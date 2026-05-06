@@ -275,11 +275,35 @@ struct SharedVulkanCore {
   VkDevice device = VK_NULL_HANDLE;
   VkQueue queue = VK_NULL_HANDLE;
   std::uint32_t queueFamily = 0;
+  struct Resources {
+    bool initialized = false;
+    VkFormat renderFormat = VK_FORMAT_UNDEFINED;
+    VkRenderPass renderPass = VK_NULL_HANDLE;
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout rectDescriptorLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout quadDescriptorLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout textureDescriptorLayout = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkPipelineLayout rectPipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline rectPipeline = VK_NULL_HANDLE;
+    VkPipeline imagePipeline = VK_NULL_HANDLE;
+    VkPipeline pathPipeline = VK_NULL_HANDLE;
+    Texture atlas;
+    std::vector<Rgba> atlasPixels;
+    int atlasX = 1;
+    int atlasY = 1;
+    int atlasRowH = 0;
+    bool atlasDirty = false;
+    std::unordered_map<GlyphKey, GlyphSlot, GlyphKeyHash> glyphs;
+  } resources;
   std::uint32_t refs = 0;
 };
 
 std::mutex gVulkanCoreMutex;
 SharedVulkanCore gVulkanCore;
+void destroySharedVulkanResources(SharedVulkanCore& core);
 
 VkInstance ensureSharedVulkanInstance() {
   std::lock_guard lock(gVulkanCoreMutex);
@@ -296,7 +320,7 @@ VkInstance ensureSharedVulkanInstance() {
   return gVulkanCore.instance;
 }
 
-SharedVulkanCore acquireSharedVulkanCore(VkSurfaceKHR surface) {
+SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
   std::lock_guard lock(gVulkanCoreMutex);
   if (!gVulkanCore.instance) {
     throw std::runtime_error("Vulkan instance was not initialized");
@@ -332,7 +356,7 @@ SharedVulkanCore acquireSharedVulkanCore(VkSurfaceKHR surface) {
           vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
           vkGetDeviceQueue(gVulkanCore.device, gVulkanCore.queueFamily, 0, &gVulkanCore.queue);
           ++gVulkanCore.refs;
-          return gVulkanCore;
+          return &gVulkanCore;
         }
       }
     }
@@ -344,7 +368,7 @@ SharedVulkanCore acquireSharedVulkanCore(VkSurfaceKHR surface) {
     throw std::runtime_error("Shared Vulkan queue cannot present to this Wayland surface");
   }
   ++gVulkanCore.refs;
-  return gVulkanCore;
+  return &gVulkanCore;
 }
 
 void releaseSharedVulkanCore() {
@@ -354,12 +378,40 @@ void releaseSharedVulkanCore() {
   if (gVulkanCore.refs != 0) return;
   if (gVulkanCore.device) {
     vkDeviceWaitIdle(gVulkanCore.device);
+    destroySharedVulkanResources(gVulkanCore);
     vkDestroyDevice(gVulkanCore.device, nullptr);
   }
   if (gVulkanCore.instance) {
     vkDestroyInstance(gVulkanCore.instance, nullptr);
   }
   gVulkanCore = {};
+}
+
+void destroySharedTexture(VkDevice device, Texture& tex) {
+  if (tex.view) vkDestroyImageView(device, tex.view, nullptr);
+  if (tex.image) vkDestroyImage(device, tex.image, nullptr);
+  if (tex.memory) vkFreeMemory(device, tex.memory, nullptr);
+  tex = {};
+}
+
+void destroySharedVulkanResources(SharedVulkanCore& core) {
+  auto& res = core.resources;
+  VkDevice const device = core.device;
+  if (!device) return;
+  destroySharedTexture(device, res.atlas);
+  if (res.pathPipeline) vkDestroyPipeline(device, res.pathPipeline, nullptr);
+  if (res.rectPipeline) vkDestroyPipeline(device, res.rectPipeline, nullptr);
+  if (res.imagePipeline) vkDestroyPipeline(device, res.imagePipeline, nullptr);
+  if (res.pathPipelineLayout) vkDestroyPipelineLayout(device, res.pathPipelineLayout, nullptr);
+  if (res.rectPipelineLayout) vkDestroyPipelineLayout(device, res.rectPipelineLayout, nullptr);
+  if (res.imagePipelineLayout) vkDestroyPipelineLayout(device, res.imagePipelineLayout, nullptr);
+  if (res.sampler) vkDestroySampler(device, res.sampler, nullptr);
+  if (res.rectDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.rectDescriptorLayout, nullptr);
+  if (res.quadDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.quadDescriptorLayout, nullptr);
+  if (res.textureDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.textureDescriptorLayout, nullptr);
+  if (res.descriptorPool) vkDestroyDescriptorPool(device, res.descriptorPool, nullptr);
+  if (res.renderPass) vkDestroyRenderPass(device, res.renderPass, nullptr);
+  res = {};
 }
 
 std::uint32_t findMemoryType(VkPhysicalDevice physical, std::uint32_t typeBits, VkMemoryPropertyFlags flags) {
@@ -508,19 +560,16 @@ public:
     surfaceInfo.display = display_;
     surfaceInfo.surface = wlSurface_;
     vkCheck(vkCreateWaylandSurfaceKHR(instance_, &surfaceInfo, nullptr, &surface_), "vkCreateWaylandSurfaceKHR");
-    SharedVulkanCore shared = acquireSharedVulkanCore(surface_);
+    SharedVulkanCore* shared = acquireSharedVulkanCore(surface_);
     ownsSharedVulkanCore_ = true;
-    physical_ = shared.physical;
-    device_ = shared.device;
-    queue_ = shared.queue;
-    queueFamily_ = shared.queueFamily;
+    shared_ = shared;
+    physical_ = shared->physical;
+    device_ = shared->device;
+    queue_ = shared->queue;
+    queueFamily_ = shared->queueFamily;
     createCommandObjects();
-    createDescriptors();
-    createSampler();
     chooseSurfaceFormat();
-    createRenderPass();
-    createPipelines();
-    createAtlas();
+    ensureSharedResources();
   }
 
   ~VulkanCanvas() override {
@@ -528,25 +577,12 @@ public:
       vkDeviceWaitIdle(device_);
     }
     destroySwapchain();
-    destroyTexture(atlas_);
     for (auto& kv : imageTextures_) {
       destroyTexture(kv.second);
     }
     destroyBuffer(pathBuffer_);
     destroyBuffer(rectBuffer_);
     destroyBuffer(quadBuffer_);
-    if (sampler_) vkDestroySampler(device_, sampler_, nullptr);
-    if (pathPipeline_) vkDestroyPipeline(device_, pathPipeline_, nullptr);
-    if (rectPipeline_) vkDestroyPipeline(device_, rectPipeline_, nullptr);
-    if (imagePipeline_) vkDestroyPipeline(device_, imagePipeline_, nullptr);
-    if (pathPipelineLayout_) vkDestroyPipelineLayout(device_, pathPipelineLayout_, nullptr);
-    if (rectPipelineLayout_) vkDestroyPipelineLayout(device_, rectPipelineLayout_, nullptr);
-    if (imagePipelineLayout_) vkDestroyPipelineLayout(device_, imagePipelineLayout_, nullptr);
-    if (rectDescriptorLayout_) vkDestroyDescriptorSetLayout(device_, rectDescriptorLayout_, nullptr);
-    if (quadDescriptorLayout_) vkDestroyDescriptorSetLayout(device_, quadDescriptorLayout_, nullptr);
-    if (textureDescriptorLayout_) vkDestroyDescriptorSetLayout(device_, textureDescriptorLayout_, nullptr);
-    if (descriptorPool_) vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-    if (renderPass_) vkDestroyRenderPass(device_, renderPass_, nullptr);
     for (VkSemaphore semaphore : imageAvailable_) {
       if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
     }
@@ -730,7 +766,7 @@ public:
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
     VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    rp.renderPass = renderPass_;
+    rp.renderPass = resources().renderPass;
     rp.framebuffer = framebuffers_[imageIndex];
     rp.renderArea.extent = swapExtent_;
     rp.clearValueCount = 1;
@@ -940,8 +976,9 @@ public:
     }
     std::uint32_t count = static_cast<std::uint32_t>(quads_.size()) - first;
     if (count > 0) {
-      batches_.push_back(ImageBatch{&atlas_, first, count});
-      ops_.push_back(DrawOp{DrawOp::Kind::Image, &atlas_, first, count});
+      Texture* atlas = &resources().atlas;
+      batches_.push_back(ImageBatch{atlas, first, count});
+      ops_.push_back(DrawOp{DrawOp::Kind::Image, atlas, first, count});
       debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
     }
   }
@@ -1137,7 +1174,41 @@ private:
     resetFrameFenceIndex_ = kNoResetFrameFence;
   }
 
+  SharedVulkanCore::Resources& resources() {
+    if (!shared_) {
+      throw std::runtime_error("Vulkan shared resources are unavailable");
+    }
+    return shared_->resources;
+  }
+
+  SharedVulkanCore::Resources const& resources() const {
+    if (!shared_) {
+      throw std::runtime_error("Vulkan shared resources are unavailable");
+    }
+    return shared_->resources;
+  }
+
+  void ensureSharedResources() {
+    auto& res = resources();
+    VkFormat const format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM
+                                                                         : surfaceFormat_.format;
+    if (res.initialized) {
+      if (res.renderFormat != format) {
+        throw std::runtime_error("Shared Vulkan resources cannot be reused with a different surface format");
+      }
+      return;
+    }
+    res.renderFormat = format;
+    createDescriptors();
+    createSampler();
+    createRenderPass();
+    createPipelines();
+    createAtlas();
+    res.initialized = true;
+  }
+
   void createDescriptors() {
+    auto& res = resources();
     VkDescriptorPoolSize sizes[3]{
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 512},
@@ -1148,9 +1219,9 @@ private:
     pool.maxSets = 512;
     pool.poolSizeCount = 3;
     pool.pPoolSizes = sizes;
-    vkCheck(vkCreateDescriptorPool(device_, &pool, nullptr, &descriptorPool_), "vkCreateDescriptorPool");
-    rectDescriptorLayout_ = createStorageLayout();
-    quadDescriptorLayout_ = createStorageLayout();
+    vkCheck(vkCreateDescriptorPool(device_, &pool, nullptr, &res.descriptorPool), "vkCreateDescriptorPool");
+    res.rectDescriptorLayout = createStorageLayout();
+    res.quadDescriptorLayout = createStorageLayout();
     VkDescriptorSetLayoutBinding b{};
     b.binding = 0;
     b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1159,7 +1230,7 @@ private:
     VkDescriptorSetLayoutCreateInfo layout{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     layout.bindingCount = 1;
     layout.pBindings = &b;
-    vkCheck(vkCreateDescriptorSetLayout(device_, &layout, nullptr, &textureDescriptorLayout_),
+    vkCheck(vkCreateDescriptorSetLayout(device_, &layout, nullptr, &res.textureDescriptorLayout),
             "vkCreateDescriptorSetLayout");
   }
 
@@ -1178,17 +1249,19 @@ private:
   }
 
   void createSampler() {
+    auto& res = resources();
     VkSamplerCreateInfo s{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     s.magFilter = VK_FILTER_LINEAR;
     s.minFilter = VK_FILTER_LINEAR;
     s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     s.addressModeU = s.addressModeV = s.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    vkCheck(vkCreateSampler(device_, &s, nullptr, &sampler_), "vkCreateSampler");
+    vkCheck(vkCreateSampler(device_, &s, nullptr, &res.sampler), "vkCreateSampler");
   }
 
   void createRenderPass() {
+    auto& res = resources();
     VkAttachmentDescription color{};
-    color.format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
+    color.format = res.renderFormat;
     color.samples = VK_SAMPLE_COUNT_1_BIT;
     color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1204,7 +1277,7 @@ private:
     info.pAttachments = &color;
     info.subpassCount = 1;
     info.pSubpasses = &sub;
-    vkCheck(vkCreateRenderPass(device_, &info, nullptr, &renderPass_), "vkCreateRenderPass");
+    vkCheck(vkCreateRenderPass(device_, &info, nullptr, &res.renderPass), "vkCreateRenderPass");
   }
 
   void chooseSurfaceFormat() {
@@ -1244,13 +1317,14 @@ private:
   };
 
   void createPipelines() {
-    rectPipelineLayout_ = createPipelineLayout({rectDescriptorLayout_}, true);
-    imagePipelineLayout_ = createPipelineLayout({quadDescriptorLayout_, textureDescriptorLayout_}, true);
-    pathPipelineLayout_ = createPipelineLayout({}, false);
-    rectPipeline_ = createPipeline(rectPipelineLayout_, flux_rect_vert_spv, flux_rect_vert_spv_len,
-                                   flux_rect_frag_spv, flux_rect_frag_spv_len, {});
-    imagePipeline_ = createPipeline(imagePipelineLayout_, flux_image_vert_spv, flux_image_vert_spv_len,
-                                    flux_image_frag_spv, flux_image_frag_spv_len, {});
+    auto& res = resources();
+    res.rectPipelineLayout = createPipelineLayout({res.rectDescriptorLayout}, true);
+    res.imagePipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
+    res.pathPipelineLayout = createPipelineLayout({}, false);
+    res.rectPipeline = createPipeline(res.rectPipelineLayout, flux_rect_vert_spv, flux_rect_vert_spv_len,
+                                      flux_rect_frag_spv, flux_rect_frag_spv_len, {});
+    res.imagePipeline = createPipeline(res.imagePipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
+                                       flux_image_frag_spv, flux_image_frag_spv_len, {});
     std::array<VkVertexInputBindingDescription, 1> binding{};
     binding[0].binding = 0;
     binding[0].stride = sizeof(VulkanPathVertex);
@@ -1267,9 +1341,9 @@ private:
     attrs[8] = {8, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, stops)};
     attrs[9] = {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, gradient)};
     attrs[10] = {10, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, params)};
-    pathPipeline_ = createPipeline(pathPipelineLayout_, flux_path_vert_spv, flux_path_vert_spv_len,
-                                   flux_path_frag_spv, flux_path_frag_spv_len,
-                                   {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});
+    res.pathPipeline = createPipeline(res.pathPipelineLayout, flux_path_vert_spv, flux_path_vert_spv_len,
+                                      flux_path_frag_spv, flux_path_frag_spv_len,
+                                      {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});
   }
 
   VkPipelineLayout createPipelineLayout(std::initializer_list<VkDescriptorSetLayout> layouts, bool viewportPush) {
@@ -1348,7 +1422,7 @@ private:
     info.pColorBlendState = &cb;
     info.pDynamicState = &dyn;
     info.layout = layout;
-    info.renderPass = renderPass_;
+    info.renderPass = resources().renderPass;
     VkPipeline out = VK_NULL_HANDLE;
     vkCheck(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &info, nullptr, &out),
             "vkCreateGraphicsPipelines");
@@ -1427,7 +1501,7 @@ private:
       view.subresourceRange.layerCount = 1;
       vkCheck(vkCreateImageView(device_, &view, nullptr, &swapchainViews_[i]), "vkCreateImageView");
       VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-      fb.renderPass = renderPass_;
+      fb.renderPass = resources().renderPass;
       fb.attachmentCount = 1;
       fb.pAttachments = &swapchainViews_[i];
       fb.width = swapExtent_.width;
@@ -1461,11 +1535,12 @@ private:
   }
 
   void createAtlas() {
-    atlas_.width = 2048;
-    atlas_.height = 2048;
-    atlasPixels_.assign(static_cast<std::size_t>(atlas_.width) * atlas_.height, Rgba{255, 255, 255, 0});
-    createTexture(atlas_, atlas_.width, atlas_.height, atlasPixels_.data(), false);
-    ensureTextureDescriptor(atlas_);
+    auto& res = resources();
+    res.atlas.width = 2048;
+    res.atlas.height = 2048;
+    res.atlasPixels.assign(static_cast<std::size_t>(res.atlas.width) * res.atlas.height, Rgba{255, 255, 255, 0});
+    createTexture(res.atlas, res.atlas.width, res.atlas.height, res.atlasPixels.data(), false);
+    ensureTextureDescriptor(res.atlas);
   }
 
   void appendPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
@@ -1560,11 +1635,11 @@ private:
     ensureBuffer(rectBuffer_, std::max<VkDeviceSize>(sizeof(RectInstance), rects_.size() * sizeof(RectInstance)),
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     upload(rectBuffer_, rects_.data(), rects_.size() * sizeof(RectInstance));
-    ensureStorageDescriptor(rectDescriptorSet_, rectDescriptorLayout_, rectBuffer_);
+    ensureStorageDescriptor(rectDescriptorSet_, resources().rectDescriptorLayout, rectBuffer_);
     ensureBuffer(quadBuffer_, std::max<VkDeviceSize>(sizeof(QuadInstance), quads_.size() * sizeof(QuadInstance)),
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     upload(quadBuffer_, quads_.data(), quads_.size() * sizeof(QuadInstance));
-    ensureStorageDescriptor(quadDescriptorSet_, quadDescriptorLayout_, quadBuffer_);
+    ensureStorageDescriptor(quadDescriptorSet_, resources().quadDescriptorLayout, quadBuffer_);
     ensureBuffer(pathBuffer_, std::max<VkDeviceSize>(sizeof(VulkanPathVertex),
                                                      pathVerts_.size() * sizeof(VulkanPathVertex)),
                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
@@ -1578,7 +1653,7 @@ private:
     try {
       createRenderTargetTexture(target, pixelW, pixelH);
       VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-      fb.renderPass = renderPass_;
+      fb.renderPass = resources().renderPass;
       fb.attachmentCount = 1;
       fb.pAttachments = &target.view;
       fb.width = static_cast<std::uint32_t>(pixelW);
@@ -1599,7 +1674,7 @@ private:
       clear.color.float32[2] = clearColor_.b;
       clear.color.float32[3] = clearColor_.a;
       VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      rp.renderPass = renderPass_;
+      rp.renderPass = resources().renderPass;
       rp.framebuffer = framebuffer;
       rp.renderArea.extent = VkExtent2D{static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH)};
       rp.clearValueCount = 1;
@@ -1682,7 +1757,7 @@ private:
   void ensureStorageDescriptor(VkDescriptorSet& set, VkDescriptorSetLayout layout, Buffer const& buffer) {
     if (!set) {
       VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-      alloc.descriptorPool = descriptorPool_;
+      alloc.descriptorPool = resources().descriptorPool;
       alloc.descriptorSetCount = 1;
       alloc.pSetLayouts = &layout;
       vkCheck(vkAllocateDescriptorSets(device_, &alloc, &set), "vkAllocateDescriptorSets");
@@ -1701,10 +1776,11 @@ private:
     if (count == 0) return;
     setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline_);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipelineLayout_, 0, 1,
+    auto const& res = resources();
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipelineLayout, 0, 1,
                             &rectDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, rectPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
+    vkCmdPushConstants(commandBuffer, res.rectPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
@@ -1712,7 +1788,7 @@ private:
     if (count == 0) return;
     setViewportScissor(commandBuffer);
     VkDeviceSize offset = 0;
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pathPipeline_);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resources().pathPipeline);
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pathBuffer_.buffer, &offset);
     vkCmdDraw(commandBuffer, count, 1, first, 0);
   }
@@ -1721,11 +1797,12 @@ private:
     if (!texture || !texture->descriptor || count == 0) return;
     setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipeline_);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipelineLayout_, 0, 1,
+    auto const& res = resources();
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 0, 1,
                             &quadDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, imagePipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipelineLayout_, 1, 1,
+    vkCmdPushConstants(commandBuffer, res.imagePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 1, 1,
                             &texture->descriptor, 0, nullptr);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
@@ -1754,56 +1831,58 @@ private:
   }
 
   GlyphSlot const* glyphSlot(std::uint32_t fontId, std::uint16_t glyphId, float fontSize) {
+    auto& res = resources();
     std::uint16_t size = static_cast<std::uint16_t>(std::clamp(std::round(fontSize * dpiScaleY_), 1.f, 512.f));
     GlyphKey key{fontId, glyphId, size};
-    auto it = glyphs_.find(key);
-    if (it != glyphs_.end()) return &it->second;
+    auto it = res.glyphs.find(key);
+    if (it != res.glyphs.end()) return &it->second;
     std::uint32_t gw = 0, gh = 0;
     Point bearing{};
     std::vector<std::uint8_t> alpha = textSystem_.rasterizeGlyph(fontId, glyphId, static_cast<float>(size), gw, gh,
                                                                  bearing);
     if (gw == 0 || gh == 0 || alpha.empty()) {
-      auto [inserted, ok] = glyphs_.emplace(key, GlyphSlot{});
+      auto [inserted, ok] = res.glyphs.emplace(key, GlyphSlot{});
       (void)ok;
       return &inserted->second;
     }
     int const pad = 1;
-    if (atlasX_ + static_cast<int>(gw) + pad >= atlas_.width) {
-      atlasX_ = pad;
-      atlasY_ += atlasRowH_ + pad;
-      atlasRowH_ = 0;
+    if (res.atlasX + static_cast<int>(gw) + pad >= res.atlas.width) {
+      res.atlasX = pad;
+      res.atlasY += res.atlasRowH + pad;
+      res.atlasRowH = 0;
     }
-    if (atlasY_ + static_cast<int>(gh) + pad >= atlas_.height) return nullptr;
-    int const x = atlasX_;
-    int const y = atlasY_;
-    atlasX_ += static_cast<int>(gw) + pad;
-    atlasRowH_ = std::max(atlasRowH_, static_cast<int>(gh));
+    if (res.atlasY + static_cast<int>(gh) + pad >= res.atlas.height) return nullptr;
+    int const x = res.atlasX;
+    int const y = res.atlasY;
+    res.atlasX += static_cast<int>(gw) + pad;
+    res.atlasRowH = std::max(res.atlasRowH, static_cast<int>(gh));
     for (std::uint32_t row = 0; row < gh; ++row) {
       for (std::uint32_t col = 0; col < gw; ++col) {
-        Rgba& px = atlasPixels_[static_cast<std::size_t>(y + row) * atlas_.width + x + col];
+        Rgba& px = res.atlasPixels[static_cast<std::size_t>(y + row) * res.atlas.width + x + col];
         px = {255, 255, 255, alpha[static_cast<std::size_t>(row) * gw + col]};
       }
     }
-    atlasDirty_ = true;
+    res.atlasDirty = true;
     GlyphSlot slot{};
-    slot.u0 = static_cast<float>(x) / atlas_.width;
-    slot.v0 = static_cast<float>(y) / atlas_.height;
-    slot.u1 = static_cast<float>(x + static_cast<int>(gw)) / atlas_.width;
-    slot.v1 = static_cast<float>(y + static_cast<int>(gh)) / atlas_.height;
+    slot.u0 = static_cast<float>(x) / res.atlas.width;
+    slot.v0 = static_cast<float>(y) / res.atlas.height;
+    slot.u1 = static_cast<float>(x + static_cast<int>(gw)) / res.atlas.width;
+    slot.v1 = static_cast<float>(y + static_cast<int>(gh)) / res.atlas.height;
     slot.w = gw;
     slot.h = gh;
     slot.bearing = bearing;
-    auto [inserted, ok] = glyphs_.emplace(key, slot);
+    auto [inserted, ok] = res.glyphs.emplace(key, slot);
     (void)ok;
     return &inserted->second;
   }
 
-  void ensureAtlasDescriptor() { ensureTextureDescriptor(atlas_); }
+  void ensureAtlasDescriptor() { ensureTextureDescriptor(resources().atlas); }
 
   void uploadAtlasIfNeeded() {
-    if (!atlasDirty_) return;
-    uploadTexture(atlas_, atlasPixels_.data());
-    atlasDirty_ = false;
+    auto& res = resources();
+    if (!res.atlasDirty) return;
+    uploadTexture(res.atlas, res.atlasPixels.data());
+    res.atlasDirty = false;
   }
 
   Texture* ensureImageTexture(VulkanImage const& image) {
@@ -1903,11 +1982,12 @@ private:
   void ensureTextureDescriptor(Texture& tex) {
     if (tex.descriptor) return;
     VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    alloc.descriptorPool = descriptorPool_;
+    alloc.descriptorPool = resources().descriptorPool;
     alloc.descriptorSetCount = 1;
-    alloc.pSetLayouts = &textureDescriptorLayout_;
+    VkDescriptorSetLayout const layout = resources().textureDescriptorLayout;
+    alloc.pSetLayouts = &layout;
     vkCheck(vkAllocateDescriptorSets(device_, &alloc, &tex.descriptor), "vkAllocateDescriptorSets");
-    VkDescriptorImageInfo ii{sampler_, tex.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkDescriptorImageInfo ii{resources().sampler, tex.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.dstSet = tex.descriptor;
     write.dstBinding = 0;
@@ -2036,6 +2116,7 @@ private:
   VkPhysicalDevice physical_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
   VkQueue queue_ = VK_NULL_HANDLE;
+  SharedVulkanCore* shared_ = nullptr;
   std::uint32_t queueFamily_ = 0;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
@@ -2052,35 +2133,16 @@ private:
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkFramebuffer> framebuffers_;
   std::vector<VkSemaphore> imageRenderFinished_;
-  VkRenderPass renderPass_ = VK_NULL_HANDLE;
-  VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout rectDescriptorLayout_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout quadDescriptorLayout_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout textureDescriptorLayout_ = VK_NULL_HANDLE;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
-  VkSampler sampler_ = VK_NULL_HANDLE;
-  VkPipelineLayout rectPipelineLayout_ = VK_NULL_HANDLE;
-  VkPipelineLayout imagePipelineLayout_ = VK_NULL_HANDLE;
-  VkPipelineLayout pathPipelineLayout_ = VK_NULL_HANDLE;
-  VkPipeline rectPipeline_ = VK_NULL_HANDLE;
-  VkPipeline imagePipeline_ = VK_NULL_HANDLE;
-  VkPipeline pathPipeline_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;
   Buffer quadBuffer_;
   Buffer pathBuffer_;
   Buffer pendingScreenshotBuffer_;
   VkDeviceSize pendingScreenshotSize_ = 0;
   std::string pendingScreenshotPath_;
-  Texture atlas_;
-  std::vector<Rgba> atlasPixels_;
-  int atlasX_ = 1;
-  int atlasY_ = 1;
-  int atlasRowH_ = 0;
-  bool atlasDirty_ = false;
   bool debugScreenshotWritten_ = false;
   bool swapchainDirty_ = true;
-  std::unordered_map<GlyphKey, GlyphSlot, GlyphKeyHash> glyphs_;
   std::unordered_map<VulkanImage const*, Texture> imageTextures_;
   bool ownsSharedVulkanCore_ = false;
 };
