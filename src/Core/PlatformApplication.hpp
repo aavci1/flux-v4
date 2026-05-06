@@ -34,6 +34,7 @@ public:
   virtual std::string applicationName() const = 0;
   virtual void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) = 0;
   virtual void setTerminateHandler(std::function<void()> handler) = 0;
+  virtual void requestTerminate() = 0;
   virtual std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const = 0;
   virtual void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) = 0;
   virtual std::string userDataDir() const = 0;

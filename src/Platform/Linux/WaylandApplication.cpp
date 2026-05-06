@@ -59,6 +59,12 @@ public:
     terminateHandler_ = std::move(handler);
   }
 
+  void requestTerminate() override {
+    if (terminateHandler_) {
+      terminateHandler_();
+    }
+  }
+
   std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const override {
     return claimedShortcuts_;
   }

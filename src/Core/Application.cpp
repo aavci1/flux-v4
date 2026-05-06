@@ -653,7 +653,7 @@ int Application::exec() {
 }
 
 void Application::quit() {
-  saveOpenWindowStates();
+  d->platformApp_->requestTerminate();
   d->quit_ = true;
   for (auto& w : d->windows_) {
     if (w) {
