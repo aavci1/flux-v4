@@ -127,6 +127,12 @@ Canvas& Window::canvas() {
   return *d->canvas_;
 }
 
+void Window::updateCanvasDpiScale(float scaleX, float scaleY) {
+  if (d->canvas_) {
+    d->canvas_->updateDpiScale(scaleX, scaleY);
+  }
+}
+
 bool Window::hasSceneGraph() const { return d->sceneGraph_.has_value(); }
 
 scenegraph::SceneGraph& Window::sceneGraph() {

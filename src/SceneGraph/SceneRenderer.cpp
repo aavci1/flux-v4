@@ -9,9 +9,11 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 
+#if defined(FLUX_PLATFORM_MACOS)
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
+#endif
 #include "SceneGraph/SceneBounds.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
 
@@ -85,6 +87,7 @@ enum class RenderTraversalMode : std::uint8_t {
     PreparedCacheBypass,
 };
 
+#if defined(FLUX_PLATFORM_MACOS)
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -103,7 +106,9 @@ MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
         .glyphVertexCount = recorded.glyphVertexCount,
     };
 }
+#endif
 
+#if defined(FLUX_PLATFORM_MACOS)
 bool roundedClipHasEntries(MetalRoundedClipStack const &clip) noexcept {
     return clip.header.x > 0.f;
 }
@@ -119,6 +124,7 @@ bool recordedOpsContainClipState(MetalFrameRecorder const &recorded) noexcept {
            std::any_of(recorded.pathOps.begin(), recorded.pathOps.end(), opHasRecordedClip<MetalPathOp>) ||
            std::any_of(recorded.glyphOps.begin(), recorded.glyphOps.end(), opHasRecordedClip<MetalGlyphOp>);
 }
+#endif
 
 class CanvasRenderer final : public Renderer {
   public:
@@ -151,6 +157,7 @@ class CanvasRenderer final : public Renderer {
     Canvas &canvas_;
 };
 
+#if defined(FLUX_PLATFORM_MACOS)
 class CanvasPreparedRenderOps final : public PreparedRenderOps {
   public:
     explicit CanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
@@ -163,6 +170,7 @@ class CanvasPreparedRenderOps final : public PreparedRenderOps {
     MetalFrameRecorder recorded_;
     MetalRecorderSlice slice_ {};
 };
+#endif
 
 class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
   public:
@@ -172,6 +180,7 @@ class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
 };
 
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
+#if defined(FLUX_PLATFORM_MACOS)
     MetalFrameRecorder recorded;
     if (!beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
         return nullptr;
@@ -184,6 +193,10 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
         return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
     }
     return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
+#else
+    (void)node;
+    return nullptr;
+#endif
 }
 
 } // namespace
@@ -278,10 +291,17 @@ struct SceneRenderer::Impl {
         if (logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
             return true;
         }
+#if defined(FLUX_PLATFORM_MACOS)
         float const dpiScale = dpiScaleForCanvas(canvas);
+#else
+        float const dpiScale = 1.f;
+#endif
         std::shared_ptr<Image> cached =
             node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
         if (!cached) {
+#if !defined(FLUX_PLATFORM_MACOS)
+            return false;
+#else
             cached = rasterizeToImage(*canvas, logicalSize, [this, &node](Canvas&, Rect) {
                 for (std::unique_ptr<SceneNode> const &child : node.children()) {
                     renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
@@ -292,6 +312,7 @@ struct SceneRenderer::Impl {
             }
             node.setCachedImage(cached, logicalSize, dpiScale);
             node.noteRasterized();
+#endif
         }
 
         renderer->save();
@@ -315,6 +336,10 @@ struct SceneRenderer::Impl {
         if (!canvas) {
             return nullptr;
         }
+#if !defined(FLUX_PLATFORM_MACOS)
+        (void)node;
+        return nullptr;
+#else
         MetalFrameRecorder recorded;
         if (!beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
             return nullptr;
@@ -329,6 +354,7 @@ struct SceneRenderer::Impl {
             return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
         }
         return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
+#endif
     }
 
     void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation,

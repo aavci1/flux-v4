@@ -13,24 +13,31 @@ set(CMAKE_CXX_RELEASE_FLAGS "-march=native -O3 -flto")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxApp.cmake)
 
-# Planned backends: LINUX_WAYLAND, LINUX_KMS — reserved for future CMake branches.
 set(FLUX_PLATFORM "AUTO" CACHE STRING
-    "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS (only MACOS is implemented).")
+    "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS.")
 
 if(FLUX_PLATFORM STREQUAL "AUTO")
   if(APPLE)
     set(FLUX_PLATFORM_MACOS ON)
     set(FLUX_PLATFORM "MACOS" CACHE STRING
-      "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS (only MACOS is implemented)." FORCE)
+      "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS." FORCE)
+  elseif(UNIX)
+    set(FLUX_PLATFORM_LINUX_WAYLAND ON)
+    set(FLUX_PLATFORM "LINUX_WAYLAND" CACHE STRING
+      "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS." FORCE)
   else()
-    message(FATAL_ERROR
-      "Flux: non-macOS builds are not implemented yet (planned: Linux Wayland/Vulkan, Linux KMS/DRM).")
+    message(FATAL_ERROR "Flux: no default backend for this host.")
   endif()
 elseif(FLUX_PLATFORM STREQUAL "MACOS")
   if(NOT APPLE)
     message(FATAL_ERROR "FLUX_PLATFORM=MACOS requires an Apple host.")
   endif()
   set(FLUX_PLATFORM_MACOS ON)
+elseif(FLUX_PLATFORM STREQUAL "LINUX_WAYLAND")
+  if(NOT UNIX OR APPLE)
+    message(FATAL_ERROR "FLUX_PLATFORM=LINUX_WAYLAND requires a Linux/Unix host.")
+  endif()
+  set(FLUX_PLATFORM_LINUX_WAYLAND ON)
 else()
   message(FATAL_ERROR "Flux: FLUX_PLATFORM=${FLUX_PLATFORM} is not implemented yet.")
 endif()
@@ -86,26 +93,27 @@ if(FLUX_V5_PROTOTYPE)
   add_subdirectory(prototype/reactive)
 endif()
 
-# Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
-set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
-set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
-set(FLUX_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/FluxShaders.metallib)
-set(FLUX_METALLIB_EMBED_H ${CMAKE_CURRENT_BINARY_DIR}/FluxShaders.metallib.h)
-# Run xxd in the build dir with basename only so symbols are FluxShaders_metallib (not full path).
-add_custom_command(
-  OUTPUT ${FLUX_METAL_AIR} ${FLUX_METALLIB} ${FLUX_METALLIB_EMBED_H}
-  COMMAND xcrun -sdk macosx metal -mmacosx-version-min=11.0 -std=metal3.0 -c ${FLUX_METAL_SOURCE} -o ${FLUX_METAL_AIR}
-  COMMAND xcrun -sdk macosx metallib ${FLUX_METAL_AIR} -o ${FLUX_METALLIB}
-  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}
-          xxd -i FluxShaders.metallib FluxShaders.metallib.h
-  DEPENDS ${FLUX_METAL_SOURCE}
-  COMMENT "Compile CanvasShaders.metal to FluxShaders.metallib (embedded)"
-  VERBATIM
-)
-add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
+if(FLUX_PLATFORM_MACOS)
+  # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
+  set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
+  set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
+  set(FLUX_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/FluxShaders.metallib)
+  set(FLUX_METALLIB_EMBED_H ${CMAKE_CURRENT_BINARY_DIR}/FluxShaders.metallib.h)
+  # Run xxd in the build dir with basename only so symbols are FluxShaders_metallib (not full path).
+  add_custom_command(
+    OUTPUT ${FLUX_METAL_AIR} ${FLUX_METALLIB} ${FLUX_METALLIB_EMBED_H}
+    COMMAND xcrun -sdk macosx metal -mmacosx-version-min=11.0 -std=metal3.0 -c ${FLUX_METAL_SOURCE} -o ${FLUX_METAL_AIR}
+    COMMAND xcrun -sdk macosx metallib ${FLUX_METAL_AIR} -o ${FLUX_METALLIB}
+    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}
+            xxd -i FluxShaders.metallib FluxShaders.metallib.h
+    DEPENDS ${FLUX_METAL_SOURCE}
+    COMMENT "Compile CanvasShaders.metal to FluxShaders.metallib (embedded)"
+    VERBATIM
+  )
+  add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
+endif()
 
 add_library(flux STATIC
-  src/Core/Application.mm
   src/Core/EventQueue.cpp
   src/Reactive/Observer.cpp
   src/Reactive/Easing.cpp
@@ -179,24 +187,74 @@ add_library(flux STATIC
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
   src/Graphics/TextCacheDebugOverlay.cpp
-  src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
   src/Graphics/xxhash_impl.c
-  src/Graphics/CoreTextSystem.mm
   src/Graphics/Path.cpp
   src/Graphics/PathFlattener.cpp
   src/Graphics/SvgPath.cpp
-  src/Graphics/Metal/GlyphAtlas.mm
-  src/Graphics/Metal/MetalImage.mm
-  src/Graphics/Metal/MetalPathRasterizer.cpp
-  src/Graphics/Metal/MetalShaderLibrary.mm
-  src/Graphics/Metal/MetalDeviceResources.mm
-  src/Graphics/Metal/MetalCanvas.mm
-  src/Platform/Mac/MacApplication.mm
-  src/Platform/Mac/MacMetalWindow.mm
-  src/Platform/Mac/MacClipboard.mm
 )
-add_dependencies(flux flux_shaders)
+
+if(FLUX_PLATFORM_MACOS)
+  target_sources(flux PRIVATE
+    src/Core/Application.mm
+    src/Graphics/CoreTextSystem.mm
+    src/Graphics/Metal/MetalFrameRecorder.mm
+    src/Graphics/Metal/GlyphAtlas.mm
+    src/Graphics/Metal/MetalImage.mm
+    src/Graphics/Metal/MetalPathRasterizer.cpp
+    src/Graphics/Metal/MetalShaderLibrary.mm
+    src/Graphics/Metal/MetalDeviceResources.mm
+    src/Graphics/Metal/MetalCanvas.mm
+    src/Platform/Mac/MacApplication.mm
+    src/Platform/Mac/MacMetalWindow.mm
+    src/Platform/Mac/MacClipboard.mm
+  )
+  add_dependencies(flux flux_shaders)
+elseif(FLUX_PLATFORM_LINUX_WAYLAND)
+  find_package(PkgConfig REQUIRED)
+  find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
+  pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+  pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+  pkg_check_modules(WAYLAND_CURSOR REQUIRED IMPORTED_TARGET wayland-cursor)
+  pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
+  pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
+  pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
+  set(FLUX_WAYLAND_PROTOCOL_DIR ${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols)
+  file(MAKE_DIRECTORY ${FLUX_WAYLAND_PROTOCOL_DIR})
+  set(FLUX_XDG_SHELL_XML ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml)
+  set(FLUX_XDG_DECORATION_XML ${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml)
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XDG_SHELL_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XDG_SHELL_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
+    DEPENDS ${FLUX_XDG_SHELL_XML}
+    VERBATIM
+  )
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XDG_DECORATION_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XDG_DECORATION_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
+    DEPENDS ${FLUX_XDG_DECORATION_XML}
+    VERBATIM
+  )
+  target_sources(flux PRIVATE
+    src/Core/Application.cpp
+    src/Graphics/Linux/FreeTypeTextSystem.cpp
+    src/Graphics/Vulkan/VulkanGpuCanvas.cpp
+    src/Platform/Linux/WaylandApplication.cpp
+    src/Platform/Linux/WaylandWindow.cpp
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
+  )
+endif()
 
 target_include_directories(flux PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -248,18 +306,30 @@ if(FLUX_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
   target_compile_definitions(flux PRIVATE FLUX_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
 endif()
 
-target_compile_definitions(flux PRIVATE FLUX_PLATFORM_MACOS=1)
+target_link_libraries(flux PRIVATE libtess2)
 
-target_link_libraries(flux PRIVATE
-  libtess2
-  "-framework Cocoa"
-  "-framework QuartzCore"
-  "-framework Metal"
-  "-framework MetalKit"
-  "-framework Foundation"
-  "-framework CoreText"
-  "-framework CoreVideo"
-)
+if(FLUX_PLATFORM_MACOS)
+  target_compile_definitions(flux PRIVATE FLUX_PLATFORM_MACOS=1)
+  target_link_libraries(flux PRIVATE
+    "-framework Cocoa"
+    "-framework QuartzCore"
+    "-framework Metal"
+    "-framework MetalKit"
+    "-framework Foundation"
+    "-framework CoreText"
+    "-framework CoreVideo"
+  )
+elseif(FLUX_PLATFORM_LINUX_WAYLAND)
+  target_compile_definitions(flux PRIVATE FLUX_PLATFORM_LINUX_WAYLAND=1)
+  target_include_directories(flux PRIVATE ${FLUX_WAYLAND_PROTOCOL_DIR})
+  target_link_libraries(flux PRIVATE
+    PkgConfig::WAYLAND_CLIENT
+    PkgConfig::WAYLAND_CURSOR
+    PkgConfig::XKBCOMMON
+    PkgConfig::VULKAN
+    PkgConfig::FREETYPE
+    ${CMAKE_DL_LIBS})
+endif()
 
 option(FLUX_BUILD_TESTS
   "Build unit and integration tests under tests/."
@@ -281,14 +351,13 @@ if(FLUX_BUILD_TESTS)
 
   enable_testing()
 
-  add_executable(flux_tests
+  set(_flux_test_sources
     tests/AlertTests.cpp
     tests/AnimationTests.cpp
     tests/BindableInferenceTests.cpp
     tests/EnvironmentKeyOtherTU.cpp
     tests/EnvironmentKeyTests.cpp
     tests/ForTests.cpp
-    tests/MetalCanvasTests.mm
     tests/MountRootTests.cpp
     tests/main.cpp
     tests/SceneGraphTests.cpp
@@ -300,6 +369,10 @@ if(FLUX_BUILD_TESTS)
     tests/SvgPathTests.cpp
     tests/ThemeReactivityTests.cpp
   )
+  if(FLUX_PLATFORM_MACOS)
+    list(APPEND _flux_test_sources tests/MetalCanvasTests.mm)
+  endif()
+  add_executable(flux_tests ${_flux_test_sources})
 
   target_include_directories(flux_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -355,10 +428,10 @@ option(FLUX_BUILD_EXAMPLES
   OFF)
 
 option(FLUX_BUILD_SOLITAIRE_APP
-  "Build the macOS Solitaire .app bundle."
+  "Build the Solitaire app."
   ON)
 
-if(APPLE AND FLUX_BUILD_SOLITAIRE_APP)
+if(FLUX_BUILD_SOLITAIRE_APP)
   add_subdirectory(examples/solitaire-app)
 endif()
 

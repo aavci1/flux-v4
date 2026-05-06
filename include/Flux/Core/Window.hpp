@@ -64,6 +64,7 @@ public:
 
   /// Lazily creates the backing canvas on first use.
   Canvas& canvas();
+  void updateCanvasDpiScale(float scaleX, float scaleY);
 
   /// True after the retained scene tree has been created (first `sceneTree()` call).
   bool hasSceneGraph() const;

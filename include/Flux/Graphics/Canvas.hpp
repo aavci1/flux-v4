@@ -22,7 +22,7 @@ namespace flux {
 class Image;
 class Window;
 
-enum class Backend : std::uint8_t { Metal };
+enum class Backend : std::uint8_t { Metal, Vulkan };
 
 class Canvas {
 public:
