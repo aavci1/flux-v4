@@ -94,6 +94,8 @@ public:
   bool isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const;
   bool dispatchMenuShortcut(KeyCode key, Modifiers modifiers);
 
+  void setName(std::string name);
+  std::string name() const;
   std::string userDataDir() const;
   std::string cacheDir() const;
   std::optional<WindowState> loadWindowState(std::string const& restoreId) const;

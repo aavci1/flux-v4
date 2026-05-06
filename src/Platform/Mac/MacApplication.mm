@@ -204,16 +204,19 @@ NSEventModifierFlags modifierMask(Modifiers modifiers) {
   return out;
 }
 
-NSURL* directoryURL(NSSearchPathDirectory directory) {
+NSURL* directoryURL(NSSearchPathDirectory directory, std::string const& explicitAppName) {
   NSArray<NSURL*>* urls = [[NSFileManager defaultManager] URLsForDirectory:directory
                                                                   inDomains:NSUserDomainMask];
   NSURL* base = urls.firstObject;
   if (!base) {
     return nil;
   }
-  NSString* appName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
+  NSString* appName = explicitAppName.empty() ? nil : ns(explicitAppName);
   if (!appName || appName.length == 0) {
-    appName = [[NSProcessInfo processInfo] processName];
+    appName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
+    if (!appName || appName.length == 0) {
+      appName = [[NSProcessInfo processInfo] processName];
+    }
   }
   NSURL* appDir = [base URLByAppendingPathComponent:(appName ? appName : @"Flux")];
   [[NSFileManager defaultManager] createDirectoryAtURL:appDir
@@ -233,6 +236,15 @@ public:
     delegate_ = [[FluxAppDelegate alloc] init];
     delegate_.owner = this;
     [NSApp setDelegate:delegate_];
+  }
+
+  void setApplicationName(std::string name) override {
+    appName_ = std::move(name);
+  }
+
+  std::string applicationName() const override {
+    if (!appName_.empty()) return appName_;
+    return appNameFromBundle();
   }
 
   void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) override {
@@ -285,12 +297,12 @@ public:
   }
 
   std::string userDataDir() const override {
-    NSURL* url = directoryURL(NSApplicationSupportDirectory);
+    NSURL* url = directoryURL(NSApplicationSupportDirectory, appName_);
     return url ? std::string(url.path.UTF8String) : std::string{};
   }
 
   std::string cacheDir() const override {
-    NSURL* url = directoryURL(NSCachesDirectory);
+    NSURL* url = directoryURL(NSCachesDirectory, appName_);
     return url ? std::string(url.path.UTF8String) : std::string{};
   }
 
@@ -404,6 +416,7 @@ private:
   std::function<void()> terminateHandler_;
   std::function<bool(std::string const&)> isEnabled_;
   std::unordered_set<ShortcutKey, ShortcutKeyHash> claimedShortcuts_;
+  std::string appName_;
 };
 
 namespace detail {

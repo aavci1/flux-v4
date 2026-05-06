@@ -275,7 +275,8 @@ public:
     toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
     xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
     xdg_toplevel_set_title(toplevel_, title_.c_str());
-    xdg_toplevel_set_app_id(toplevel_, "flux");
+    appId_ = Application::instance().name();
+    xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
     if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
     if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
     requestServerSideDecorations();
@@ -690,6 +691,7 @@ private:
   unsigned int handle_ = 0;
   Size size_{};
   std::string title_;
+  std::string appId_;
   float dpiScaleX_ = 1.f;
   float dpiScaleY_ = 1.f;
   bool fullscreen_ = false;

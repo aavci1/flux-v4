@@ -441,6 +441,16 @@ bool Application::dispatchMenuShortcut(KeyCode key, Modifiers modifiers) {
   return dispatchAction(it->second);
 }
 
+void Application::setName(std::string name) {
+  d->platformApp_->setApplicationName(std::move(name));
+  d->windowStatesLoaded_ = false;
+  d->windowStates_.clear();
+}
+
+std::string Application::name() const {
+  return d->platformApp_->applicationName();
+}
+
 std::string Application::userDataDir() const {
   return d->platformApp_->userDataDir();
 }

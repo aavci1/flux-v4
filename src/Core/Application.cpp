@@ -76,6 +76,15 @@ std::filesystem::path windowStatePath(std::string const& userDataDir) {
   return std::filesystem::path(userDataDir) / "window-state.json";
 }
 
+std::string appNameFromArgv(int argc, char** argv) {
+  if (argc <= 0 || !argv || !argv[0] || !*argv[0]) {
+    return "flux";
+  }
+  std::filesystem::path path(argv[0]);
+  std::string name = path.stem().string();
+  return name.empty() ? "flux" : name;
+}
+
 void loadWindowStatesFromDisk(std::filesystem::path const& path,
                               std::unordered_map<std::string, WindowState>& out) {
   out.clear();
@@ -230,7 +239,7 @@ struct Application::Impl {
   }
 };
 
-Application::Application(int, char**) {
+Application::Application(int argc, char** argv) {
   if (gCurrent) {
     throw std::runtime_error("Application already exists");
   }
@@ -241,6 +250,7 @@ Application::Application(int, char**) {
   d->clipboard_ = std::make_unique<MemoryClipboard>();
   d->platformApp_ = detail::createPlatformApplication();
   d->platformApp_->initialize();
+  d->platformApp_->setApplicationName(appNameFromArgv(argc, argv));
   d->platformApp_->setTerminateHandler([this] {
     saveOpenWindowStates();
     d->quit_ = true;
@@ -394,6 +404,16 @@ bool Application::dispatchMenuShortcut(KeyCode key, Modifiers modifiers) {
     return false;
   }
   return dispatchAction(it->second);
+}
+
+void Application::setName(std::string name) {
+  d->platformApp_->setApplicationName(std::move(name));
+  d->windowStatesLoaded_ = false;
+  d->windowStates_.clear();
+}
+
+std::string Application::name() const {
+  return d->platformApp_->applicationName();
 }
 
 std::string Application::userDataDir() const { return d->platformApp_->userDataDir(); }
