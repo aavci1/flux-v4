@@ -273,6 +273,11 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     list(APPEND _flux_vulkan_shader_headers ${_flux_shader_header})
   endforeach()
   add_custom_target(flux_vulkan_shaders DEPENDS ${_flux_vulkan_shader_headers})
+  add_custom_target(flux_vulkan_shaders_check
+    DEPENDS ${_flux_vulkan_shader_headers}
+    COMMENT "Regenerating Vulkan SPIR-V headers from shader sources"
+    VERBATIM
+  )
   add_dependencies(flux flux_vulkan_shaders)
   target_sources(flux PRIVATE
     src/Core/Application.cpp
