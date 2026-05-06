@@ -1,5 +1,6 @@
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 
+#include <Flux/Core/Application.hpp>
 #include <Flux/Debug/PerfCounters.hpp>
 #include <Flux/Graphics/AttributedString.hpp>
 
@@ -92,9 +93,10 @@ std::string firstExisting(std::initializer_list<std::filesystem::path> paths) {
 std::string findFontPath(std::string_view family, float weight, bool italic) {
   std::filesystem::path const exeDir = executableDir();
   if (family == "Material Symbols Rounded") {
+    std::string const appName = Application::hasInstance() ? Application::instance().name() : "flux";
     std::string path = firstExisting({
         exeDir / "fonts/MaterialSymbolsRounded.ttf",
-        exeDir / "../share/solitaire-app/fonts/MaterialSymbolsRounded.ttf",
+        exeDir / "../share" / appName / "fonts/MaterialSymbolsRounded.ttf",
         exeDir / "../share/flux/fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
