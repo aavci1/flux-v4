@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -38,8 +39,18 @@ std::string appNameFromBundle() {
 
 std::string roleActionName(MenuRole role) {
   switch (role) {
+  case MenuRole::AppAbout:
+    return "app.about";
   case MenuRole::AppPreferences:
     return "settings";
+  case MenuRole::AppHide:
+    return "app.hide";
+  case MenuRole::AppHideOthers:
+    return "app.hide-others";
+  case MenuRole::AppShowAll:
+    return "app.show-all";
+  case MenuRole::AppQuit:
+    return "app.quit";
   case MenuRole::EditUndo:
     return "undo";
   case MenuRole::EditRedo:
@@ -54,26 +65,24 @@ std::string roleActionName(MenuRole role) {
     return "delete";
   case MenuRole::EditSelectAll:
     return "select-all";
+  case MenuRole::WindowMinimize:
+    return "window.minimize";
+  case MenuRole::WindowZoom:
+    return "window.zoom";
+  case MenuRole::WindowFullscreen:
+    return "window.fullscreen";
+  case MenuRole::WindowBringAllToFront:
+    return "window.bring-all-to-front";
   default:
     return {};
   }
 }
 
-bool systemHandledRole(MenuRole role) {
-  switch (role) {
-  case MenuRole::AppAbout:
-  case MenuRole::AppHide:
-  case MenuRole::AppHideOthers:
-  case MenuRole::AppShowAll:
-  case MenuRole::AppQuit:
-  case MenuRole::WindowMinimize:
-  case MenuRole::WindowZoom:
-  case MenuRole::WindowFullscreen:
-  case MenuRole::WindowBringAllToFront:
-    return true;
-  default:
-    return false;
-  }
+bool systemHandledAction(std::string_view action) {
+  return action == "app.about" || action == "app.hide" || action == "app.hide-others" ||
+         action == "app.show-all" || action == "app.quit" || action == "window.minimize" ||
+         action == "window.zoom" || action == "window.fullscreen" ||
+         action == "window.bring-all-to-front";
 }
 
 std::string roleLabel(MenuRole role, std::string const& appName) {
@@ -307,56 +316,60 @@ public:
   }
 
   bool dispatchMenuItem(NSMenuItem* item) {
-    MenuRole const role = static_cast<MenuRole>(item.tag);
-    switch (role) {
-    case MenuRole::AppAbout:
-      [NSApp orderFrontStandardAboutPanel:nil];
-      return true;
-    case MenuRole::AppHide:
-      [NSApp hide:nil];
-      return true;
-    case MenuRole::AppHideOthers:
-      [NSApp hideOtherApplications:nil];
-      return true;
-    case MenuRole::AppShowAll:
-      [NSApp unhideAllApplications:nil];
-      return true;
-    case MenuRole::AppQuit:
-      [NSApp terminate:nil];
-      return true;
-    case MenuRole::WindowMinimize:
-      [[NSApp keyWindow] performMiniaturize:nil];
-      return true;
-    case MenuRole::WindowZoom:
-      [[NSApp keyWindow] performZoom:nil];
-      return true;
-    case MenuRole::WindowFullscreen:
-      [[NSApp keyWindow] toggleFullScreen:nil];
-      return true;
-    case MenuRole::WindowBringAllToFront:
-      [NSApp arrangeInFront:nil];
-      return true;
-    default:
-      break;
-    }
-
-    NSString* action = [item representedObject];
-    if (!action) {
+    NSString* actionObject = [item representedObject];
+    if (!actionObject) {
       return false;
     }
-    return dispatcher_ && dispatcher_(action.UTF8String);
+    std::string const action = actionObject.UTF8String;
+    if (action == "app.about") {
+      [NSApp orderFrontStandardAboutPanel:nil];
+      return true;
+    }
+    if (action == "app.hide") {
+      [NSApp hide:nil];
+      return true;
+    }
+    if (action == "app.hide-others") {
+      [NSApp hideOtherApplications:nil];
+      return true;
+    }
+    if (action == "app.show-all") {
+      [NSApp unhideAllApplications:nil];
+      return true;
+    }
+    if (action == "app.quit") {
+      [NSApp terminate:nil];
+      return true;
+    }
+    if (action == "window.minimize") {
+      [[NSApp keyWindow] performMiniaturize:nil];
+      return true;
+    }
+    if (action == "window.zoom") {
+      [[NSApp keyWindow] performZoom:nil];
+      return true;
+    }
+    if (action == "window.fullscreen") {
+      [[NSApp keyWindow] toggleFullScreen:nil];
+      return true;
+    }
+    if (action == "window.bring-all-to-front") {
+      [NSApp arrangeInFront:nil];
+      return true;
+    }
+    return dispatcher_ && dispatcher_(action);
   }
 
   bool validateMenuItem(NSMenuItem* item) const {
-    MenuRole const role = static_cast<MenuRole>(item.tag);
-    if (systemHandledRole(role)) {
+    NSString* actionObject = [item representedObject];
+    if (!actionObject) {
       return true;
     }
-    NSString* action = [item representedObject];
-    if (!action) {
+    std::string const action = actionObject.UTF8String;
+    if (systemHandledAction(action)) {
       return true;
     }
-    return isEnabled_ && isEnabled_(action.UTF8String);
+    return isEnabled_ && isEnabled_(action);
   }
 
   void handleShouldTerminate() {
@@ -400,7 +413,6 @@ private:
                                                     action:@selector(fluxMenuAction:)
                                              keyEquivalent:(key ? key : @"")];
     nsItem.target = delegate_;
-    nsItem.tag = static_cast<NSInteger>(item.role);
     if (!actionName.empty()) {
       nsItem.representedObject = ns(actionName);
     }
