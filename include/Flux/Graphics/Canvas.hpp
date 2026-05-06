@@ -38,6 +38,7 @@ public:
 
   virtual void resize(int width, int height) = 0;
   virtual void updateDpiScale(float scaleX, float scaleY) = 0;
+  virtual float dpiScale() const noexcept = 0;
 
   virtual void beginFrame() = 0;
   virtual void present() = 0;

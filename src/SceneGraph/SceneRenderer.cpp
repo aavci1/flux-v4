@@ -88,12 +88,7 @@ enum class RenderTraversalMode : std::uint8_t {
 };
 
 float rasterCacheDpiScaleForCanvas(Canvas* canvas) noexcept {
-#if defined(FLUX_PLATFORM_MACOS)
-    return dpiScaleForCanvas(canvas);
-#else
-    (void)canvas;
-    return 1.f;
-#endif
+    return canvas ? canvas->dpiScale() : 1.f;
 }
 
 #if defined(FLUX_PLATFORM_MACOS)

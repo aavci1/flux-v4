@@ -633,6 +633,8 @@ public:
     resize(width_, height_);
   }
 
+  float dpiScale() const noexcept override { return std::max(dpiScaleX_, dpiScaleY_); }
+
   void beginFrame() override {
     if (swapchainDirty_ || !swapchain_) {
       recreateSwapchain();
