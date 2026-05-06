@@ -636,9 +636,6 @@ public:
   float dpiScale() const noexcept override { return std::max(dpiScaleX_, dpiScaleY_); }
 
   void beginFrame() override {
-    if (swapchainDirty_ || !swapchain_) {
-      recreateSwapchain();
-    }
     rects_.clear();
     quads_.clear();
     batches_.clear();
@@ -734,9 +731,13 @@ public:
   }
 
   void present() override {
-    if (!swapchain_ || width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0) return;
+    if (width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0) return;
     debug::perf::ScopedTimer timer(debug::perf::TimedMetric::CanvasPresent);
     try {
+      if (swapchainDirty_ || !swapchain_) {
+        recreateSwapchain();
+      }
+      if (!swapchain_) return;
       presentImpl();
     } catch (std::exception const& e) {
       recoverResetFrameFence();
@@ -755,7 +756,7 @@ public:
     VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable, VK_NULL_HANDLE,
                                               &imageIndex);
     if (acquired == VK_ERROR_OUT_OF_DATE_KHR) {
-      recreateSwapchain();
+      swapchainDirty_ = true;
       return;
     }
     if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) {
@@ -825,7 +826,7 @@ public:
     presentInfo.pImageIndices = &imageIndex;
     VkResult presented = vkQueuePresentKHR(queue_, &presentInfo);
     if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR) {
-      recreateSwapchain();
+      swapchainDirty_ = true;
     } else {
       vkCheck(presented, "vkQueuePresentKHR");
     }
