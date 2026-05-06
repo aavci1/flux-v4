@@ -196,7 +196,7 @@ Element makeHeroDemo(Theme const &theme, Signal<int> workspace, Signal<std::stri
                                 std::fprintf(stderr, "[segmented-demo] workspace -> %s\n", next.c_str());
                             },
                         }
-                            .size(360.f, 0.f),
+                            .width(360.f),
                         Spacer {}.flex(1.f, 1.f),
                         statusPill(theme, current, Color::selectedContentBackground(), Color::accent())
                     )
@@ -246,7 +246,7 @@ Element makeToolbarDemo(Theme const &theme, Signal<int> channel, Signal<int> den
                                 std::fprintf(stderr, "[segmented-demo] channel -> %s\n", next.c_str());
                             },
                         }
-                            .size(250.f, 0.f),
+                            .width(220.f),
                         Spacer {}.flex(1.f, 1.f),
                         Text {
                             .text = "Density",
@@ -260,13 +260,16 @@ Element makeToolbarDemo(Theme const &theme, Signal<int> channel, Signal<int> den
                                 SegmentedControlOption {.label = "Balanced"},
                                 SegmentedControlOption {.label = "Compact"},
                             },
+                            .style = SegmentedControl::Style {
+                                .paddingH = 12.f,
+                            },
                             .onChange = [lastEvent](int index) {
                                 std::string const next = densityLabel(index);
                                 lastEvent = "Density set to " + next + ".";
                                 std::fprintf(stderr, "[segmented-demo] density -> %s\n", next.c_str());
                             },
                         }
-                            .size(320.f, 0.f)
+                            .width(320.f)
                     )
                 },
                 HStack {
@@ -317,7 +320,7 @@ Element makeStateDemo(Theme const &theme, Signal<int> branch, Signal<std::string
                                 std::fprintf(stderr, "[segmented-demo] branch -> %s\n", labels[index]);
                             },
                         }
-                            .size(280.f, 0.f),
+                            .width(280.f),
                         statusPill(theme, "Canary locked", Color::warningBackground(), Color::warning())
                     )
                 },
