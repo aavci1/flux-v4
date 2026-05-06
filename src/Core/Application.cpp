@@ -139,9 +139,45 @@ void saveWindowStatesToDisk(std::filesystem::path const& path,
   }
 }
 
+std::string standardRoleActionName(MenuRole role) {
+  switch (role) {
+  case MenuRole::AppPreferences: return "settings";
+  case MenuRole::AppQuit: return "app.quit";
+  case MenuRole::EditUndo: return "undo";
+  case MenuRole::EditRedo: return "redo";
+  case MenuRole::EditCut: return "cut";
+  case MenuRole::EditCopy: return "copy";
+  case MenuRole::EditPaste: return "paste";
+  case MenuRole::EditDelete: return "delete";
+  case MenuRole::EditSelectAll: return "select-all";
+  default: return {};
+  }
+}
+
+Shortcut standardRoleShortcut(MenuRole role) {
+  switch (role) {
+  case MenuRole::AppPreferences: return Shortcut{keys::Comma, Modifiers::Meta};
+  case MenuRole::AppQuit: return shortcuts::Quit;
+  case MenuRole::EditUndo: return shortcuts::Undo;
+  case MenuRole::EditRedo: return shortcuts::Redo;
+  case MenuRole::EditCut: return shortcuts::Cut;
+  case MenuRole::EditCopy: return shortcuts::Copy;
+  case MenuRole::EditPaste: return shortcuts::Paste;
+  case MenuRole::EditSelectAll: return shortcuts::SelectAll;
+  default: return {};
+  }
+}
+
 void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::function<void()>>& handlers,
                       std::unordered_map<std::string, std::function<bool()>>& enabled,
+                      std::unordered_map<ShortcutKey, std::string, ShortcutKeyHash>& shortcuts,
                       std::uint64_t& nextId) {
+  if (item.actionName.empty()) {
+    item.actionName = standardRoleActionName(item.role);
+  }
+  if (item.shortcut.key == 0 && item.shortcut.modifiers == Modifiers::None) {
+    item.shortcut = standardRoleShortcut(item.role);
+  }
   if (item.actionName.empty() && item.handler) {
     item.actionName = "__flux.menu.handler." + std::to_string(nextId++);
     handlers[item.actionName] = item.handler;
@@ -149,8 +185,11 @@ void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::funct
   if (!item.actionName.empty() && item.isEnabled) {
     enabled[item.actionName] = item.isEnabled;
   }
+  if (!item.actionName.empty() && (item.shortcut.key != 0 || item.shortcut.modifiers != Modifiers::None)) {
+    shortcuts[ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers}] = item.actionName;
+  }
   for (MenuItem& child : item.children) {
-    collectMenuState(child, handlers, enabled, nextId);
+    collectMenuState(child, handlers, enabled, shortcuts, nextId);
   }
 }
 
@@ -178,6 +217,7 @@ struct Application::Impl {
   MenuBar menuBar_;
   std::unordered_map<std::string, std::function<void()>> menuHandlers_;
   std::unordered_map<std::string, std::function<bool()>> menuEnabled_;
+  std::unordered_map<ShortcutKey, std::string, ShortcutKeyHash> menuShortcuts_;
   std::uint64_t nextMenuHandlerId_ = 1;
   mutable bool windowStatesLoaded_ = false;
   mutable std::unordered_map<std::string, WindowState> windowStates_;
@@ -244,7 +284,9 @@ Application::Application(int, char**) {
     if (ev.kind == WindowEvent::Kind::DpiChanged) {
       auto it = d->byHandle_.find(ev.handle);
       if (it != d->byHandle_.end() && it->second) {
-        it->second->updateCanvasDpiScale(ev.dpi, ev.dpi);
+        float const sx = ev.dpiX > 0.f ? ev.dpiX : ev.dpi;
+        float const sy = ev.dpiY > 0.f ? ev.dpiY : ev.dpi;
+        it->second->updateCanvasDpiScale(sx, sy);
       }
     }
     if (ev.kind == WindowEvent::Kind::CloseRequest) {
@@ -314,8 +356,9 @@ Clipboard& Application::clipboard() { return *d->clipboard_; }
 void Application::setMenuBar(MenuBar menu) {
   d->menuHandlers_.clear();
   d->menuEnabled_.clear();
+  d->menuShortcuts_.clear();
   for (MenuItem& item : menu.menus) {
-    collectMenuState(item, d->menuHandlers_, d->menuEnabled_, d->nextMenuHandlerId_);
+    collectMenuState(item, d->menuHandlers_, d->menuEnabled_, d->menuShortcuts_, d->nextMenuHandlerId_);
   }
   d->menuBar_ = std::move(menu);
   d->platformApp_->setMenuBar(d->menuBar_, [this](std::string const& actionName) {
@@ -327,6 +370,11 @@ void Application::setMenuBar(MenuBar menu) {
 }
 
 bool Application::dispatchAction(std::string const& name) {
+  if (name == "app.quit") {
+    quit();
+    return true;
+  }
+
   auto menuHandler = d->menuHandlers_.find(name);
   if (menuHandler != d->menuHandlers_.end()) {
     auto enabled = d->menuEnabled_.find(name);
@@ -364,7 +412,16 @@ bool Application::isActionEnabled(std::string const& name) const {
 }
 
 bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const {
-  return d->platformApp_->menuClaimedShortcuts().contains(ShortcutKey{.key = key, .modifiers = modifiers});
+  ShortcutKey const shortcut{.key = key, .modifiers = modifiers};
+  return d->menuShortcuts_.contains(shortcut) || d->platformApp_->menuClaimedShortcuts().contains(shortcut);
+}
+
+bool Application::dispatchMenuShortcut(KeyCode key, Modifiers modifiers) {
+  auto it = d->menuShortcuts_.find(ShortcutKey{.key = key, .modifiers = modifiers});
+  if (it == d->menuShortcuts_.end()) {
+    return false;
+  }
+  return dispatchAction(it->second);
 }
 
 std::string Application::userDataDir() const { return d->platformApp_->userDataDir(); }

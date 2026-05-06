@@ -92,6 +92,7 @@ public:
   bool dispatchAction(std::string const& name);
   bool isActionEnabled(std::string const& name) const;
   bool isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const;
+  bool dispatchMenuShortcut(KeyCode key, Modifiers modifiers);
 
   std::string userDataDir() const;
   std::string cacheDir() const;

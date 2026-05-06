@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -90,8 +91,11 @@ struct RectInstance {
 
 struct QuadInstance {
   float rect[4]{};
+  float axisX[4]{};
+  float axisY[4]{};
   float uv[4]{};
   float color[4]{};
+  float radii[4]{};
 };
 
 struct ImageBatch {
@@ -106,6 +110,40 @@ struct DrawOp {
   Texture* texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
+};
+
+struct VulkanPathVertex {
+  float x = 0.f;
+  float y = 0.f;
+  float color[4]{};
+  float viewport[2]{};
+  float local[2]{};
+  float fill0[4]{};
+  float fill1[4]{};
+  float fill2[4]{};
+  float fill3[4]{};
+  float stops[4]{};
+  float gradient[4]{};
+  float params[4]{};
+};
+
+struct PathCacheKey {
+  std::uint64_t pathHash = 0;
+  std::uint64_t styleHash = 0;
+  int viewportW = 0;
+  int viewportH = 0;
+
+  bool operator==(PathCacheKey const&) const = default;
+};
+
+struct PathCacheKeyHash {
+  std::size_t operator()(PathCacheKey const& key) const noexcept {
+    std::size_t h = static_cast<std::size_t>(key.pathHash);
+    h ^= static_cast<std::size_t>(key.styleHash + 0x9e3779b97f4a7c15ULL + (h << 6u) + (h >> 2u));
+    h ^= static_cast<std::size_t>(key.viewportW) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
+    h ^= static_cast<std::size_t>(key.viewportH) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
+    return h;
+  }
 };
 
 struct GlyphKey {
@@ -135,6 +173,88 @@ void putColor(float out[4], Color c, float opacity = 1.f) {
   out[3] = c.a * opacity;
 }
 
+void hashBytes(std::uint64_t& h, void const* data, std::size_t size) {
+  auto const* bytes = static_cast<std::uint8_t const*>(data);
+  for (std::size_t i = 0; i < size; ++i) {
+    h ^= bytes[i];
+    h *= 1099511628211ULL;
+  }
+}
+
+template<typename T>
+void hashValue(std::uint64_t& h, T const& value) {
+  hashBytes(h, &value, sizeof(value));
+}
+
+void hashColor(std::uint64_t& h, Color c) {
+  hashValue(h, c.r);
+  hashValue(h, c.g);
+  hashValue(h, c.b);
+  hashValue(h, c.a);
+}
+
+void hashPoint(std::uint64_t& h, Point p) {
+  hashValue(h, p.x);
+  hashValue(h, p.y);
+}
+
+void hashStops(std::uint64_t& h, std::array<GradientStop, kMaxGradientStops> const& stops, std::uint8_t count) {
+  hashValue(h, count);
+  for (std::uint8_t i = 0; i < count; ++i) {
+    hashValue(h, stops[i].position);
+    hashColor(h, stops[i].color);
+  }
+}
+
+std::uint64_t hashFill(FillStyle const& fill) {
+  std::uint64_t h = 14695981039346656037ULL;
+  hashValue(h, fill.fillRule);
+  hashValue(h, fill.data.index());
+  Color solid{};
+  if (fill.solidColor(&solid)) {
+    hashColor(h, solid);
+  }
+  LinearGradient linear{};
+  if (fill.linearGradient(&linear)) {
+    hashPoint(h, linear.start);
+    hashPoint(h, linear.end);
+    hashStops(h, linear.stops, linear.stopCount);
+  }
+  RadialGradient radial{};
+  if (fill.radialGradient(&radial)) {
+    hashPoint(h, radial.center);
+    hashValue(h, radial.radius);
+    hashStops(h, radial.stops, radial.stopCount);
+  }
+  ConicalGradient conical{};
+  if (fill.conicalGradient(&conical)) {
+    hashPoint(h, conical.center);
+    hashValue(h, conical.startAngleRadians);
+    hashStops(h, conical.stops, conical.stopCount);
+  }
+  return h;
+}
+
+std::uint64_t hashStroke(StrokeStyle const& stroke) {
+  std::uint64_t h = 14695981039346656037ULL;
+  hashValue(h, stroke.type);
+  hashColor(h, stroke.color);
+  hashValue(h, stroke.width);
+  hashValue(h, stroke.cap);
+  hashValue(h, stroke.join);
+  hashValue(h, stroke.miterLimit);
+  return h;
+}
+
+std::uint64_t hashTransform(Mat3 const& transform, float opacity) {
+  std::uint64_t h = 14695981039346656037ULL;
+  for (float value : transform.m) {
+    hashValue(h, value);
+  }
+  hashValue(h, opacity);
+  return h;
+}
+
 Rect unionRects(Rect a, Rect b) {
   float const x0 = std::min(a.x, b.x);
   float const y0 = std::min(a.y, b.y);
@@ -147,6 +267,99 @@ void vkCheck(VkResult result, char const* what) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(std::string(what) + " failed");
   }
+}
+
+struct SharedVulkanCore {
+  VkInstance instance = VK_NULL_HANDLE;
+  VkPhysicalDevice physical = VK_NULL_HANDLE;
+  VkDevice device = VK_NULL_HANDLE;
+  VkQueue queue = VK_NULL_HANDLE;
+  std::uint32_t queueFamily = 0;
+  std::uint32_t refs = 0;
+};
+
+std::mutex gVulkanCoreMutex;
+SharedVulkanCore gVulkanCore;
+
+VkInstance ensureSharedVulkanInstance() {
+  std::lock_guard lock(gVulkanCoreMutex);
+  if (gVulkanCore.instance) return gVulkanCore.instance;
+  char const* exts[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
+  VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
+  app.pApplicationName = "Flux";
+  app.apiVersion = VK_API_VERSION_1_0;
+  VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+  info.pApplicationInfo = &app;
+  info.enabledExtensionCount = 2;
+  info.ppEnabledExtensionNames = exts;
+  vkCheck(vkCreateInstance(&info, nullptr, &gVulkanCore.instance), "vkCreateInstance");
+  return gVulkanCore.instance;
+}
+
+SharedVulkanCore acquireSharedVulkanCore(VkSurfaceKHR surface) {
+  std::lock_guard lock(gVulkanCoreMutex);
+  if (!gVulkanCore.instance) {
+    throw std::runtime_error("Vulkan instance was not initialized");
+  }
+  if (!gVulkanCore.device) {
+    std::uint32_t count = 0;
+    vkEnumeratePhysicalDevices(gVulkanCore.instance, &count, nullptr);
+    if (!count) throw std::runtime_error("No Vulkan physical devices");
+    std::vector<VkPhysicalDevice> devices(count);
+    vkEnumeratePhysicalDevices(gVulkanCore.instance, &count, devices.data());
+    for (VkPhysicalDevice d : devices) {
+      std::uint32_t familiesCount = 0;
+      vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, nullptr);
+      std::vector<VkQueueFamilyProperties> families(familiesCount);
+      vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, families.data());
+      for (std::uint32_t i = 0; i < familiesCount; ++i) {
+        VkBool32 present = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(d, i, surface, &present);
+        if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && present) {
+          gVulkanCore.physical = d;
+          gVulkanCore.queueFamily = i;
+          float priority = 1.f;
+          VkDeviceQueueCreateInfo q{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+          q.queueFamilyIndex = i;
+          q.queueCount = 1;
+          q.pQueuePriorities = &priority;
+          char const* exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+          VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+          info.queueCreateInfoCount = 1;
+          info.pQueueCreateInfos = &q;
+          info.enabledExtensionCount = 1;
+          info.ppEnabledExtensionNames = exts;
+          vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
+          vkGetDeviceQueue(gVulkanCore.device, gVulkanCore.queueFamily, 0, &gVulkanCore.queue);
+          ++gVulkanCore.refs;
+          return gVulkanCore;
+        }
+      }
+    }
+    throw std::runtime_error("No Vulkan graphics/present queue");
+  }
+  VkBool32 present = VK_FALSE;
+  vkGetPhysicalDeviceSurfaceSupportKHR(gVulkanCore.physical, gVulkanCore.queueFamily, surface, &present);
+  if (!present) {
+    throw std::runtime_error("Shared Vulkan queue cannot present to this Wayland surface");
+  }
+  ++gVulkanCore.refs;
+  return gVulkanCore;
+}
+
+void releaseSharedVulkanCore() {
+  std::lock_guard lock(gVulkanCoreMutex);
+  if (gVulkanCore.refs == 0) return;
+  --gVulkanCore.refs;
+  if (gVulkanCore.refs != 0) return;
+  if (gVulkanCore.device) {
+    vkDeviceWaitIdle(gVulkanCore.device);
+    vkDestroyDevice(gVulkanCore.device, nullptr);
+  }
+  if (gVulkanCore.instance) {
+    vkDestroyInstance(gVulkanCore.instance, nullptr);
+  }
+  gVulkanCore = {};
 }
 
 std::uint32_t findMemoryType(VkPhysicalDevice physical, std::uint32_t typeBits, VkMemoryPropertyFlags flags) {
@@ -228,74 +441,60 @@ Rect boundsOfSubpaths(std::vector<std::vector<Point>> const& subpaths) {
   return Rect::sharp(minX, minY, maxX - minX, maxY - minY);
 }
 
-Color interpolateStops(GradientStop const* stops, std::uint8_t stopCount, float t, float opacity) {
-  t = std::clamp(t, 0.f, 1.f);
-  if (stopCount == 0) return Colors::transparent;
-  if (stopCount == 1 || t <= stops[0].position) {
-    Color c = stops[0].color;
-    c.a *= opacity;
-    return c;
-  }
-  for (std::uint8_t i = 0; i + 1 < stopCount; ++i) {
-    GradientStop const& a = stops[i];
-    GradientStop const& b = stops[i + 1];
-    if (t <= b.position || i + 2 == stopCount) {
-      float const span = std::max(b.position - a.position, 1e-5f);
-      float const u = std::clamp((t - a.position) / span, 0.f, 1.f);
-      return {a.color.r + (b.color.r - a.color.r) * u,
-              a.color.g + (b.color.g - a.color.g) * u,
-              a.color.b + (b.color.b - a.color.b) * u,
-              (a.color.a + (b.color.a - a.color.a) * u) * opacity};
+void putPathGradient(VulkanPathVertex& out, FillStyle const& fill, Point local) {
+  out.local[0] = local.x;
+  out.local[1] = local.y;
+  auto putStops = [&](auto const& gradient, int type) {
+    out.params[0] = static_cast<float>(type);
+    out.params[1] = static_cast<float>(gradient.stopCount);
+    std::array<float*, 4> colors{out.fill0, out.fill1, out.fill2, out.fill3};
+    for (std::uint8_t i = 0; i < gradient.stopCount && i < colors.size(); ++i) {
+      putColor(colors[i], gradient.stops[i].color, 1.f);
+      out.stops[i] = gradient.stops[i].position;
     }
-  }
-  Color c = stops[stopCount - 1].color;
-  c.a *= opacity;
-  return c;
-}
-
-bool gradientColorAt(FillStyle const& fill, Point unit, float opacity, Color* out) {
+  };
   LinearGradient linear{};
-  if (fill.linearGradient(&linear) && linear.stopCount >= 2) {
-    Point const axis = linear.end - linear.start;
-    float const axisLenSq = axis.x * axis.x + axis.y * axis.y;
-    float const t = axisLenSq > 1e-8f
-                        ? ((unit.x - linear.start.x) * axis.x + (unit.y - linear.start.y) * axis.y) / axisLenSq
-                        : 0.f;
-    *out = interpolateStops(linear.stops.data(), linear.stopCount, t, opacity);
-    return true;
+  if (fill.linearGradient(&linear) && linear.stopCount > 0) {
+    putStops(linear, 1);
+    out.gradient[0] = linear.start.x;
+    out.gradient[1] = linear.start.y;
+    out.gradient[2] = linear.end.x;
+    out.gradient[3] = linear.end.y;
+    return;
   }
   RadialGradient radial{};
-  if (fill.radialGradient(&radial) && radial.stopCount >= 2) {
-    float const dx = unit.x - radial.center.x;
-    float const dy = unit.y - radial.center.y;
-    *out = interpolateStops(radial.stops.data(), radial.stopCount,
-                            std::sqrt(dx * dx + dy * dy) / std::max(radial.radius, 1e-4f), opacity);
-    return true;
+  if (fill.radialGradient(&radial) && radial.stopCount > 0) {
+    putStops(radial, 2);
+    out.gradient[0] = radial.center.x;
+    out.gradient[1] = radial.center.y;
+    out.gradient[2] = radial.radius;
+    return;
   }
   ConicalGradient conical{};
-  if (fill.conicalGradient(&conical) && conical.stopCount >= 2) {
-    constexpr float twoPi = 6.28318530718f;
-    float t = (std::atan2(unit.y - conical.center.y, unit.x - conical.center.x) -
-               conical.startAngleRadians) / twoPi;
-    t -= std::floor(t);
-    *out = interpolateStops(conical.stops.data(), conical.stopCount, t, opacity);
-    return true;
+  if (fill.conicalGradient(&conical) && conical.stopCount > 0) {
+    putStops(conical, 3);
+    out.gradient[0] = conical.center.x;
+    out.gradient[1] = conical.center.y;
+    out.gradient[2] = conical.startAngleRadians;
   }
-  return false;
 }
 
-void applyGradientFill(TessellatedPath& tessellated, FillStyle const& fill, Rect bounds, float opacity) {
+VulkanPathVertex makeVulkanPathVertex(PathVertex const& src, FillStyle const* fill, Rect bounds, float opacity) {
+  VulkanPathVertex out{};
+  out.x = src.x;
+  out.y = src.y;
+  std::copy(std::begin(src.color), std::end(src.color), std::begin(out.color));
+  std::copy(std::begin(src.viewport), std::end(src.viewport), std::begin(out.viewport));
   float const invW = 1.f / std::max(bounds.width, 1e-4f);
   float const invH = 1.f / std::max(bounds.height, 1e-4f);
-  for (PathVertex& vertex : tessellated.vertices) {
-    Point const unit{(vertex.x - bounds.x) * invW, (vertex.y - bounds.y) * invH};
-    Color color{};
-    if (!gradientColorAt(fill, unit, opacity, &color)) return;
-    vertex.color[0] = color.r;
-    vertex.color[1] = color.g;
-    vertex.color[2] = color.b;
-    vertex.color[3] = color.a;
+  Point const local{(src.x - bounds.x) * invW, (src.y - bounds.y) * invH};
+  out.local[0] = local.x;
+  out.local[1] = local.y;
+  out.params[3] = opacity;
+  if (fill) {
+    putPathGradient(out, *fill, local);
   }
+  return out;
 }
 
 } // namespace
@@ -304,13 +503,17 @@ class VulkanCanvas final : public Canvas {
 public:
   VulkanCanvas(wl_display* display, wl_surface* surface, unsigned int handle, TextSystem& textSystem)
       : display_(display), wlSurface_(surface), handle_(handle), textSystem_(textSystem) {
-    createInstance();
+    instance_ = ensureSharedVulkanInstance();
     VkWaylandSurfaceCreateInfoKHR surfaceInfo{VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR};
     surfaceInfo.display = display_;
     surfaceInfo.surface = wlSurface_;
     vkCheck(vkCreateWaylandSurfaceKHR(instance_, &surfaceInfo, nullptr, &surface_), "vkCreateWaylandSurfaceKHR");
-    pickDevice();
-    createDevice();
+    SharedVulkanCore shared = acquireSharedVulkanCore(surface_);
+    ownsSharedVulkanCore_ = true;
+    physical_ = shared.physical;
+    device_ = shared.device;
+    queue_ = shared.queue;
+    queueFamily_ = shared.queueFamily;
     createCommandObjects();
     createDescriptors();
     createSampler();
@@ -347,16 +550,15 @@ public:
     for (VkSemaphore semaphore : imageAvailable_) {
       if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
     }
-    for (VkSemaphore semaphore : renderFinished_) {
+    for (VkSemaphore semaphore : imageRenderFinished_) {
       if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
     }
     for (VkFence fence : frameFences_) {
       if (fence) vkDestroyFence(device_, fence, nullptr);
     }
     if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
-    if (device_) vkDestroyDevice(device_, nullptr);
     if (surface_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
-    if (instance_) vkDestroyInstance(instance_, nullptr);
+    if (ownsSharedVulkanCore_) releaseSharedVulkanCore();
   }
 
   Backend backend() const noexcept override { return Backend::Vulkan; }
@@ -396,12 +598,103 @@ public:
 
   void clear(Color color = Colors::transparent) override { clearColor_ = color; }
 
+  std::shared_ptr<Image> rasterize(Size logicalSize, RasterizeDrawCallback const& draw, float dpiScale) {
+    if (!draw || logicalSize.width <= 0.f || logicalSize.height <= 0.f) return nullptr;
+    float const scale = dpiScale > 0.f ? dpiScale : std::max(dpiScaleX_, dpiScaleY_);
+    int const logicalW = std::max(1, static_cast<int>(std::ceil(logicalSize.width)));
+    int const logicalH = std::max(1, static_cast<int>(std::ceil(logicalSize.height)));
+    int const pixelW = std::max(1, static_cast<int>(std::ceil(logicalSize.width * scale)));
+    int const pixelH = std::max(1, static_cast<int>(std::ceil(logicalSize.height * scale)));
+
+    struct SavedFrameState {
+      int width = 1;
+      int height = 1;
+      int framebufferWidth = 1;
+      int framebufferHeight = 1;
+      VkExtent2D swapExtent{};
+      Color clearColor{};
+      DrawState state{};
+      std::vector<DrawState> stateStack;
+      std::vector<RectInstance> rects;
+      std::vector<QuadInstance> quads;
+      std::vector<ImageBatch> batches;
+      std::vector<DrawOp> ops;
+      std::vector<VulkanPathVertex> pathVerts;
+    };
+
+    SavedFrameState saved{
+        .width = width_,
+        .height = height_,
+        .framebufferWidth = framebufferWidth_,
+        .framebufferHeight = framebufferHeight_,
+        .swapExtent = swapExtent_,
+        .clearColor = clearColor_,
+        .state = state_,
+        .stateStack = std::move(stateStack_),
+        .rects = std::move(rects_),
+        .quads = std::move(quads_),
+        .batches = std::move(batches_),
+        .ops = std::move(ops_),
+        .pathVerts = std::move(pathVerts_),
+    };
+
+    auto restore = [&] {
+      width_ = saved.width;
+      height_ = saved.height;
+      framebufferWidth_ = saved.framebufferWidth;
+      framebufferHeight_ = saved.framebufferHeight;
+      swapExtent_ = saved.swapExtent;
+      clearColor_ = saved.clearColor;
+      state_ = saved.state;
+      stateStack_ = std::move(saved.stateStack);
+      rects_ = std::move(saved.rects);
+      quads_ = std::move(saved.quads);
+      batches_ = std::move(saved.batches);
+      ops_ = std::move(saved.ops);
+      pathVerts_ = std::move(saved.pathVerts);
+    };
+
+    width_ = logicalW;
+    height_ = logicalH;
+    framebufferWidth_ = pixelW;
+    framebufferHeight_ = pixelH;
+    swapExtent_ = VkExtent2D{static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH)};
+    rects_.clear();
+    quads_.clear();
+    batches_.clear();
+    ops_.clear();
+    pathVerts_.clear();
+    stateStack_.clear();
+    state_ = {};
+    state_.clip = Rect::sharp(0.f, 0.f, static_cast<float>(logicalW), static_cast<float>(logicalH));
+    clearColor_ = Colors::transparent;
+
+    try {
+      draw(*this, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
+      std::shared_ptr<Image> image = renderCurrentOpsToImage(pixelW, pixelH);
+      restore();
+      return image;
+    } catch (...) {
+      restore();
+      throw;
+    }
+  }
+
   void present() override {
     if (!swapchain_ || width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0) return;
     debug::perf::ScopedTimer timer(debug::perf::TimedMetric::CanvasPresent);
+    try {
+      presentImpl();
+    } catch (std::exception const& e) {
+      recoverResetFrameFence();
+      std::fprintf(stderr, "Flux Vulkan: present failed: %s\n", e.what());
+      swapchainDirty_ = true;
+    }
+  }
+
+  void presentImpl() {
     VkFence const frameFence = frameFences_[currentFrame_];
     VkSemaphore const imageAvailable = imageAvailable_[currentFrame_];
-    VkSemaphore const renderFinished = renderFinished_[currentFrame_];
     VkCommandBuffer const commandBuffer = commandBuffers_[currentFrame_];
 
     vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
@@ -419,7 +712,11 @@ public:
       vkWaitForFences(device_, 1, &imageInFlightFences_[imageIndex], VK_TRUE, UINT64_MAX);
     }
     imageInFlightFences_[imageIndex] = frameFence;
-    vkResetFences(device_, 1, &frameFence);
+    if (imageIndex >= imageRenderFinished_.size() || !imageRenderFinished_[imageIndex]) {
+      swapchainDirty_ = true;
+      return;
+    }
+    VkSemaphore const renderFinished = imageRenderFinished_[imageIndex];
 
     uploadFrameBuffers();
     uploadAtlasIfNeeded();
@@ -457,7 +754,14 @@ public:
     submit.pCommandBuffers = &commandBuffer;
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &renderFinished;
-    vkCheck(vkQueueSubmit(queue_, 1, &submit, frameFence), "vkQueueSubmit");
+    resetFrameFenceIndex_ = currentFrame_;
+    vkCheck(vkResetFences(device_, 1, &frameFence), "vkResetFences");
+    VkResult const submitted = vkQueueSubmit(queue_, 1, &submit, frameFence);
+    if (submitted != VK_SUCCESS) {
+      recoverResetFrameFence();
+      vkCheck(submitted, "vkQueueSubmit");
+    }
+    resetFrameFenceIndex_ = kNoResetFrameFence;
     flushScreenshot();
 
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
@@ -617,16 +921,19 @@ public:
                                      pos.y - slot->bearing.y / dpiScaleY_,
                                      static_cast<float>(slot->w) / dpiScaleX_,
                                      static_cast<float>(slot->h) / dpiScaleY_);
-        Rect r = transformedBounds(glyphRect);
         Point p00 = state_.transform.apply({glyphRect.x, glyphRect.y});
-        Point p11 = state_.transform.apply({glyphRect.x + glyphRect.width, glyphRect.y + glyphRect.height});
+        Point p10 = state_.transform.apply({glyphRect.x + glyphRect.width, glyphRect.y});
+        Point p01 = state_.transform.apply({glyphRect.x, glyphRect.y + glyphRect.height});
         QuadInstance q{};
-        q.rect[0] = r.x; q.rect[1] = r.y;
-        q.rect[2] = r.width; q.rect[3] = r.height;
-        q.uv[0] = p00.x <= p11.x ? slot->u0 : slot->u1;
-        q.uv[1] = p00.y <= p11.y ? slot->v0 : slot->v1;
-        q.uv[2] = p00.x <= p11.x ? slot->u1 : slot->u0;
-        q.uv[3] = p00.y <= p11.y ? slot->v1 : slot->v0;
+        q.rect[0] = 0.f; q.rect[1] = 0.f;
+        q.rect[2] = glyphRect.width; q.rect[3] = glyphRect.height;
+        q.axisX[0] = p00.x; q.axisX[1] = p00.y;
+        q.axisX[2] = p10.x - p00.x; q.axisX[3] = p10.y - p00.y;
+        q.axisY[0] = p01.x - p00.x; q.axisY[1] = p01.y - p00.y;
+        q.uv[0] = slot->u0;
+        q.uv[1] = slot->v0;
+        q.uv[2] = slot->u1;
+        q.uv[3] = slot->v1;
         putColor(q.color, placed.run.color, state_.opacity);
         quads_.push_back(q);
       }
@@ -639,26 +946,34 @@ public:
     }
   }
 
-  void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const&, float opacity) override {
+  void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners, float opacity) override {
     auto const* vi = dynamic_cast<VulkanImage const*>(&image);
     if (!vi || src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) return;
     Texture* texture = ensureImageTexture(*vi);
     if (!texture) return;
-    Rect r = transformedBounds(dst);
     Point p00 = state_.transform.apply({dst.x, dst.y});
-    Point p11 = state_.transform.apply({dst.x + dst.width, dst.y + dst.height});
+    Point p10 = state_.transform.apply({dst.x + dst.width, dst.y});
+    Point p01 = state_.transform.apply({dst.x, dst.y + dst.height});
     Size sz = image.size();
     float const u0 = src.x / sz.width;
     float const v0 = src.y / sz.height;
     float const u1 = (src.x + src.width) / sz.width;
     float const v1 = (src.y + src.height) / sz.height;
     QuadInstance q{};
-    q.rect[0] = r.x; q.rect[1] = r.y; q.rect[2] = r.width; q.rect[3] = r.height;
-    q.uv[0] = p00.x <= p11.x ? u0 : u1;
-    q.uv[1] = p00.y <= p11.y ? v0 : v1;
-    q.uv[2] = p00.x <= p11.x ? u1 : u0;
-    q.uv[3] = p00.y <= p11.y ? v1 : v0;
+    q.rect[0] = 0.f; q.rect[1] = 0.f; q.rect[2] = dst.width; q.rect[3] = dst.height;
+    q.axisX[0] = p00.x; q.axisX[1] = p00.y;
+    q.axisX[2] = p10.x - p00.x; q.axisX[3] = p10.y - p00.y;
+    q.axisY[0] = p01.x - p00.x; q.axisY[1] = p01.y - p00.y;
+    q.uv[0] = u0;
+    q.uv[1] = v0;
+    q.uv[2] = u1;
+    q.uv[3] = v1;
     q.color[0] = q.color[1] = q.color[2] = 1.f; q.color[3] = opacity * state_.opacity;
+    CornerRadius cr = clampRadii(corners, dst.width, dst.height);
+    q.radii[0] = cr.topLeft;
+    q.radii[1] = cr.topRight;
+    q.radii[2] = cr.bottomRight;
+    q.radii[3] = cr.bottomLeft;
     std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(q);
     batches_.push_back(ImageBatch{texture, first, 1});
@@ -781,58 +1096,6 @@ private:
     inst.params[1] = 1.f;
   }
 
-  void createInstance() {
-    char const* exts[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
-    VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    app.pApplicationName = "Flux";
-    app.apiVersion = VK_API_VERSION_1_0;
-    VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-    info.pApplicationInfo = &app;
-    info.enabledExtensionCount = 2;
-    info.ppEnabledExtensionNames = exts;
-    vkCheck(vkCreateInstance(&info, nullptr, &instance_), "vkCreateInstance");
-  }
-
-  void pickDevice() {
-    std::uint32_t count = 0;
-    vkEnumeratePhysicalDevices(instance_, &count, nullptr);
-    if (!count) throw std::runtime_error("No Vulkan physical devices");
-    std::vector<VkPhysicalDevice> devices(count);
-    vkEnumeratePhysicalDevices(instance_, &count, devices.data());
-    for (VkPhysicalDevice d : devices) {
-      std::uint32_t familiesCount = 0;
-      vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, nullptr);
-      std::vector<VkQueueFamilyProperties> families(familiesCount);
-      vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, families.data());
-      for (std::uint32_t i = 0; i < familiesCount; ++i) {
-        VkBool32 present = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(d, i, surface_, &present);
-        if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && present) {
-          physical_ = d;
-          queueFamily_ = i;
-          return;
-        }
-      }
-    }
-    throw std::runtime_error("No Vulkan graphics/present queue");
-  }
-
-  void createDevice() {
-    float priority = 1.f;
-    VkDeviceQueueCreateInfo q{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-    q.queueFamilyIndex = queueFamily_;
-    q.queueCount = 1;
-    q.pQueuePriorities = &priority;
-    char const* exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-    info.queueCreateInfoCount = 1;
-    info.pQueueCreateInfos = &q;
-    info.enabledExtensionCount = 1;
-    info.ppEnabledExtensionNames = exts;
-    vkCheck(vkCreateDevice(physical_, &info, nullptr, &device_), "vkCreateDevice");
-    vkGetDeviceQueue(device_, queueFamily_, 0, &queue_);
-  }
-
   void createCommandObjects() {
     VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -848,9 +1111,30 @@ private:
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (std::size_t i = 0; i < kMaxFramesInFlight; ++i) {
       vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageAvailable_[i]), "vkCreateSemaphore");
-      vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &renderFinished_[i]), "vkCreateSemaphore");
       vkCheck(vkCreateFence(device_, &fence, nullptr, &frameFences_[i]), "vkCreateFence");
     }
+  }
+
+  void recoverResetFrameFence() {
+    if (resetFrameFenceIndex_ == kNoResetFrameFence || resetFrameFenceIndex_ >= frameFences_.size()) {
+      return;
+    }
+    VkFence oldFence = frameFences_[resetFrameFenceIndex_];
+    VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    VkFence newFence = VK_NULL_HANDLE;
+    if (vkCreateFence(device_, &fence, nullptr, &newFence) == VK_SUCCESS) {
+      for (VkFence& imageFence : imageInFlightFences_) {
+        if (imageFence == oldFence) {
+          imageFence = newFence;
+        }
+      }
+      frameFences_[resetFrameFenceIndex_] = newFence;
+      if (oldFence) {
+        vkDestroyFence(device_, oldFence, nullptr);
+      }
+    }
+    resetFrameFenceIndex_ = kNoResetFrameFence;
   }
 
   void createDescriptors() {
@@ -969,12 +1253,20 @@ private:
                                     flux_image_frag_spv, flux_image_frag_spv_len, {});
     std::array<VkVertexInputBindingDescription, 1> binding{};
     binding[0].binding = 0;
-    binding[0].stride = sizeof(PathVertex);
+    binding[0].stride = sizeof(VulkanPathVertex);
     binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    std::array<VkVertexInputAttributeDescription, 3> attrs{};
-    attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(PathVertex, x)};
-    attrs[1] = {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(PathVertex, color)};
-    attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(PathVertex, viewport)};
+    std::array<VkVertexInputAttributeDescription, 11> attrs{};
+    attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VulkanPathVertex, x)};
+    attrs[1] = {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, color)};
+    attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VulkanPathVertex, viewport)};
+    attrs[3] = {3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VulkanPathVertex, local)};
+    attrs[4] = {4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, fill0)};
+    attrs[5] = {5, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, fill1)};
+    attrs[6] = {6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, fill2)};
+    attrs[7] = {7, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, fill3)};
+    attrs[8] = {8, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, stops)};
+    attrs[9] = {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, gradient)};
+    attrs[10] = {10, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, params)};
     pathPipeline_ = createPipeline(pathPipelineLayout_, flux_path_vert_spv, flux_path_vert_spv_len,
                                    flux_path_frag_spv, flux_path_frag_spv_len,
                                    {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});
@@ -1073,10 +1365,12 @@ private:
     VkSwapchainKHR oldSwapchain = swapchain_;
     std::vector<VkImageView> oldViews = std::move(swapchainViews_);
     std::vector<VkFramebuffer> oldFramebuffers = std::move(framebuffers_);
+    std::vector<VkSemaphore> oldImageRenderFinished = std::move(imageRenderFinished_);
     swapchain_ = VK_NULL_HANDLE;
     swapchainImages_.clear();
     swapchainViews_.clear();
     framebuffers_.clear();
+    imageRenderFinished_.clear();
     VkSurfaceCapabilitiesKHR caps{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &caps);
     std::uint32_t presentCount = 0;
@@ -1118,9 +1412,12 @@ private:
     swapchainImages_.resize(count);
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, swapchainImages_.data());
     imageInFlightFences_.assign(count, VK_NULL_HANDLE);
+    imageRenderFinished_.resize(count, VK_NULL_HANDLE);
     swapchainViews_.resize(count);
     framebuffers_.resize(count);
+    VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
+      vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageRenderFinished_[i]), "vkCreateSemaphore");
       VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
       view.image = swapchainImages_[i];
       view.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -1138,6 +1435,9 @@ private:
       fb.layers = 1;
       vkCheck(vkCreateFramebuffer(device_, &fb, nullptr, &framebuffers_[i]), "vkCreateFramebuffer");
     }
+    for (VkSemaphore semaphore : oldImageRenderFinished) {
+      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+    }
     for (VkFramebuffer fb : oldFramebuffers) vkDestroyFramebuffer(device_, fb, nullptr);
     for (VkImageView view : oldViews) vkDestroyImageView(device_, view, nullptr);
     if (oldSwapchain) vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
@@ -1150,6 +1450,10 @@ private:
     for (VkImageView view : swapchainViews_) vkDestroyImageView(device_, view, nullptr);
     swapchainViews_.clear();
     swapchainImages_.clear();
+    for (VkSemaphore semaphore : imageRenderFinished_) {
+      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+    }
+    imageRenderFinished_.clear();
     if (swapchain_) {
       vkDestroySwapchainKHR(device_, swapchain_, nullptr);
       swapchain_ = VK_NULL_HANDLE;
@@ -1166,6 +1470,22 @@ private:
 
   void appendPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
     if (path.isEmpty()) return;
+    PathCacheKey const cacheKey{
+        .pathHash = path.contentHash(),
+        .styleHash = hashFill(fill) ^ (hashStroke(stroke) + 0x9e3779b97f4a7c15ULL) ^
+                     (hashTransform(state_.transform, state_.opacity) << 1u),
+        .viewportW = width_,
+        .viewportH = height_,
+    };
+    if (auto it = pathCache_.find(cacheKey); it != pathCache_.end()) {
+      std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
+      pathVerts_.insert(pathVerts_.end(), it->second.begin(), it->second.end());
+      if (!it->second.empty()) {
+        ops_.push_back(DrawOp{DrawOp::Kind::Path, nullptr, firstVertex,
+                              static_cast<std::uint32_t>(it->second.size())});
+      }
+      return;
+    }
     auto subpaths = PathFlattener::flattenSubpaths(path);
     if (subpaths.empty()) return;
     std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
@@ -1174,8 +1494,15 @@ private:
     }
     Rect const bounds = boundsOfSubpaths(subpaths);
     auto append = [&](TessellatedPath&& tess, FillStyle const* gradientSource = nullptr) {
-      if (gradientSource) applyGradientFill(tess, *gradientSource, bounds, state_.opacity);
-      pathVerts_.insert(pathVerts_.end(), tess.vertices.begin(), tess.vertices.end());
+      if (gradientSource) {
+        for (PathVertex const& vertex : tess.vertices) {
+          pathVerts_.push_back(makeVulkanPathVertex(vertex, gradientSource, bounds, state_.opacity));
+        }
+      } else {
+        for (PathVertex const& vertex : tess.vertices) {
+          pathVerts_.push_back(makeVulkanPathVertex(vertex, nullptr, bounds, 1.f));
+        }
+      }
     };
     if (!fill.isNone()) {
       Color fc{};
@@ -1210,7 +1537,22 @@ private:
     }
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(pathVerts_.size()) - firstVertex;
     if (vertexCount > 0) {
+      std::vector<VulkanPathVertex> cached(pathVerts_.begin() + firstVertex, pathVerts_.end());
+      auto [it, inserted] = pathCache_.emplace(cacheKey, std::move(cached));
+      if (inserted) {
+        cachedPathVertexCount_ += it->second.size();
+      }
+      trimPathCache();
       ops_.push_back(DrawOp{DrawOp::Kind::Path, nullptr, firstVertex, vertexCount});
+    }
+  }
+
+  void trimPathCache() {
+    constexpr std::size_t kMaxCachedPathVertices = 500'000;
+    while (cachedPathVertexCount_ > kMaxCachedPathVertices && !pathCache_.empty()) {
+      auto it = pathCache_.begin();
+      cachedPathVertexCount_ -= it->second.size();
+      pathCache_.erase(it);
     }
   }
 
@@ -1223,9 +1565,85 @@ private:
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     upload(quadBuffer_, quads_.data(), quads_.size() * sizeof(QuadInstance));
     ensureStorageDescriptor(quadDescriptorSet_, quadDescriptorLayout_, quadBuffer_);
-    ensureBuffer(pathBuffer_, std::max<VkDeviceSize>(sizeof(PathVertex), pathVerts_.size() * sizeof(PathVertex)),
+    ensureBuffer(pathBuffer_, std::max<VkDeviceSize>(sizeof(VulkanPathVertex),
+                                                     pathVerts_.size() * sizeof(VulkanPathVertex)),
                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    upload(pathBuffer_, pathVerts_.data(), pathVerts_.size() * sizeof(PathVertex));
+    upload(pathBuffer_, pathVerts_.data(), pathVerts_.size() * sizeof(VulkanPathVertex));
+  }
+
+  std::shared_ptr<Image> renderCurrentOpsToImage(int pixelW, int pixelH) {
+    Texture target{};
+    Buffer readback{};
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    try {
+      createRenderTargetTexture(target, pixelW, pixelH);
+      VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+      fb.renderPass = renderPass_;
+      fb.attachmentCount = 1;
+      fb.pAttachments = &target.view;
+      fb.width = static_cast<std::uint32_t>(pixelW);
+      fb.height = static_cast<std::uint32_t>(pixelH);
+      fb.layers = 1;
+      vkCheck(vkCreateFramebuffer(device_, &fb, nullptr, &framebuffer), "vkCreateFramebuffer");
+
+      uploadFrameBuffers();
+      uploadAtlasIfNeeded();
+
+      VkDeviceSize const byteSize = static_cast<VkDeviceSize>(pixelW) * pixelH * sizeof(Rgba);
+      ensureBuffer(readback, byteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+      VkCommandBuffer commandBuffer = beginImmediate();
+      VkClearValue clear{};
+      clear.color.float32[0] = clearColor_.r;
+      clear.color.float32[1] = clearColor_.g;
+      clear.color.float32[2] = clearColor_.b;
+      clear.color.float32[3] = clearColor_.a;
+      VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      rp.renderPass = renderPass_;
+      rp.framebuffer = framebuffer;
+      rp.renderArea.extent = VkExtent2D{static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH)};
+      rp.clearValueCount = 1;
+      rp.pClearValues = &clear;
+      vkCmdBeginRenderPass(commandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+      drawOps(commandBuffer);
+      vkCmdEndRenderPass(commandBuffer);
+      transition(commandBuffer, target.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+      VkBufferImageCopy copy{};
+      copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      copy.imageSubresource.layerCount = 1;
+      copy.imageExtent = {static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH), 1};
+      vkCmdCopyImageToBuffer(commandBuffer, target.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             readback.buffer, 1, &copy);
+      endImmediate(commandBuffer);
+
+      std::vector<Rgba> pixels(static_cast<std::size_t>(pixelW) * pixelH);
+      void* mapped = nullptr;
+      vkMapMemory(device_, readback.memory, 0, byteSize, 0, &mapped);
+      auto const* bytes = static_cast<std::uint8_t const*>(mapped);
+      bool const bgra = surfaceFormat_.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                        surfaceFormat_.format == VK_FORMAT_B8G8R8A8_SRGB;
+      for (int i = 0; i < pixelW * pixelH; ++i) {
+        if (bgra) {
+          pixels[static_cast<std::size_t>(i)] = Rgba{bytes[i * 4 + 2], bytes[i * 4 + 1],
+                                                     bytes[i * 4 + 0], bytes[i * 4 + 3]};
+        } else {
+          pixels[static_cast<std::size_t>(i)] = Rgba{bytes[i * 4 + 0], bytes[i * 4 + 1],
+                                                     bytes[i * 4 + 2], bytes[i * 4 + 3]};
+        }
+      }
+      vkUnmapMemory(device_, readback.memory);
+
+      destroyBuffer(readback);
+      if (framebuffer) vkDestroyFramebuffer(device_, framebuffer, nullptr);
+      destroyTexture(target);
+      return std::make_shared<VulkanImage>(pixelW, pixelH, std::move(pixels));
+    } catch (...) {
+      destroyBuffer(readback);
+      if (framebuffer) vkDestroyFramebuffer(device_, framebuffer, nullptr);
+      destroyTexture(target);
+      throw;
+    }
   }
 
   void ensureBuffer(Buffer& buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
@@ -1432,6 +1850,38 @@ private:
     if (uploadNow) uploadTexture(tex, pixels);
   }
 
+  void createRenderTargetTexture(Texture& tex, int width, int height) {
+    tex.width = width;
+    tex.height = height;
+    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    image.imageType = VK_IMAGE_TYPE_2D;
+    image.format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
+    image.extent = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
+    image.mipLevels = 1;
+    image.arrayLayers = 1;
+    image.samples = VK_SAMPLE_COUNT_1_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkCheck(vkCreateImage(device_, &image, nullptr, &tex.image), "vkCreateImage");
+    VkMemoryRequirements req{};
+    vkGetImageMemoryRequirements(device_, tex.image, &req);
+    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    alloc.allocationSize = req.size;
+    alloc.memoryTypeIndex = findMemoryType(physical_, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkCheck(vkAllocateMemory(device_, &alloc, nullptr, &tex.memory), "vkAllocateMemory");
+    vkBindImageMemory(device_, tex.image, tex.memory, 0);
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = tex.image;
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = image.format;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view.subresourceRange.levelCount = 1;
+    view.subresourceRange.layerCount = 1;
+    vkCheck(vkCreateImageView(device_, &view, nullptr, &tex.view), "vkCreateImageView");
+  }
+
   void uploadTexture(Texture& tex, Rgba const* pixels) {
     if (!pixels || tex.width <= 0 || tex.height <= 0) return;
     Buffer staging{};
@@ -1577,7 +2027,9 @@ private:
   std::vector<QuadInstance> quads_;
   std::vector<ImageBatch> batches_;
   std::vector<DrawOp> ops_;
-  std::vector<PathVertex> pathVerts_;
+  std::vector<VulkanPathVertex> pathVerts_;
+  std::unordered_map<PathCacheKey, std::vector<VulkanPathVertex>, PathCacheKeyHash> pathCache_;
+  std::size_t cachedPathVertexCount_ = 0;
 
   VkInstance instance_ = VK_NULL_HANDLE;
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -1588,8 +2040,9 @@ private:
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
   std::array<VkSemaphore, kMaxFramesInFlight> imageAvailable_{};
-  std::array<VkSemaphore, kMaxFramesInFlight> renderFinished_{};
   std::array<VkFence, kMaxFramesInFlight> frameFences_{};
+  static constexpr std::size_t kNoResetFrameFence = static_cast<std::size_t>(-1);
+  std::size_t resetFrameFenceIndex_ = kNoResetFrameFence;
   std::size_t currentFrame_ = 0;
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   VkSurfaceFormatKHR surfaceFormat_{};
@@ -1598,6 +2051,7 @@ private:
   std::vector<VkFence> imageInFlightFences_;
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkFramebuffer> framebuffers_;
+  std::vector<VkSemaphore> imageRenderFinished_;
   VkRenderPass renderPass_ = VK_NULL_HANDLE;
   VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout rectDescriptorLayout_ = VK_NULL_HANDLE;
@@ -1628,6 +2082,7 @@ private:
   bool swapchainDirty_ = true;
   std::unordered_map<GlyphKey, GlyphSlot, GlyphKeyHash> glyphs_;
   std::unordered_map<VulkanImage const*, Texture> imageTextures_;
+  bool ownsSharedVulkanCore_ = false;
 };
 
 std::unique_ptr<Canvas> createVulkanCanvas(wl_display* display, wl_surface* surface,
@@ -1673,8 +2128,10 @@ std::shared_ptr<Image> loadImageFromFile(std::string_view path, void*) {
   return std::make_shared<VulkanImage>(width, height, std::move(rgba));
 }
 
-std::shared_ptr<Image> rasterizeToImage(Canvas&, Size, RasterizeDrawCallback, float) {
-  return nullptr;
+std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize, RasterizeDrawCallback draw, float dpiScale) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(&canvas);
+  if (!vulkan) return nullptr;
+  return vulkan->rasterize(logicalSize, draw, dpiScale);
 }
 
 } // namespace flux

@@ -27,7 +27,9 @@ class WaylandApplication final : public PlatformApplication {
 public:
   void initialize() override {}
 
-  void setMenuBar(MenuBar const&, MenuActionDispatcher dispatcher) override {
+  void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) override {
+    claimedShortcuts_.clear();
+    collectShortcuts(menu);
     dispatcher_ = std::move(dispatcher);
   }
 
@@ -36,7 +38,7 @@ public:
   }
 
   std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const override {
-    return {};
+    return claimedShortcuts_;
   }
 
   void revalidateMenuItems(std::function<bool(std::string const&)>) override {}
@@ -50,8 +52,24 @@ public:
   }
 
 private:
+  void collectShortcuts(MenuItem const& item) {
+    if (!item.actionName.empty() && (item.shortcut.key != 0 || item.shortcut.modifiers != Modifiers::None)) {
+      claimedShortcuts_.insert(ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers});
+    }
+    for (MenuItem const& child : item.children) {
+      collectShortcuts(child);
+    }
+  }
+
+  void collectShortcuts(MenuBar const& menu) {
+    for (MenuItem const& item : menu.menus) {
+      collectShortcuts(item);
+    }
+  }
+
   MenuActionDispatcher dispatcher_;
   std::function<void()> terminateHandler_;
+  std::unordered_set<ShortcutKey, ShortcutKeyHash> claimedShortcuts_;
 };
 
 } // namespace

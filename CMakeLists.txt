@@ -219,7 +219,10 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
-  find_program(GLSLANG_VALIDATOR glslangValidator)
+  pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
+  pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
+  pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
+  find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
   set(FLUX_WAYLAND_PROTOCOL_DIR ${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols)
   set(FLUX_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${FLUX_WAYLAND_PROTOCOL_DIR})
@@ -248,32 +251,28 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     DEPENDS ${FLUX_XDG_DECORATION_XML}
     VERBATIM
   )
-  if(GLSLANG_VALIDATOR)
-    set(_flux_vulkan_shader_headers)
-    foreach(_flux_shader rect.vert rect.frag image.vert image.frag path.vert path.frag)
-      string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
-      set(_flux_shader_src ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Vulkan/shaders/${_flux_shader})
-      set(_flux_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_flux_shader}.spv)
-      set(_flux_shader_header ${FLUX_VULKAN_GENERATED_DIR}/${_flux_shader_name}_spv.hpp)
-      add_custom_command(
-        OUTPUT ${_flux_shader_header}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders
-        COMMAND ${GLSLANG_VALIDATOR} -V ${_flux_shader_src} -o ${_flux_shader_spv}
-        COMMAND ${CMAKE_COMMAND}
-                -DINPUT=${_flux_shader_spv}
-                -DOUTPUT=${_flux_shader_header}
-                -DSYMBOL=flux_${_flux_shader_name}_spv
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxEmbedBinary.cmake
-        DEPENDS ${_flux_shader_src} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxEmbedBinary.cmake
-        VERBATIM
-      )
-      list(APPEND _flux_vulkan_shader_headers ${_flux_shader_header})
-    endforeach()
-    add_custom_target(flux_vulkan_shaders DEPENDS ${_flux_vulkan_shader_headers})
-    add_dependencies(flux flux_vulkan_shaders)
-  else()
-    message(WARNING "glslangValidator not found; using checked-in Vulkan SPIR-V headers.")
-  endif()
+  set(_flux_vulkan_shader_headers)
+  foreach(_flux_shader rect.vert rect.frag image.vert image.frag path.vert path.frag)
+    string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
+    set(_flux_shader_src ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Vulkan/shaders/${_flux_shader})
+    set(_flux_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_flux_shader}.spv)
+    set(_flux_shader_header ${FLUX_VULKAN_GENERATED_DIR}/${_flux_shader_name}_spv.hpp)
+    add_custom_command(
+      OUTPUT ${_flux_shader_header}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders
+      COMMAND ${GLSLANG_VALIDATOR} -V ${_flux_shader_src} -o ${_flux_shader_spv}
+      COMMAND ${CMAKE_COMMAND}
+              -DINPUT=${_flux_shader_spv}
+              -DOUTPUT=${_flux_shader_header}
+              -DSYMBOL=flux_${_flux_shader_name}_spv
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxEmbedBinary.cmake
+      DEPENDS ${_flux_shader_src} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxEmbedBinary.cmake
+      VERBATIM
+    )
+    list(APPEND _flux_vulkan_shader_headers ${_flux_shader_header})
+  endforeach()
+  add_custom_target(flux_vulkan_shaders DEPENDS ${_flux_vulkan_shader_headers})
+  add_dependencies(flux flux_vulkan_shaders)
   target_sources(flux PRIVATE
     src/Core/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
@@ -357,6 +356,9 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     PkgConfig::FREETYPE
+    PkgConfig::FONTCONFIG
+    PkgConfig::HARFBUZZ
+    PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 endif()
 

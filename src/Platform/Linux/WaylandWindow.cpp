@@ -28,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -93,6 +94,48 @@ bool debugDecorations() {
   return value && *value && std::strcmp(value, "0") != 0;
 }
 
+struct SharedWaylandConnection {
+  wl_display* display = nullptr;
+  xkb_context* xkbContext = nullptr;
+  unsigned int refs = 0;
+};
+
+std::mutex gWaylandConnectionMutex;
+SharedWaylandConnection gWaylandConnection;
+
+SharedWaylandConnection acquireWaylandConnection() {
+  std::lock_guard lock(gWaylandConnectionMutex);
+  if (!gWaylandConnection.display) {
+    gWaylandConnection.display = wl_display_connect(nullptr);
+    if (!gWaylandConnection.display) {
+      throw std::runtime_error("Failed to connect to Wayland display");
+    }
+    gWaylandConnection.xkbContext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!gWaylandConnection.xkbContext) {
+      wl_display_disconnect(gWaylandConnection.display);
+      gWaylandConnection.display = nullptr;
+      throw std::runtime_error("Failed to create XKB context");
+    }
+  }
+  ++gWaylandConnection.refs;
+  return gWaylandConnection;
+}
+
+void releaseWaylandConnection() {
+  std::lock_guard lock(gWaylandConnectionMutex);
+  if (gWaylandConnection.refs == 0) return;
+  --gWaylandConnection.refs;
+  if (gWaylandConnection.refs != 0) return;
+  if (gWaylandConnection.xkbContext) {
+    xkb_context_unref(gWaylandConnection.xkbContext);
+    gWaylandConnection.xkbContext = nullptr;
+  }
+  if (gWaylandConnection.display) {
+    wl_display_disconnect(gWaylandConnection.display);
+    gWaylandConnection.display = nullptr;
+  }
+}
+
 } // namespace
 
 class WaylandWindow final : public PlatformWindow {
@@ -105,11 +148,10 @@ public:
     }
     fcntl(wakePipe_[0], F_SETFL, fcntl(wakePipe_[0], F_GETFL, 0) | O_NONBLOCK);
     fcntl(wakePipe_[1], F_SETFL, fcntl(wakePipe_[1], F_GETFL, 0) | O_NONBLOCK);
-    display_ = wl_display_connect(nullptr);
-    if (!display_) {
-      throw std::runtime_error("Failed to connect to Wayland display");
-    }
-    xkbContext_ = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    SharedWaylandConnection shared = acquireWaylandConnection();
+    ownsSharedConnection_ = true;
+    display_ = shared.display;
+    xkbContext_ = shared.xkbContext;
     registry_ = wl_display_get_registry(display_);
     wl_registry_add_listener(registry_, &registryListener_, this);
     wl_display_roundtrip(display_);
@@ -156,8 +198,7 @@ public:
     if (registry_) wl_registry_destroy(registry_);
     if (xkbState_) xkb_state_unref(xkbState_);
     if (xkbKeymap_) xkb_keymap_unref(xkbKeymap_);
-    if (xkbContext_) xkb_context_unref(xkbContext_);
-    if (display_) wl_display_disconnect(display_);
+    if (ownsSharedConnection_) releaseWaylandConnection();
     if (wakePipe_[0] >= 0) close(wakePipe_[0]);
     if (wakePipe_[1] >= 0) close(wakePipe_[1]);
   }
@@ -389,8 +430,11 @@ private:
     self->dpiScaleY_ = self->dpiScaleX_;
     wl_surface_set_buffer_scale(self->surface_, factor);
     if (self->fluxWindow_) self->fluxWindow_->updateCanvasDpiScale(self->dpiScaleX_, self->dpiScaleY_);
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::DpiChanged, self->handle_, {},
-                                                          self->dpiScaleX_});
+    Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
+                                                          .handle = self->handle_,
+                                                          .dpi = self->dpiScaleX_,
+                                                          .dpiX = self->dpiScaleX_,
+                                                          .dpiY = self->dpiScaleY_});
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
     self->requestResizeRedraw();
   }
@@ -577,7 +621,11 @@ private:
     dpiScaleY_ = scale;
     wl_surface_set_buffer_scale(surface_, static_cast<std::int32_t>(std::max(1.f, std::round(scale))));
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::DpiChanged, handle_, {}, dpiScaleX_});
+    Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
+                                                          .handle = handle_,
+                                                          .dpi = dpiScaleX_,
+                                                          .dpiX = dpiScaleX_,
+                                                          .dpiY = dpiScaleY_});
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
     requestResizeRedraw();
   }
@@ -675,6 +723,7 @@ private:
   Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
   bool framePending_ = false;
+  bool ownsSharedConnection_ = false;
   int wakePipe_[2]{-1, -1};
 };
 

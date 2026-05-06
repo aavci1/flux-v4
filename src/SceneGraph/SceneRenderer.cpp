@@ -87,6 +87,15 @@ enum class RenderTraversalMode : std::uint8_t {
     PreparedCacheBypass,
 };
 
+float rasterCacheDpiScaleForCanvas(Canvas* canvas) noexcept {
+#if defined(FLUX_PLATFORM_MACOS)
+    return dpiScaleForCanvas(canvas);
+#else
+    (void)canvas;
+    return 1.f;
+#endif
+}
+
 #if defined(FLUX_PLATFORM_MACOS)
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
@@ -291,17 +300,10 @@ struct SceneRenderer::Impl {
         if (logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
             return true;
         }
-#if defined(FLUX_PLATFORM_MACOS)
-        float const dpiScale = dpiScaleForCanvas(canvas);
-#else
-        float const dpiScale = 1.f;
-#endif
+        float const dpiScale = rasterCacheDpiScaleForCanvas(canvas);
         std::shared_ptr<Image> cached =
             node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
         if (!cached) {
-#if !defined(FLUX_PLATFORM_MACOS)
-            return false;
-#else
             cached = rasterizeToImage(*canvas, logicalSize, [this, &node](Canvas&, Rect) {
                 for (std::unique_ptr<SceneNode> const &child : node.children()) {
                     renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
@@ -312,7 +314,6 @@ struct SceneRenderer::Impl {
             }
             node.setCachedImage(cached, logicalSize, dpiScale);
             node.noteRasterized();
-#endif
         }
 
         renderer->save();
