@@ -121,6 +121,7 @@ add_library(flux STATIC
   src/Reactive/AnimationClock.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
+  src/Core/MenuRoleDefaults.cpp
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp

@@ -6,6 +6,7 @@
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Reactive/AnimationClock.hpp>
 
+#include "Core/MenuRoleDefaults.hpp"
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformApplication.hpp"
 #include "Debug/PerfCounters.hpp"
@@ -130,44 +131,15 @@ void saveWindowStatesToDisk(std::filesystem::path const& path,
   }
 }
 
-std::string standardRoleActionName(MenuRole role) {
-  switch (role) {
-  case MenuRole::AppPreferences: return "settings";
-  case MenuRole::AppQuit: return "app.quit";
-  case MenuRole::EditUndo: return "undo";
-  case MenuRole::EditRedo: return "redo";
-  case MenuRole::EditCut: return "cut";
-  case MenuRole::EditCopy: return "copy";
-  case MenuRole::EditPaste: return "paste";
-  case MenuRole::EditDelete: return "delete";
-  case MenuRole::EditSelectAll: return "select-all";
-  default: return {};
-  }
-}
-
-Shortcut standardRoleShortcut(MenuRole role) {
-  switch (role) {
-  case MenuRole::AppPreferences: return Shortcut{keys::Comma, Modifiers::Meta};
-  case MenuRole::AppQuit: return shortcuts::Quit;
-  case MenuRole::EditUndo: return shortcuts::Undo;
-  case MenuRole::EditRedo: return shortcuts::Redo;
-  case MenuRole::EditCut: return shortcuts::Cut;
-  case MenuRole::EditCopy: return shortcuts::Copy;
-  case MenuRole::EditPaste: return shortcuts::Paste;
-  case MenuRole::EditSelectAll: return shortcuts::SelectAll;
-  default: return {};
-  }
-}
-
 void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::function<void()>>& handlers,
                       std::unordered_map<std::string, std::function<bool()>>& enabled,
                       std::unordered_map<ShortcutKey, std::string, ShortcutKeyHash>& shortcuts,
                       std::uint64_t& nextId) {
   if (item.actionName.empty()) {
-    item.actionName = standardRoleActionName(item.role);
+    item.actionName = detail::standardRoleActionName(item.role);
   }
   if (item.shortcut.key == 0 && item.shortcut.modifiers == Modifiers::None) {
-    item.shortcut = standardRoleShortcut(item.role);
+    item.shortcut = detail::standardRoleShortcut(item.role);
   }
   if (item.actionName.empty() && item.handler) {
     item.actionName = "__flux.menu.handler." + std::to_string(nextId++);
