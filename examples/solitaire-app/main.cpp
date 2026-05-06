@@ -3490,6 +3490,7 @@ struct RootView : ViewModifiers<RootView> {
 
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
+  app.setName("Solitaire");
 
   app.setMenuBar(MenuBar{
       .menus = {
@@ -3526,7 +3527,6 @@ int main(int argc, char* argv[]) {
               MenuItem::standard(MenuRole::HelpSearch),
           }),
       },
-      .appName = "Solitaire",
   });
 
   auto& window = app.createWindow<Window>({

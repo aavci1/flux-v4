@@ -260,7 +260,7 @@ public:
     dispatcher_ = std::move(dispatcher);
     claimedShortcuts_.clear();
 
-    std::string const appName = menu.appName.empty() ? appNameFromBundle() : menu.appName;
+    std::string const appName = applicationName();
     std::vector<MenuItem> menus = menu.menus;
     if (menus.empty() || menus.front().role != MenuRole::Submenu) {
       menus.insert(menus.begin(), MenuItem::submenu(appName, {

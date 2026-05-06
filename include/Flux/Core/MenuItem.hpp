@@ -70,7 +70,6 @@ struct MenuItem {
 
 struct MenuBar {
   std::vector<MenuItem> menus;
-  std::string appName;
 };
 
 } // namespace flux
