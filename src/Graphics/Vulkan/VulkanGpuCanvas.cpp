@@ -36,9 +36,15 @@
 #include <vector>
 
 namespace flux {
+
+class VulkanCanvas;
+
 namespace {
 
 constexpr std::size_t kMaxFramesInFlight = 2;
+
+struct VulkanImage;
+void evictImageTexturesFor(VulkanImage const* image);
 
 struct Rgba {
   std::uint8_t r = 0, g = 0, b = 0, a = 255;
@@ -55,7 +61,7 @@ struct VulkanImage final : Image {
   mutable bool uploaded = false;
 
   VulkanImage(int w, int h, std::vector<Rgba> p) : width(w), height(h), pixels(std::move(p)) {}
-  ~VulkanImage() override = default;
+  ~VulkanImage() override { evictImageTexturesFor(this); }
   Size size() const override { return {static_cast<float>(width), static_cast<float>(height)}; }
 };
 
@@ -308,6 +314,9 @@ struct SharedVulkanCore {
 std::mutex gVulkanCoreMutex;
 SharedVulkanCore gVulkanCore;
 void destroySharedVulkanResources(SharedVulkanCore& core);
+
+std::mutex gCanvasRegistryMutex;
+std::vector<::flux::VulkanCanvas*> gCanvases;
 
 VkInstance ensureSharedVulkanInstance() {
   std::lock_guard lock(gVulkanCoreMutex);
@@ -574,12 +583,14 @@ public:
     createCommandObjects();
     chooseSurfaceFormat();
     ensureSharedResources();
+    registerCanvas();
   }
 
   ~VulkanCanvas() override {
     if (device_) {
       vkDeviceWaitIdle(device_);
     }
+    unregisterCanvas();
     destroySwapchain();
     for (auto& kv : imageTextures_) {
       destroyTexture(kv.second);
@@ -1041,6 +1052,14 @@ public:
 
   void* gpuDevice() const override { return device_; }
 
+  void evictImageTexture(VulkanImage const* image) {
+    auto it = imageTextures_.find(image);
+    if (it == imageTextures_.end()) return;
+    vkDeviceWaitIdle(device_);
+    destroyTexture(it->second);
+    imageTextures_.erase(it);
+  }
+
 private:
   struct DrawState {
     Mat3 transform = Mat3::identity();
@@ -1048,6 +1067,16 @@ private:
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
   };
+
+  void registerCanvas() {
+    std::lock_guard lock(gCanvasRegistryMutex);
+    gCanvases.push_back(this);
+  }
+
+  void unregisterCanvas() {
+    std::lock_guard lock(gCanvasRegistryMutex);
+    gCanvases.erase(std::remove(gCanvases.begin(), gCanvases.end(), this), gCanvases.end());
+  }
 
   Rect transformedBounds(Rect rect) const {
     std::array<Point, 4> pts{
@@ -2225,6 +2254,18 @@ private:
   std::unordered_map<VulkanImage const*, Texture> imageTextures_;
   bool ownsSharedVulkanCore_ = false;
 };
+
+namespace {
+
+void evictImageTexturesFor(VulkanImage const* image) {
+  if (!image) return;
+  std::lock_guard lock(gCanvasRegistryMutex);
+  for (::flux::VulkanCanvas* canvas : gCanvases) {
+    if (canvas) canvas->evictImageTexture(image);
+  }
+}
+
+} // namespace
 
 std::unique_ptr<Canvas> createVulkanCanvas(wl_display* display, wl_surface* surface,
                                            unsigned int handle, TextSystem& textSystem) {
