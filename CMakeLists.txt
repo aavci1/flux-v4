@@ -398,6 +398,7 @@ if(FLUX_BUILD_TESTS)
     tests/ForTests.cpp
     tests/MountRootTests.cpp
     tests/main.cpp
+    tests/PathFlattenerTests.cpp
     tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp

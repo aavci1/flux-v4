@@ -30,6 +30,92 @@ void appendArcSamples(std::vector<Point>& out, float cx, float cy, float r,
     }
 }
 
+CornerRadius clampedCornerRadii(float w, float h, CornerRadius r) {
+    if (w <= 0.f || h <= 0.f) {
+        return {};
+    }
+
+    const float maxR = std::min(w, h) * 0.5f;
+    r.topLeft = std::clamp(r.topLeft, 0.f, maxR);
+    r.topRight = std::clamp(r.topRight, 0.f, maxR);
+    r.bottomRight = std::clamp(r.bottomRight, 0.f, maxR);
+    r.bottomLeft = std::clamp(r.bottomLeft, 0.f, maxR);
+
+    auto fixEdge = [](float& a, float& b, float len) {
+        if (a + b > len && len > 0.f) {
+            float const scale = len / (a + b);
+            a *= scale;
+            b *= scale;
+        }
+    };
+    fixEdge(r.topLeft, r.topRight, w);
+    fixEdge(r.bottomLeft, r.bottomRight, w);
+    fixEdge(r.topLeft, r.bottomLeft, h);
+    fixEdge(r.topRight, r.bottomRight, h);
+    return r;
+}
+
+std::vector<Point> flattenedRect(Rect r, CornerRadius cr) {
+    std::vector<Point> contour;
+    if (r.width <= 0.f || r.height <= 0.f) {
+        return contour;
+    }
+
+    cr = clampedCornerRadii(r.width, r.height, cr);
+    float const x0 = r.x;
+    float const y0 = r.y;
+    float const x1 = r.x + r.width;
+    float const y1 = r.y + r.height;
+
+    if (cr.isZero()) {
+        return {
+            {x0, y0},
+            {x1, y0},
+            {x1, y1},
+            {x0, y1},
+            {x0, y0},
+        };
+    }
+
+    contour.push_back({x0 + cr.topLeft, y0});
+    contour.push_back({x1 - cr.topRight, y0});
+    if (cr.topRight > 0.f) {
+        appendArcSamples(contour, x1 - cr.topRight, y0 + cr.topRight, cr.topRight,
+                         -kPi * 0.5f, kPi * 0.5f);
+    } else {
+        contour.push_back({x1, y0});
+    }
+
+    contour.push_back({x1, y1 - cr.bottomRight});
+    if (cr.bottomRight > 0.f) {
+        appendArcSamples(contour, x1 - cr.bottomRight, y1 - cr.bottomRight, cr.bottomRight,
+                         0.f, kPi * 0.5f);
+    } else {
+        contour.push_back({x1, y1});
+    }
+
+    contour.push_back({x0 + cr.bottomLeft, y1});
+    if (cr.bottomLeft > 0.f) {
+        appendArcSamples(contour, x0 + cr.bottomLeft, y1 - cr.bottomLeft, cr.bottomLeft,
+                         kPi * 0.5f, kPi * 0.5f);
+    } else {
+        contour.push_back({x0, y1});
+    }
+
+    contour.push_back({x0, y0 + cr.topLeft});
+    if (cr.topLeft > 0.f) {
+        appendArcSamples(contour, x0 + cr.topLeft, y0 + cr.topLeft, cr.topLeft,
+                         kPi, kPi * 0.5f);
+    } else {
+        contour.push_back({x0, y0});
+    }
+
+    if (!nearlySamePoint(contour.front(), contour.back())) {
+        contour.push_back(contour.front());
+    }
+    return contour;
+}
+
 /** Signed sweep from start to end angle matching canvas-style arc direction. */
 float sweepForArc(float a0, float a1, bool clockwise) {
     float d = a1 - a0;
@@ -474,19 +560,19 @@ std::vector<std::vector<Point>> PathFlattener::flattenSubpaths(const Path& path,
             }
 
             case Path::CommandType::Rect: {
-                if (cv.dataCount >= 8) {
+                if (cv.dataCount >= 4) {
                     if (!current.empty()) {
                         result.push_back(std::move(current));
                         current.clear();
                     }
                     Rect r{cv.data[0], cv.data[1], cv.data[2], cv.data[3]};
-                    CornerRadius cr{cv.data[4], cv.data[5], cv.data[6], cv.data[7]};
-                    Path expanded;
-                    expanded.rect(r, cr);
-                    auto subs = flattenSubpaths(expanded, tolerance);
-                    for (auto& sp : subs) {
-                        if (!sp.empty())
-                            result.push_back(std::move(sp));
+                    CornerRadius cr{};
+                    if (cv.dataCount >= 8) {
+                        cr = CornerRadius{cv.data[4], cv.data[5], cv.data[6], cv.data[7]};
+                    }
+                    auto contour = flattenedRect(r, cr);
+                    if (!contour.empty()) {
+                        result.push_back(std::move(contour));
                     }
                 }
                 break;
