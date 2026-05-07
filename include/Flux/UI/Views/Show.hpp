@@ -84,6 +84,7 @@ private:
     LayoutConstraints constraints;
     LayoutHints hints;
     Reactive::SmallFn<void()> requestRedraw;
+    std::optional<Size> assignedSlot;
     std::optional<bool> activeBranch;
     std::shared_ptr<Reactive::Scope> branchScope;
 
@@ -122,7 +123,8 @@ private:
         children.push_back(std::move(node));
         group.replaceChildren(std::move(children));
       }
-      frameSize = detail::controlAssignedSize(constraints);
+      detail::controlRelayoutSingleChildInSlot(group, assignedSlot);
+      frameSize = assignedSlot.value_or(detail::controlAssignedSize(constraints));
       detail::controlLayoutSingle(group, frameSize);
       detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
@@ -131,8 +133,11 @@ private:
     }
 
     void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {
-      if (!scenegraph::detail::isTransientRelayout()) {
+      if (scenegraph::detail::isTransientRelayout()) {
+        assignedSlot = detail::controlAssignedSlot(nextConstraints);
+      } else {
         constraints = nextConstraints;
+        assignedSlot.reset();
       }
       frameSize = detail::controlAssignedSize(nextConstraints);
       auto children = group.children();

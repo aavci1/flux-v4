@@ -15,6 +15,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -43,6 +44,39 @@ inline LayoutConstraints controlFixedConstraints(Size size) {
       .minWidth = std::max(0.f, size.width),
       .minHeight = std::max(0.f, size.height),
   };
+}
+
+inline bool controlIsPositiveSize(Size size) {
+  constexpr float epsilon = 0.01f;
+  return size.width > epsilon && size.height > epsilon;
+}
+
+inline bool controlIsFixedAxis(float minValue, float maxValue) {
+  constexpr float epsilon = 0.01f;
+  return std::isfinite(maxValue) && std::abs(maxValue - minValue) <= epsilon;
+}
+
+inline std::optional<Size> controlAssignedSlot(LayoutConstraints const& constraints) {
+  if (!controlIsFixedAxis(constraints.minWidth, constraints.maxWidth) ||
+      !controlIsFixedAxis(constraints.minHeight, constraints.maxHeight)) {
+    return std::nullopt;
+  }
+  Size size = controlAssignedSize(constraints);
+  if (!controlIsPositiveSize(size)) {
+    return std::nullopt;
+  }
+  return size;
+}
+
+inline void controlRelayoutSingleChildInSlot(scenegraph::GroupNode& group,
+                                             std::optional<Size> const& assignedSlot) {
+  if (!assignedSlot) {
+    return;
+  }
+  auto children = group.children();
+  if (!children.empty() && children.front()) {
+    (void)children.front()->relayout(controlFixedConstraints(*assignedSlot), false);
+  }
 }
 
 inline Size controlMeasureElement(Element const& element, EnvironmentBinding const& environment,

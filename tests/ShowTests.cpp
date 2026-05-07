@@ -505,3 +505,62 @@ TEST_CASE("Switch replaces scopes when the selected case changes") {
   root.unmount(sceneGraph);
   CHECK(disposed == 3);
 }
+
+TEST_CASE("Switch relayouts newly selected branch into flexible stack slot") {
+  struct Root {
+    flux::Reactive::Signal<int> mode;
+
+    flux::Element body() const {
+      auto branch = [](flux::Color color) {
+        return [color] {
+          return flux::Rectangle{}.fill(color);
+        };
+      };
+
+      return flux::HStack{
+          .spacing = 0.f,
+          .alignment = flux::Alignment::Stretch,
+          .children = flux::children(
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::red),
+              flux::Element{flux::Switch(
+                  [mode = mode] { return mode.get(); },
+                  std::vector{
+                      flux::Case(0, branch(flux::Colors::blue)),
+                      flux::Case(1, branch(flux::Colors::green)),
+                  })}.flex(1.f, 1.f, 0.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<int> mode{0};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{mode}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 40.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto assertSwitchSlot = [&sceneGraph] {
+    auto const& group = rootGroup(sceneGraph);
+    REQUIRE(group.children().size() == 2);
+    auto const& slot = *group.children()[1];
+    CHECK(slot.position().x == doctest::Approx(20.f));
+    CHECK(slot.size().width == doctest::Approx(80.f));
+    CHECK(slot.size().height == doctest::Approx(40.f));
+    REQUIRE(slot.children().size() == 1);
+    CHECK(slot.children()[0]->size().width == doctest::Approx(80.f));
+    CHECK(slot.children()[0]->size().height == doctest::Approx(40.f));
+  };
+
+  assertSwitchSlot();
+
+  mode.set(1);
+
+  assertSwitchSlot();
+}
