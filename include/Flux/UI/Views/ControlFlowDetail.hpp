@@ -77,7 +77,7 @@ inline void controlLayoutVertical(scenegraph::GroupNode& group, Size frameSize, 
   auto children = group.children();
   for (std::size_t i = 0; i < children.size(); ++i) {
     auto& child = children[i];
-    detail::setLayoutPosition(*child, Point{0.f, y});
+    child->setPosition(Point{0.f, y});
     Size const childSize = child->size();
     width = std::max(width, childSize.width);
     y += childSize.height;

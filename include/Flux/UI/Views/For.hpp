@@ -197,14 +197,14 @@ private:
             node = std::move(oldNodes[oldIndex]);
           }
           if (node) {
-            row.cachedSize = node->size();
-            row.cachedConstraints = childConstraints;
-            row.cachedHints = childHints;
-            row.hasCachedSize = true;
+            relayoutMountedRow(row, *node, childConstraints, childHints);
           } else {
             ensureMeasured(row, environment, *textSystem,
                            childConstraints, childHints);
             node = mountRowNode(row, childHints);
+            if (node) {
+              relayoutMountedRow(row, *node, childConstraints, childHints);
+            }
           }
           nextRows.push_back(std::move(row));
           nextNodes.push_back(std::move(node));
@@ -212,7 +212,11 @@ private:
           Row row = createRow(item, index, std::move(key), environment);
           ensureMeasured(row, environment, *textSystem,
                          childConstraints, childHints);
-          nextNodes.push_back(mountRowNode(row, childHints));
+          auto node = mountRowNode(row, childHints);
+          if (node) {
+            relayoutMountedRow(row, *node, childConstraints, childHints);
+          }
+          nextNodes.push_back(std::move(node));
           nextRows.push_back(std::move(row));
         }
       }
@@ -288,11 +292,7 @@ private:
         Row& row = rows[i];
         scenegraph::SceneNode* child = i < children.size() ? children[i].get() : nullptr;
         if (child) {
-          (void)child->relayout(childConstraints);
-          row.cachedSize = child->size();
-          row.cachedConstraints = childConstraints;
-          row.cachedHints = childHints;
-          row.hasCachedSize = true;
+          relayoutMountedRow(row, *child, childConstraints, childHints);
         }
       }
       detail::controlLayoutVertical(group, Size{}, spacing);
@@ -351,6 +351,16 @@ private:
       return detail::controlMountElement(
           row.element, *row.scope, environment, *textSystem,
           detail::controlFixedConstraints(row.cachedSize), childHints, requestRedraw);
+    }
+
+    static void relayoutMountedRow(Row& row, scenegraph::SceneNode& node,
+                                   LayoutConstraints const& childConstraints,
+                                   LayoutHints const& childHints) {
+      (void)node.relayout(childConstraints);
+      row.cachedSize = node.size();
+      row.cachedConstraints = childConstraints;
+      row.cachedHints = childHints;
+      row.hasCachedSize = true;
     }
 
     void ensureMeasured(Row& row, EnvironmentBinding const& measureEnvironment,
