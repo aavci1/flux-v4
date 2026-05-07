@@ -17,6 +17,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include <algorithm>
@@ -176,14 +177,46 @@ bool debugDecorations() {
   return value && *value && std::strcmp(value, "0") != 0;
 }
 
+char const* const* cursorNames(Cursor cursor) {
+  static char const* const arrow[] = {"default", "left_ptr", nullptr};
+  static char const* const ibeam[] = {"text", "xterm", nullptr};
+  static char const* const hand[] = {"pointer", "hand2", "hand1", nullptr};
+  static char const* const resizeEW[] = {"ew-resize", "col-resize", "sb_h_double_arrow", nullptr};
+  static char const* const resizeNS[] = {"ns-resize", "row-resize", "sb_v_double_arrow", nullptr};
+  static char const* const resizeNESW[] = {"nesw-resize", "fd_double_arrow", nullptr};
+  static char const* const resizeNWSE[] = {"nwse-resize", "bd_double_arrow", nullptr};
+  static char const* const resizeAll[] = {"all-scroll", "move", "fleur", nullptr};
+  static char const* const crosshair[] = {"crosshair", "cross", nullptr};
+  static char const* const notAllowed[] = {"not-allowed", "crossed_circle", nullptr};
+
+  switch (cursor) {
+  case Cursor::Inherit:
+  case Cursor::Arrow: return arrow;
+  case Cursor::IBeam: return ibeam;
+  case Cursor::Hand: return hand;
+  case Cursor::ResizeEW: return resizeEW;
+  case Cursor::ResizeNS: return resizeNS;
+  case Cursor::ResizeNESW: return resizeNESW;
+  case Cursor::ResizeNWSE: return resizeNWSE;
+  case Cursor::ResizeAll: return resizeAll;
+  case Cursor::Crosshair: return crosshair;
+  case Cursor::NotAllowed: return notAllowed;
+  }
+  return arrow;
+}
+
 struct SharedWaylandConnection {
   wl_display* display = nullptr;
   wl_registry* registry = nullptr;
   wl_compositor* compositor = nullptr;
+  wl_shm* shm = nullptr;
   xdg_wm_base* wmBase = nullptr;
   zxdg_decoration_manager_v1* decorationManager = nullptr;
   wl_seat* seat = nullptr;
   wl_pointer* pointer = nullptr;
+  wl_cursor_theme* cursorTheme = nullptr;
+  wl_surface* cursorSurface = nullptr;
+  int cursorThemeScale = 1;
   wl_keyboard* keyboard = nullptr;
   xkb_context* xkbContext = nullptr;
   xkb_keymap* xkbKeymap = nullptr;
@@ -216,7 +249,7 @@ void sharedOutputDone(void*, wl_output*);
 void sharedOutputScale(void* data, wl_output*, std::int32_t scale);
 void sharedOutputName(void*, wl_output*, char const*);
 void sharedOutputDescription(void*, wl_output*, char const*);
-void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface* surface, wl_fixed_t x, wl_fixed_t y);
+void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y);
 void sharedPointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface* surface);
 void sharedPointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, wl_fixed_t y);
 void sharedPointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::uint32_t button,
@@ -288,6 +321,14 @@ void releaseWaylandConnection() {
     wl_pointer_destroy(gWaylandConnection.pointer);
     gWaylandConnection.pointer = nullptr;
   }
+  if (gWaylandConnection.cursorSurface) {
+    wl_surface_destroy(gWaylandConnection.cursorSurface);
+    gWaylandConnection.cursorSurface = nullptr;
+  }
+  if (gWaylandConnection.cursorTheme) {
+    wl_cursor_theme_destroy(gWaylandConnection.cursorTheme);
+    gWaylandConnection.cursorTheme = nullptr;
+  }
   if (gWaylandConnection.seat) {
     wl_seat_destroy(gWaylandConnection.seat);
     gWaylandConnection.seat = nullptr;
@@ -307,6 +348,10 @@ void releaseWaylandConnection() {
   if (gWaylandConnection.compositor) {
     wl_compositor_destroy(gWaylandConnection.compositor);
     gWaylandConnection.compositor = nullptr;
+  }
+  if (gWaylandConnection.shm) {
+    wl_shm_destroy(gWaylandConnection.shm);
+    gWaylandConnection.shm = nullptr;
   }
   if (gWaylandConnection.registry) {
     wl_registry_destroy(gWaylandConnection.registry);
@@ -407,6 +452,7 @@ public:
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
+    applyCursor(currentCursor_);
     requestResizeRedraw();
   }
 
@@ -429,6 +475,11 @@ public:
     if (!toplevel_) return;
     if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
     else xdg_toplevel_unset_fullscreen(toplevel_);
+  }
+
+  void setCursor(Cursor kind) override {
+    currentCursor_ = kind == Cursor::Inherit ? Cursor::Arrow : kind;
+    applyCursor(currentCursor_);
   }
 
   void setTitle(std::string const& title) override {
@@ -479,8 +530,10 @@ public:
 
   wl_surface* waylandSurface() const noexcept { return surface_; }
 
-  void handlePointerEnter(wl_fixed_t x, wl_fixed_t y) {
+  void handlePointerEnter(std::uint32_t serial, wl_fixed_t x, wl_fixed_t y) {
+    pointerEnterSerial_ = serial;
     pointerPos_ = logicalPointFromFixed(x, y, dpiScaleX_, dpiScaleY_);
+    applyCursor(currentCursor_);
   }
 
   void handlePointerLeave() {
@@ -654,6 +707,7 @@ private:
                                                           .dpiX = self->dpiScaleX_,
                                                           .dpiY = self->dpiScaleY_});
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
+    self->applyCursor(self->currentCursor_);
     self->requestResizeRedraw();
   }
   static void surfacePreferredBufferTransform(void*, wl_surface*, std::uint32_t) {}
@@ -664,11 +718,76 @@ private:
                                  static_cast<int>(std::lround(size_.height)));
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
+    applyCursor(currentCursor_);
     requestResizeRedraw();
   }
 
   void updateCanvasDpi() {
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+  }
+
+  bool ensureCursorTheme(int scale) {
+    if (!shared_ || !shared_->compositor || !shared_->shm) {
+      return false;
+    }
+    scale = std::max(1, scale);
+    if (!shared_->cursorSurface) {
+      shared_->cursorSurface = wl_compositor_create_surface(shared_->compositor);
+    }
+    if (!shared_->cursorTheme || shared_->cursorThemeScale != scale) {
+      if (shared_->cursorTheme) {
+        wl_cursor_theme_destroy(shared_->cursorTheme);
+        shared_->cursorTheme = nullptr;
+      }
+      shared_->cursorTheme = wl_cursor_theme_load(nullptr, 24 * scale, shared_->shm);
+      shared_->cursorThemeScale = scale;
+    }
+    return shared_->cursorSurface && shared_->cursorTheme;
+  }
+
+  wl_cursor* loadCursor(Cursor cursor) {
+    if (!shared_ || !shared_->cursorTheme) {
+      return nullptr;
+    }
+    for (char const* const* name = cursorNames(cursor); *name; ++name) {
+      if (wl_cursor* loaded = wl_cursor_theme_get_cursor(shared_->cursorTheme, *name)) {
+        return loaded;
+      }
+    }
+    return nullptr;
+  }
+
+  void applyCursor(Cursor cursor) {
+    if (!shared_ || !shared_->pointer || pointerEnterSerial_ == 0) {
+      return;
+    }
+    int const scale = static_cast<int>(std::max(1.f, std::round(dpiScaleX_)));
+    if (!ensureCursorTheme(scale)) {
+      return;
+    }
+    wl_cursor* loaded = loadCursor(cursor);
+    if (!loaded || loaded->image_count == 0) {
+      loaded = loadCursor(Cursor::Arrow);
+    }
+    if (!loaded || loaded->image_count == 0) {
+      return;
+    }
+    wl_cursor_image* image = loaded->images[0];
+    wl_buffer* buffer = wl_cursor_image_get_buffer(image);
+    if (!buffer) {
+      return;
+    }
+    wl_surface_set_buffer_scale(shared_->cursorSurface, scale);
+    wl_surface_attach(shared_->cursorSurface, buffer, 0, 0);
+    std::uint32_t const cursorScale = static_cast<std::uint32_t>(scale);
+    wl_surface_damage(shared_->cursorSurface, 0, 0,
+                      static_cast<std::int32_t>(std::max(1u, image->width / cursorScale)),
+                      static_cast<std::int32_t>(std::max(1u, image->height / cursorScale)));
+    wl_surface_commit(shared_->cursorSurface);
+    wl_pointer_set_cursor(shared_->pointer, pointerEnterSerial_, shared_->cursorSurface,
+                          static_cast<std::int32_t>(image->hotspot_x / static_cast<std::uint32_t>(scale)),
+                          static_cast<std::int32_t>(image->hotspot_y / static_cast<std::uint32_t>(scale)));
+    wl_display_flush(display_);
   }
 
   void requestServerSideDecorations() {
@@ -781,6 +900,8 @@ private:
   int pendingWidth_ = 0;
   int pendingHeight_ = 0;
   Point pointerPos_{};
+  std::uint32_t pointerEnterSerial_ = 0;
+  Cursor currentCursor_ = Cursor::Arrow;
   std::uint8_t pressedButtons_ = 0;
   Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
@@ -811,6 +932,8 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
   if (std::strcmp(interface, wl_compositor_interface.name) == 0) {
     shared->compositor = static_cast<wl_compositor*>(
         wl_registry_bind(registry, name, &wl_compositor_interface, std::min(version, 4u)));
+  } else if (std::strcmp(interface, wl_shm_interface.name) == 0) {
+    shared->shm = static_cast<wl_shm*>(wl_registry_bind(registry, name, &wl_shm_interface, 1));
   } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
     shared->wmBase = static_cast<xdg_wm_base*>(
         wl_registry_bind(registry, name, &xdg_wm_base_interface, 1));
@@ -874,10 +997,10 @@ void sharedOutputScale(void* data, wl_output* output, std::int32_t scale) {
 void sharedOutputName(void*, wl_output*, char const*) {}
 void sharedOutputDescription(void*, wl_output*, char const*) {}
 
-void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface* surface, wl_fixed_t x, wl_fixed_t y) {
+void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
   shared->pointerFocus = windowForSurface(shared, surface);
-  if (shared->pointerFocus) shared->pointerFocus->handlePointerEnter(x, y);
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerEnter(serial, x, y);
 }
 void sharedPointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface* surface) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
