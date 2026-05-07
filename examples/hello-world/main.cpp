@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   auto& w = app.createWindow<Window>({
-      .size = {800, 800},
+      .size = {400, 400},
       .title = "Hello, World!",
   });
 

@@ -237,6 +237,20 @@ TEST_CASE("OverlayLayout: anchorless overlays are centered in the window") {
   CHECK(frame.height == doctest::Approx(180.f));
 }
 
+TEST_CASE("OverlayLayout: anchored overlays respect anchor outsets and max height") {
+  OverlayConfig config{};
+  config.anchor = Rect{100.f, 100.f, 80.f, 80.f};
+  config.anchorOutsets = EdgeInsets{4.f, 6.f, 8.f, 10.f};
+  config.anchorMaxHeight = 32.f;
+  config.crossAlignment = OverlayConfig::CrossAlignment::Start;
+
+  Rect const frame =
+      resolveOverlayFrame(Size{800.f, 600.f}, config, Rect{0.f, 0.f, 120.f, 60.f});
+
+  CHECK(frame.x == doctest::Approx(94.f));
+  CHECK(frame.y == doctest::Approx(100.f + 32.f + 8.f));
+}
+
 TEST_CASE("PopoverPlacement: measured popover size avoids premature flip from max-size estimate") {
   Rect const anchor{120.f, 500.f, 80.f, 32.f};
   Size const window{420.f, 640.f};

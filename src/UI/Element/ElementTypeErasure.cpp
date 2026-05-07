@@ -31,11 +31,6 @@ float positive(float value) {
   return std::isfinite(value) ? std::max(0.f, value) : 0.f;
 }
 
-bool fixedFiniteHeight(LayoutConstraints const& constraints) {
-  return std::isfinite(constraints.maxHeight) &&
-         constraints.minHeight >= constraints.maxHeight - 1e-4f;
-}
-
 LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets padding) {
   float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
   float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
@@ -598,10 +593,6 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     LayoutConstraints innerConstraints =
         modifierInnerConstraints(constraints, padding, relayoutHints, width, height,
                                  modifiers.hasSizeWidth, modifiers.hasSizeHeight);
-    if (!hasResolvedHeight && !fixedFiniteHeight(constraints)) {
-      innerConstraints.maxHeight = std::numeric_limits<float>::infinity();
-      innerConstraints.minHeight = 0.f;
-    }
     if (rawContent) {
       rawContent->relayout(innerConstraints);
     }

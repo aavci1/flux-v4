@@ -7,20 +7,28 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Views/PopoverPlacement.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 
+#include <memory>
 #include <optional>
 
 namespace flux {
 
+class MountContext;
+namespace scenegraph {
+class SceneNode;
+} // namespace scenegraph
+
 /// Single filled/stroked path: rounded card + optional callout triangle (merged outline).
 struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext&) const;
 
   /// Side on which the callout arrow is attached.
-  PopoverPlacement placement = PopoverPlacement::Below;
+  Reactive::Bindable<PopoverPlacement> placement{PopoverPlacement::Below};
   /// Draws the callout arrow when true.
   bool arrow = true;
   /// Inset between the outer shape and `content`.

@@ -278,6 +278,9 @@ void Window::render(Canvas& canvas) {
   if (!d->sceneRenderer_) {
     d->sceneRenderer_ = std::make_unique<scenegraph::SceneRenderer>(canvas);
   }
+  if (d->runtime_ && d->overlayMgr_.hasTrackedAnchors()) {
+    d->overlayMgr_.rebuild(getSize(), *d->runtime_);
+  }
   renderWindowFrame(*d->sceneRenderer_, canvas, d->sceneGraph_, d->overlayMgr_, d->runtime_.get(), d->clearColor_,
                     d->textCacheRing_);
 }

@@ -52,10 +52,16 @@ struct RuntimeInputState {
   std::vector<RuntimeTargetSnapshot> hoverChain;
   std::optional<RuntimeTargetSnapshot> pressTarget;
   std::optional<RuntimeTargetSnapshot> focusTarget;
+  std::optional<Rect> lastTapAnchor;
+  std::optional<Rect> hoverAnchor;
+  std::optional<ComponentKey> lastTapTargetKey;
+  std::optional<ComponentKey> hoverTargetKey;
   Point pressPoint{};
   bool pressCancelled = false;
   Cursor currentCursor = Cursor::Arrow;
 };
+
+std::optional<Rect> windowRectForTarget(RuntimeTargetSnapshot const& target, Window& window);
 
 } // namespace
 
@@ -144,6 +150,36 @@ ActionRegistry const& Runtime::actionRegistry() const noexcept {
   return d->actions;
 }
 
+std::optional<Rect> Runtime::lastTapAnchor() const noexcept {
+  return d->input.lastTapAnchor;
+}
+
+std::optional<Rect> Runtime::hoverAnchor() const noexcept {
+  return d->input.hoverAnchor;
+}
+
+std::optional<Rect> Runtime::focusAnchor() const noexcept {
+  if (!d->input.focusTarget) {
+    return std::nullopt;
+  }
+  return windowRectForTarget(*d->input.focusTarget, d->window);
+}
+
+std::optional<ComponentKey> Runtime::lastTapTargetKey() const noexcept {
+  return d->input.lastTapTargetKey;
+}
+
+std::optional<ComponentKey> Runtime::hoverTargetKey() const noexcept {
+  return d->input.hoverTargetKey;
+}
+
+std::optional<ComponentKey> Runtime::focusTargetKey() const noexcept {
+  if (!d->input.focusTarget || d->input.focusTarget->stableTargetKey.empty()) {
+    return std::nullopt;
+  }
+  return d->input.focusTarget->stableTargetKey;
+}
+
 Window& Runtime::window() noexcept {
   return d->window;
 }
@@ -223,6 +259,28 @@ std::optional<HitTarget> hitWindow(Window& window, Point point,
     }
   }
   return std::nullopt;
+}
+
+Rect windowRectForHit(HitTarget const& hit, Point windowPoint) {
+  Size const size = hit.node ? hit.node->size() : Size{};
+  return Rect{
+      windowPoint.x - hit.localPoint.x,
+      windowPoint.y - hit.localPoint.y,
+      std::max(0.f, size.width),
+      std::max(0.f, size.height),
+  };
+}
+
+Rect windowRectForNode(scenegraph::SceneNode const& node, Point rootOrigin = {}) {
+  Point origin = rootOrigin;
+  scenegraph::SceneNode const* current = &node;
+  while (current) {
+    origin.x += current->position().x;
+    origin.y += current->position().y;
+    current = current->parent();
+  }
+  Size const size = node.size();
+  return Rect{origin.x, origin.y, std::max(0.f, size.width), std::max(0.f, size.height)};
 }
 
 void appendFocusableTargets(scenegraph::SceneGraph const& graph, OverlayId overlay,
@@ -349,6 +407,23 @@ std::optional<Point> localPointForTarget(RuntimeTargetSnapshot const& target,
   return scenegraph::localPointForNode(window.sceneGraph().root(), windowPoint, target.node);
 }
 
+std::optional<Rect> windowRectForTarget(RuntimeTargetSnapshot const& target, Window& window) {
+  if (!target.node) {
+    return std::nullopt;
+  }
+  if (target.inOverlay) {
+    OverlayEntry const* entry = window.overlayManager().find(target.overlay);
+    if (!entry) {
+      return std::nullopt;
+    }
+    return windowRectForNode(*target.node, Point{entry->resolvedFrame.x, entry->resolvedFrame.y});
+  }
+  if (!window.hasSceneGraph()) {
+    return std::nullopt;
+  }
+  return windowRectForNode(*target.node);
+}
+
 void applyCursor(RuntimeInputState& input, Window& window, Cursor cursor) {
   if (cursor == Cursor::Inherit) {
     cursor = Cursor::Arrow;
@@ -394,6 +469,13 @@ void updateCursorForPoint(RuntimeInputState& input, Window& window, Point point)
 
 void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) {
   std::optional<HitTarget> hit = hitWindow(window, point);
+  input.hoverAnchor = hit ? std::optional<Rect>{windowRectForHit(*hit, point)}
+                          : std::nullopt;
+  if (hit && hit->interaction && !hit->interaction->stableTargetKey.empty()) {
+    input.hoverTargetKey = hit->interaction->stableTargetKey;
+  } else {
+    input.hoverTargetKey.reset();
+  }
   std::vector<RuntimeTargetSnapshot> nextChain = hit ? hoverChainForHit(*hit)
                                                      : std::vector<RuntimeTargetSnapshot>{};
   if (input.hoverChain.size() == nextChain.size()) {
@@ -482,6 +564,30 @@ void cycleKeyboardFocus(RuntimeInputState& input, Window& window, bool reverse) 
   setFocus(input, targets[nextIndex], true, FocusInputKind::Keyboard);
 }
 
+void cycleKeyboardFocusFromKey(RuntimeInputState& input, Window& window,
+                               ComponentKey const& fromKey, bool reverse) {
+  std::vector<HitTarget> targets = focusableTargets(window);
+  if (targets.empty()) {
+    setFocus(input, std::nullopt, true, FocusInputKind::Keyboard);
+    return;
+  }
+
+  if (!fromKey.empty()) {
+    for (std::size_t i = 0; i < targets.size(); ++i) {
+      if (targets[i].interaction &&
+          targets[i].interaction->stableTargetKey == fromKey) {
+        std::size_t const nextIndex =
+            reverse ? (i == 0 ? targets.size() - 1 : i - 1)
+                    : (i + 1) % targets.size();
+        setFocus(input, targets[nextIndex], true, FocusInputKind::Keyboard);
+        return;
+      }
+    }
+  }
+
+  cycleKeyboardFocus(input, window, reverse);
+}
+
 ComponentKey focusedActionKey(RuntimeInputState const& input) {
   return input.focusTarget ? input.focusTarget->stableTargetKey : ComponentKey{};
 }
@@ -495,6 +601,10 @@ void resetTransientTargets(RuntimeInputState& input, Window& window) {
   }
   input.hoverChain.clear();
   input.pressTarget.reset();
+  input.hoverAnchor.reset();
+  input.hoverTargetKey.reset();
+  input.lastTapAnchor.reset();
+  input.lastTapTargetKey.reset();
   setFocus(input, std::nullopt, false);
   input.pressCancelled = false;
   applyCursor(input, window, Cursor::Arrow);
@@ -514,7 +624,30 @@ void Runtime::handleInput(InputEvent const& event) {
   }
 
   if (event.kind == InputEvent::Kind::KeyDown && event.key == keys::Tab) {
-    cycleKeyboardFocus(d->input, d->window, any(event.modifiers & Modifiers::Shift));
+    bool const reverse = any(event.modifiers & Modifiers::Shift);
+    std::optional<OverlayId> overlayId;
+    std::optional<ComponentKey> anchorKey;
+    if (d->input.focusTarget && d->input.focusTarget->onKeyDown) {
+      if (d->input.focusTarget->inOverlay) {
+        overlayId = d->input.focusTarget->overlay;
+        if (OverlayEntry const* entry = d->window.overlayManager().find(*overlayId)) {
+          anchorKey = entry->config.anchorTrackComponentKey;
+        }
+      } else if (OverlayEntry const* top = d->window.overlayManager().top();
+                 top && top->config.anchorTrackComponentKey &&
+                 *top->config.anchorTrackComponentKey == d->input.focusTarget->stableTargetKey) {
+        overlayId = top->id;
+        anchorKey = top->config.anchorTrackComponentKey;
+      }
+      if (overlayId) {
+        d->input.focusTarget->onKeyDown(event.key, event.modifiers);
+      }
+    }
+    if (overlayId && anchorKey && !d->window.overlayManager().find(*overlayId)) {
+      cycleKeyboardFocusFromKey(d->input, d->window, *anchorKey, reverse);
+    } else {
+      cycleKeyboardFocus(d->input, d->window, reverse);
+    }
     return;
   }
 
@@ -591,6 +724,12 @@ void Runtime::handleInput(InputEvent const& event) {
     d->input.pressCancelled = false;
     d->input.pressPoint = point;
     if (auto hit = hitWindow(d->window, point)) {
+      d->input.lastTapAnchor = windowRectForHit(*hit, point);
+      if (hit->interaction && !hit->interaction->stableTargetKey.empty()) {
+        d->input.lastTapTargetKey = hit->interaction->stableTargetKey;
+      } else {
+        d->input.lastTapTargetKey.reset();
+      }
       RuntimeTargetSnapshot target = snapshot(*hit);
       if (target.focusable) {
         setFocus(d->input, hit, true, FocusInputKind::Pointer);
@@ -603,6 +742,8 @@ void Runtime::handleInput(InputEvent const& event) {
         target.onPointerDown(hit->localPoint, event.button);
       }
     } else {
+      d->input.lastTapAnchor.reset();
+      d->input.lastTapTargetKey.reset();
       setFocus(d->input, std::nullopt);
     }
     updateHoverForPoint(d->input, d->window, point);

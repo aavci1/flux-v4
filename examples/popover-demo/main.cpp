@@ -9,6 +9,7 @@
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,47 @@ struct PopoverDemoRoot {
                 }
                     .padding(8.f, 0.f, 8.f, 0.f)
             );
+        };
+
+        Theme const activeTheme = theme();
+        auto regularActionButton = [activeTheme](std::string label,
+                                                 ButtonVariant variant,
+                                                 std::function<void()> action) -> Element {
+            Color fill = activeTheme.accentColor;
+            Color labelColor = activeTheme.accentForegroundColor;
+            StrokeStyle stroke = StrokeStyle::none();
+            if (variant == ButtonVariant::Secondary) {
+                fill = activeTheme.elevatedBackgroundColor;
+                labelColor = activeTheme.labelColor;
+                stroke = StrokeStyle::solid(activeTheme.separatorColor, 1.f);
+            }
+
+            auto activate = [action] {
+                if (action) {
+                    action();
+                }
+            };
+            auto handleKey = [activate](KeyCode key, Modifiers) {
+                if (key == keys::Return || key == keys::Space) {
+                    activate();
+                }
+            };
+
+            return Text {
+                .text = std::move(label),
+                .font = activeTheme.headlineFont,
+                .color = labelColor,
+                .horizontalAlignment = HorizontalAlignment::Center,
+                .verticalAlignment = VerticalAlignment::Center,
+            }
+                .fill(FillStyle::solid(fill))
+                .stroke(stroke)
+                .cornerRadius(CornerRadius {activeTheme.radiusLarge})
+                .padding(activeTheme.space3, activeTheme.space4, activeTheme.space3, activeTheme.space4)
+                .cursor(Cursor::Hand)
+                .focusable(true)
+                .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+                .onTap(std::function<void()> {activate});
         };
 
         addSection("Placement");
@@ -60,11 +102,7 @@ struct PopoverDemoRoot {
                                 Text {.text = std::string(label), .font = Font::title3(), .color = Color::primary()},
                                 Text {.text = "Placement follows preference when space allows.", .font = Font::footnote(), .color = Color::secondary(), .wrapping = TextWrapping::Wrap}
                                     .flex(1.f),
-                                Button {
-                                    .label = "Close",
-                                    .variant = ButtonVariant::Secondary,
-                                    .onTap = hidePopover,
-                                }
+                                regularActionButton("Close", ButtonVariant::Secondary, hidePopover)
                             ),
                         },
                         .placement = placement,
@@ -136,20 +174,19 @@ struct PopoverDemoRoot {
                         .spacing = 8.f,
                         .alignment = Alignment::Start,
                         .children = children(
-                            Text {.text = "Popover anchored to this button.", .font = Font::title2(), .color = Color::primary()},
-                            HStack {
-                                .spacing = 0.f,
-                                .children = children(
-                                    Text {
-                                        .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
-                                        .font = Font::footnote(),
-                                        .color = Color::secondary(),
-                                        .wrapping = TextWrapping::Wrap,
-                                    }
-                                        .flex(1.f)
-                                ),
+                            Text {
+                                .text = "Popover anchored to this button.",
+                                .font = Font::title2(),
+                                .color = Color::primary(),
+                                .wrapping = TextWrapping::Wrap,
                             },
-                            Button {.label = "OK", .onTap = hidePopover}
+                            Text {
+                                .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
+                                .font = Font::footnote(),
+                                .color = Color::secondary(),
+                                .wrapping = TextWrapping::Wrap,
+                            },
+                            regularActionButton("OK", ButtonVariant::Primary, hidePopover)
                         ),
                     }},
                     .placement = PopoverPlacement::Below,
@@ -194,7 +231,7 @@ struct PopoverDemoRoot {
                                         .flex(1.f)
                                 ),
                             },
-                            Button {.label = "OK", .onTap = hidePopover}
+                            regularActionButton("OK", ButtonVariant::Primary, hidePopover)
                         ),
                     }},
                     .placement = PopoverPlacement::Below,

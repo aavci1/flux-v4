@@ -32,7 +32,7 @@ Element Alert::body() const {
   }
       .fill(FillStyle::solid(surface.cardFill))
       .stroke(StrokeStyle::solid(surface.cardStroke, 1.f))
-      .size(cardWidth, 0.f)
+      .width(cardWidth)
       .cornerRadius(surface.cornerRadius)
       .padding(theme().space6);
 }
@@ -46,7 +46,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
                      .font = Font::title2(),
                      .color = titleC,
                  }
-                     .size(contentW, 0.f));
+                     .width(contentW));
 
   if (!message.empty()) {
     rows.push_back(Text{
@@ -55,7 +55,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
                        .color = msgC,
                        .wrapping = TextWrapping::Wrap,
                    }
-                       .size(contentW, 0.f));
+                       .width(contentW));
   }
 
   if (buttons.size() == 1) {

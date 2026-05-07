@@ -8,11 +8,16 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/Popover.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Show.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -226,6 +231,80 @@ struct ScrollProbeRoot {
   }
 };
 
+struct ScrollAnchoredProbeRoot {
+  flux::Reactive::Signal<flux::Point> offset;
+
+  flux::Element body() const {
+    return flux::ScrollView{
+        .axis = flux::ScrollAxis::Vertical,
+        .scrollOffset = offset,
+        .children = flux::children(
+            flux::Rectangle{}.size(100.f, 80.f),
+            ProbeView{},
+            flux::Rectangle{}.size(100.f, 100.f)),
+    };
+  }
+};
+
+struct SelectKeyboardProbeRoot {
+  flux::Element body() const {
+    return flux::Element{flux::Select{
+        .options = {
+            flux::SelectOption{.label = "First"},
+            flux::SelectOption{.label = "Second"},
+        },
+    }}.width(120.f);
+  }
+};
+
+struct SelectCommitProbeRoot {
+  flux::Reactive::Signal<int> selected;
+  flux::Reactive::Signal<bool>* nextFocus = nullptr;
+  int* changeCount = nullptr;
+
+  flux::Element body() const {
+    return flux::VStack{
+        .spacing = 8.f,
+        .alignment = flux::Alignment::Stretch,
+        .children = flux::children(
+            flux::Element{flux::Select{
+                .selectedIndex = selected,
+                .options = {
+                    flux::SelectOption{.label = "First"},
+                    flux::SelectOption{.label = "Second"},
+                },
+                .onChange = [changeCount = changeCount](int) {
+                  if (changeCount) {
+                    ++*changeCount;
+                  }
+                },
+            }}.width(120.f),
+            ProbeView{nullptr, nullptr, nextFocus, nullptr}),
+    };
+  }
+};
+
+struct LongSelectProbeRoot {
+  flux::Element body() const {
+    return flux::Element{flux::Select{
+        .options = {
+            flux::SelectOption{.label = "Option 1"},
+            flux::SelectOption{.label = "Option 2"},
+            flux::SelectOption{.label = "Option 3"},
+            flux::SelectOption{.label = "Option 4"},
+            flux::SelectOption{.label = "Option 5"},
+            flux::SelectOption{.label = "Option 6"},
+            flux::SelectOption{.label = "Option 7"},
+            flux::SelectOption{.label = "Option 8"},
+            flux::SelectOption{.label = "Option 9"},
+            flux::SelectOption{.label = "Option 10"},
+            flux::SelectOption{.label = "Option 11"},
+            flux::SelectOption{.label = "Option 12"},
+        },
+    }}.width(160.f);
+  }
+};
+
 struct WrappedScrollProbeRoot {
   flux::Reactive::Signal<flux::Point> offset;
   flux::Reactive::Signal<flux::Size> viewport;
@@ -264,6 +343,63 @@ void registerSaveAction(flux::Window& window) {
       .label = "Save",
       .shortcut = flux::shortcuts::Save,
   });
+}
+
+flux::scenegraph::SceneNode const* findScrollViewport(flux::scenegraph::SceneNode const& node) {
+  if (node.interaction() && node.interaction()->onScroll && node.children().size() >= 2) {
+    return &node;
+  }
+  for (auto const& child : node.children()) {
+    if (child) {
+      if (auto* found = findScrollViewport(*child)) {
+        return found;
+      }
+    }
+  }
+  return nullptr;
+}
+
+void collectTapRects(flux::scenegraph::SceneNode const& node,
+                     std::vector<flux::scenegraph::RectNode const*>& out) {
+  if (node.kind() == flux::scenegraph::SceneNodeKind::Rect &&
+      node.interaction() && node.interaction()->onTap) {
+    out.push_back(static_cast<flux::scenegraph::RectNode const*>(&node));
+  }
+  for (auto const& child : node.children()) {
+    if (child) {
+      collectTapRects(*child, out);
+    }
+  }
+}
+
+flux::Point windowPointInside(flux::OverlayEntry const& entry,
+                              flux::scenegraph::SceneNode const& node) {
+  flux::Point origin{entry.resolvedFrame.x, entry.resolvedFrame.y};
+  flux::scenegraph::SceneNode const* current = &node;
+  while (current) {
+    origin.x += current->position().x;
+    origin.y += current->position().y;
+    current = current->parent();
+  }
+  flux::Size const size = node.size();
+  return flux::Point{origin.x + std::min(12.f, std::max(1.f, size.width * 0.5f)),
+                     origin.y + std::min(12.f, std::max(1.f, size.height * 0.5f))};
+}
+
+float solidFillAlpha(flux::scenegraph::RectNode const& node) {
+  flux::Color color{};
+  if (node.fill().solidColor(&color)) {
+    return color.a;
+  }
+  return 0.f;
+}
+
+flux::Color solidFillColor(flux::scenegraph::RectNode const& node) {
+  flux::Color color{};
+  if (node.fill().solidColor(&color)) {
+    return color;
+  }
+  return {};
 }
 
 } // namespace
@@ -418,6 +554,343 @@ TEST_CASE("scroll view measurement does not overwrite mounted scroll range") {
   harness.scroll({10.f, 40.f}, {0.f, -12.f});
 
   CHECK(offset.get().y == doctest::Approx(12.f));
+}
+
+TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
+  RuntimeHarness harness;
+  harness.setRoot(SingleProbeRoot{});
+
+  harness.pointerMove({10.f, 10.f});
+  std::optional<flux::Rect> hoverAnchor = harness.runtime.hoverAnchor();
+  REQUIRE(hoverAnchor.has_value());
+  CHECK(harness.runtime.hoverTargetKey().has_value());
+  CHECK(hoverAnchor->x == doctest::Approx(0.f));
+  CHECK(hoverAnchor->y == doctest::Approx(0.f));
+  CHECK(hoverAnchor->width == doctest::Approx(20.f));
+  CHECK(hoverAnchor->height == doctest::Approx(20.f));
+
+  harness.pointerDown({10.f, 10.f});
+  std::optional<flux::Rect> tapAnchor = harness.runtime.lastTapAnchor();
+  REQUIRE(tapAnchor.has_value());
+  CHECK(harness.runtime.lastTapTargetKey().has_value());
+  CHECK(tapAnchor->x == doctest::Approx(0.f));
+  CHECK(tapAnchor->y == doctest::Approx(0.f));
+  CHECK(tapAnchor->width == doctest::Approx(20.f));
+  CHECK(tapAnchor->height == doctest::Approx(20.f));
+
+  harness.keyDown(flux::keys::Tab);
+  std::optional<flux::Rect> focusAnchor = harness.runtime.focusAnchor();
+  REQUIRE(focusAnchor.has_value());
+  CHECK(harness.runtime.focusTargetKey().has_value());
+  CHECK(focusAnchor->x == doctest::Approx(0.f));
+  CHECK(focusAnchor->y == doctest::Approx(0.f));
+  CHECK(focusAnchor->width == doctest::Approx(20.f));
+  CHECK(focusAnchor->height == doctest::Approx(20.f));
+}
+
+TEST_CASE("tracked overlay anchors follow moved trigger nodes") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
+
+  harness.pointerDown({10.f, 90.f});
+  std::optional<flux::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  REQUIRE(key.has_value());
+
+  flux::OverlayConfig config{};
+  config.anchor = harness.runtime.lastTapAnchor();
+  config.anchorTrackComponentKey = key;
+  config.placement = flux::OverlayConfig::Placement::Below;
+  flux::OverlayId const id = harness.window.overlayManager().push(
+      flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+      std::move(config), &harness.runtime);
+
+  flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  REQUIRE(entry != nullptr);
+  CHECK(entry->resolvedFrame.y == doctest::Approx(100.f));
+
+  harness.scroll({10.f, 90.f}, {0.f, -12.f});
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  entry = harness.window.overlayManager().find(id);
+  REQUIRE(entry != nullptr);
+  CHECK(entry->resolvedFrame.y == doctest::Approx(88.f));
+}
+
+TEST_CASE("tracked overlay placement flips after scroll changes available space") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
+
+  harness.pointerDown({10.f, 90.f});
+  std::optional<flux::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  REQUIRE(key.has_value());
+
+  flux::OverlayConfig config{};
+  config.anchor = harness.runtime.lastTapAnchor();
+  config.anchorTrackComponentKey = key;
+  config.placement = flux::OverlayConfig::Placement::Below;
+  config.autoFlipPreferredPlacement = flux::OverlayConfig::Placement::Below;
+  flux::OverlayId const id = harness.window.overlayManager().push(
+      flux::Element{flux::Rectangle{}}.size(30.f, 50.f),
+      std::move(config), &harness.runtime);
+
+  flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  REQUIRE(entry != nullptr);
+  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Above);
+  CHECK(entry->resolvedFrame.y == doctest::Approx(30.f));
+
+  harness.scroll({10.f, 90.f}, {0.f, -60.f});
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  entry = harness.window.overlayManager().find(id);
+  REQUIRE(entry != nullptr);
+  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Below);
+  CHECK(entry->resolvedFrame.y == doctest::Approx(40.f));
+}
+
+TEST_CASE("tracked popover callout arrow follows flipped overlay placement") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 60.f}};
+  harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
+
+  harness.pointerDown({10.f, 30.f});
+  std::optional<flux::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  REQUIRE(key.has_value());
+
+  flux::OverlayConfig config{};
+  config.anchor = harness.runtime.lastTapAnchor();
+  config.anchorTrackComponentKey = key;
+  config.placement = flux::OverlayConfig::Placement::Below;
+  config.autoFlipPreferredPlacement = flux::OverlayConfig::Placement::Below;
+
+  flux::Theme const theme = flux::Theme::light();
+  flux::OverlayId const id = harness.window.overlayManager().push(
+      flux::Popover{
+          .content = flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+          .placement = flux::PopoverPlacement::Below,
+          .arrow = true,
+      },
+      std::move(config), &harness.runtime);
+
+  auto calloutContentY = [&]() {
+    flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+    REQUIRE(entry != nullptr);
+    REQUIRE(entry->sceneGraph.root().children().size() >= 1);
+    flux::scenegraph::SceneNode const* callout =
+        entry->sceneGraph.root().children().back().get();
+    REQUIRE(callout != nullptr);
+    REQUIRE(callout->children().size() == 2);
+    return callout->children()[1]->position().y;
+  };
+
+  flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  REQUIRE(entry != nullptr);
+  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Below);
+  CHECK(calloutContentY() == doctest::Approx(theme.space3 + flux::PopoverCalloutShape::kArrowH));
+
+  offset = flux::Point{0.f, 0.f};
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  entry = harness.window.overlayManager().find(id);
+  REQUIRE(entry != nullptr);
+  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Above);
+  CHECK(calloutContentY() == doctest::Approx(theme.space3));
+}
+
+TEST_CASE("transparent overlay backdrop still dismisses on outside tap") {
+  RuntimeHarness harness;
+  harness.setRoot(SingleProbeRoot{});
+
+  flux::OverlayConfig config{};
+  config.backdropColor = flux::Colors::transparent;
+  config.dismissOnOutsideTap = true;
+  flux::OverlayId const id = harness.window.overlayManager().push(
+      flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+      std::move(config), &harness.runtime);
+
+  REQUIRE(harness.window.overlayManager().find(id) != nullptr);
+
+  harness.pointerDown({1.f, 1.f});
+  harness.pointerUp({1.f, 1.f});
+
+  CHECK(harness.window.overlayManager().find(id) == nullptr);
+}
+
+TEST_CASE("transparent overlay backdrop ignores outside tap when dismissal is disabled") {
+  RuntimeHarness harness;
+  harness.setRoot(SingleProbeRoot{});
+
+  flux::OverlayConfig config{};
+  config.backdropColor = flux::Colors::transparent;
+  config.dismissOnOutsideTap = false;
+  flux::OverlayId const id = harness.window.overlayManager().push(
+      flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+      std::move(config), &harness.runtime);
+
+  REQUIRE(harness.window.overlayManager().find(id) != nullptr);
+
+  harness.pointerDown({1.f, 1.f});
+  harness.pointerUp({1.f, 1.f});
+
+  CHECK(harness.window.overlayManager().find(id) != nullptr);
+}
+
+TEST_CASE("select popover anchors to focused trigger when opened from keyboard") {
+  RuntimeHarness harness;
+  harness.setRoot(SelectKeyboardProbeRoot{});
+
+  harness.keyDown(flux::keys::Tab);
+  std::optional<flux::Rect> focusAnchor = harness.runtime.focusAnchor();
+  REQUIRE(focusAnchor.has_value());
+  std::optional<flux::ComponentKey> focusKey = harness.runtime.focusTargetKey();
+  REQUIRE(focusKey.has_value());
+
+  harness.keyDown(flux::keys::Return);
+
+  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  REQUIRE(entry->config.anchor.has_value());
+  CHECK(entry->config.anchor->x == doctest::Approx(focusAnchor->x));
+  CHECK(entry->config.anchor->y == doctest::Approx(focusAnchor->y));
+  CHECK(entry->config.anchor->width == doctest::Approx(focusAnchor->width));
+  CHECK(entry->config.anchor->height == doctest::Approx(focusAnchor->height));
+  REQUIRE(entry->config.anchorTrackComponentKey.has_value());
+  CHECK(*entry->config.anchorTrackComponentKey == *focusKey);
+}
+
+TEST_CASE("select option Enter commits and closes keyboard-opened popover") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<int> selected{-1};
+  int changes = 0;
+  harness.setRoot(SelectCommitProbeRoot{
+      .selected = selected,
+      .changeCount = &changes,
+  });
+
+  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(flux::keys::Return);
+  REQUIRE(harness.window.overlayManager().top() != nullptr);
+
+  harness.keyDown(flux::keys::DownArrow);
+  CHECK(selected.get() == -1);
+
+  harness.keyDown(flux::keys::Return);
+
+  CHECK(harness.window.overlayManager().top() == nullptr);
+  CHECK(selected.get() == 1);
+  CHECK(changes == 1);
+}
+
+TEST_CASE("select option Tab commits closes popover and advances focus past trigger") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<int> selected{-1};
+  flux::Reactive::Signal<bool> nextFocus;
+  int changes = 0;
+  harness.setRoot(SelectCommitProbeRoot{
+      .selected = selected,
+      .nextFocus = &nextFocus,
+      .changeCount = &changes,
+  });
+
+  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(flux::keys::Return);
+  REQUIRE(harness.window.overlayManager().top() != nullptr);
+
+  harness.keyDown(flux::keys::DownArrow);
+  CHECK(selected.get() == -1);
+  CHECK_FALSE(nextFocus.get());
+
+  harness.keyDown(flux::keys::Tab);
+
+  CHECK(harness.window.overlayManager().top() == nullptr);
+  CHECK(selected.get() == 1);
+  CHECK(changes == 1);
+  CHECK(nextFocus.get());
+}
+
+TEST_CASE("select popover scroll moves menu content") {
+  RuntimeHarness harness;
+  harness.setRoot(LongSelectProbeRoot{});
+
+  harness.pointerDown({20.f, 20.f});
+  harness.pointerUp({20.f, 20.f});
+  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  flux::scenegraph::SceneNode const* viewport = findScrollViewport(entry->sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  REQUIRE(viewport->children().size() >= 1);
+  flux::scenegraph::SceneNode const* content = viewport->children()[0].get();
+  REQUIRE(content != nullptr);
+  CHECK(content->position().y == doctest::Approx(0.f));
+
+  harness.scroll({40.f, 70.f}, {0.f, -48.f});
+  entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  viewport = findScrollViewport(entry->sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  REQUIRE(viewport->children().size() >= 1);
+  content = viewport->children()[0].get();
+  REQUIRE(content != nullptr);
+  CHECK(content->position().y < 0.f);
+
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  viewport = findScrollViewport(entry->sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  REQUIRE(viewport->children().size() >= 1);
+  content = viewport->children()[0].get();
+  REQUIRE(content != nullptr);
+  CHECK(content->position().y < 0.f);
+}
+
+TEST_CASE("select mouse hover drives stable active option highlight") {
+  RuntimeHarness harness;
+  flux::Theme theme = flux::Theme::light();
+  theme.durationFast = 0.f;
+  harness.window.setTheme(theme);
+  harness.setRoot(LongSelectProbeRoot{});
+
+  harness.pointerDown({20.f, 20.f});
+  harness.pointerUp({20.f, 20.f});
+  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  std::vector<flux::scenegraph::RectNode const*> rows;
+  collectTapRects(entry->sceneGraph.root(), rows);
+  REQUIRE(rows.size() >= 2);
+  flux::Color idleFill = solidFillColor(*rows[1]);
+  CHECK(idleFill.r == doctest::Approx(theme.rowHoverBackgroundColor.r));
+  CHECK(idleFill.g == doctest::Approx(theme.rowHoverBackgroundColor.g));
+  CHECK(idleFill.b == doctest::Approx(theme.rowHoverBackgroundColor.b));
+  CHECK(idleFill.a == doctest::Approx(0.f));
+
+  harness.pointerMove(windowPointInside(*entry, *rows[1]));
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  rows.clear();
+  collectTapRects(entry->sceneGraph.root(), rows);
+  REQUIRE(rows.size() >= 2);
+
+  CHECK(solidFillAlpha(*rows[0]) == doctest::Approx(0.f));
+  CHECK(solidFillAlpha(*rows[1]) > 0.f);
+
+  harness.pointerMove({230.f, 130.f});
+  harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
+
+  entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  rows.clear();
+  collectTapRects(entry->sceneGraph.root(), rows);
+  REQUIRE(rows.size() >= 2);
+  CHECK(solidFillAlpha(*rows[1]) == doctest::Approx(0.f));
 }
 
 TEST_CASE("overlay rebuild relayouts mounted content without remounting state") {

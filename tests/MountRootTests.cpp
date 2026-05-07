@@ -13,6 +13,8 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/Popover.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
@@ -25,6 +27,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -281,6 +284,74 @@ TEST_CASE("MountRoot mounts a static root once") {
   auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
   CHECK(rect.size() == flux::Size{20.f, 30.f});
   CHECK(solidColor(rect) == flux::Colors::red);
+}
+
+TEST_CASE("Popover body mounts callout chrome and reserves arrow depth") {
+  struct Root {
+    flux::Element body() const {
+      return flux::Popover{
+          .content = flux::Element{flux::Rectangle{}}
+                         .size(100.f, 20.f)
+                         .fill(flux::Colors::blue),
+          .placement = flux::PopoverPlacement::Below,
+          .arrow = true,
+      };
+    }
+  };
+
+  flux::Theme const theme = flux::Theme::light();
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(theme),
+      flux::Size{300.f, 200.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  CHECK(sceneGraph.root().size().width == doctest::Approx(100.f + 2.f * theme.space3));
+  CHECK(sceneGraph.root().size().height ==
+        doctest::Approx(20.f + 2.f * theme.space3 + flux::PopoverCalloutShape::kArrowH));
+  REQUIRE(sceneGraph.root().children().size() == 2);
+  CHECK(sceneGraph.root().children()[0]->kind() == flux::scenegraph::SceneNodeKind::Path);
+  CHECK(sceneGraph.root().children()[1]->position().y ==
+        doctest::Approx(flux::PopoverCalloutShape::kArrowH + theme.space3));
+}
+
+TEST_CASE("Popover body follows resolved overlay placement from environment") {
+  struct Root {
+    flux::Element body() const {
+      return flux::Popover{
+          .content = flux::Element{flux::Rectangle{}}
+                         .size(100.f, 20.f)
+                         .fill(flux::Colors::blue),
+          .placement = flux::PopoverPlacement::Below,
+          .arrow = true,
+      };
+    }
+  };
+
+  flux::Theme const theme = flux::Theme::light();
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      flux::EnvironmentBinding{}
+          .withValue<flux::ThemeKey>(theme)
+          .withValue<flux::ResolvedOverlayPlacementKey>(
+              std::optional<flux::OverlayConfig::Placement>{flux::OverlayConfig::Placement::Above}),
+      flux::Size{300.f, 200.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().children().size() == 2);
+  CHECK(sceneGraph.root().children()[1]->position().y == doctest::Approx(theme.space3));
 }
 
 TEST_CASE("composite child body is materialized once across measure and mount") {
@@ -1173,8 +1244,49 @@ TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
   viewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
 
   CHECK(viewport.children()[0]->position().y == doctest::Approx(-12.f));
-  CHECK(overlay.opacity() == doctest::Approx(1.f));
+  CHECK(overlay.opacity() == doctest::Approx(0.f));
   CHECK(overlay.children()[0]->bounds().y > initialIndicatorY);
+}
+
+TEST_CASE("ScrollView updates content size when mounted content grows reactively") {
+  struct Root {
+    flux::Reactive::Signal<float> childHeight;
+    flux::Reactive::Signal<flux::Size> contentSize;
+
+    flux::Element body() const {
+      return flux::ScrollView{
+          .axis = flux::ScrollAxis::Vertical,
+          .contentSize = contentSize,
+          .children = flux::children(
+              flux::Rectangle{}.size(60.f, [childHeight = childHeight] {
+                return childHeight.get();
+              })),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<float> childHeight{30.f};
+  flux::Reactive::Signal<flux::Size> contentSize{};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(
+          std::in_place, Root{.childHeight = childHeight, .contentSize = contentSize}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{80.f, 40.f},
+  };
+
+  root.mount(sceneGraph);
+  CHECK(contentSize.peek().height == doctest::Approx(30.f));
+
+  childHeight = 90.f;
+
+  CHECK(contentSize.peek().height == doctest::Approx(90.f));
+  REQUIRE(sceneGraph.root().interaction() != nullptr);
+  sceneGraph.root().interaction()->onScroll(flux::Vec2{0.f, -50.f});
+  REQUIRE(sceneGraph.root().children().size() >= 1);
+  CHECK(sceneGraph.root().children()[0]->position().y == doctest::Approx(-50.f));
 }
 
 TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {

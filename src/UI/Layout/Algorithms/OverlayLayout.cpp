@@ -48,6 +48,21 @@ float resolveCrossAlignedX(Size win, Rect const& anchor, Rect contentBounds,
   return centeredX;
 }
 
+Rect adjustedAnchor(OverlayConfig const& cfg) {
+  Rect anchor = *cfg.anchor;
+  if (cfg.anchorMaxHeight && anchor.height > *cfg.anchorMaxHeight) {
+    anchor.height = *cfg.anchorMaxHeight;
+  }
+  EdgeInsets const outsets = cfg.anchorOutsets;
+  anchor.x -= outsets.left;
+  anchor.y -= outsets.top;
+  anchor.width += outsets.left + outsets.right;
+  anchor.height += outsets.top + outsets.bottom;
+  anchor.width = std::max(0.f, anchor.width);
+  anchor.height = std::max(0.f, anchor.height);
+  return anchor;
+}
+
 } // namespace
 
 LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& value,
@@ -72,8 +87,9 @@ LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& v
     availableHeight -= 2.f * pad;
   }
 
+  PopoverPlacement const placement = value.placement.evaluate();
   if (value.arrow) {
-    switch (value.placement) {
+    switch (placement) {
     case PopoverPlacement::Below:
     case PopoverPlacement::Above:
       if (std::isfinite(availableHeight)) {
@@ -107,7 +123,8 @@ PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size
   float const cardWidth = contentSize.width + 2.f * pad;
   float const cardHeight = contentSize.height + 2.f * pad;
 
-  switch (value.placement) {
+  PopoverPlacement const placement = value.placement.evaluate();
+  switch (placement) {
   case PopoverPlacement::Below:
     layout.totalSize = Size{cardWidth, cardHeight + arrowDepth};
     layout.cardRect = Rect{0.f, arrowDepth, cardWidth, cardHeight};
@@ -136,7 +153,7 @@ PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size
   }
   }
 
-  layout.chromePath = buildPopoverCalloutPath(value.placement, value.cornerRadius, value.arrow,
+  layout.chromePath = buildPopoverCalloutPath(placement, value.cornerRadius, value.arrow,
                                               arrowWidth, arrowDepth, layout.cardRect,
                                               layout.totalSize);
   return layout;
@@ -151,7 +168,7 @@ Rect resolveOverlayFrame(Size win, OverlayConfig const& cfg, Rect contentBounds)
     return Rect{x, y, contentBounds.width, contentBounds.height};
   }
 
-  Rect const& anchor = *cfg.anchor;
+  Rect const anchor = adjustedAnchor(cfg);
   float const centerY = anchor.y + anchor.height * 0.5f;
   float const centerLocalY = contentBounds.y + contentBounds.height * 0.5f;
   float const tipTopLocalY = contentBounds.y;

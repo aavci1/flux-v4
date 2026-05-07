@@ -3,6 +3,7 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Element.hpp>
 
@@ -48,6 +49,11 @@ struct OverlayConfig {
   std::optional<float> anchorMaxHeight;
   EdgeInsets anchorOutsets{};
   Placement placement = Placement::Below;
+  /// When set, placement is re-resolved from this preference when the anchor moves or the
+  /// overlay is rebuilt. The current resolved placement remains in `placement`.
+  std::optional<Placement> autoFlipPreferredPlacement;
+  /// Gap included in auto-flip fit checks; usually matches the directional `offset`.
+  float autoFlipGap = 0.f;
   CrossAlignment crossAlignment = CrossAlignment::Center;
   Vec2 offset{};
   std::optional<Size> maxSize;
@@ -59,12 +65,17 @@ struct OverlayConfig {
   std::string debugName;
 };
 
+FLUX_DEFINE_ENVIRONMENT_KEY(ResolvedOverlayPlacementKey,
+                            std::optional<OverlayConfig::Placement>,
+                            std::optional<OverlayConfig::Placement>{});
+
 std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay();
 
 struct OverlayEntry {
   OverlayId id{};
   std::optional<Element> content;
   OverlayConfig config;
+  Reactive::Signal<std::optional<OverlayConfig::Placement>> resolvedPlacement;
   Reactive::Scope scope;
   scenegraph::SceneGraph sceneGraph;
   Rect resolvedFrame{};
@@ -81,6 +92,7 @@ public:
   void clear(Runtime* runtime, bool invokeDismissCallbacks = true);
 
   bool hasOverlays() const noexcept { return !overlays_.empty(); }
+  bool hasTrackedAnchors() const noexcept;
   OverlayEntry const* top() const;
   OverlayEntry* find(OverlayId id);
   OverlayEntry const* find(OverlayId id) const;

@@ -97,6 +97,7 @@ TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
 
   REQUIRE(node);
   CHECK(node->bounds().width == doctest::Approx(360.f));
+  CHECK(node->bounds().height > 0.f);
   REQUIRE(node->children().size() == 1);
 
   flux::scenegraph::SceneNode const& cardContent = *node->children()[0];
@@ -104,7 +105,13 @@ TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
   CHECK(cardContent.bounds().width == doctest::Approx(contentWidth));
   REQUIRE(cardContent.children().size() == 3);
 
+  flux::scenegraph::SceneNode const& title = *cardContent.children()[0];
+  flux::scenegraph::SceneNode const& message = *cardContent.children()[1];
   flux::scenegraph::SceneNode const& buttonRow = *cardContent.children()[2];
+  CHECK(title.bounds().height > 0.f);
+  CHECK(message.bounds().height > 0.f);
+  CHECK(message.position().y > title.position().y + title.bounds().height);
+  CHECK(buttonRow.position().y > message.position().y + message.bounds().height);
   CHECK(buttonRow.bounds().width == doctest::Approx(contentWidth));
   REQUIRE(buttonRow.children().size() == 2);
   float const firstButtonWidth = buttonRow.children()[0]->bounds().width;

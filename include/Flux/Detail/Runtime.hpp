@@ -37,6 +37,12 @@ public:
   bool dispatchAction(std::string const& name);
   ActionRegistry& actionRegistry() noexcept;
   ActionRegistry const& actionRegistry() const noexcept;
+  std::optional<Rect> lastTapAnchor() const noexcept;
+  std::optional<Rect> hoverAnchor() const noexcept;
+  std::optional<Rect> focusAnchor() const noexcept;
+  std::optional<ComponentKey> lastTapTargetKey() const noexcept;
+  std::optional<ComponentKey> hoverTargetKey() const noexcept;
+  std::optional<ComponentKey> focusTargetKey() const noexcept;
   Window& window() noexcept;
   Window const& window() const noexcept;
 

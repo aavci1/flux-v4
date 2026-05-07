@@ -177,55 +177,78 @@ float intrinsicMenuWidth(std::vector<SelectOption> const &options, SelectResolve
 
 struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
     SelectOption option;
-    bool selected = false;
+    Signal<int> selectedIndex {};
+    Signal<int> activeIndex {};
+    int index = -1;
     bool showCheckmark = true;
     SelectResolvedStyle style {};
     Theme theme {};
     std::function<void()> onTap;
 
     bool operator==(SelectMenuRow const& other) const {
-        return option == other.option && selected == other.selected &&
+        return option == other.option && selectedIndex == other.selectedIndex &&
+               activeIndex == other.activeIndex && index == other.index &&
                showCheckmark == other.showCheckmark && style == other.style &&
                theme == other.theme && static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
     }
 
     Element body() const {
         bool const disabled = option.disabled;
-        Reactive::Signal<bool> hovered = useHover();
         Reactive::Signal<bool> pressed = usePress();
         Reactive::Signal<bool> focused = useFocus();
+        Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
-        Color const selectedFill = withAlpha(style.accentColor, 0.16f);
-        Color const selectedHoverFill = withAlpha(style.accentColor, 0.24f);
-        Color const selectedPressFill = withAlpha(style.accentColor, 0.30f);
-        Color const idleFill = Colors::transparent;
         Color const hoverFill = style.rowHoverColor;
+        Color const idleFill = withAlpha(hoverFill, 0.f);
         Color const pressFill = darken(style.rowHoverColor, 0.04f);
 
         auto motion = [theme = theme] {
             return Transition::ease(theme.durationFast);
         };
-        auto fillTarget = [disabled, selected = selected, pressed, hovered,
-                           selectedPressFill, selectedHoverFill, selectedFill,
+        auto isSelected = [selectedIndex = selectedIndex, index = index] {
+            return selectedIndex.get() == index;
+        };
+        auto isActive = [activeIndex = activeIndex, index = index] {
+            return activeIndex.get() == index;
+        };
+        auto fillTarget = [disabled, isActive, pressed, keyboardFocused,
                            pressFill, hoverFill, idleFill] {
+            bool const activeFocus = keyboardFocused();
+            bool const active = isActive() || activeFocus;
             return disabled ? Colors::transparent :
-                   selected ? (pressed() ? selectedPressFill : hovered() ? selectedHoverFill : selectedFill) :
-                              (pressed() ? pressFill : hovered() ? hoverFill : idleFill);
+                   pressed() ? pressFill :
+                   active ? hoverFill :
+                            idleFill;
         };
         auto fillAnim = useAnimation(fillTarget, motion);
-        Color const labelTarget =
-            disabled ? theme.disabledTextColor : selected ? style.accentColor :
-                                                            theme.labelColor;
-        Color const detailTarget =
-            disabled ? theme.disabledTextColor : selected ? lighten(style.accentColor, 0.08f) :
-                                                            theme.secondaryLabelColor;
-        Color const iconTarget = disabled ? theme.disabledTextColor : style.accentColor;
+        auto labelTarget = [disabled, isSelected, accentColor = style.accentColor, theme = theme] {
+            return disabled ? theme.disabledTextColor :
+                   isSelected() ? accentColor :
+                                  theme.labelColor;
+        };
+        auto detailTarget = [disabled, isSelected, accentColor = style.accentColor, theme = theme] {
+            return disabled ? theme.disabledTextColor :
+                   isSelected() ? lighten(accentColor, 0.08f) :
+                                  theme.secondaryLabelColor;
+        };
+        auto iconTarget = [disabled, isSelected, accentColor = style.accentColor, theme = theme] {
+            Color color = disabled ? theme.disabledTextColor : accentColor;
+            if (!isSelected()) {
+                color.a = 0.f;
+            }
+            return color;
+        };
+        auto labelAnim = useAnimation(labelTarget, motion);
+        auto detailAnim = useAnimation(detailTarget, motion);
+        auto iconAnim = useAnimation(iconTarget, motion);
 
         bool const hasDetail = !option.detail.empty();
         Element textBlock = Text {
             .text = option.label,
             .font = style.labelFont,
-            .color = labelTarget,
+            .color = [labelAnim] {
+                return labelAnim();
+            },
             .horizontalAlignment = HorizontalAlignment::Leading,
             .verticalAlignment = VerticalAlignment::Center,
         };
@@ -235,14 +258,18 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             textChildren.emplace_back(Text {
                 .text = option.label,
                 .font = style.labelFont,
-                .color = labelTarget,
+                .color = [labelAnim] {
+                    return labelAnim();
+                },
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,
             });
             textChildren.emplace_back(Text {
                 .text = option.detail,
                 .font = style.detailFont,
-                .color = detailTarget,
+                .color = [detailAnim] {
+                    return detailAnim();
+                },
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,
                 .wrapping = TextWrapping::Wrap,
@@ -257,11 +284,13 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
         std::vector<Element> rowChildren;
         rowChildren.reserve(showCheckmark ? 2 : 1);
         rowChildren.emplace_back(std::move(textBlock).flex(1.f, 1.f, 0.f));
-        if (showCheckmark && selected) {
+        if (showCheckmark) {
             rowChildren.emplace_back(Icon {
                 .name = IconName::Check,
                 .size = 18.f,
-                .color = iconTarget,
+                .color = [iconAnim] {
+                    return iconAnim();
+                },
             });
         }
 
@@ -274,8 +303,18 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             }
         };
         auto handleKey = [activate](KeyCode key, Modifiers) {
-            if (key == keys::Return || key == keys::Space) {
+            if (key == keys::Return || key == keys::Space || key == keys::Tab) {
                 activate();
+            }
+        };
+        auto activateHover = [activeIndex = activeIndex, index = index, disabled]() {
+            if (!disabled) {
+                activeIndex = index;
+            }
+        };
+        auto deactivateHover = [activeIndex = activeIndex, index = index, disabled]() {
+            if (!disabled && activeIndex.get() == index) {
+                activeIndex = -1;
             }
         };
 
@@ -296,12 +335,15 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!disabled)
             .onKeyDown(disabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+            .onPointerEnter(disabled ? std::function<void()> {} : std::function<void()> {activateHover})
+            .onPointerExit(disabled ? std::function<void()> {} : std::function<void()> {deactivateHover})
             .onTap(disabled ? std::function<void()> {} : std::function<void()> {activate});
     }
 };
 
 struct SelectMenuContent {
     Signal<int> selectedIndex {};
+    Signal<int> activeIndex {};
     std::vector<SelectOption> options;
     std::string emptyText;
     bool showCheckmark = true;
@@ -311,9 +353,10 @@ struct SelectMenuContent {
     std::function<void(int)> onSelect;
 
     bool operator==(SelectMenuContent const& other) const {
-        return selectedIndex == other.selectedIndex && options == other.options &&
-               emptyText == other.emptyText && showCheckmark == other.showCheckmark &&
-               menuWidth == other.menuWidth && style == other.style && theme == other.theme &&
+        return selectedIndex == other.selectedIndex && activeIndex == other.activeIndex &&
+               options == other.options && emptyText == other.emptyText &&
+               showCheckmark == other.showCheckmark && menuWidth == other.menuWidth &&
+               style == other.style && theme == other.theme &&
                static_cast<bool>(onSelect) == static_cast<bool>(other.onSelect);
     }
 
@@ -331,12 +374,13 @@ struct SelectMenuContent {
 
         std::vector<Element> rows;
         rows.reserve(options.size());
-        int const current = *selectedIndex;
         for (std::size_t i = 0; i < options.size(); ++i) {
             int const index = static_cast<int>(i);
             rows.emplace_back(SelectMenuRow {
                 .option = options[i],
-                .selected = current == index,
+                .selectedIndex = selectedIndex,
+                .activeIndex = activeIndex,
+                .index = index,
                 .showCheckmark = showCheckmark,
                 .style = style,
                 .theme = theme,
@@ -353,7 +397,7 @@ struct SelectMenuContent {
             .children = children(
                 VStack {
                     .spacing = theme.space1 * 0.5f,
-                    .alignment = Alignment::Start,
+                    .alignment = Alignment::Stretch,
                     .children = std::move(rows),
                 }
                     .padding(theme.space1)
@@ -398,6 +442,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         auto theme = useEnvironment<ThemeKey>();
 
         auto [showPopover, hidePopover, isPresented] = usePopover();
+        auto activeIndex = useState<int>(-1);
+        auto menuOpen = useState<bool>(isPresented);
 
         int const currentIndex = *selectedIndex;
         SelectOption const *currentOption =
@@ -407,7 +453,6 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         Reactive::Signal<bool> hovered = useHover();
         Reactive::Signal<bool> pressed = usePress();
         Reactive::Signal<bool> focused = useFocus();
-        bool const open = isPresented;
         Rect const bounds = useBounds();
         ResolvedInputFieldChrome const &fieldChrome = style.fieldChrome;
         float const shellInset = inputFieldShellInset(fieldChrome);
@@ -421,24 +466,24 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         auto motion = [theme] {
             return Transition::ease(theme().durationFast);
         };
-        auto fillTarget = [triggerMode = triggerMode, pressed, hovered, open,
+        auto fillTarget = [triggerMode = triggerMode, pressed, hovered, menuOpen,
                            pressFill, openFill, hoverFill, idleFill] {
             return triggerMode == SelectTriggerMode::Link ? Colors::transparent :
                    pressed()                             ? pressFill :
-                   open                                  ? openFill :
+                   menuOpen.get()                        ? openFill :
                    hovered()                             ? hoverFill :
                                                            idleFill;
         };
 
         bool const hasCurrentOption = currentOption != nullptr;
         auto labelTarget = [triggerMode = triggerMode, isDisabled, pressed,
-                            hovered, open, accent = style.accentColor,
+                            hovered, menuOpen, accent = style.accentColor,
                             hasCurrentOption, theme] {
             if (triggerMode == SelectTriggerMode::Link) {
                 return isDisabled ? theme().disabledTextColor :
                        pressed() ? darken(accent, 0.12f) :
-                       (hovered() || open) ? lighten(accent, 0.12f) :
-                                                 accent;
+                       (hovered() || menuOpen.get()) ? lighten(accent, 0.12f) :
+                                                       accent;
             }
             return isDisabled ? theme().disabledTextColor :
                    hasCurrentOption ? theme().labelColor : theme().placeholderTextColor;
@@ -447,12 +492,12 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             return triggerMode == SelectTriggerMode::Link ? labelTarget() :
                    isDisabled ? theme().disabledTextColor : theme().secondaryLabelColor;
         };
-        auto chevronTarget = [triggerMode = triggerMode, isDisabled, open,
+        auto chevronTarget = [triggerMode = triggerMode, isDisabled, menuOpen,
                               labelTarget, accent = style.accentColor,
                               theme] {
             return triggerMode == SelectTriggerMode::Link ? labelTarget() :
                    isDisabled ? theme().disabledTextColor :
-                   open ? accent : theme().secondaryLabelColor;
+                   menuOpen.get() ? accent : theme().secondaryLabelColor;
         };
         auto fillAnim = useAnimation(fillTarget, motion);
         auto labelAnim = useAnimation(labelTarget, motion);
@@ -477,10 +522,22 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 }
             }
         };
+        auto commitActiveSelection = [applySelection, activeIndex = activeIndex, options = options]() {
+            int const nextIndex = activeIndex.get();
+            if (isValidIndex(nextIndex, options.size()) && !options[static_cast<std::size_t>(nextIndex)].disabled) {
+                applySelection(nextIndex);
+            }
+        };
+        auto closeMenu = [menuOpen = menuOpen, hidePopover]() {
+            menuOpen = false;
+            hidePopover();
+        };
 
         auto openMenu = [showPopover,
-                         hidePopover,
+                         closeMenu,
                          selectedIndex = selectedIndex,
+                         activeIndex = activeIndex,
+                         menuOpen = menuOpen,
                          options = options,
                          emptyText = emptyText,
                          showCheckmark = showCheckmark,
@@ -494,8 +551,16 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                          anchorMaxHeight,
                          anchorOutsets,
                          popoverGap = triggerMode == SelectTriggerMode::Field ? theme().space1 : kFloatFromTheme,
-                         onChange = onChange]() {
-            auto handleSelect = [selectedIndex, options = options, dismissOnSelect, hidePopover, onChange](int nextIndex) {
+                         onChange = onChange](bool highlightInitial) {
+            menuOpen = true;
+            int const selected = selectedIndex.get();
+            activeIndex = highlightInitial
+                              ? (isValidIndex(selected, options.size()) &&
+                                         !options[static_cast<std::size_t>(selected)].disabled
+                                     ? selected
+                                     : firstEnabledIndex(options))
+                              : -1;
+            auto handleSelect = [selectedIndex, options = options, dismissOnSelect, closeMenu, onChange](int nextIndex) {
                 if (!isValidIndex(nextIndex, options.size()) || options[static_cast<std::size_t>(nextIndex)].disabled) {
                     return;
                 }
@@ -506,13 +571,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                     }
                 }
                 if (dismissOnSelect) {
-                    hidePopover();
+                    closeMenu();
                 }
             };
 
             showPopover(Popover {
                 .content = Element {SelectMenuContent {
                     .selectedIndex = selectedIndex,
+                    .activeIndex = activeIndex,
                     .options = options,
                     .emptyText = emptyText,
                     .showCheckmark = showCheckmark,
@@ -548,45 +614,72 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .anchorOutsets = anchorOutsets,
                 .dismissOnEscape = true,
                 .dismissOnOutsideTap = true,
-                .useTapAnchor = triggerMode == SelectTriggerMode::Link,
+                .onDismiss = [menuOpen] {
+                    menuOpen = false;
+                },
+                .useTapAnchor = false,
+                .useFocusAnchor = true,
             });
         };
 
-        auto moveSelection = [applySelection, options = options, selectedIndex = selectedIndex](int direction) {
-            int const next = stepEnabledIndex(options, *selectedIndex, direction);
-            if (next != *selectedIndex) {
+        auto moveSelection = [applySelection, activeIndex = activeIndex, options = options,
+                              selectedIndex = selectedIndex, menuOpen](int direction) {
+            bool const open = menuOpen.get();
+            Signal<int> target = open ? activeIndex : selectedIndex;
+            int const next = stepEnabledIndex(options, target.get(), direction);
+            if (next != target.get()) {
+                if (open) {
+                    activeIndex = next;
+                    return;
+                }
                 applySelection(next);
             }
         };
 
-        auto jumpSelection = [applySelection, options = options](bool toEnd) {
+        auto jumpSelection = [applySelection, activeIndex = activeIndex, options = options, menuOpen](bool toEnd) {
             int const next = toEnd ? lastEnabledIndex(options) : firstEnabledIndex(options);
             if (next >= 0) {
+                if (menuOpen.get()) {
+                    activeIndex = next;
+                    return;
+                }
                 applySelection(next);
             }
         };
 
-        auto toggleMenu = [isDisabled, open, openMenu, hidePopover]() {
+        auto toggleMenu = [isDisabled, menuOpen = menuOpen, openMenu, closeMenu](bool highlightInitial) {
             if (isDisabled) {
                 return;
             }
-            if (open) {
-                hidePopover();
+            if (menuOpen.get()) {
+                closeMenu();
             } else {
-                openMenu();
+                openMenu(highlightInitial);
             }
         };
 
-        auto handleKey = [isDisabled, open, toggleMenu, hidePopover, moveSelection, jumpSelection](KeyCode key, Modifiers) {
+        auto handleKey = [isDisabled, menuOpen = menuOpen, openMenu, closeMenu, commitActiveSelection,
+                          moveSelection, jumpSelection](KeyCode key, Modifiers) {
             if (isDisabled) {
                 return;
             }
+            bool const open = menuOpen.get();
             if (key == keys::Return || key == keys::Space) {
-                toggleMenu();
+                if (open) {
+                    commitActiveSelection();
+                    closeMenu();
+                } else {
+                    openMenu(true);
+                }
+                return;
+            }
+            if (key == keys::Tab && open) {
+                commitActiveSelection();
+                closeMenu();
                 return;
             }
             if (key == keys::Escape && open) {
-                hidePopover();
+                closeMenu();
                 return;
             }
             if (key == keys::DownArrow) {
@@ -604,6 +697,9 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             if (key == keys::End) {
                 jumpSelection(true);
             }
+        };
+        auto handleTap = [toggleMenu] {
+            toggleMenu(false);
         };
 
         bool const hasDetail = showDetailInTrigger && currentOption && !currentOption->detail.empty();
@@ -676,7 +772,9 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .children = children(
                 std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f),
                 Icon {
-                    .name = open ? IconName::KeyboardArrowUp : IconName::KeyboardArrowDown,
+                    .name = [menuOpen] {
+                        return menuOpen.get() ? IconName::KeyboardArrowUp : IconName::KeyboardArrowDown;
+                    },
                     .size = 18.f,
                     .color = [chevronAnim] {
                         return chevronAnim();
@@ -697,7 +795,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
                 .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-                .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {toggleMenu});
+                .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
         }
 
         Element fieldTrigger = std::move(trigger)
@@ -705,8 +803,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .fill([fillAnim] {
                 return fillAnim();
             })
-            .stroke([focused, open, isDisabled, fieldChrome] {
-                return (focused.get() || open) && !isDisabled
+            .stroke([focused, menuOpen, isDisabled, fieldChrome] {
+                return (focused.get() || menuOpen.get()) && !isDisabled
                            ? StrokeStyle::solid(fieldChrome.borderFocusColor, fieldChrome.borderFocusWidth)
                            : StrokeStyle::solid(fieldChrome.borderColor, fieldChrome.borderWidth);
             })
@@ -714,7 +812,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
             .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-            .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {toggleMenu});
+            .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 
         if (isDisabled) {
             Color overlay = fieldChrome.disabledColor;

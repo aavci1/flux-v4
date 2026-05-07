@@ -46,6 +46,7 @@ Element attachTooltip(Element element, TooltipConfig config) {
             .dismissOnEscape = true,
             .dismissOnOutsideTap = false,
             .useTapAnchor = false,
+            .useHoverLeafAnchor = true,
             .debugName = "tooltip",
         });
     };

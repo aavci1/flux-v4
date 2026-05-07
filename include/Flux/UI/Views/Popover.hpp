@@ -70,6 +70,7 @@ struct Popover : ViewModifiers<Popover> {
 
   bool dismissOnEscape = true;
   bool dismissOnOutsideTap = true;
+  std::function<void()> onDismiss;
 
   /// When true (default), \ref usePopover prefers the last pointer-down tap anchor (same resolution
   /// as popover-demo: \c forLeafKeyPrefix on the tap leaf). Set false when using \ref useHoverLeafAnchor
@@ -80,6 +81,10 @@ struct Popover : ViewModifiers<Popover> {
   /// hover leaf key through the retained scene graph's leaf-prefix lookup, and track that leaf for scroll.
   /// Matches popover-demo placement without requiring a pointer-down.
   bool useHoverLeafAnchor = false;
+
+  /// When true, resolve the anchor from the focused interactive node. This is useful for
+  /// keyboard-opened popovers where no fresh pointer/tap anchor exists.
+  bool useFocusAnchor = false;
 
   /// When set, \ref usePopover uses this window-space rect as the anchor (skips tap, hover, and key lookup).
   std::optional<Rect> anchorRectOverride;

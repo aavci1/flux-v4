@@ -158,6 +158,7 @@ add_library(flux STATIC
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Popover.cpp
   src/UI/Views/PopoverCalloutPath.cpp
+  src/UI/Views/PopoverCalloutShape.cpp
   src/UI/Views/ProgressBar.cpp
   src/UI/Views/ScrollView.cpp
   src/UI/Views/Select.cpp

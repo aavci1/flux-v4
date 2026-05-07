@@ -9,6 +9,7 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 
 #include "UI/Layout/Algorithms/OverlayLayout.hpp"
 
@@ -56,12 +57,158 @@ Rect contentBoundsFor(scenegraph::SceneNode const* contentNode) {
   return bounds;
 }
 
+Rect windowRectForNode(scenegraph::SceneNode const& node) {
+  Point origin{};
+  scenegraph::SceneNode const* current = &node;
+  while (current) {
+    origin.x += current->position().x;
+    origin.y += current->position().y;
+    current = current->parent();
+  }
+  Size const size = node.size();
+  return Rect{origin.x, origin.y, std::max(0.f, size.width), std::max(0.f, size.height)};
+}
+
+Rect adjustedAnchor(OverlayConfig const& config) {
+  Rect anchor = *config.anchor;
+  if (config.anchorMaxHeight && anchor.height > *config.anchorMaxHeight) {
+    anchor.height = *config.anchorMaxHeight;
+  }
+  EdgeInsets const outsets = config.anchorOutsets;
+  anchor.x -= outsets.left;
+  anchor.y -= outsets.top;
+  anchor.width += outsets.left + outsets.right;
+  anchor.height += outsets.top + outsets.bottom;
+  anchor.width = std::max(0.f, anchor.width);
+  anchor.height = std::max(0.f, anchor.height);
+  return anchor;
+}
+
+std::optional<Rect> trackedAnchorRect(Window& window, OverlayConfig const& config) {
+  if (!window.hasSceneGraph()) {
+    return std::nullopt;
+  }
+  if (config.anchorTrackComponentKey && !config.anchorTrackComponentKey->empty()) {
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window.sceneGraph(), *config.anchorTrackComponentKey);
+    (void)interaction;
+    if (node) {
+      return windowRectForNode(*node);
+    }
+  }
+  if (config.anchorTrackLeafKey && !config.anchorTrackLeafKey->empty()) {
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window.sceneGraph(), *config.anchorTrackLeafKey);
+    (void)interaction;
+    if (node) {
+      return windowRectForNode(*node);
+    }
+    if (std::optional<Rect> rect = window.sceneGraph().rectForLeafKeyPrefix(*config.anchorTrackLeafKey)) {
+      return rect;
+    }
+  }
+  return std::nullopt;
+}
+
+void updateTrackedAnchor(OverlayEntry& entry, Window& window) {
+  if (std::optional<Rect> tracked = trackedAnchorRect(window, entry.config)) {
+    entry.config.anchor = *tracked;
+  }
+}
+
+float availableAbove(Rect const& anchor) {
+  return std::max(0.f, anchor.y);
+}
+
+float availableBelow(Rect const& anchor, Size windowSize) {
+  return std::max(0.f, windowSize.height - (anchor.y + anchor.height));
+}
+
+float availableStart(Rect const& anchor) {
+  return std::max(0.f, anchor.x);
+}
+
+float availableEnd(Rect const& anchor, Size windowSize) {
+  return std::max(0.f, windowSize.width - (anchor.x + anchor.width));
+}
+
+Vec2 offsetForPlacement(OverlayConfig::Placement placement, float gap) {
+  switch (placement) {
+  case OverlayConfig::Placement::Below:
+    return Vec2{0.f, gap};
+  case OverlayConfig::Placement::Above:
+    return Vec2{0.f, -gap};
+  case OverlayConfig::Placement::End:
+    return Vec2{gap, 0.f};
+  case OverlayConfig::Placement::Start:
+    return Vec2{-gap, 0.f};
+  }
+  return Vec2{};
+}
+
+OverlayConfig::Placement resolveAutoFlipPlacement(OverlayConfig const& config,
+                                                  Size windowSize,
+                                                  Rect contentBounds) {
+  if (!config.autoFlipPreferredPlacement || !config.anchor) {
+    return config.placement;
+  }
+
+  OverlayConfig::Placement const preferred = *config.autoFlipPreferredPlacement;
+  Rect const anchor = adjustedAnchor(config);
+  float const desiredWidth = contentBounds.width + config.autoFlipGap;
+  float const desiredHeight = contentBounds.height + config.autoFlipGap;
+
+  switch (preferred) {
+  case OverlayConfig::Placement::Below:
+    if (desiredHeight > 0.f && availableBelow(anchor, windowSize) < desiredHeight &&
+        availableAbove(anchor) > availableBelow(anchor, windowSize)) {
+      return OverlayConfig::Placement::Above;
+    }
+    return OverlayConfig::Placement::Below;
+  case OverlayConfig::Placement::Above:
+    if (desiredHeight > 0.f && availableAbove(anchor) < desiredHeight &&
+        availableBelow(anchor, windowSize) > availableAbove(anchor)) {
+      return OverlayConfig::Placement::Below;
+    }
+    return OverlayConfig::Placement::Above;
+  case OverlayConfig::Placement::End:
+    if (desiredWidth > 0.f && availableEnd(anchor, windowSize) < desiredWidth &&
+        availableStart(anchor) > availableEnd(anchor, windowSize)) {
+      return OverlayConfig::Placement::Start;
+    }
+    return OverlayConfig::Placement::End;
+  case OverlayConfig::Placement::Start:
+    if (desiredWidth > 0.f && availableStart(anchor) < desiredWidth &&
+        availableEnd(anchor, windowSize) > availableStart(anchor)) {
+      return OverlayConfig::Placement::End;
+    }
+    return OverlayConfig::Placement::Start;
+  }
+  return preferred;
+}
+
+bool updateAutoFlipPlacement(OverlayEntry& entry, Size windowSize, Rect contentBounds) {
+  OverlayConfig::Placement const resolved =
+      resolveAutoFlipPlacement(entry.config, windowSize, contentBounds);
+  if (resolved == entry.config.placement) {
+    entry.resolvedPlacement = std::optional<OverlayConfig::Placement>{entry.config.placement};
+    return false;
+  }
+  entry.config.placement = resolved;
+  entry.config.offset = offsetForPlacement(resolved, entry.config.autoFlipGap);
+  entry.resolvedPlacement = std::optional<OverlayConfig::Placement>{resolved};
+  return true;
+}
+
 std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& window,
                                                                      OverlayEntry& entry,
-                                                                     bool dismissOnTap) {
+                                                                     bool dismissOnTap,
+                                                                     bool captureScroll) {
   auto interaction = std::make_unique<scenegraph::InteractionData>();
   interaction->cursor = Cursor::Arrow;
-  interaction->onScroll = [](Vec2) {};
+  if (captureScroll) {
+    interaction->onScroll = [](Vec2) {};
+  }
   if (dismissOnTap) {
     OverlayId const id = entry.id;
     interaction->onTap = [&window, id](MouseButton button) {
@@ -76,7 +223,7 @@ std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& win
 }
 
 void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windowSize,
-                    Window& window, bool dismissOnTap) {
+                    Window& window, bool dismissOnTap, bool captureScroll) {
   float const ox = -entry.resolvedFrame.x;
   float const oy = -entry.resolvedFrame.y;
   auto backdrop = std::make_unique<scenegraph::RectNode>(
@@ -85,7 +232,7 @@ void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windo
   root.appendChild(std::move(backdrop));
 
   auto capture = std::make_unique<scenegraph::RectNode>(Rect{ox, oy, windowSize.width, windowSize.height});
-  capture->setInteraction(makeBackdropInteraction(window, entry, dismissOnTap));
+  capture->setInteraction(makeBackdropInteraction(window, entry, dismissOnTap, captureScroll));
   root.appendChild(std::move(capture));
 }
 
@@ -105,6 +252,7 @@ std::unique_ptr<scenegraph::SceneNode> takeMountedContentNode(OverlayEntry& entr
 
 void rebuildOverlayRoot(OverlayEntry& entry, Size windowSize, Window& window,
                         std::unique_ptr<scenegraph::SceneNode> contentNode) {
+  updateTrackedAnchor(entry, window);
   Rect const contentBounds = contentBoundsFor(contentNode.get());
   entry.resolvedFrame = layout::resolveOverlayFrame(windowSize, entry.config, contentBounds);
 
@@ -113,16 +261,22 @@ void rebuildOverlayRoot(OverlayEntry& entry, Size windowSize, Window& window,
            std::max(windowSize.height, entry.resolvedFrame.height)});
   bool capturesBackdrop = false;
   bool dismissBackdropTap = false;
+  bool captureBackdropScroll = false;
   if (entry.config.modal) {
-    insertBackdrop(*root, entry, windowSize, window, false);
+    insertBackdrop(*root, entry, windowSize, window, false, true);
     capturesBackdrop = true;
-  } else if (entry.config.backdropColor.a > 0.001f) {
-    insertBackdrop(*root, entry, windowSize, window, entry.config.dismissOnOutsideTap);
+    captureBackdropScroll = true;
+  } else if (entry.config.backdropColor.a > 0.001f || entry.config.dismissOnOutsideTap) {
+    bool const visibleBackdrop = entry.config.backdropColor.a > 0.001f;
+    insertBackdrop(*root, entry, windowSize, window, entry.config.dismissOnOutsideTap,
+                   visibleBackdrop);
     capturesBackdrop = true;
     dismissBackdropTap = entry.config.dismissOnOutsideTap;
+    captureBackdropScroll = visibleBackdrop;
   }
   if (capturesBackdrop) {
-    root->setInteraction(makeBackdropInteraction(window, entry, dismissBackdropTap));
+    root->setInteraction(makeBackdropInteraction(window, entry, dismissBackdropTap,
+                                                 captureBackdropScroll));
   }
   if (contentNode) {
     root->appendChild(std::move(contentNode));
@@ -138,15 +292,23 @@ void mountOverlay(OverlayEntry& entry, Size windowSize, Runtime& runtime,
 
   std::unique_ptr<scenegraph::SceneNode> contentNode;
   if (entry.content) {
-    MeasureContext measureContext{Application::instance().textSystem(), runtime.window().environmentBinding()};
+    entry.resolvedPlacement = std::optional<OverlayConfig::Placement>{entry.config.placement};
+    EnvironmentBinding const overlayEnvironment =
+        runtime.window().environmentBinding().withSignal<ResolvedOverlayPlacementKey>(
+            entry.resolvedPlacement);
+    MeasureContext measureContext{Application::instance().textSystem(), overlayEnvironment};
     MountContext context{entry.scope, Application::instance().textSystem(),
                          measureContext, constraints, LayoutHints{}, [handle = runtime.window().handle()] {
                            Window::postRedraw(handle);
-                         }, runtime.window().environmentBinding()};
+                         }, overlayEnvironment};
 
     contentNode = Reactive::withOwner(entry.scope, [&] {
       return entry.content->mount(context);
     });
+  }
+  updateTrackedAnchor(entry, runtime.window());
+  if (contentNode && updateAutoFlipPlacement(entry, windowSize, contentBoundsFor(contentNode.get()))) {
+    contentNode->relayout(constraints);
   }
   rebuildOverlayRoot(entry, windowSize, runtime.window(), std::move(contentNode));
 }
@@ -202,6 +364,12 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
       if (!contentNode->relayout(constraints)) {
         contentNode->setSize(Size{constraints.maxWidth, constraints.maxHeight});
       }
+      updateTrackedAnchor(entry, runtime.window());
+      if (updateAutoFlipPlacement(entry, windowSize, contentBoundsFor(contentNode.get()))) {
+        if (!contentNode->relayout(constraints)) {
+          contentNode->setSize(Size{constraints.maxWidth, constraints.maxHeight});
+        }
+      }
       rebuildOverlayRoot(entry, windowSize, runtime.window(), std::move(contentNode));
     } else {
       mountOverlay(entry, windowSize, runtime, constraints);
@@ -224,6 +392,7 @@ OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* r
   entry->id = OverlayId{nextId_++};
   entry->content.emplace(std::move(content));
   entry->config = std::move(config);
+  entry->resolvedPlacement = std::optional<OverlayConfig::Placement>{entry->config.placement};
   OverlayId id = entry->id;
   overlays_.push_back(std::move(entry));
   if (runtime) {
@@ -233,6 +402,13 @@ OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* r
     Application::instance().requestRedraw();
   }
   return id;
+}
+
+bool OverlayManager::hasTrackedAnchors() const noexcept {
+  return std::any_of(overlays_.begin(), overlays_.end(), [](std::unique_ptr<OverlayEntry> const& entry) {
+    return entry && (entry->config.anchorTrackComponentKey.has_value() ||
+                     entry->config.anchorTrackLeafKey.has_value());
+  });
 }
 
 void OverlayManager::remove(OverlayId id, Runtime* runtime) {

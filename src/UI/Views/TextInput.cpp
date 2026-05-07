@@ -5,12 +5,14 @@
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/RenderNode.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
 #include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/TextEditUtils.hpp>
 #include <Flux/UI/Views/Text.hpp>
 
 #include <algorithm>
@@ -170,19 +172,83 @@ Rect textBox(Size frameSize, ResolvedTextInputStyle const& style) {
 
 void setTextLayout(scenegraph::TextNode& node, TextInput const& input,
                    ResolvedTextInputStyle const& style, TextSystem& textSystem,
-                   Size frameSize) {
+                   Size frameSize,
+                   std::shared_ptr<detail::TextEditLayoutResult> const& layoutResult = {}) {
   Rect const box = textBox(frameSize, style);
   node.setBounds(box);
-  node.setLayout(textSystem.layout(attributedText(input, style), box,
-                                   textInputLayoutOptions(input.multiline)));
+  auto layout = textSystem.layout(attributedText(input, style), box,
+                                  textInputLayoutOptions(input.multiline));
+  node.setLayout(layout);
+  if (layoutResult) {
+    *layoutResult = detail::makeTextEditLayoutResult(
+        layout, static_cast<int>(input.value.get().size()), box.width);
+  }
 }
 
-std::string appendLimited(std::string value, std::string const& text, int maxLength) {
-  value += text;
-  if (maxLength > 0 && static_cast<int>(value.size()) > maxLength) {
-    value.resize(static_cast<std::size_t>(maxLength));
+bool sameSelection(detail::TextEditSelection lhs, detail::TextEditSelection rhs) noexcept {
+  return lhs.caretByte == rhs.caretByte && lhs.anchorByte == rhs.anchorByte;
+}
+
+Color selectionFill(Color color) noexcept {
+  color.a = std::min(color.a, 0.28f);
+  return color;
+}
+
+Point textLayoutPoint(Point localPoint, Size frameSize, ResolvedTextInputStyle const& style) {
+  Rect const box = textBox(frameSize, style);
+  return Point{
+      std::clamp(localPoint.x - box.x, 0.f, std::max(0.f, box.width)),
+      std::clamp(localPoint.y - box.y, 0.f, std::max(0.f, box.height)),
+  };
+}
+
+void drawSelection(Canvas& canvas, detail::TextEditLayoutResult const& layoutResult,
+                   detail::TextEditSelection selection, std::string const& text,
+                   Size frameSize, ResolvedTextInputStyle const& style) {
+  if (!selection.hasSelection() || layoutResult.empty()) {
+    return;
   }
-  return value;
+  Rect const box = textBox(frameSize, style);
+  Color const fill = selectionFill(style.selectionColor);
+  for (Rect rect : detail::selectionRects(layoutResult, selection, &text, box.x, box.y, 2.f)) {
+    if (rect.width <= 0.f || rect.height <= 0.f) {
+      continue;
+    }
+    canvas.drawRect(rect, CornerRadius{2.f}, FillStyle::solid(fill), StrokeStyle::none());
+  }
+}
+
+void drawCaret(Canvas& canvas, detail::TextEditLayoutResult const& layoutResult,
+               detail::TextEditSelection selection, Size frameSize,
+               ResolvedTextInputStyle const& style) {
+  if (selection.hasSelection() || layoutResult.empty()) {
+    return;
+  }
+  Rect const box = textBox(frameSize, style);
+  Rect caret = detail::caretRect(layoutResult, selection.caretByte, box.x, box.y,
+                                 detail::kTextCaretStrokeWidthPx);
+  caret.y = std::max(box.y, caret.y);
+  caret.height = std::min(caret.height, std::max(0.f, box.y + box.height - caret.y));
+  if (caret.width <= 0.f || caret.height <= 0.f) {
+    return;
+  }
+  canvas.drawRect(caret, CornerRadius{1.f}, FillStyle::solid(style.caretColor),
+                  StrokeStyle::none());
+}
+
+void applyTextMutation(Signal<std::string> const& valueState,
+                       Signal<detail::TextEditSelection> const& selectionState,
+                       detail::TextEditMutation const& mutation,
+                       std::function<void(std::string const&)> const& onChangeHandler) {
+  if (mutation.valueChanged) {
+    valueState = mutation.text;
+    if (onChangeHandler) {
+      onChangeHandler(mutation.text);
+    }
+  }
+  if (!sameSelection(selectionState.peek(), mutation.selection)) {
+    selectionState = mutation.selection;
+  }
 }
 
 } // namespace
@@ -209,59 +275,151 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
 
   auto textNode = std::make_unique<scenegraph::TextNode>();
   scenegraph::TextNode* rawText = textNode.get();
-  setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize);
-  wrapper->appendChild(std::move(textNode));
+  Signal<std::string> valueState = value;
+  Signal<detail::TextEditSelection> selectionState{
+      detail::TextEditSelection{
+          .caretByte = static_cast<int>(value.get().size()),
+          .anchorByte = static_cast<int>(value.get().size()),
+      }};
+  auto layoutResult = std::make_shared<detail::TextEditLayoutResult>();
+  setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize, layoutResult);
 
   auto interaction = std::make_unique<scenegraph::InteractionData>();
   interaction->cursor = disabled ? Cursor::Inherit : Cursor::IBeam;
   interaction->focusable = !disabled;
-  Signal<std::string> valueState = value;
+  Signal<bool> focusState = interaction->focusSignal;
+
+  auto selectionLayer = std::make_unique<scenegraph::RenderNode>(
+      Rect{0.f, 0.f, frameSize->width, frameSize->height},
+      [layoutResult, valueState, selectionState, focusState, frameSize, resolved](Canvas& canvas, Rect) {
+        if (!focusState.peek()) {
+          return;
+        }
+        drawSelection(canvas, *layoutResult, selectionState.peek(), valueState.peek(),
+                      *frameSize, resolved);
+      });
+  selectionLayer->setPurity(scenegraph::RenderNode::Purity::Live);
+  scenegraph::RenderNode* rawSelectionLayer = selectionLayer.get();
+  wrapper->appendChild(std::move(selectionLayer));
+  wrapper->appendChild(std::move(textNode));
+
+  auto caretLayer = std::make_unique<scenegraph::RenderNode>(
+      Rect{0.f, 0.f, frameSize->width, frameSize->height},
+      [layoutResult, selectionState, focusState, frameSize, resolved](Canvas& canvas, Rect) {
+        if (!focusState.peek()) {
+          return;
+        }
+        drawCaret(canvas, *layoutResult, selectionState.peek(), *frameSize, resolved);
+      });
+  caretLayer->setPurity(scenegraph::RenderNode::Purity::Live);
+  scenegraph::RenderNode* rawCaretLayer = caretLayer.get();
+  wrapper->appendChild(std::move(caretLayer));
+
   int const lengthLimit = maxLength;
   bool const acceptsMultiline = multiline;
   auto onChangeHandler = onChange;
   auto onSubmitHandler = onSubmit;
   auto onEscapeHandler = onEscape;
   bool const isDisabled = disabled;
-  interaction->onTextInput = [valueState, lengthLimit, onChangeHandler, isDisabled](std::string const& text) {
+  auto draggingSelection = std::make_shared<bool>(false);
+
+  interaction->onPointerDown = [selectionState, valueState, layoutResult, frameSize, resolved,
+                                draggingSelection, isDisabled](Point point, MouseButton button) {
+    if (isDisabled || button != MouseButton::Left || !layoutResult || layoutResult->empty()) {
+      return;
+    }
+    int const byte = detail::caretByteAtPoint(
+        *layoutResult, textLayoutPoint(point, *frameSize, resolved), valueState.peek());
+    selectionState = detail::moveSelectionToByte(valueState.peek(), selectionState.peek(), byte, false);
+    *draggingSelection = true;
+  };
+  interaction->onPointerMove = [selectionState, valueState, layoutResult, frameSize, resolved,
+                                draggingSelection, isDisabled](Point point) {
+    if (isDisabled || !*draggingSelection || !layoutResult || layoutResult->empty()) {
+      return;
+    }
+    int const byte = detail::caretByteAtPoint(
+        *layoutResult, textLayoutPoint(point, *frameSize, resolved), valueState.peek());
+    selectionState = detail::moveSelectionToByte(valueState.peek(), selectionState.peek(), byte, true);
+  };
+  interaction->onPointerUp = [draggingSelection](Point, MouseButton) {
+    *draggingSelection = false;
+  };
+  interaction->onTextInput = [valueState, selectionState, lengthLimit, onChangeHandler,
+                              isDisabled](std::string const& text) {
     if (isDisabled || text.empty()) {
       return;
     }
-    std::string next = appendLimited(valueState.get(), text, lengthLimit);
-    valueState = next;
-    if (onChangeHandler) {
-      onChangeHandler(next);
-    }
+    applyTextMutation(valueState, selectionState,
+                      detail::insertText(valueState.peek(), selectionState.peek(), text, lengthLimit),
+                      onChangeHandler);
   };
-  interaction->onKeyDown = [valueState, acceptsMultiline, lengthLimit, onChangeHandler,
-                            onSubmitHandler, onEscapeHandler, isDisabled](KeyCode key, Modifiers) {
+  interaction->onKeyDown = [valueState, selectionState, layoutResult, acceptsMultiline, lengthLimit,
+                            onChangeHandler, onSubmitHandler, onEscapeHandler,
+                            isDisabled](KeyCode key, Modifiers modifiers) {
     if (isDisabled) {
       return;
     }
+    bool const shift = any(modifiers & Modifiers::Shift);
+    bool const alt = any(modifiers & Modifiers::Alt);
+    bool const meta = any(modifiers & Modifiers::Meta);
+    detail::TextEditSelection const current = selectionState.peek();
+    std::string const& text = valueState.peek();
+
+    if (meta && key == keys::A) {
+      selectionState = detail::selectAllSelection(text);
+      return;
+    }
     if (key == keys::Delete) {
-      std::string next = valueState.get();
-      if (!next.empty()) {
-        next.pop_back();
-        valueState = next;
-        if (onChangeHandler) {
-          onChangeHandler(next);
-        }
-      }
+      detail::TextEditMutation mutation = meta ? detail::eraseToLineBoundary(text, current, false)
+                                               : alt ? detail::eraseWord(text, current, false)
+                                                     : detail::eraseSelectionOrChar(text, current, false);
+      applyTextMutation(valueState, selectionState, mutation, onChangeHandler);
+      return;
+    }
+    if (key == keys::ForwardDelete) {
+      detail::TextEditMutation mutation = meta ? detail::eraseToLineBoundary(text, current, true)
+                                               : alt ? detail::eraseWord(text, current, true)
+                                                     : detail::eraseSelectionOrChar(text, current, true);
+      applyTextMutation(valueState, selectionState, mutation, onChangeHandler);
       return;
     }
     if (key == keys::Return) {
       if (acceptsMultiline) {
-        std::string next = appendLimited(valueState.get(), "\n", lengthLimit);
-        valueState = next;
-        if (onChangeHandler) {
-          onChangeHandler(next);
-        }
+        applyTextMutation(valueState, selectionState,
+                          detail::insertText(text, current, "\n", lengthLimit),
+                          onChangeHandler);
       } else if (onSubmitHandler) {
-        onSubmitHandler(valueState.get());
+        onSubmitHandler(text);
       }
       return;
     }
+    if (key == keys::LeftArrow || key == keys::RightArrow) {
+      int const direction = key == keys::LeftArrow ? -1 : 1;
+      detail::TextEditSelection next =
+          meta ? detail::moveSelectionToLineBoundary(text, current, direction > 0, shift)
+               : alt ? detail::moveSelectionByWord(text, current, direction, shift)
+                     : detail::moveSelectionByChar(text, current, direction, shift);
+      if (!sameSelection(current, next)) {
+        selectionState = next;
+      }
+      return;
+    }
+    if (key == keys::UpArrow || key == keys::DownArrow) {
+      int const direction = key == keys::UpArrow ? -1 : 1;
+      int const byte = acceptsMultiline && layoutResult && !layoutResult->empty()
+                           ? detail::moveCaretVertically(*layoutResult, text, current.caretByte, direction)
+                           : (direction < 0 ? 0 : static_cast<int>(text.size()));
+      selectionState = detail::moveSelectionToByte(text, current, byte, shift);
+      return;
+    }
+    if (key == keys::Home || key == keys::End) {
+      selectionState =
+          detail::moveSelectionToLineBoundary(text, current, key == keys::End, shift);
+      return;
+    }
     if (key == keys::Escape && onEscapeHandler) {
-      onEscapeHandler(valueState.get());
+      onEscapeHandler(text);
     }
   };
   wrapper->setInteraction(std::move(interaction));
@@ -269,19 +427,37 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   auto* rawWrapper = wrapper.get();
   TextSystem* textSystem = &ctx.textSystem();
   rawWrapper->setLayoutConstraints(ctx.constraints());
-  rawWrapper->setRelayout([rawWrapper, rawText, input = *this, resolved,
-                           frameSize, textSystem](LayoutConstraints const& constraints) mutable {
+  rawWrapper->setRelayout([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, input = *this, resolved,
+                           frameSize, layoutResult, textSystem](LayoutConstraints const& constraints) mutable {
     *frameSize = textInputFrameSize(input, resolved, constraints, *textSystem);
     rawWrapper->setSize(*frameSize);
-    setTextLayout(*rawText, input, resolved, *textSystem, *frameSize);
+    rawSelectionLayer->setBounds(Rect{0.f, 0.f, frameSize->width, frameSize->height});
+    rawCaretLayer->setBounds(Rect{0.f, 0.f, frameSize->width, frameSize->height});
+    setTextLayout(*rawText, input, resolved, *textSystem, *frameSize, layoutResult);
   });
 
-  Reactive::withOwner(ctx.owner(), [rawText, input = *this, resolved, frameSize,
-                                    textSystem = &ctx.textSystem(),
+  Reactive::withOwner(ctx.owner(), [rawWrapper, rawText, rawSelectionLayer, rawCaretLayer,
+                                    valueState, selectionState, focusState, input = *this,
+                                    resolved, frameSize, layoutResult, textSystem = &ctx.textSystem(),
                                     requestRedraw = ctx.redrawCallback()] {
-    Reactive::Effect([rawText, input, resolved, frameSize, textSystem, requestRedraw] {
-      (void)input.value.get();
-      setTextLayout(*rawText, input, resolved, *textSystem, *frameSize);
+    Reactive::Effect([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, valueState,
+                      selectionState, focusState, input, resolved, frameSize, layoutResult,
+                      textSystem, requestRedraw] {
+      std::string const& text = valueState.get();
+      detail::TextEditSelection const clamped =
+          detail::clampSelection(text, selectionState.peek());
+      if (!sameSelection(selectionState.peek(), clamped)) {
+        selectionState = clamped;
+      }
+      setTextLayout(*rawText, input, resolved, *textSystem, *frameSize, layoutResult);
+      bool const focused = focusState.get();
+      rawWrapper->setStroke(focused && !input.disabled
+                                ? StrokeStyle::solid(resolved.chrome.borderFocusColor,
+                                                     resolved.chrome.borderFocusWidth)
+                                : StrokeStyle::solid(resolved.chrome.borderColor,
+                                                     resolved.chrome.borderWidth));
+      rawSelectionLayer->invalidate();
+      rawCaretLayer->invalidate();
       if (requestRedraw) {
         requestRedraw();
       }

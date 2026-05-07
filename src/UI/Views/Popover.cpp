@@ -3,6 +3,7 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/OverlaySurfaceHelpers.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
 #include <algorithm>
 
@@ -26,20 +27,86 @@ float availableEnd(Rect const& anchor, Size window) {
   return std::max(0.f, window.width - (anchor.x + anchor.width));
 }
 
+Rect adjustAnchor(Rect anchor, Popover const& popover) {
+  if (popover.anchorMaxHeight && anchor.height > *popover.anchorMaxHeight) {
+    anchor.height = *popover.anchorMaxHeight;
+  }
+  EdgeInsets const outsets = popover.anchorOutsets;
+  anchor.x -= outsets.left;
+  anchor.y -= outsets.top;
+  anchor.width += outsets.left + outsets.right;
+  anchor.height += outsets.top + outsets.bottom;
+  anchor.width = std::max(0.f, anchor.width);
+  anchor.height = std::max(0.f, anchor.height);
+  return anchor;
+}
+
+std::optional<Rect> resolvePopoverAnchor(Popover const& popover, Runtime* runtime) {
+  std::optional<Rect> anchor = popover.anchorRectOverride;
+  if (!anchor && runtime && popover.useHoverLeafAnchor) {
+    anchor = runtime->hoverAnchor();
+  }
+  if (!anchor && runtime && popover.useFocusAnchor) {
+    anchor = runtime->focusAnchor();
+  }
+  if (!anchor && runtime && popover.useTapAnchor) {
+    anchor = runtime->lastTapAnchor();
+  }
+  if (anchor) {
+    return adjustAnchor(*anchor, popover);
+  }
+  return std::nullopt;
+}
+
+std::optional<Size> estimatedPopoverOuterSize(Popover const& popover, Theme const& theme) {
+  if (!popover.maxSize) {
+    return std::nullopt;
+  }
+  float const pad = resolveFloat(popover.contentPadding, theme.space3);
+  float const arrowDepth = popover.arrow ? PopoverCalloutShape::kArrowH : 0.f;
+  return Size{
+      std::max(0.f, popover.maxSize->width + 2.f * pad + arrowDepth),
+      std::max(0.f, popover.maxSize->height + 2.f * pad + arrowDepth),
+  };
+}
+
+PopoverPlacement popoverPlacementFromOverlay(OverlayConfig::Placement placement) {
+  switch (placement) {
+  case OverlayConfig::Placement::Below:
+    return PopoverPlacement::Below;
+  case OverlayConfig::Placement::Above:
+    return PopoverPlacement::Above;
+  case OverlayConfig::Placement::End:
+    return PopoverPlacement::End;
+  case OverlayConfig::Placement::Start:
+    return PopoverPlacement::Start;
+  }
+  return PopoverPlacement::Below;
+}
+
 } // namespace
 
 Element Popover::body() const {
   auto theme = useEnvironment<ThemeKey>();
+  auto overlayPlacement = useEnvironment<ResolvedOverlayPlacementKey>();
   ResolvedPopoverCardBody const surface =
       resolvePopoverCardBody(backgroundColor, borderColor, borderWidth, cornerRadius,
                              contentPadding, theme());
 
-  Element body = content;
-  return std::move(body)
-      .padding(surface.contentPadding)
-      .fill(surface.background)
-      .stroke(StrokeStyle::solid(surface.border, surface.borderWidth))
-      .cornerRadius(surface.cornerRadius);
+  return PopoverCalloutShape{
+      .placement = [overlayPlacement, fallback = resolvedPlacement] {
+        std::optional<OverlayConfig::Placement> const resolved = overlayPlacement();
+        return resolved ? popoverPlacementFromOverlay(*resolved) : fallback;
+      },
+      .arrow = arrow,
+      .padding = surface.contentPadding,
+      .cornerRadius = surface.cornerRadius,
+      .backgroundColor = surface.background,
+      .borderColor = surface.border,
+      .borderWidth = surface.borderWidth,
+      .maxSize = maxSize,
+      .content = content,
+  };
 }
 
 std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover() {
@@ -47,28 +114,41 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
   Runtime* runtime = Runtime::current();
   Window* window = runtime ? &runtime->window() : nullptr;
 
-  auto show = [showOverlay = std::move(showOverlay), window](Popover popover) mutable {
+  auto show = [showOverlay = std::move(showOverlay), runtime, window](Popover popover) mutable {
     Theme const theme = window ? window->theme() : Theme::light();
     PopoverPlacement const preferred = popover.placement;
-    std::optional<Rect> const anchor = popover.anchorRectOverride;
+    std::optional<Rect> const anchor = resolvePopoverAnchor(popover, runtime);
     Size const windowSize = window ? window->getSize() : Size{};
+    float const gap = resolveFloat(popover.gap, theme.space2);
+    std::optional<Size> const estimatedOuterSize = estimatedPopoverOuterSize(popover, theme);
     PopoverPlacement const resolved =
-        anchor ? resolvePopoverPlacement(preferred, anchor, popover.maxSize, popover.gap, windowSize)
+        anchor ? resolvePopoverPlacement(preferred, anchor, estimatedOuterSize, gap, windowSize)
                : preferred;
     popover.resolvedPlacement = resolved;
+    std::optional<ComponentKey> anchorTrackKey;
+    if (!popover.anchorRectOverride && runtime) {
+      if (popover.useHoverLeafAnchor) {
+        anchorTrackKey = runtime->hoverTargetKey();
+      } else if (popover.useFocusAnchor) {
+        anchorTrackKey = runtime->focusTargetKey();
+      } else {
+        anchorTrackKey = runtime->lastTapTargetKey();
+      }
+    }
 
     OverlayConfig config{
         .anchor = anchor,
-        .anchorMaxHeight = popover.anchorMaxHeight,
-        .anchorOutsets = popover.anchorOutsets,
+        .anchorTrackComponentKey = anchorTrackKey,
         .placement = overlayPlacementFromPopover(resolved),
+        .autoFlipPreferredPlacement = overlayPlacementFromPopover(preferred),
+        .autoFlipGap = gap,
         .crossAlignment = popover.crossAlignment,
-        .offset = popoverOverlayGapOffset(resolved, popover.gap),
-        .maxSize = popover.maxSize,
+        .offset = popoverOverlayGapOffset(resolved, gap),
         .modal = false,
         .backdropColor = resolvePopoverBackdropColor(popover.backdropColor, theme),
         .dismissOnOutsideTap = popover.dismissOnOutsideTap,
         .dismissOnEscape = popover.dismissOnEscape,
+        .onDismiss = popover.onDismiss,
         .debugName = popover.debugName,
     };
 
