@@ -305,6 +305,31 @@ struct LongSelectProbeRoot {
   }
 };
 
+struct HoverPopoverProbeRoot {
+  flux::Element body() const {
+    auto [showPopover, hidePopover, presented] = flux::usePopover();
+    (void)presented;
+    return flux::Element{flux::Rectangle{}}
+        .size(20.f, 20.f)
+        .onPointerEnter([showPopover] {
+          showPopover(flux::Popover{
+              .content = flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+              .placement = flux::PopoverPlacement::Below,
+              .gap = 0.f,
+              .arrow = false,
+              .contentPadding = 0.f,
+              .backdropColor = flux::Colors::transparent,
+              .dismissOnOutsideTap = false,
+              .useTapAnchor = false,
+              .useHoverLeafAnchor = true,
+          });
+        })
+        .onPointerExit([hidePopover] {
+          hidePopover();
+        });
+  }
+};
+
 struct WrappedScrollProbeRoot {
   flux::Reactive::Signal<flux::Point> offset;
   flux::Reactive::Signal<flux::Size> viewport;
@@ -586,6 +611,22 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   CHECK(focusAnchor->y == doctest::Approx(0.f));
   CHECK(focusAnchor->width == doctest::Approx(20.f));
   CHECK(focusAnchor->height == doctest::Approx(20.f));
+}
+
+TEST_CASE("hover popovers keep the exact hover anchor instead of tracking component wrappers") {
+  RuntimeHarness harness;
+  harness.setRoot(HoverPopoverProbeRoot{});
+
+  harness.pointerMove({10.f, 10.f});
+
+  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  REQUIRE(entry->config.anchor.has_value());
+  CHECK(entry->config.anchor->x == doctest::Approx(0.f));
+  CHECK(entry->config.anchor->y == doctest::Approx(0.f));
+  CHECK(entry->config.anchor->width == doctest::Approx(20.f));
+  CHECK(entry->config.anchor->height == doctest::Approx(20.f));
+  CHECK_FALSE(entry->config.anchorTrackComponentKey.has_value());
 }
 
 TEST_CASE("tracked overlay anchors follow moved trigger nodes") {

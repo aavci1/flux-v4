@@ -128,7 +128,8 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
     std::optional<ComponentKey> anchorTrackKey;
     if (!popover.anchorRectOverride && runtime) {
       if (popover.useHoverLeafAnchor) {
-        anchorTrackKey = runtime->hoverTargetKey();
+        // Hover tooltips should stay anchored to the exact leaf hit that opened them. The tracked
+        // component key can resolve to an ancestor wrapper with a different layout size.
       } else if (popover.useFocusAnchor) {
         anchorTrackKey = runtime->focusTargetKey();
       } else {
