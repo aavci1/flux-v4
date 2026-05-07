@@ -396,7 +396,7 @@ public:
   std::unique_ptr<Canvas> createCanvas(Window&) override {
     auto canvas = createVulkanCanvas(display_, surface_, handle_, Application::instance().textSystem());
     canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
-    canvas->resize(static_cast<int>(size_.width), static_cast<int>(size_.height));
+    canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
     canvas_ = canvas.get();
     return canvas;
   }

@@ -5,6 +5,7 @@
 /// Part of the Flux public API.
 
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -45,6 +46,18 @@ public:
       restoredState = loadWindowState(config.restoreId);
       if (restoredState && !restoredState->contentSize.isEmpty()) {
         resolvedConfig.size = restoredState->contentSize;
+        if (config.minSize.width > 0.f) {
+          resolvedConfig.size.width = std::max(resolvedConfig.size.width, config.minSize.width);
+        }
+        if (config.minSize.height > 0.f) {
+          resolvedConfig.size.height = std::max(resolvedConfig.size.height, config.minSize.height);
+        }
+        if (config.maxSize.width > 0.f) {
+          resolvedConfig.size.width = std::min(resolvedConfig.size.width, config.maxSize.width);
+        }
+        if (config.maxSize.height > 0.f) {
+          resolvedConfig.size.height = std::min(resolvedConfig.size.height, config.maxSize.height);
+        }
       }
     }
     // `new T` must run in a member of `Application` so `friend Application` can call `Window`'s protected ctor.
