@@ -16,6 +16,7 @@
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <memory>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -300,6 +301,46 @@ TEST_CASE("Show hidden stack child stays mounted and expands later") {
   REQUIRE(hiddenAgain.children().size() == 3);
   CHECK(hiddenAgain.children()[1]->size().height == doctest::Approx(0.f));
   CHECK(hiddenAgain.children()[2]->position().y == doctest::Approx(22.f));
+}
+
+TEST_CASE("Show keeps natural constraints after transient zero-size layout") {
+  FakeTextSystem textSystem;
+  flux::EnvironmentBinding environment = testEnvironment();
+  flux::MeasureContext measure{textSystem, environment};
+  flux::Reactive::Scope owner;
+  flux::Reactive::Signal<bool> visible{false};
+  flux::Element show{flux::Show(
+      [visible] {
+        return visible.get();
+      },
+      [] {
+        return flux::Element{flux::Rectangle{}}
+            .size(80.f, 20.f)
+            .fill(flux::Colors::blue);
+      })};
+
+  flux::LayoutConstraints natural{
+      .maxWidth = 100.f,
+      .maxHeight = std::numeric_limits<float>::infinity(),
+      .minWidth = 0.f,
+      .minHeight = 0.f,
+  };
+  flux::MountContext mount{owner, textSystem, measure, natural, {}, {}, environment};
+  std::unique_ptr<flux::scenegraph::SceneNode> node = show.mount(mount);
+
+  node->relayout(flux::LayoutConstraints{
+                     .maxWidth = 100.f,
+                     .maxHeight = 0.f,
+                     .minWidth = 100.f,
+                     .minHeight = 0.f,
+                 },
+                 false);
+  CHECK(node->size().height == doctest::Approx(0.f));
+
+  visible.set(true);
+
+  CHECK(node->size().width == doctest::Approx(100.f));
+  CHECK(node->size().height == doctest::Approx(20.f));
 }
 
 TEST_CASE("Show relayouts active branch into flexible stack slot") {

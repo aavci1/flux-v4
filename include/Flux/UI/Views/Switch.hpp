@@ -153,7 +153,9 @@ private:
     }
 
     void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {
-      constraints = nextConstraints;
+      if (!scenegraph::detail::isTransientRelayout()) {
+        constraints = nextConstraints;
+      }
       frameSize = detail::controlAssignedSize(nextConstraints);
       auto children = group.children();
       if (!children.empty() && children.front()) {

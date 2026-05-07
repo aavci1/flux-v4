@@ -28,6 +28,7 @@ struct InteractionData;
 
 namespace detail {
 struct SceneNodeAccess;
+bool isTransientRelayout() noexcept;
 }
 
 using RelayoutFn = Reactive::SmallFn<void(LayoutConstraints const&), 64>;

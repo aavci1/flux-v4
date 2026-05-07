@@ -37,6 +37,14 @@ struct TransientRelayoutScope {
 
 } // namespace
 
+namespace detail {
+
+bool isTransientRelayout() noexcept {
+    return gTransientRelayoutDepth > 0;
+}
+
+} // namespace detail
+
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     switch (kind) {
     case SceneNodeKind::Group:
