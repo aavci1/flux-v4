@@ -116,6 +116,9 @@ void KmsWindow::setFluxWindow(Window* window) {
 
 void KmsWindow::show() {
   if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(1.f, 1.f);
+  Point const center{std::max(0.f, size_.width * 0.5f), std::max(0.f, size_.height * 0.5f)};
+  app_.setPointerPosition(center);
+  cursorPos_ = center;
   applyCursor();
   Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
   Application::instance().requestWindowRedraw(handle_);

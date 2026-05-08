@@ -6,6 +6,7 @@
 #include <libinput.h>
 #include <libudev.h>
 #include <poll.h>
+#include <cstdarg>
 #include <signal.h>
 #include <unistd.h>
 #include <vulkan/vulkan.h>
@@ -62,6 +63,29 @@ void restoreTerminationSignalHandlers() {
   gTerminateSignalPending = 0;
 }
 
+bool debugKms() {
+  char const* value = std::getenv("FLUX_DEBUG_KMS");
+  return value && *value && std::strcmp(value, "0") != 0;
+}
+
+void debugLog(char const* format, ...) {
+  if (!debugKms()) return;
+  std::fprintf(stderr, "Flux KMS: ");
+  va_list args;
+  va_start(args, format);
+  std::vfprintf(stderr, format, args);
+  va_end(args);
+  std::fprintf(stderr, "\n");
+  std::fflush(stderr);
+}
+
+void libinputLog(libinput*, libinput_log_priority priority, char const* format, va_list args) {
+  if (!debugKms()) return;
+  std::fprintf(stderr, "Flux KMS libinput[%d]: ", static_cast<int>(priority));
+  std::vfprintf(stderr, format, args);
+  std::fflush(stderr);
+}
+
 void vkCheck(VkResult result, char const* what) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(std::string(what) + " failed");
@@ -93,7 +117,11 @@ std::string appDir(std::string const& base, std::string const& appName) {
 }
 
 int openRestricted(char const* path, int flags, void*) {
-  return open(path, flags | O_CLOEXEC);
+  int fd = open(path, flags | O_CLOEXEC);
+  if (fd < 0) {
+    debugLog("failed to open input device %s: %s", path, std::strerror(errno));
+  }
+  return fd;
 }
 
 void closeRestricted(int fd, void*) {
@@ -387,9 +415,37 @@ void KmsApplication::initializeInput() {
   if (!udev_) throw std::runtime_error("udev_new failed");
   input_ = libinput_udev_create_context(&kLibinputInterface, nullptr, udev_);
   if (!input_) throw std::runtime_error("libinput_udev_create_context failed");
+  libinput_log_set_handler(input_, libinputLog);
+  libinput_log_set_priority(input_, debugKms() ? LIBINPUT_LOG_PRIORITY_DEBUG : LIBINPUT_LOG_PRIORITY_ERROR);
+  debugLog("created udev libinput context fd=%d", libinput_get_fd(input_));
   if (libinput_udev_assign_seat(input_, "seat0") != 0) {
     throw std::runtime_error("libinput_udev_assign_seat(seat0) failed");
   }
+  debugLog("assigned libinput seat0");
+  dispatchPendingInput();
+  if (inputDeviceCount_ > 0) return;
+
+  debugLog("udev seat0 reported no input devices; falling back to /dev/input/event*");
+  libinput_unref(input_);
+  input_ = libinput_path_create_context(&kLibinputInterface, nullptr);
+  if (!input_) throw std::runtime_error("libinput_path_create_context failed");
+  libinput_log_set_handler(input_, libinputLog);
+  libinput_log_set_priority(input_, debugKms() ? LIBINPUT_LOG_PRIORITY_DEBUG : LIBINPUT_LOG_PRIORITY_ERROR);
+  if (std::filesystem::exists("/dev/input")) {
+    for (auto const& entry : std::filesystem::directory_iterator("/dev/input")) {
+      std::string name = entry.path().filename().string();
+      if (!name.starts_with("event")) continue;
+      libinput_device* device = libinput_path_add_device(input_, entry.path().c_str());
+      if (device) {
+        debugLog("added input path %s", entry.path().c_str());
+        libinput_device_unref(device);
+      } else {
+        debugLog("libinput rejected input path %s", entry.path().c_str());
+      }
+    }
+  }
+  dispatchPendingInput();
+  debugLog("input initialization complete with %d device(s)", inputDeviceCount_);
 }
 
 void KmsApplication::setApplicationName(std::string name) {

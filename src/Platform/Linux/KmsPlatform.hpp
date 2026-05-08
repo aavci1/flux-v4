@@ -17,6 +17,7 @@
 #include <vector>
 
 struct libinput;
+struct libinput_device;
 struct udev;
 
 namespace flux {
@@ -62,6 +63,8 @@ public:
   void registerWindow(KmsWindow* window);
   void unregisterWindow(KmsWindow* window);
   KmsWindow* focusedWindow() const;
+  void handleInputDeviceAdded(libinput_device* device);
+  void setPointerPosition(Point position);
   void routePointer(Point position, InputEvent::Kind kind, MouseButton button = MouseButton::None,
                     Vec2 scrollDelta = {}, bool preciseScrollDelta = true);
   void routeKey(std::uint32_t evdevKey, bool pressed);
@@ -83,6 +86,7 @@ private:
   int wakePipe_[2]{-1, -1};
   udev* udev_ = nullptr;
   libinput* input_ = nullptr;
+  int inputDeviceCount_ = 0;
   std::vector<KmsConnector> connectors_;
   std::vector<KmsWindow*> windows_;
   KmsWindow* pointerFocus_ = nullptr;
