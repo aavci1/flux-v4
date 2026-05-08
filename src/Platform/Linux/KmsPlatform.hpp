@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -56,7 +57,7 @@ public:
   int inputFd() const noexcept;
   int wakeFd() const noexcept { return wakePipe_[0]; }
   void wakeEventLoop();
-  bool pollInputAndWake(int timeoutMs, int extraFd = -1);
+  bool pollInputAndWake(int timeoutMs, std::span<int const> extraFds = {});
   void dispatchPendingInput();
   void registerWindow(KmsWindow* window);
   void unregisterWindow(KmsWindow* window);
@@ -74,6 +75,9 @@ private:
   void collectShortcuts(MenuItem const& item);
   void collectShortcuts(MenuBar const& menu);
   void drainWakePipe();
+  void installSignalHandlers();
+  void uninstallSignalHandlers();
+  void handlePendingTerminateSignal();
 
   int drmFd_ = -1;
   int wakePipe_[2]{-1, -1};
@@ -89,6 +93,7 @@ private:
   Point pointerPos_{};
   std::uint8_t pressedButtons_ = 0;
   std::atomic<bool> terminateRequested_{false};
+  bool signalHandlersInstalled_ = false;
 };
 
 KmsApplication& kmsApplication();
@@ -121,6 +126,7 @@ public:
   void postFrameTick();
   Point clampPointer(Point p) const;
   void moveCursor(Point p);
+  int frameTimerFd() const noexcept { return frameTimerFd_; }
 
 private:
   struct CursorBuffer {

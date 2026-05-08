@@ -153,7 +153,7 @@ void KmsWindow::processEvents() {
 }
 
 void KmsWindow::waitForEvents(int timeoutMs) {
-  app_.pollInputAndWake(timeoutMs, frameTimerFd_);
+  app_.pollInputAndWake(timeoutMs);
   drainFrameTimer();
 }
 

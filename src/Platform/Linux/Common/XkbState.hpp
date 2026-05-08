@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <string>
 
-#include <xkbcommon/xkbcommon.h>
+struct xkb_context;
+struct xkb_keymap;
+struct xkb_state;
 
 namespace flux::linux_platform {
 
@@ -26,10 +28,9 @@ public:
   KeyCode keyCodeForEvdevKey(std::uint32_t key) const;
   std::string utf8ForEvdevKey(std::uint32_t key) const;
   Modifiers modifiers() const noexcept { return modifiers_; }
-  xkb_state* rawState() const noexcept { return state_; }
 
 private:
-  xkb_keysym_t keysymForEvdevKey(std::uint32_t key) const;
+  std::uint32_t keysymForEvdevKey(std::uint32_t key) const;
   bool installKeymap(xkb_keymap* keymap);
 
   xkb_context* context_ = nullptr;
@@ -37,8 +38,5 @@ private:
   xkb_state* state_ = nullptr;
   Modifiers modifiers_ = Modifiers::None;
 };
-
-KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym);
-std::string utf8FromXkbKeysym(xkb_keysym_t sym);
 
 } // namespace flux::linux_platform

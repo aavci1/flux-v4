@@ -6,11 +6,13 @@
 #include <libinput.h>
 #include <libudev.h>
 #include <poll.h>
+#include <signal.h>
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 #include <xf86drm.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -26,6 +28,39 @@ namespace flux {
 namespace {
 
 KmsApplication* gKmsApplication = nullptr;
+
+struct TerminationSignalState {
+  struct sigaction previousSigInt {};
+  struct sigaction previousSigTerm {};
+  bool sigIntInstalled = false;
+  bool sigTermInstalled = false;
+};
+
+TerminationSignalState gTerminationSignals;
+volatile sig_atomic_t gTerminateSignalPending = 0;
+volatile sig_atomic_t gSignalWakeFd = -1;
+
+void terminateSignalHandler(int) {
+  gTerminateSignalPending = 1;
+  int const wakeFd = static_cast<int>(gSignalWakeFd);
+  if (wakeFd >= 0) {
+    char const c = 1;
+    (void)write(wakeFd, &c, 1);
+  }
+}
+
+void restoreTerminationSignalHandlers() {
+  if (gTerminationSignals.sigIntInstalled) {
+    sigaction(SIGINT, &gTerminationSignals.previousSigInt, nullptr);
+    gTerminationSignals.sigIntInstalled = false;
+  }
+  if (gTerminationSignals.sigTermInstalled) {
+    sigaction(SIGTERM, &gTerminationSignals.previousSigTerm, nullptr);
+    gTerminationSignals.sigTermInstalled = false;
+  }
+  gSignalWakeFd = -1;
+  gTerminateSignalPending = 0;
+}
 
 void vkCheck(VkResult result, char const* what) {
   if (result != VK_SUCCESS) {
@@ -271,6 +306,7 @@ KmsApplication::KmsApplication() {
 }
 
 KmsApplication::~KmsApplication() {
+  uninstallSignalHandlers();
   if (input_) libinput_unref(input_);
   if (udev_) udev_unref(udev_);
   if (drmFd_ >= 0) {
@@ -286,6 +322,7 @@ void KmsApplication::initialize() {
   if (pipe(wakePipe_) != 0) throw std::system_error(errno, std::generic_category(), "pipe");
   fcntl(wakePipe_[0], F_SETFL, fcntl(wakePipe_[0], F_GETFL, 0) | O_NONBLOCK);
   fcntl(wakePipe_[1], F_SETFL, fcntl(wakePipe_[1], F_GETFL, 0) | O_NONBLOCK);
+  installSignalHandlers();
   if (!openFirstDisplayCard()) {
     throw std::runtime_error("No connected DRM/KMS display found");
   }
@@ -374,8 +411,9 @@ void KmsApplication::setTerminateHandler(std::function<void()> handler) {
 }
 
 void KmsApplication::requestTerminate() {
-  terminateRequested_ = true;
-  if (terminateHandler_) terminateHandler_();
+  if (!terminateRequested_.exchange(true) && terminateHandler_) {
+    terminateHandler_();
+  }
   wakeEventLoop();
 }
 
@@ -536,6 +574,7 @@ int KmsApplication::inputFd() const noexcept {
 }
 
 void KmsApplication::wakeEventLoop() {
+  if (wakePipe_[1] < 0) return;
   char const c = 1;
   (void)write(wakePipe_[1], &c, 1);
 }
@@ -545,16 +584,74 @@ void KmsApplication::drainWakePipe() {
   while (read(wakePipe_[0], buffer, sizeof(buffer)) > 0) {}
 }
 
-bool KmsApplication::pollInputAndWake(int timeoutMs, int extraFd) {
+void KmsApplication::installSignalHandlers() {
+  if (signalHandlersInstalled_) return;
+  gSignalWakeFd = wakePipe_[1];
+  gTerminateSignalPending = 0;
+
+  struct sigaction action {};
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = terminateSignalHandler;
+
+  if (sigaction(SIGINT, &action, &gTerminationSignals.previousSigInt) != 0) {
+    gSignalWakeFd = -1;
+    throw std::system_error(errno, std::generic_category(), "sigaction(SIGINT)");
+  }
+  gTerminationSignals.sigIntInstalled = true;
+
+  if (sigaction(SIGTERM, &action, &gTerminationSignals.previousSigTerm) != 0) {
+    int const savedErrno = errno;
+    restoreTerminationSignalHandlers();
+    throw std::system_error(savedErrno, std::generic_category(), "sigaction(SIGTERM)");
+  }
+  gTerminationSignals.sigTermInstalled = true;
+  signalHandlersInstalled_ = true;
+}
+
+void KmsApplication::uninstallSignalHandlers() {
+  if (!signalHandlersInstalled_) return;
+  restoreTerminationSignalHandlers();
+  signalHandlersInstalled_ = false;
+}
+
+void KmsApplication::handlePendingTerminateSignal() {
+  if (!gTerminateSignalPending) return;
+  gTerminateSignalPending = 0;
+  requestTerminate();
+}
+
+bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraFds) {
   std::vector<pollfd> fds;
   if (inputFd() >= 0) fds.push_back({inputFd(), POLLIN, 0});
   if (wakePipe_[0] >= 0) fds.push_back({wakePipe_[0], POLLIN, 0});
-  if (extraFd >= 0) fds.push_back({extraFd, POLLIN, 0});
+  for (int fd : extraFds) {
+    if (fd >= 0) fds.push_back({fd, POLLIN, 0});
+  }
+  for (KmsWindow const* window : windows_) {
+    int const timerFd = window ? window->frameTimerFd() : -1;
+    if (timerFd >= 0) {
+      bool const alreadyPolled = std::any_of(fds.begin(), fds.end(), [&](pollfd const& pollFd) {
+        return pollFd.fd == timerFd;
+      });
+      if (!alreadyPolled) fds.push_back({timerFd, POLLIN, 0});
+    }
+  }
   int rc = poll(fds.data(), fds.size(), timeoutMs < 0 ? -1 : timeoutMs);
-  if (rc <= 0) return false;
+  if (rc < 0) {
+    if (errno == EINTR) {
+      handlePendingTerminateSignal();
+      return true;
+    }
+    return false;
+  }
+  if (rc == 0) {
+    handlePendingTerminateSignal();
+    return false;
+  }
   for (auto const& fd : fds) {
     if (fd.fd == wakePipe_[0] && (fd.revents & POLLIN)) drainWakePipe();
   }
+  handlePendingTerminateSignal();
   dispatchPendingInput();
   return true;
 }

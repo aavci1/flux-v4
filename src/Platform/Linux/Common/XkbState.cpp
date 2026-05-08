@@ -4,10 +4,14 @@
 
 #include <sys/mman.h>
 #include <unistd.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include <cstring>
 
 namespace flux::linux_platform {
+
+static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym);
+static std::string utf8FromXkbKeysym(xkb_keysym_t sym);
 
 XkbState::XkbState() {
   context_ = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
@@ -96,8 +100,9 @@ void XkbState::updateKey(std::uint32_t key, bool pressed) {
   modifiers_ = mods;
 }
 
-xkb_keysym_t XkbState::keysymForEvdevKey(std::uint32_t key) const {
-  return state_ ? xkb_state_key_get_one_sym(state_, key + 8) : XKB_KEY_NoSymbol;
+std::uint32_t XkbState::keysymForEvdevKey(std::uint32_t key) const {
+  return state_ ? static_cast<std::uint32_t>(xkb_state_key_get_one_sym(state_, key + 8))
+                : static_cast<std::uint32_t>(XKB_KEY_NoSymbol);
 }
 
 KeyCode XkbState::keyCodeForEvdevKey(std::uint32_t key) const {
@@ -108,7 +113,7 @@ std::string XkbState::utf8ForEvdevKey(std::uint32_t key) const {
   return utf8FromXkbKeysym(keysymForEvdevKey(key));
 }
 
-KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
+static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
   switch (sym) {
   case XKB_KEY_a:
   case XKB_KEY_A: return keys::A;
@@ -213,7 +218,7 @@ KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
   }
 }
 
-std::string utf8FromXkbKeysym(xkb_keysym_t sym) {
+static std::string utf8FromXkbKeysym(xkb_keysym_t sym) {
   char buffer[8]{};
   int const n = xkb_keysym_to_utf8(sym, buffer, sizeof(buffer));
   return n > 1 ? std::string(buffer, static_cast<std::size_t>(n - 1)) : std::string{};

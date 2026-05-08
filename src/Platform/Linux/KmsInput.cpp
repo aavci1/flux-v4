@@ -60,7 +60,6 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   KeyCode const key = xkb.keyCodeForEvdevKey(evdevKey);
   Modifiers const modifiers = xkb.modifiers();
   xkb.updateKey(evdevKey, pressed);
-  if (pressed && Application::instance().dispatchActionForShortcut(key, modifiers)) return;
   Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
                                                                         : InputEvent::Kind::KeyUp,
                                                        .handle = window->handle(),
@@ -77,6 +76,7 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
 }
 
 void KmsApplication::dispatchPendingInput() {
+  handlePendingTerminateSignal();
   if (!input_) return;
   libinput_dispatch(input_);
   while (libinput_event* event = libinput_get_event(input_)) {
