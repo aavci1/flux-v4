@@ -1,9 +1,11 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
+#include <Flux/Core/Application.hpp>
 #include <Flux/Debug/PerfCounters.hpp>
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
+#include "Core/PlatformApplication.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/path_frag_spv.hpp"
@@ -12,9 +14,7 @@
 #include "Graphics/Vulkan/generated/rect_vert_spv.hpp"
 #include "Graphics/PathFlattener.hpp"
 
-#define VK_USE_PLATFORM_WAYLAND_KHR
 #include <vulkan/vulkan.h>
-#include <wayland-client.h>
 
 #include <algorithm>
 #include <array>
@@ -26,10 +26,12 @@
 #include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <list>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -306,6 +308,8 @@ struct SharedVulkanCore {
     VkPipeline rectPipeline = VK_NULL_HANDLE;
     VkPipeline imagePipeline = VK_NULL_HANDLE;
     VkPipeline pathPipeline = VK_NULL_HANDLE;
+    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    std::filesystem::path pipelineCacheFile;
     Texture atlas;
     std::vector<Rgba> atlasPixels;
     int atlasX = 1;
@@ -325,19 +329,95 @@ void destroySharedVulkanResources(SharedVulkanCore& core);
 std::mutex gCanvasRegistryMutex;
 std::vector<::flux::VulkanCanvas*> gCanvases;
 
-VkInstance ensureSharedVulkanInstance() {
+VkInstance ensureSharedVulkanInstanceImpl() {
   std::lock_guard lock(gVulkanCoreMutex);
   if (gVulkanCore.instance) return gVulkanCore.instance;
-  char const* exts[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
+  std::span<char const* const> const exts =
+      Application::instance().platformApp().requiredVulkanInstanceExtensions();
+  if (exts.empty()) {
+    throw std::runtime_error("Platform did not provide Vulkan instance extensions");
+  }
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
   app.pApplicationName = "Flux";
   app.apiVersion = VK_API_VERSION_1_0;
   VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   info.pApplicationInfo = &app;
-  info.enabledExtensionCount = 2;
-  info.ppEnabledExtensionNames = exts;
+  info.enabledExtensionCount = static_cast<std::uint32_t>(exts.size());
+  info.ppEnabledExtensionNames = exts.data();
   vkCheck(vkCreateInstance(&info, nullptr, &gVulkanCore.instance), "vkCreateInstance");
   return gVulkanCore.instance;
+}
+
+std::string hexBytes(std::uint8_t const* bytes, std::size_t size) {
+  std::ostringstream out;
+  out << std::hex << std::setfill('0');
+  for (std::size_t i = 0; i < size; ++i) {
+    out << std::setw(2) << static_cast<unsigned int>(bytes[i]);
+  }
+  return out.str();
+}
+
+std::filesystem::path pipelineCachePath(VkPhysicalDevice physical) {
+  VkPhysicalDeviceProperties props{};
+  vkGetPhysicalDeviceProperties(physical, &props);
+  std::string identity;
+  auto getProps2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+      vkGetInstanceProcAddr(gVulkanCore.instance, "vkGetPhysicalDeviceProperties2"));
+  if (!getProps2) {
+    getProps2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+        vkGetInstanceProcAddr(gVulkanCore.instance, "vkGetPhysicalDeviceProperties2KHR"));
+  }
+  if (getProps2) {
+    VkPhysicalDeviceIDProperties idProps{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
+    VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    props2.pNext = &idProps;
+    getProps2(physical, &props2);
+    identity = hexBytes(idProps.deviceUUID, VK_UUID_SIZE);
+  }
+  if (identity.empty() || identity == std::string(VK_UUID_SIZE * 2, '0')) {
+    identity = std::to_string(props.vendorID) + "-" + std::to_string(props.deviceID);
+  }
+  return std::filesystem::path(Application::instance().cacheDir()) / ("flux-vulkan-" + identity + ".cache");
+}
+
+void createPipelineCache(SharedVulkanCore& core) {
+  auto& res = core.resources;
+  if (res.pipelineCache) return;
+  res.pipelineCacheFile = pipelineCachePath(core.physical);
+  std::vector<std::uint8_t> initialData;
+  if (std::ifstream in(res.pipelineCacheFile, std::ios::binary); in) {
+    initialData.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  VkPipelineCacheCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+  info.initialDataSize = initialData.size();
+  info.pInitialData = initialData.empty() ? nullptr : initialData.data();
+  VkResult const result = vkCreatePipelineCache(core.device, &info, nullptr, &res.pipelineCache);
+  if (result != VK_SUCCESS && !initialData.empty()) {
+    info.initialDataSize = 0;
+    info.pInitialData = nullptr;
+    vkCheck(vkCreatePipelineCache(core.device, &info, nullptr, &res.pipelineCache),
+            "vkCreatePipelineCache");
+    return;
+  }
+  vkCheck(result, "vkCreatePipelineCache");
+}
+
+void saveAndDestroyPipelineCache(VkDevice device, SharedVulkanCore::Resources& res) {
+  if (!res.pipelineCache) return;
+  std::size_t size = 0;
+  if (vkGetPipelineCacheData(device, res.pipelineCache, &size, nullptr) == VK_SUCCESS && size > 0) {
+    std::vector<std::uint8_t> data(size);
+    if (vkGetPipelineCacheData(device, res.pipelineCache, &size, data.data()) == VK_SUCCESS) {
+      try {
+        std::filesystem::create_directories(res.pipelineCacheFile.parent_path());
+        std::ofstream out(res.pipelineCacheFile, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<char const*>(data.data()), static_cast<std::streamsize>(size));
+      } catch (...) {
+      }
+    }
+  }
+  vkDestroyPipelineCache(device, res.pipelineCache, nullptr);
+  res.pipelineCache = VK_NULL_HANDLE;
 }
 
 SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
@@ -385,7 +465,7 @@ SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
   VkBool32 present = VK_FALSE;
   vkGetPhysicalDeviceSurfaceSupportKHR(gVulkanCore.physical, gVulkanCore.queueFamily, surface, &present);
   if (!present) {
-    throw std::runtime_error("Shared Vulkan queue cannot present to this Wayland surface");
+    throw std::runtime_error("Shared Vulkan queue cannot present to this surface");
   }
   ++gVulkanCore.refs;
   return &gVulkanCore;
@@ -431,6 +511,7 @@ void destroySharedVulkanResources(SharedVulkanCore& core) {
   if (res.textureDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.textureDescriptorLayout, nullptr);
   if (res.descriptorPool) vkDestroyDescriptorPool(device, res.descriptorPool, nullptr);
   if (res.renderPass) vkDestroyRenderPass(device, res.renderPass, nullptr);
+  saveAndDestroyPipelineCache(device, res);
   res = {};
 }
 
@@ -573,13 +654,12 @@ VulkanPathVertex makeVulkanPathVertex(PathVertex const& src, FillStyle const* fi
 
 class VulkanCanvas final : public Canvas {
 public:
-  VulkanCanvas(wl_display* display, wl_surface* surface, unsigned int handle, TextSystem& textSystem)
-      : display_(display), wlSurface_(surface), handle_(handle), textSystem_(textSystem) {
-    instance_ = ensureSharedVulkanInstance();
-    VkWaylandSurfaceCreateInfoKHR surfaceInfo{VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR};
-    surfaceInfo.display = display_;
-    surfaceInfo.surface = wlSurface_;
-    vkCheck(vkCreateWaylandSurfaceKHR(instance_, &surfaceInfo, nullptr, &surface_), "vkCreateWaylandSurfaceKHR");
+  VulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem)
+      : handle_(handle), textSystem_(textSystem), surface_(surface) {
+    instance_ = ensureSharedVulkanInstanceImpl();
+    if (!surface_) {
+      throw std::runtime_error("Vulkan canvas requires a valid platform surface");
+    }
     SharedVulkanCore* shared = acquireSharedVulkanCore(surface_);
     ownsSharedVulkanCore_ = true;
     shared_ = shared;
@@ -1270,6 +1350,7 @@ private:
     createDescriptors();
     createSampler();
     createRenderPass();
+    createPipelineCache(*shared_);
     createPipelines();
     createAtlas();
     res.initialized = true;
@@ -1492,7 +1573,7 @@ private:
     info.layout = layout;
     info.renderPass = resources().renderPass;
     VkPipeline out = VK_NULL_HANDLE;
-    vkCheck(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &info, nullptr, &out),
+    vkCheck(vkCreateGraphicsPipelines(device_, resources().pipelineCache, 1, &info, nullptr, &out),
             "vkCreateGraphicsPipelines");
     vkDestroyShaderModule(device_, vert, nullptr);
     vkDestroyShaderModule(device_, frag, nullptr);
@@ -2268,8 +2349,6 @@ private:
     pendingScreenshotPath_.clear();
   }
 
-  wl_display* display_ = nullptr;
-  wl_surface* wlSurface_ = nullptr;
   unsigned int handle_ = 0;
   TextSystem& textSystem_;
   int width_ = 1;
@@ -2339,9 +2418,12 @@ void evictImageTexturesFor(VulkanImage const* image) {
 
 } // namespace
 
-std::unique_ptr<Canvas> createVulkanCanvas(wl_display* display, wl_surface* surface,
-                                           unsigned int handle, TextSystem& textSystem) {
-  return std::make_unique<VulkanCanvas>(display, surface, handle, textSystem);
+VkInstance ensureSharedVulkanInstance() {
+  return ensureSharedVulkanInstanceImpl();
+}
+
+std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem) {
+  return std::make_unique<VulkanCanvas>(surface, handle, textSystem);
 }
 
 std::shared_ptr<Image> loadImageFromFile(std::string_view path, void*) {

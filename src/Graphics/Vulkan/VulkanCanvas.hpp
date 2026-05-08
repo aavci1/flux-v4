@@ -4,14 +4,13 @@
 
 #include <memory>
 
-struct wl_display;
-struct wl_surface;
+#include <vulkan/vulkan.h>
 
 namespace flux {
 
 class TextSystem;
 
-std::unique_ptr<Canvas> createVulkanCanvas(wl_display* display, wl_surface* surface,
-                                           unsigned int handle, TextSystem& textSystem);
+VkInstance ensureSharedVulkanInstance();
+std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem);
 
 } // namespace flux

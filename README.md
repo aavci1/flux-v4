@@ -1,14 +1,12 @@
 # Flux v5
 
-Flux is a small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths tessellated through [libtess2](https://github.com/memononen/libtess2), CoreText-backed text layout, and a retained declarative UI layer.
+Flux is a small **C++23** application framework for **macOS** with a **Metal** 2D canvas, Linux **Wayland/Vulkan**, and Linux **KMS/DRM/Vulkan** backends, vector paths tessellated through [libtess2](https://github.com/memononen/libtess2), platform text layout, and a retained declarative UI layer.
 
 The v5 UI runtime mounts each view tree once, owns reactive state in scopes, and updates retained scene nodes through `Signal`, `Computed`, `Effect`, `Bindable`, animation handles, and reactive environment values.
 
-Linux desktop (Wayland/Vulkan) and embedded Linux (KMS/DRM) are reserved in CMake but not implemented yet.
-
 ## Build
 
-Requirements: **CMake 3.25+**, **Xcode command-line tools** (`xcrun metal` and `xxd`).
+Requirements: **CMake 3.25+**. macOS builds need **Xcode command-line tools** (`xcrun metal` and `xxd`). Linux Wayland builds need `wayland-client`, `wayland-cursor`, `wayland-protocols`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`. Linux KMS builds need `libdrm`, `libinput`, `libudev`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON
@@ -26,7 +24,7 @@ Current example targets:
 
 ## Options
 
-- `FLUX_PLATFORM` - `AUTO` (default), `MACOS`, or reserved future values (`LINUX_WAYLAND`, `LINUX_KMS`).
+- `FLUX_PLATFORM` - `AUTO` (default), `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`.
 - `FLUX_BUILD_TESTS` - default `OFF`; set `ON` to build unit and reactive tests.
 - `FLUX_BUILD_EXAMPLES` - default `OFF`; set `ON` to build examples.
 - `FLUX_BUILD_BENCHMARKS` - default `OFF`; set `ON` to build micro-benchmarks.

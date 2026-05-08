@@ -15,6 +15,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxApp.cmake)
 
 set(FLUX_PLATFORM "AUTO" CACHE STRING
     "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS.")
+set_property(CACHE FLUX_PLATFORM PROPERTY STRINGS AUTO MACOS LINUX_WAYLAND LINUX_KMS)
 
 if(FLUX_PLATFORM STREQUAL "AUTO")
   if(APPLE)
@@ -38,6 +39,11 @@ elseif(FLUX_PLATFORM STREQUAL "LINUX_WAYLAND")
     message(FATAL_ERROR "FLUX_PLATFORM=LINUX_WAYLAND requires a Linux/Unix host.")
   endif()
   set(FLUX_PLATFORM_LINUX_WAYLAND ON)
+elseif(FLUX_PLATFORM STREQUAL "LINUX_KMS")
+  if(NOT UNIX OR APPLE)
+    message(FATAL_ERROR "FLUX_PLATFORM=LINUX_KMS requires a Linux host.")
+  endif()
+  set(FLUX_PLATFORM_LINUX_KMS ON)
 else()
   message(FATAL_ERROR "Flux: FLUX_PLATFORM=${FLUX_PLATFORM} is not implemented yet.")
 endif()
@@ -284,10 +290,61 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     src/Core/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
+    src/Platform/Linux/Common/XkbState.cpp
     src/Platform/Linux/WaylandApplication.cpp
     src/Platform/Linux/WaylandWindow.cpp
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
+  )
+elseif(FLUX_PLATFORM_LINUX_KMS)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
+  pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
+  pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
+  pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
+  pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
+  pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
+  pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
+  pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
+  pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
+  find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
+  set(FLUX_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
+  file(MAKE_DIRECTORY ${FLUX_VULKAN_GENERATED_DIR})
+  set(_flux_vulkan_shader_headers)
+  foreach(_flux_shader rect.vert rect.frag image.vert image.frag path.vert path.frag)
+    string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
+    set(_flux_shader_src ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Vulkan/shaders/${_flux_shader})
+    set(_flux_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_flux_shader}.spv)
+    set(_flux_shader_header ${FLUX_VULKAN_GENERATED_DIR}/${_flux_shader_name}_spv.hpp)
+    add_custom_command(
+      OUTPUT ${_flux_shader_header}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders
+      COMMAND ${GLSLANG_VALIDATOR} -V ${_flux_shader_src} -o ${_flux_shader_spv}
+      COMMAND ${CMAKE_COMMAND}
+              -DINPUT=${_flux_shader_spv}
+              -DOUTPUT=${_flux_shader_header}
+              -DSYMBOL=flux_${_flux_shader_name}_spv
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxEmbedBinary.cmake
+      DEPENDS ${_flux_shader_src} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxEmbedBinary.cmake
+      VERBATIM
+    )
+    list(APPEND _flux_vulkan_shader_headers ${_flux_shader_header})
+  endforeach()
+  add_custom_target(flux_vulkan_shaders DEPENDS ${_flux_vulkan_shader_headers})
+  add_custom_target(flux_vulkan_shaders_check
+    DEPENDS ${_flux_vulkan_shader_headers}
+    COMMENT "Regenerating Vulkan SPIR-V headers from shader sources"
+    VERBATIM
+  )
+  add_dependencies(flux flux_vulkan_shaders)
+  target_sources(flux PRIVATE
+    src/Core/Application.cpp
+    src/Graphics/Linux/FreeTypeTextSystem.cpp
+    src/Graphics/Vulkan/VulkanGpuCanvas.cpp
+    src/Platform/Linux/Common/XkbState.cpp
+    src/Platform/Linux/KmsApplication.cpp
+    src/Platform/Linux/KmsWindow.cpp
+    src/Platform/Linux/KmsInput.cpp
   )
 endif()
 
@@ -360,6 +417,19 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   target_link_libraries(flux PRIVATE
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::WAYLAND_CURSOR
+    PkgConfig::XKBCOMMON
+    PkgConfig::VULKAN
+    PkgConfig::FREETYPE
+    PkgConfig::FONTCONFIG
+    PkgConfig::HARFBUZZ
+    PkgConfig::ZLIB
+    ${CMAKE_DL_LIBS})
+elseif(FLUX_PLATFORM_LINUX_KMS)
+  target_compile_definitions(flux PRIVATE FLUX_PLATFORM_LINUX_KMS=1)
+  target_link_libraries(flux PRIVATE
+    PkgConfig::LIBDRM
+    PkgConfig::LIBINPUT
+    PkgConfig::LIBUDEV
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     PkgConfig::FREETYPE

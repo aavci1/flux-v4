@@ -5,7 +5,7 @@ This document describes the current repository layout and coding patterns.
 ## Project Identity
 
 - **Name / version:** Flux v5 (`CMakeLists.txt`: `project(flux VERSION 5.0.0 ...)`).
-- **Platform:** macOS is implemented today. Linux desktop and embedded Linux values are reserved by `FLUX_PLATFORM` but fail at configure time until a backend is added.
+- **Platform:** `FLUX_PLATFORM` selects one backend at build time: `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`. `AUTO` picks macOS on Apple hosts and Wayland on Unix hosts.
 - **Language:** C++23, extensions off.
 - **Minimum macOS:** 11.0.
 - **Library:** Static library target `flux`.

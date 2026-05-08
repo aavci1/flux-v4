@@ -4,8 +4,16 @@
 
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_set>
+
+#ifndef VK_VERSION_1_0
+struct VkInstance_T;
+using VkInstance = VkInstance_T*;
+struct VkSurfaceKHR_T;
+using VkSurfaceKHR = VkSurfaceKHR_T*;
+#endif
 
 namespace flux {
 
@@ -39,6 +47,8 @@ public:
   virtual void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) = 0;
   virtual std::string userDataDir() const = 0;
   virtual std::string cacheDir() const = 0;
+  virtual std::span<char const* const> requiredVulkanInstanceExtensions() const { return {}; }
+  virtual VkSurfaceKHR createVulkanSurface(VkInstance, void*) { return nullptr; }
 };
 
 namespace detail {

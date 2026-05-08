@@ -332,6 +332,7 @@ void Application::unregisterWindowHandle(unsigned int handle) {
 
 EventQueue& Application::eventQueue() { return d->eventQueue_; }
 TextSystem& Application::textSystem() { return *d->textSystem_; }
+PlatformApplication& Application::platformApp() { return *d->platformApp_; }
 Clipboard& Application::clipboard() { return *d->clipboard_; }
 
 void Application::setMenuBar(MenuBar menu) {
