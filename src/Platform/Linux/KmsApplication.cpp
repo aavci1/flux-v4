@@ -683,6 +683,15 @@ std::string KmsApplication::cacheDir() const {
   return appDir(envOr("XDG_CACHE_HOME", envOr("HOME", ".") + "/.cache"), applicationName());
 }
 
+std::vector<std::string> KmsApplication::availableOutputs() const {
+  std::vector<std::string> outputs;
+  outputs.reserve(connectors_.size());
+  for (KmsConnector const& connector : connectors_) {
+    outputs.push_back(connector.name);
+  }
+  return outputs;
+}
+
 std::span<char const* const> KmsApplication::requiredVulkanInstanceExtensions() const {
   static std::vector<char const*> exts = [] {
     std::vector<char const*> result{
@@ -1194,6 +1203,66 @@ void KmsApplication::unregisterWindow(KmsWindow* window) {
 
 KmsWindow* KmsApplication::focusedWindow() const {
   return pointerFocus_ ? pointerFocus_ : (windows_.empty() ? nullptr : windows_.front());
+}
+
+Point KmsApplication::windowOrigin(KmsWindow const* window) const {
+  Point origin{};
+  for (KmsWindow const* candidate : windows_) {
+    if (!candidate || candidate == window) break;
+    origin.x += candidate->currentSize().width;
+  }
+  return origin;
+}
+
+Point KmsApplication::clampGlobalPointer(Point position) const {
+  if (windows_.empty()) return position;
+  float width = 0.f;
+  float height = 0.f;
+  for (KmsWindow const* window : windows_) {
+    if (!window) continue;
+    Size const size = window->currentSize();
+    width += std::max(1.f, size.width);
+    height = std::max(height, std::max(1.f, size.height));
+  }
+  position.x = std::clamp(position.x, 0.f, std::max(0.f, width - 1.f));
+  position.y = std::clamp(position.y, 0.f, std::max(0.f, height - 1.f));
+  return position;
+}
+
+KmsWindow* KmsApplication::windowAtGlobalPoint(Point position, Point& localPosition) const {
+  if (windows_.empty()) return nullptr;
+  float x = position.x;
+  KmsWindow* fallback = nullptr;
+  for (KmsWindow* window : windows_) {
+    if (!window) continue;
+    fallback = window;
+    Size const size = window->currentSize();
+    float const width = std::max(1.f, size.width);
+    if (x < width) {
+      localPosition = window->clampPointer(Point{x, position.y});
+      return window;
+    }
+    x -= width;
+  }
+  if (!fallback) return nullptr;
+  Size const size = fallback->currentSize();
+  localPosition = fallback->clampPointer(Point{std::max(0.f, size.width - 1.f), position.y});
+  return fallback;
+}
+
+void KmsApplication::focusPointerWindow(KmsWindow* window) {
+  if (!window) return;
+  for (KmsWindow* candidate : windows_) {
+    if (candidate && candidate != window) candidate->hideCursor();
+  }
+  pointerFocus_ = window;
+}
+
+KmsWindow* KmsApplication::windowForConnector(std::uint32_t connectorId) const {
+  auto it = std::find_if(windows_.begin(), windows_.end(), [&](KmsWindow const* window) {
+    return window && window->connectorId() == connectorId;
+  });
+  return it == windows_.end() ? nullptr : *it;
 }
 
 void KmsApplication::collectShortcuts(MenuItem const& item) {

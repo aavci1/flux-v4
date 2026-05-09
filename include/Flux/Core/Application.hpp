@@ -15,6 +15,7 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <Flux/Core/Clipboard.hpp>
 #include <Flux/Core/MenuItem.hpp>
@@ -113,6 +114,8 @@ public:
   std::string name() const;
   std::string userDataDir() const;
   std::string cacheDir() const;
+  /// Returns platform output names when available. KMS returns DRM connector names such as "eDP-1" or "HDMI-A-1".
+  std::vector<std::string> availableOutputs() const;
   std::optional<WindowState> loadWindowState(std::string const& restoreId) const;
   void saveWindowState(std::string const& restoreId, WindowState const& state);
 

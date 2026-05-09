@@ -63,33 +63,41 @@ void KmsApplication::handleInputDeviceAdded(libinput_device* device) {
   }
 }
 
-void KmsApplication::setPointerPosition(Point position) {
-  if (KmsWindow* window = focusedWindow()) {
-    pointerPos_ = window->clampPointer(position);
-    window->moveCursor(pointerPos_);
-  } else {
-    pointerPos_ = position;
+void KmsApplication::setPointerPosition(KmsWindow* window, Point localPosition) {
+  if (!window) {
+    pointerPos_ = localPosition;
+    return;
   }
+  Point const local = window->clampPointer(localPosition);
+  pointerPos_ = windowOrigin(window);
+  pointerPos_.x += local.x;
+  pointerPos_.y += local.y;
+  focusPointerWindow(window);
+  window->moveCursor(local);
 }
 
 void KmsApplication::routePointer(Point position, InputEvent::Kind kind, MouseButton button,
                                   Vec2 scrollDelta, bool preciseScrollDelta) {
-  KmsWindow* window = focusedWindow();
+  pointerPos_ = clampGlobalPointer(position);
+  Point localPosition{};
+  KmsWindow* window = windowAtGlobalPoint(pointerPos_, localPosition);
   if (!window) return;
-  pointerPos_ = window->clampPointer(position);
-  window->moveCursor(pointerPos_);
+  focusPointerWindow(window);
+  window->moveCursor(localPosition);
   if (debugKmsInput()) {
     char const* kindName = kind == InputEvent::Kind::PointerMove ? "move" :
                            kind == InputEvent::Kind::PointerDown ? "down" :
                            kind == InputEvent::Kind::PointerUp ? "up" :
                            kind == InputEvent::Kind::Scroll ? "scroll" : "pointer";
-    std::fprintf(stderr, "[flux:kms:input] pointer %s at %.1f,%.1f button=%u mask=%u\n",
-                 kindName, pointerPos_.x, pointerPos_.y, static_cast<unsigned int>(button),
+    std::fprintf(stderr, "[flux:kms:input] pointer %s on %s at %.1f,%.1f global %.1f,%.1f button=%u mask=%u\n",
+                 kindName, window->outputName().c_str(), localPosition.x, localPosition.y,
+                 pointerPos_.x, pointerPos_.y, static_cast<unsigned int>(button),
                  static_cast<unsigned int>(pressedButtons_));
+    std::fflush(stderr);
   }
   Application::instance().eventQueue().post(InputEvent{.kind = kind,
                                                        .handle = window->handle(),
-                                                       .position = pointerPos_,
+                                                       .position = localPosition,
                                                        .scrollDelta = scrollDelta,
                                                        .preciseScrollDelta = preciseScrollDelta,
                                                        .button = button,
@@ -156,7 +164,10 @@ void KmsApplication::dispatchPendingInput() {
                                                                                   static_cast<std::uint32_t>(size.width))),
               static_cast<float>(libinput_event_pointer_get_absolute_y_transformed(pointer,
                                                                                   static_cast<std::uint32_t>(size.height)))};
-      routePointer(p, InputEvent::Kind::PointerMove);
+      Point global = windowOrigin(window);
+      global.x += p.x;
+      global.y += p.y;
+      routePointer(global, InputEvent::Kind::PointerMove);
       break;
     }
     case LIBINPUT_EVENT_POINTER_BUTTON: {
@@ -217,15 +228,18 @@ void KmsApplication::dispatchPendingInput() {
                                                                         static_cast<std::uint32_t>(size.width))),
               static_cast<float>(libinput_event_touch_get_y_transformed(touch,
                                                                         static_cast<std::uint32_t>(size.height)))};
+      Point global = windowOrigin(window);
+      global.x += p.x;
+      global.y += p.y;
       if (libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_DOWN) {
         pressedButtons_ |= 1u;
-        routePointer(p, InputEvent::Kind::PointerMove);
-        routePointer(p, InputEvent::Kind::PointerDown, MouseButton::Left);
+        routePointer(global, InputEvent::Kind::PointerMove);
+        routePointer(global, InputEvent::Kind::PointerDown, MouseButton::Left);
       } else if (libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_UP) {
         routePointer(pointerPos_, InputEvent::Kind::PointerUp, MouseButton::Left);
         pressedButtons_ &= static_cast<std::uint8_t>(~1u);
       } else {
-        routePointer(p, InputEvent::Kind::PointerMove);
+        routePointer(global, InputEvent::Kind::PointerMove);
       }
       break;
     }

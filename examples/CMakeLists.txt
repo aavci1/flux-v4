@@ -53,6 +53,7 @@ endif()
 
 flux_add_example(layout-demo layout-demo/main.cpp)
 flux_add_example(markdown-formatter-demo markdown-formatter-demo/main.cpp)
+flux_add_example(output-demo output-demo/main.cpp)
 flux_add_example(popover-demo popover-demo/main.cpp)
 flux_add_example(scene-graph-demo scene-graph-demo/main.cpp)
 flux_add_example(scroll-demo scroll-demo/main.cpp)

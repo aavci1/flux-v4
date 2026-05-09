@@ -3,6 +3,7 @@
 
 #include "Core/PlatformApplication.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
+#include "Platform/Linux/WaylandOutputs.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -88,6 +89,10 @@ public:
 
   std::string cacheDir() const override {
     return appDir(envOr("XDG_CACHE_HOME", envOr("HOME", ".") + "/.cache"), applicationName());
+  }
+
+  std::vector<std::string> availableOutputs() const override {
+    return linux_platform::availableWaylandOutputs();
   }
 
   std::span<char const* const> requiredVulkanInstanceExtensions() const override {

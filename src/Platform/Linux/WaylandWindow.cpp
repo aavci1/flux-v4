@@ -2,6 +2,7 @@
 #include "Core/PlatformApplication.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
+#include "Platform/Linux/WaylandOutputs.hpp"
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
@@ -112,6 +113,7 @@ struct SharedWaylandConnection {
   struct Output {
     wl_output* output = nullptr;
     std::uint32_t name = 0;
+    std::string displayName;
     float scale = 1.f;
   };
   std::vector<std::unique_ptr<Output>> outputs;
@@ -816,7 +818,7 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;
     output->output = static_cast<wl_output*>(
-        wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 2u)));
+        wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 4u)));
     wl_output_add_listener(output->output, &sharedOutputListener, output.get());
     shared->outputs.push_back(std::move(output));
   }
@@ -861,7 +863,10 @@ void sharedOutputScale(void* data, wl_output* output, std::int32_t scale) {
   sharedOutput->scale = safeScale(static_cast<float>(std::max(1, scale)));
   refreshWindowsForOutput(&gWaylandConnection, output);
 }
-void sharedOutputName(void*, wl_output*, char const*) {}
+void sharedOutputName(void* data, wl_output*, char const* name) {
+  auto* sharedOutput = static_cast<SharedWaylandConnection::Output*>(data);
+  sharedOutput->displayName = name ? name : "";
+}
 void sharedOutputDescription(void*, wl_output*, char const*) {}
 
 void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y) {
@@ -929,6 +934,33 @@ void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint3
 void sharedKeyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t) {}
 
 } // namespace
+
+namespace linux_platform {
+
+std::vector<std::string> availableWaylandOutputs() {
+  SharedWaylandConnection* shared = nullptr;
+  try {
+    shared = acquireWaylandConnection();
+    wl_display_roundtrip(shared->display);
+
+    std::vector<std::string> outputs;
+    outputs.reserve(shared->outputs.size());
+    for (auto const& output : shared->outputs) {
+      if (!output->displayName.empty()) {
+        outputs.push_back(output->displayName);
+      } else {
+        outputs.push_back(std::to_string(output->name));
+      }
+    }
+    releaseWaylandConnection();
+    return outputs;
+  } catch (...) {
+    if (shared) releaseWaylandConnection();
+    return {};
+  }
+}
+
+} // namespace linux_platform
 
 namespace detail {
 

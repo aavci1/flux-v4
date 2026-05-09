@@ -52,6 +52,7 @@ public:
   void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) override;
   std::string userDataDir() const override;
   std::string cacheDir() const override;
+  std::vector<std::string> availableOutputs() const override;
   std::span<char const* const> requiredVulkanInstanceExtensions() const override;
   VkSurfaceKHR createVulkanSurface(VkInstance instance, void* nativeHandle) override;
 
@@ -67,7 +68,7 @@ public:
   void unregisterWindow(KmsWindow* window);
   KmsWindow* focusedWindow() const;
   void handleInputDeviceAdded(libinput_device* device);
-  void setPointerPosition(Point position);
+  void setPointerPosition(KmsWindow* window, Point localPosition);
   void routePointer(Point position, InputEvent::Kind kind, MouseButton button = MouseButton::None,
                     Vec2 scrollDelta = {}, bool preciseScrollDelta = true);
   void routeKey(std::uint32_t evdevKey, bool pressed);
@@ -98,6 +99,11 @@ private:
   void pollActiveVt();
   void releaseDrmMasterForVt(bool acknowledge);
   void acquireDrmMasterForVt(bool acknowledge);
+  KmsWindow* windowForConnector(std::uint32_t connectorId) const;
+  Point windowOrigin(KmsWindow const* window) const;
+  Point clampGlobalPointer(Point position) const;
+  KmsWindow* windowAtGlobalPoint(Point position, Point& localPosition) const;
+  void focusPointerWindow(KmsWindow* window);
 
   int drmFd_ = -1;
   int ttyFd_ = -1;
@@ -165,6 +171,7 @@ public:
   void postFrameTick();
   Point clampPointer(Point p) const;
   void moveCursor(Point p);
+  void hideCursor();
   int frameTimerFd() const noexcept { return frameTimerFd_; }
 
 private:

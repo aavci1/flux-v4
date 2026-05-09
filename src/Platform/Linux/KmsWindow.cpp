@@ -117,7 +117,7 @@ void KmsWindow::setFluxWindow(Window* window) {
 void KmsWindow::show() {
   if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(1.f, 1.f);
   Point const center{std::max(0.f, size_.width * 0.5f), std::max(0.f, size_.height * 0.5f)};
-  app_.setPointerPosition(center);
+  app_.setPointerPosition(this, center);
   cursorPos_ = center;
   applyCursor();
   Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
@@ -147,7 +147,7 @@ int KmsWindow::wakeFd() const { return app_.wakeFd(); }
 void KmsWindow::wakeEventLoop() { app_.wakeEventLoop(); }
 void KmsWindow::setCursor(Cursor kind) {
   cursor_ = kind == Cursor::Inherit ? Cursor::Arrow : kind;
-  applyCursor();
+  if (app_.focusedWindow() == this) applyCursor();
 }
 
 void KmsWindow::processEvents() {
@@ -184,7 +184,7 @@ void KmsWindow::suspendForVtSwitch() {
 }
 
 void KmsWindow::resumeFromVtSwitch() {
-  applyCursor();
+  if (app_.focusedWindow() == this) applyCursor();
   requestAnimationFrame();
   Application::instance().requestWindowRedraw(handle_);
 }
@@ -222,6 +222,13 @@ void KmsWindow::moveCursor(Point p) {
     drmModeMoveCursor(app_.drmFd(), connector_.crtcId, static_cast<int>(std::lround(cursorPos_.x)),
                       static_cast<int>(std::lround(cursorPos_.y)));
   }
+}
+
+void KmsWindow::hideCursor() {
+  if (cursorVisible_ && app_.isVtForeground()) {
+    drmModeSetCursor(app_.drmFd(), connector_.crtcId, 0, 0, 0);
+  }
+  cursorVisible_ = false;
 }
 
 void KmsWindow::armFrameTimer() {
@@ -310,7 +317,19 @@ bool KmsWindow::ensureCursorBuffer() {
 
 std::unique_ptr<PlatformWindow> KmsApplication::createWindow(WindowConfig const& config) {
   if (connectors_.empty()) throw std::runtime_error("No KMS connector is available for window creation");
-  return std::make_unique<KmsWindow>(*this, connectors_.front(), config);
+  auto connector = connectors_.begin();
+  if (!config.outputName.empty()) {
+    connector = std::find_if(connectors_.begin(), connectors_.end(), [&](KmsConnector const& candidate) {
+      return candidate.name == config.outputName;
+    });
+    if (connector == connectors_.end()) {
+      throw std::runtime_error("KMS: no connector named '" + config.outputName + "'");
+    }
+  }
+  if (windowForConnector(connector->connectorId)) {
+    throw std::runtime_error("KMS: connector '" + connector->name + "' already in use");
+  }
+  return std::make_unique<KmsWindow>(*this, *connector, config);
 }
 
 namespace detail {

@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #ifndef VK_VERSION_1_0
 struct VkInstance_T;
@@ -47,6 +48,7 @@ public:
   virtual void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) = 0;
   virtual std::string userDataDir() const = 0;
   virtual std::string cacheDir() const = 0;
+  virtual std::vector<std::string> availableOutputs() const { return {}; }
   virtual std::span<char const* const> requiredVulkanInstanceExtensions() const { return {}; }
   virtual VkSurfaceKHR createVulkanSurface(VkInstance, void*) { return nullptr; }
 };

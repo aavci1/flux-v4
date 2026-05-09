@@ -40,6 +40,9 @@ struct WindowConfig {
   Size minSize{};
   Size maxSize{};
   std::string restoreId;
+  /// On KMS, bind this window to a named output connector (for example "HDMI-A-1" or "DP-1").
+  /// Empty means the platform default output. Other backends currently ignore this value.
+  std::string outputName;
 };
 
 struct WindowState {
