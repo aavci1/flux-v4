@@ -2,12 +2,17 @@
 
 #include "Core/PlatformWindowCreate.hpp"
 
+#include <Flux/Core/Application.hpp>
+
 #include <fcntl.h>
 #include <libinput.h>
 #include <libudev.h>
+#include <linux/kd.h>
+#include <linux/vt.h>
 #include <poll.h>
 #include <cstdarg>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 #include <xf86drm.h>
@@ -33,16 +38,30 @@ KmsApplication* gKmsApplication = nullptr;
 struct TerminationSignalState {
   struct sigaction previousSigInt {};
   struct sigaction previousSigTerm {};
+  struct sigaction previousSigUsr1 {};
+  struct sigaction previousSigUsr2 {};
   bool sigIntInstalled = false;
   bool sigTermInstalled = false;
+  bool sigUsr1Installed = false;
+  bool sigUsr2Installed = false;
 };
 
 TerminationSignalState gTerminationSignals;
 volatile sig_atomic_t gTerminateSignalPending = 0;
+volatile sig_atomic_t gVtSignalPending = 0;
 volatile sig_atomic_t gSignalWakeFd = -1;
 
 void terminateSignalHandler(int) {
   gTerminateSignalPending = 1;
+  int const wakeFd = static_cast<int>(gSignalWakeFd);
+  if (wakeFd >= 0) {
+    char const c = 1;
+    (void)write(wakeFd, &c, 1);
+  }
+}
+
+void vtSignalHandler(int signal) {
+  gVtSignalPending = signal;
   int const wakeFd = static_cast<int>(gSignalWakeFd);
   if (wakeFd >= 0) {
     char const c = 1;
@@ -59,8 +78,17 @@ void restoreTerminationSignalHandlers() {
     sigaction(SIGTERM, &gTerminationSignals.previousSigTerm, nullptr);
     gTerminationSignals.sigTermInstalled = false;
   }
+  if (gTerminationSignals.sigUsr1Installed) {
+    sigaction(SIGUSR1, &gTerminationSignals.previousSigUsr1, nullptr);
+    gTerminationSignals.sigUsr1Installed = false;
+  }
+  if (gTerminationSignals.sigUsr2Installed) {
+    sigaction(SIGUSR2, &gTerminationSignals.previousSigUsr2, nullptr);
+    gTerminationSignals.sigUsr2Installed = false;
+  }
   gSignalWakeFd = -1;
   gTerminateSignalPending = 0;
+  gVtSignalPending = 0;
 }
 
 bool debugKms() {
@@ -77,6 +105,18 @@ void debugLog(char const* format, ...) {
   va_end(args);
   std::fprintf(stderr, "\n");
   std::fflush(stderr);
+}
+
+int readActiveVt() {
+  int fd = open("/sys/class/tty/tty0/active", O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return 0;
+  char buffer[32]{};
+  ssize_t const n = read(fd, buffer, sizeof(buffer) - 1);
+  close(fd);
+  if (n <= 0) return 0;
+  char const* p = buffer;
+  while (*p && !std::isdigit(static_cast<unsigned char>(*p))) ++p;
+  return *p ? std::atoi(p) : 0;
 }
 
 void libinputLog(libinput*, libinput_log_priority priority, char const* format, va_list args) {
@@ -334,13 +374,21 @@ KmsApplication::KmsApplication() {
 }
 
 KmsApplication::~KmsApplication() {
+  debugLog("destroying KMS application");
+  restoreConsole();
   uninstallSignalHandlers();
+  debugLog("releasing input devices");
   if (input_) libinput_unref(input_);
   if (udev_) udev_unref(udev_);
   if (drmFd_ >= 0) {
-    drmDropMaster(drmFd_);
+    if (drmMaster_) {
+      debugLog("dropping DRM master during shutdown");
+      if (drmDropMaster(drmFd_) != 0) debugLog("drmDropMaster during shutdown failed: %s", std::strerror(errno));
+      drmMaster_ = false;
+    }
     close(drmFd_);
   }
+  if (ttyFd_ >= 0) close(ttyFd_);
   if (wakePipe_[0] >= 0) close(wakePipe_[0]);
   if (wakePipe_[1] >= 0) close(wakePipe_[1]);
   if (gKmsApplication == this) gKmsApplication = nullptr;
@@ -351,12 +399,14 @@ void KmsApplication::initialize() {
   fcntl(wakePipe_[0], F_SETFL, fcntl(wakePipe_[0], F_GETFL, 0) | O_NONBLOCK);
   fcntl(wakePipe_[1], F_SETFL, fcntl(wakePipe_[1], F_GETFL, 0) | O_NONBLOCK);
   installSignalHandlers();
+  initializeConsole();
   if (!openFirstDisplayCard()) {
     throw std::runtime_error("No connected DRM/KMS display found");
   }
   if (drmSetMaster(drmFd_) != 0) {
     throw std::runtime_error("DRM master unavailable; another graphical session may be running.");
   }
+  drmMaster_ = true;
   enumerateConnectors();
   initializeInput();
 }
@@ -640,10 +690,97 @@ void KmsApplication::drainWakePipe() {
   while (read(wakePipe_[0], buffer, sizeof(buffer)) > 0) {}
 }
 
+void KmsApplication::initializeConsole() {
+  ttyFd_ = open("/dev/tty", O_RDWR | O_CLOEXEC);
+  if (ttyFd_ < 0) {
+    int const activeVt = readActiveVt();
+    if (activeVt > 0) {
+      std::string path = "/dev/tty" + std::to_string(activeVt);
+      ttyFd_ = open(path.c_str(), O_RDWR | O_CLOEXEC);
+      if (ttyFd_ >= 0) debugLog("using %s for VT switching", path.c_str());
+    }
+  }
+  if (ttyFd_ < 0) {
+    debugLog("failed to open a tty for VT switching: %s", std::strerror(errno));
+    return;
+  }
+  if (ioctl(ttyFd_, VT_GETMODE, &previousVtMode_) != 0) {
+    debugLog("VT_GETMODE failed on /dev/tty: %s", std::strerror(errno));
+    close(ttyFd_);
+    ttyFd_ = -1;
+    int const activeVt = readActiveVt();
+    if (activeVt > 0) {
+      std::string path = "/dev/tty" + std::to_string(activeVt);
+      ttyFd_ = open(path.c_str(), O_RDWR | O_CLOEXEC);
+      if (ttyFd_ >= 0) debugLog("retrying VT switching with %s", path.c_str());
+    }
+    if (ttyFd_ < 0 || ioctl(ttyFd_, VT_GETMODE, &previousVtMode_) != 0) {
+      debugLog("VT_GETMODE failed; VT switching fallback will use active VT polling only: %s", std::strerror(errno));
+      if (ttyFd_ >= 0) {
+        close(ttyFd_);
+        ttyFd_ = -1;
+      }
+      ourVt_ = activeVt;
+      return;
+    }
+  }
+  if (ioctl(ttyFd_, KDGETMODE, &previousConsoleMode_) != 0) {
+    previousConsoleMode_ = KD_TEXT;
+  }
+  vt_stat state{};
+  if (ioctl(ttyFd_, VT_GETSTATE, &state) == 0) {
+    ourVt_ = state.v_active;
+  } else {
+    ourVt_ = readActiveVt();
+  }
+
+  vt_mode mode = previousVtMode_;
+  mode.mode = VT_PROCESS;
+  mode.relsig = SIGUSR1;
+  mode.acqsig = SIGUSR2;
+  mode.frsig = 0;
+  if (ioctl(ttyFd_, VT_SETMODE, &mode) == 0) {
+    vtProcessMode_ = true;
+  } else {
+    debugLog("VT_SETMODE(VT_PROCESS) failed; active VT polling remains enabled: %s", std::strerror(errno));
+  }
+  if (ioctl(ttyFd_, KDSETMODE, KD_GRAPHICS) != 0) {
+    debugLog("KDSETMODE(KD_GRAPHICS) failed: %s", std::strerror(errno));
+  }
+  consoleInitialized_ = true;
+  vtForeground_ = true;
+  debugLog("initialized VT switching vt=%d processMode=%d", ourVt_, vtProcessMode_ ? 1 : 0);
+}
+
+void KmsApplication::restoreConsole() {
+  if (ttyFd_ < 0 || !consoleInitialized_) return;
+  debugLog("restoring console vt=%d foreground=%d previousMode=%d", ourVt_, vtForeground_ ? 1 : 0,
+           previousConsoleMode_);
+  if (vtProcessMode_) {
+    vt_mode mode = previousVtMode_;
+    if (mode.mode == VT_PROCESS) mode.mode = VT_AUTO;
+    if (ioctl(ttyFd_, VT_SETMODE, &mode) != 0) {
+      debugLog("VT_SETMODE restore failed: %s", std::strerror(errno));
+      vt_mode autoMode{};
+      autoMode.mode = VT_AUTO;
+      if (ioctl(ttyFd_, VT_SETMODE, &autoMode) != 0) {
+        debugLog("VT_SETMODE(VT_AUTO) fallback failed: %s", std::strerror(errno));
+      }
+    }
+  }
+  if (vtForeground_ && ioctl(ttyFd_, KDSETMODE, KD_TEXT) != 0) {
+    debugLog("KDSETMODE(KD_TEXT) during shutdown failed: %s", std::strerror(errno));
+  }
+  consoleInitialized_ = false;
+  vtProcessMode_ = false;
+  debugLog("console restore complete");
+}
+
 void KmsApplication::installSignalHandlers() {
   if (signalHandlersInstalled_) return;
   gSignalWakeFd = wakePipe_[1];
   gTerminateSignalPending = 0;
+  gVtSignalPending = 0;
 
   struct sigaction action {};
   sigemptyset(&action.sa_mask);
@@ -661,6 +798,22 @@ void KmsApplication::installSignalHandlers() {
     throw std::system_error(savedErrno, std::generic_category(), "sigaction(SIGTERM)");
   }
   gTerminationSignals.sigTermInstalled = true;
+
+  struct sigaction vtAction {};
+  sigemptyset(&vtAction.sa_mask);
+  vtAction.sa_handler = vtSignalHandler;
+  if (sigaction(SIGUSR1, &vtAction, &gTerminationSignals.previousSigUsr1) != 0) {
+    int const savedErrno = errno;
+    restoreTerminationSignalHandlers();
+    throw std::system_error(savedErrno, std::generic_category(), "sigaction(SIGUSR1)");
+  }
+  gTerminationSignals.sigUsr1Installed = true;
+  if (sigaction(SIGUSR2, &vtAction, &gTerminationSignals.previousSigUsr2) != 0) {
+    int const savedErrno = errno;
+    restoreTerminationSignalHandlers();
+    throw std::system_error(savedErrno, std::generic_category(), "sigaction(SIGUSR2)");
+  }
+  gTerminationSignals.sigUsr2Installed = true;
   signalHandlersInstalled_ = true;
 }
 
@@ -673,17 +826,91 @@ void KmsApplication::uninstallSignalHandlers() {
 void KmsApplication::handlePendingTerminateSignal() {
   if (!gTerminateSignalPending) return;
   gTerminateSignalPending = 0;
+  debugLog("termination signal received");
   requestTerminate();
 }
 
+void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
+  if (!vtForeground_) return;
+  vtForeground_ = false;
+  debugLog("releasing DRM master for VT switch");
+  for (KmsWindow* window : windows_) {
+    if (window) window->suspendForVtSwitch();
+  }
+  if (drmFd_ >= 0 && drmMaster_) {
+    if (drmDropMaster(drmFd_) != 0) debugLog("drmDropMaster failed: %s", std::strerror(errno));
+    drmMaster_ = false;
+  }
+  if (ttyFd_ >= 0) {
+    if (acknowledge && vtProcessMode_ && ioctl(ttyFd_, VT_RELDISP, 1) != 0) {
+      debugLog("VT_RELDISP release failed: %s", std::strerror(errno));
+    }
+  }
+}
+
+void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
+  if (vtForeground_) return;
+  debugLog("reacquiring DRM master after VT switch");
+  if (ttyFd_ >= 0 && acknowledge && vtProcessMode_ && ioctl(ttyFd_, VT_RELDISP, VT_ACKACQ) != 0) {
+    debugLog("VT_RELDISP acquire ack failed: %s", std::strerror(errno));
+  }
+  if (drmFd_ >= 0 && !drmMaster_) {
+    for (int attempt = 0; attempt < 10 && !drmMaster_; ++attempt) {
+      if (drmSetMaster(drmFd_) == 0) {
+        drmMaster_ = true;
+      } else {
+        debugLog("drmSetMaster attempt %d failed: %s", attempt + 1, std::strerror(errno));
+        usleep(100'000);
+      }
+    }
+    if (!drmMaster_) {
+      requestTerminate();
+      return;
+    }
+  }
+  if (ttyFd_ >= 0 && ioctl(ttyFd_, KDSETMODE, KD_GRAPHICS) != 0) {
+    debugLog("KDSETMODE(KD_GRAPHICS) after VT acquire failed: %s", std::strerror(errno));
+  }
+  vtForeground_ = true;
+  for (KmsWindow* window : windows_) {
+    if (window) window->resumeFromVtSwitch();
+  }
+  wakeEventLoop();
+}
+
+void KmsApplication::handlePendingVtSignal() {
+  int const signal = static_cast<int>(gVtSignalPending);
+  if (!signal) return;
+  gVtSignalPending = 0;
+  if (signal == SIGUSR1) {
+    releaseDrmMasterForVt(true);
+  } else if (signal == SIGUSR2) {
+    acquireDrmMasterForVt(true);
+  }
+}
+
+void KmsApplication::pollActiveVt() {
+  if (ourVt_ <= 0) return;
+  int const activeVt = readActiveVt();
+  if (activeVt <= 0) return;
+  if (activeVt != ourVt_ && vtForeground_) {
+    releaseDrmMasterForVt(false);
+  } else if (activeVt == ourVt_ && !vtForeground_) {
+    acquireDrmMasterForVt(false);
+  }
+}
+
 bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraFds) {
+  handlePendingVtSignal();
+  pollActiveVt();
   std::vector<pollfd> fds;
-  if (inputFd() >= 0) fds.push_back({inputFd(), POLLIN, 0});
+  if (isVtForeground() && inputFd() >= 0) fds.push_back({inputFd(), POLLIN, 0});
   if (wakePipe_[0] >= 0) fds.push_back({wakePipe_[0], POLLIN, 0});
   for (int fd : extraFds) {
     if (fd >= 0) fds.push_back({fd, POLLIN, 0});
   }
   for (KmsWindow const* window : windows_) {
+    if (!isVtForeground()) break;
     int const timerFd = window ? window->frameTimerFd() : -1;
     if (timerFd >= 0) {
       bool const alreadyPolled = std::any_of(fds.begin(), fds.end(), [&](pollfd const& pollFd) {
@@ -692,23 +919,30 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
       if (!alreadyPolled) fds.push_back({timerFd, POLLIN, 0});
     }
   }
-  int rc = poll(fds.data(), fds.size(), timeoutMs < 0 ? -1 : timeoutMs);
+  int const effectiveTimeout = ourVt_ > 0 ? (timeoutMs < 0 ? 250 : std::min(timeoutMs, 250)) : timeoutMs;
+  int rc = poll(fds.data(), fds.size(), effectiveTimeout < 0 ? -1 : effectiveTimeout);
   if (rc < 0) {
     if (errno == EINTR) {
+      handlePendingVtSignal();
+      pollActiveVt();
       handlePendingTerminateSignal();
       return true;
     }
     return false;
   }
   if (rc == 0) {
+    handlePendingVtSignal();
+    pollActiveVt();
     handlePendingTerminateSignal();
     return false;
   }
   for (auto const& fd : fds) {
     if (fd.fd == wakePipe_[0] && (fd.revents & POLLIN)) drainWakePipe();
   }
+  handlePendingVtSignal();
+  pollActiveVt();
   handlePendingTerminateSignal();
-  dispatchPendingInput();
+  if (isVtForeground()) dispatchPendingInput();
   return true;
 }
 

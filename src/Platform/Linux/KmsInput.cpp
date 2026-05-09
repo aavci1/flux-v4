@@ -119,7 +119,10 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
 }
 
 void KmsApplication::dispatchPendingInput() {
+  handlePendingVtSignal();
+  pollActiveVt();
   handlePendingTerminateSignal();
+  if (!isVtForeground()) return;
   if (!input_) return;
   int const dispatchResult = libinput_dispatch(input_);
   if (dispatchResult != 0 && debugKmsInput()) {

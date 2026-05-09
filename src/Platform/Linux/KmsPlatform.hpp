@@ -5,6 +5,7 @@
 
 #include <Flux/Core/Events.hpp>
 
+#include <linux/vt.h>
 #include <xf86drmMode.h>
 
 #include <atomic>
@@ -60,6 +61,7 @@ public:
   void wakeEventLoop();
   bool pollInputAndWake(int timeoutMs, std::span<int const> extraFds = {});
   void dispatchPendingInput();
+  bool isVtForeground() const noexcept { return vtForeground_; }
   void registerWindow(KmsWindow* window);
   void unregisterWindow(KmsWindow* window);
   KmsWindow* focusedWindow() const;
@@ -78,11 +80,18 @@ private:
   void collectShortcuts(MenuItem const& item);
   void collectShortcuts(MenuBar const& menu);
   void drainWakePipe();
+  void initializeConsole();
+  void restoreConsole();
   void installSignalHandlers();
   void uninstallSignalHandlers();
   void handlePendingTerminateSignal();
+  void handlePendingVtSignal();
+  void pollActiveVt();
+  void releaseDrmMasterForVt(bool acknowledge);
+  void acquireDrmMasterForVt(bool acknowledge);
 
   int drmFd_ = -1;
+  int ttyFd_ = -1;
   int wakePipe_[2]{-1, -1};
   udev* udev_ = nullptr;
   libinput* input_ = nullptr;
@@ -98,6 +107,13 @@ private:
   std::uint8_t pressedButtons_ = 0;
   std::atomic<bool> terminateRequested_{false};
   bool signalHandlersInstalled_ = false;
+  bool drmMaster_ = false;
+  bool consoleInitialized_ = false;
+  bool vtProcessMode_ = false;
+  bool vtForeground_ = true;
+  int previousConsoleMode_ = 0;
+  vt_mode previousVtMode_{};
+  int ourVt_ = 0;
 };
 
 KmsApplication& kmsApplication();
@@ -127,6 +143,8 @@ public:
   void completeAnimationFrame(bool needsAnotherFrame) override;
   void setCursor(Cursor kind) override;
 
+  void suspendForVtSwitch();
+  void resumeFromVtSwitch();
   void postFrameTick();
   Point clampPointer(Point p) const;
   void moveCursor(Point p);

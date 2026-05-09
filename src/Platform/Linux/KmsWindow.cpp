@@ -104,7 +104,7 @@ KmsWindow::KmsWindow(KmsApplication& app, KmsConnector connector, WindowConfig c
 }
 
 KmsWindow::~KmsWindow() {
-  if (cursorVisible_) drmModeSetCursor(app_.drmFd(), connector_.crtcId, 0, 0, 0);
+  if (cursorVisible_ && app_.isVtForeground()) drmModeSetCursor(app_.drmFd(), connector_.crtcId, 0, 0, 0);
   destroyCursorBuffer();
   app_.unregisterWindow(this);
   if (frameTimerFd_ >= 0) close(frameTimerFd_);
@@ -161,6 +161,7 @@ void KmsWindow::waitForEvents(int timeoutMs) {
 }
 
 void KmsWindow::requestAnimationFrame() {
+  if (!app_.isVtForeground()) return;
   if (framePending_) return;
   framePending_ = true;
   armFrameTimer();
@@ -171,11 +172,29 @@ void KmsWindow::acknowledgeAnimationFrameTick() {
 }
 
 void KmsWindow::completeAnimationFrame(bool needsAnotherFrame) {
-  if (needsAnotherFrame) requestAnimationFrame();
+  if (needsAnotherFrame && app_.isVtForeground()) requestAnimationFrame();
+}
+
+void KmsWindow::suspendForVtSwitch() {
+  framePending_ = false;
+  if (cursorVisible_) {
+    drmModeSetCursor(app_.drmFd(), connector_.crtcId, 0, 0, 0);
+    cursorVisible_ = false;
+  }
+}
+
+void KmsWindow::resumeFromVtSwitch() {
+  applyCursor();
+  requestAnimationFrame();
+  Application::instance().requestWindowRedraw(handle_);
 }
 
 void KmsWindow::postFrameTick() {
   if (!framePending_) return;
+  if (!app_.isVtForeground()) {
+    framePending_ = false;
+    return;
+  }
   Application::instance().eventQueue().post(FrameEvent{nowNanos(), handle_});
   Application::instance().eventQueue().dispatch();
   wakeEventLoop();
@@ -189,6 +208,7 @@ Point KmsWindow::clampPointer(Point p) const {
 
 void KmsWindow::moveCursor(Point p) {
   cursorPos_ = clampPointer(p);
+  if (!app_.isVtForeground()) return;
   if (!cursorVisible_) applyCursor();
   if (cursorVisible_) {
     drmModeMoveCursor(app_.drmFd(), connector_.crtcId, static_cast<int>(std::lround(cursorPos_.x)),
@@ -212,6 +232,7 @@ void KmsWindow::drainFrameTimer() {
 }
 
 void KmsWindow::applyCursor() {
+  if (!app_.isVtForeground()) return;
   if (!ensureCursorBuffer()) return;
   int const fd = app_.drmFd();
   int rc = drmModeSetCursor2(fd, connector_.crtcId, cursorBuffer_.handle, cursorBuffer_.width,
