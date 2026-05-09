@@ -3,6 +3,7 @@
 #include "Core/PlatformWindowCreate.hpp"
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/EventQueue.hpp>
 
 #include <fcntl.h>
 #include <libinput.h>
@@ -28,7 +29,9 @@
 #include <cstring>
 #include <filesystem>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -229,6 +232,15 @@ bool modeResolutionMatches(VkDisplayModePropertiesKHR const& mode, KmsConnector 
          mode.parameters.visibleRegion.height == connector.mode.vdisplay;
 }
 
+bool connectorModeChanged(KmsConnector const& a, KmsConnector const& b) {
+  return a.mode.hdisplay != b.mode.hdisplay || a.mode.vdisplay != b.mode.vdisplay ||
+         a.mode.vrefresh != b.mode.vrefresh || a.mode.clock != b.mode.clock;
+}
+
+bool connectorDpiChanged(KmsConnector const& a, KmsConnector const& b) {
+  return a.widthMm != b.widthMm || a.heightMm != b.heightMm;
+}
+
 std::uint32_t chooseAlphaMode(VkDisplayPlaneCapabilitiesKHR const& caps) {
   if ((caps.supportedAlpha & VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR) != 0) {
     return VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR;
@@ -386,6 +398,7 @@ KmsApplication::~KmsApplication() {
   uninstallSignalHandlers();
   debugLog("releasing input devices");
   if (input_) libinput_unref(input_);
+  if (udevMonitor_) udev_monitor_unref(udevMonitor_);
   if (udev_) udev_unref(udev_);
   if (drmFd_ >= 0) {
     if (drmMaster_) {
@@ -417,6 +430,7 @@ void KmsApplication::initialize() {
   drmMaster_ = true;
   enumerateConnectors();
   initializeInput();
+  initializeDrmMonitor();
 }
 
 bool KmsApplication::openFirstDisplayCard() {
@@ -446,6 +460,12 @@ bool KmsApplication::openFirstDisplayCard() {
 }
 
 void KmsApplication::enumerateConnectors() {
+  connectors_ = scanConnectors();
+  if (connectors_.empty()) throw std::runtime_error("No usable DRM/KMS connector found");
+}
+
+std::vector<KmsConnector> KmsApplication::scanConnectors() const {
+  std::vector<KmsConnector> result;
   drmModeRes* resources = drmModeGetResources(drmFd_);
   if (!resources) throw std::runtime_error("drmModeGetResources failed");
   for (int i = 0; i < resources->count_connectors; ++i) {
@@ -460,12 +480,12 @@ void KmsApplication::enumerateConnectors() {
       out.widthMm = connector->mmWidth;
       out.heightMm = connector->mmHeight;
       out.name = connectorName(*connector);
-      if (out.crtcId != 0) connectors_.push_back(out);
+      if (out.crtcId != 0) result.push_back(out);
     }
     drmModeFreeConnector(connector);
   }
   drmModeFreeResources(resources);
-  if (connectors_.empty()) throw std::runtime_error("No usable DRM/KMS connector found");
+  return result;
 }
 
 void KmsApplication::initializeInput() {
@@ -504,6 +524,124 @@ void KmsApplication::initializeInput() {
   }
   dispatchPendingInput();
   debugLog("input initialization complete with %d device(s)", inputDeviceCount_);
+}
+
+void KmsApplication::initializeDrmMonitor() {
+  if (!udev_ || udevMonitor_) return;
+  udevMonitor_ = udev_monitor_new_from_netlink(udev_, "udev");
+  if (!udevMonitor_) {
+    debugLog("udev_monitor_new_from_netlink failed; KMS hot-plug disabled");
+    return;
+  }
+  if (udev_monitor_filter_add_match_subsystem_devtype(udevMonitor_, "drm", nullptr) != 0) {
+    debugLog("udev_monitor_filter_add_match_subsystem_devtype(drm) failed; KMS hot-plug disabled");
+    udev_monitor_unref(udevMonitor_);
+    udevMonitor_ = nullptr;
+    return;
+  }
+  if (udev_monitor_enable_receiving(udevMonitor_) != 0) {
+    debugLog("udev_monitor_enable_receiving failed; KMS hot-plug disabled");
+    udev_monitor_unref(udevMonitor_);
+    udevMonitor_ = nullptr;
+    return;
+  }
+  udevMonitorFd_ = udev_monitor_get_fd(udevMonitor_);
+  debugLog("watching DRM hot-plug via udev fd=%d", udevMonitorFd_);
+}
+
+void KmsApplication::drainDrmMonitor() {
+  if (!udevMonitor_) return;
+  bool shouldReEnumerate = false;
+  for (;;) {
+    udev_device* device = udev_monitor_receive_device(udevMonitor_);
+    if (!device) break;
+    char const* action = udev_device_get_action(device);
+    char const* hotplug = udev_device_get_property_value(device, "HOTPLUG");
+    char const* devnode = udev_device_get_devnode(device);
+    debugLog("DRM udev event action=%s hotplug=%s devnode=%s", action ? action : "(none)",
+             hotplug ? hotplug : "(none)", devnode ? devnode : "(none)");
+    if (hotplug && std::string_view(hotplug) == "1") {
+      shouldReEnumerate = true;
+    }
+    udev_device_unref(device);
+  }
+  if (shouldReEnumerate) reEnumerateConnectors();
+}
+
+void KmsApplication::reEnumerateConnectors() {
+  std::vector<KmsConnector> next;
+  try {
+    next = scanConnectors();
+  } catch (std::exception const& e) {
+    debugLog("connector re-enumeration failed: %s", e.what());
+    return;
+  }
+
+  std::unordered_map<std::uint32_t, KmsConnector> previousById;
+  std::unordered_map<std::uint32_t, KmsConnector> nextById;
+  for (KmsConnector const& connector : connectors_) previousById.emplace(connector.connectorId, connector);
+  for (KmsConnector const& connector : next) nextById.emplace(connector.connectorId, connector);
+
+  for (KmsConnector const& connector : connectors_) {
+    if (nextById.contains(connector.connectorId)) continue;
+    debugLog("KMS output removed: %s", connector.name.c_str());
+    Application::instance().eventQueue().post(WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputRemoved,
+                                                                   .handle = 0,
+                                                                   .window = nullptr,
+                                                                   .outputName = connector.name});
+    for (KmsWindow* window : windows_) {
+      if (window && window->connectorId() == connector.connectorId) {
+        Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::CloseRequest,
+                                                              .handle = window->handle(),
+                                                              .size = {},
+                                                              .dpi = 1.f,
+                                                              .dpiX = 1.f,
+                                                              .dpiY = 1.f});
+      }
+    }
+  }
+
+  for (KmsConnector const& connector : next) {
+    auto previous = previousById.find(connector.connectorId);
+    if (previous == previousById.end()) {
+      debugLog("KMS output added: %s", connector.name.c_str());
+      Application::instance().eventQueue().post(WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputAdded,
+                                                                     .handle = 0,
+                                                                     .window = nullptr,
+                                                                     .outputName = connector.name});
+      continue;
+    }
+    bool const modeChanged = connectorModeChanged(previous->second, connector);
+    bool const dpiChanged = connectorDpiChanged(previous->second, connector);
+    if (!modeChanged && !dpiChanged && previous->second.name == connector.name) continue;
+
+    debugLog("KMS output changed: %s", connector.name.c_str());
+    for (KmsWindow* window : windows_) {
+      if (!window || window->connectorId() != connector.connectorId) continue;
+      window->updateConnector(connector);
+      if (dpiChanged) {
+        Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
+                                                              .handle = window->handle(),
+                                                              .size = {},
+                                                              .dpi = 1.f,
+                                                              .dpiX = 1.f,
+                                                              .dpiY = 1.f});
+      }
+      if (modeChanged) {
+        Size const size{static_cast<float>(std::max(1, static_cast<int>(connector.mode.hdisplay))),
+                        static_cast<float>(std::max(1, static_cast<int>(connector.mode.vdisplay)))};
+        Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
+                                                              .handle = window->handle(),
+                                                              .size = size,
+                                                              .dpi = 1.f,
+                                                              .dpiX = 1.f,
+                                                              .dpiY = 1.f});
+      }
+    }
+  }
+
+  connectors_ = std::move(next);
+  Application::instance().eventQueue().dispatch();
 }
 
 void KmsApplication::setApplicationName(std::string name) {
@@ -991,6 +1129,7 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
   pollActiveVt();
   std::vector<pollfd> fds;
   if (isVtForeground() && inputFd() >= 0) fds.push_back({inputFd(), POLLIN, 0});
+  if (isVtForeground() && udevMonitorFd_ >= 0) fds.push_back({udevMonitorFd_, POLLIN, 0});
   if (activeVtNotifyFd_ >= 0) fds.push_back({activeVtNotifyFd_, POLLIN, 0});
   if (wakePipe_[0] >= 0) fds.push_back({wakePipe_[0], POLLIN, 0});
   for (int fd : extraFds) {
@@ -1031,6 +1170,9 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
     if (fd.fd == wakePipe_[0] && (fd.revents & POLLIN)) drainWakePipe();
     if (fd.fd == activeVtNotifyFd_ && (fd.revents & (POLLIN | POLLERR | POLLHUP))) {
       drainActiveVtWatch();
+    }
+    if (fd.fd == udevMonitorFd_ && (fd.revents & (POLLIN | POLLERR | POLLHUP))) {
+      drainDrmMonitor();
     }
   }
   handlePendingVtSignal();

@@ -20,6 +20,7 @@
 struct libinput;
 struct libinput_device;
 struct udev;
+struct udev_monitor;
 
 namespace flux {
 
@@ -77,6 +78,10 @@ private:
   bool openFirstDisplayCard();
   void enumerateConnectors();
   void initializeInput();
+  void initializeDrmMonitor();
+  void drainDrmMonitor();
+  std::vector<KmsConnector> scanConnectors() const;
+  void reEnumerateConnectors();
   void collectShortcuts(MenuItem const& item);
   void collectShortcuts(MenuBar const& menu);
   void drainWakePipe();
@@ -100,6 +105,8 @@ private:
   int activeVtWatch_ = -1;
   int wakePipe_[2]{-1, -1};
   udev* udev_ = nullptr;
+  udev_monitor* udevMonitor_ = nullptr;
+  int udevMonitorFd_ = -1;
   libinput* input_ = nullptr;
   int inputDeviceCount_ = 0;
   std::vector<KmsConnector> connectors_;
@@ -152,6 +159,9 @@ public:
 
   void suspendForVtSwitch();
   void resumeFromVtSwitch();
+  std::uint32_t connectorId() const noexcept { return connector_.connectorId; }
+  std::string const& outputName() const noexcept { return connector_.name; }
+  void updateConnector(KmsConnector connector);
   void postFrameTick();
   Point clampPointer(Point p) const;
   void moveCursor(Point p);

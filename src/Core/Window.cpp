@@ -86,9 +86,10 @@ Window::Window(const WindowConfig& config) {
   d->platform_ = detail::createPlatformWindow(config);
   d->platform_->setFluxWindow(this);
   Application::instance().eventQueue().post(WindowLifecycleEvent{
-      WindowLifecycleEvent::Kind::Registered,
-      handle(),
-      this,
+      .kind = WindowLifecycleEvent::Kind::Registered,
+      .handle = handle(),
+      .window = this,
+      .outputName = {},
   });
 }
 
@@ -99,8 +100,12 @@ Window::~Window() {
   const unsigned int id = handle();
   if (Application::hasInstance()) {
     Application::instance().unregisterWindowHandle(id);
-    Application::instance().eventQueue().post(
-        WindowLifecycleEvent{WindowLifecycleEvent::Kind::Unregistered, id, nullptr});
+    Application::instance().eventQueue().post(WindowLifecycleEvent{
+        .kind = WindowLifecycleEvent::Kind::Unregistered,
+        .handle = id,
+        .window = nullptr,
+        .outputName = {},
+    });
   }
 }
 

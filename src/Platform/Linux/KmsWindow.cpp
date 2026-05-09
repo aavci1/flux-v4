@@ -189,6 +189,14 @@ void KmsWindow::resumeFromVtSwitch() {
   Application::instance().requestWindowRedraw(handle_);
 }
 
+void KmsWindow::updateConnector(KmsConnector connector) {
+  connector_ = std::move(connector);
+  size_ = sizeForMode(connector_.mode);
+  if (canvas_) {
+    canvas_->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
+  }
+}
+
 void KmsWindow::postFrameTick() {
   if (!framePending_) return;
   if (!app_.isVtForeground()) {
