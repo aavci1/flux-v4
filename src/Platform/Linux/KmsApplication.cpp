@@ -12,6 +12,7 @@
 #include <poll.h>
 #include <cstdarg>
 #include <signal.h>
+#include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <vulkan/vulkan.h>
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -98,7 +100,7 @@ bool debugKms() {
 
 void debugLog(char const* format, ...) {
   if (!debugKms()) return;
-  std::fprintf(stderr, "Flux KMS: ");
+  std::fprintf(stderr, "[flux:kms] ");
   va_list args;
   va_start(args, format);
   std::vfprintf(stderr, format, args);
@@ -121,9 +123,14 @@ int readActiveVt() {
 
 void libinputLog(libinput*, libinput_log_priority priority, char const* format, va_list args) {
   if (!debugKms()) return;
-  std::fprintf(stderr, "Flux KMS libinput[%d]: ", static_cast<int>(priority));
+  std::fprintf(stderr, "[flux:kms:libinput:%d] ", static_cast<int>(priority));
   std::vfprintf(stderr, format, args);
   std::fflush(stderr);
+}
+
+std::int64_t monotonicMillis() {
+  using namespace std::chrono;
+  return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 void vkCheck(VkResult result, char const* what) {
@@ -388,6 +395,7 @@ KmsApplication::~KmsApplication() {
     }
     close(drmFd_);
   }
+  closeActiveVtWatch();
   if (ttyFd_ >= 0) close(ttyFd_);
   if (wakePipe_[0] >= 0) close(wakePipe_[0]);
   if (wakePipe_[1] >= 0) close(wakePipe_[1]);
@@ -592,7 +600,7 @@ VkSurfaceKHR KmsApplication::createVulkanSurface(VkInstance instance, void* nati
           VkResult const acquireResult = acquireDrmDisplay(physical, drmFd_, drmDisplay);
           if (acquireResult != VK_SUCCESS && acquireResult != VK_ERROR_INITIALIZATION_FAILED) {
             std::fprintf(stderr,
-                         "Flux KMS: vkAcquireDrmDisplayEXT failed for connector %s with %s (%d); trying surface creation anyway.\n",
+                         "[flux:kms] vkAcquireDrmDisplayEXT failed for connector %s with %s (%d); trying surface creation anyway.\n",
                          connector->name.c_str(), vkResultName(acquireResult), static_cast<int>(acquireResult));
           }
         }
@@ -664,13 +672,13 @@ VkSurfaceKHR KmsApplication::createVulkanSurface(VkInstance instance, void* nati
   }
 
   std::fprintf(stderr,
-               "Flux KMS: no Vulkan display surface for connector %s id=%u (%ux%u @ %u mHz); "
+               "[flux:kms] no Vulkan display surface for connector %s id=%u (%ux%u @ %u mHz); "
                "VK_EXT_acquire_drm_display=%s mapped=%s candidates=%zu.\n",
                connector->name.c_str(), connector->connectorId, connector->mode.hdisplay,
                connector->mode.vdisplay, refreshRateMilliHz(connector->mode),
                hasDrmDisplayExtension ? "yes" : "no", drmDisplayMapped ? "yes" : "no", candidates.size());
   for (std::string const& line : diagnostics) {
-    std::fprintf(stderr, "Flux KMS: %s\n", line.c_str());
+    std::fprintf(stderr, "[flux:kms] %s\n", line.c_str());
   }
   throw std::runtime_error("No Vulkan display surface matched the selected KMS connector");
 }
@@ -690,10 +698,84 @@ void KmsApplication::drainWakePipe() {
   while (read(wakePipe_[0], buffer, sizeof(buffer)) > 0) {}
 }
 
+void KmsApplication::initializeActiveVtWatch() {
+  if (ourVt_ <= 0 || activeVtNotifyFd_ >= 0) return;
+
+  activeVtNotifyFd_ = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+  if (activeVtNotifyFd_ < 0) {
+    debugLog("inotify_init1 for active VT failed; using periodic fallback: %s", std::strerror(errno));
+    return;
+  }
+
+  activeVtWatch_ = inotify_add_watch(activeVtNotifyFd_, "/sys/class/tty/tty0/active",
+                                     IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE_SELF |
+                                         IN_MOVE_SELF | IN_IGNORED);
+  if (activeVtWatch_ < 0) {
+    debugLog("inotify_add_watch for active VT failed; using periodic fallback: %s", std::strerror(errno));
+    closeActiveVtWatch();
+    return;
+  }
+
+  debugLog("watching active VT via inotify fd=%d", activeVtNotifyFd_);
+}
+
+void KmsApplication::closeActiveVtWatch() {
+  if (activeVtNotifyFd_ >= 0) {
+    close(activeVtNotifyFd_);
+    activeVtNotifyFd_ = -1;
+  }
+  activeVtWatch_ = -1;
+}
+
+void KmsApplication::handleActiveVt(int activeVt) {
+  if (activeVt <= 0 || ourVt_ <= 0) return;
+  if (activeVt != ourVt_ && vtForeground_) {
+    releaseDrmMasterForVt(false);
+  } else if (activeVt == ourVt_ && !vtForeground_) {
+    acquireDrmMasterForVt(false);
+  }
+}
+
+void KmsApplication::drainActiveVtWatch() {
+  if (activeVtNotifyFd_ < 0) return;
+
+  bool sawEvent = false;
+  bool watchInvalidated = false;
+  char buffer[4096];
+  for (;;) {
+    ssize_t const n = read(activeVtNotifyFd_, buffer, sizeof(buffer));
+    if (n < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+      debugLog("active VT inotify read failed: %s", std::strerror(errno));
+      break;
+    }
+    if (n == 0) break;
+    sawEvent = true;
+
+    ssize_t offset = 0;
+    while (offset + static_cast<ssize_t>(sizeof(inotify_event)) <= n) {
+      auto const* event = reinterpret_cast<inotify_event const*>(buffer + offset);
+      if (event->wd == activeVtWatch_ &&
+          (event->mask & (IN_IGNORED | IN_DELETE_SELF | IN_MOVE_SELF)) != 0) {
+        watchInvalidated = true;
+      }
+      offset += static_cast<ssize_t>(sizeof(inotify_event)) + static_cast<ssize_t>(event->len);
+    }
+  }
+
+  if (watchInvalidated) {
+    closeActiveVtWatch();
+    initializeActiveVtWatch();
+  }
+  if (sawEvent) {
+    handleActiveVt(readActiveVt());
+  }
+}
+
 void KmsApplication::initializeConsole() {
+  int activeVt = readActiveVt();
   ttyFd_ = open("/dev/tty", O_RDWR | O_CLOEXEC);
   if (ttyFd_ < 0) {
-    int const activeVt = readActiveVt();
     if (activeVt > 0) {
       std::string path = "/dev/tty" + std::to_string(activeVt);
       ttyFd_ = open(path.c_str(), O_RDWR | O_CLOEXEC);
@@ -702,25 +784,29 @@ void KmsApplication::initializeConsole() {
   }
   if (ttyFd_ < 0) {
     debugLog("failed to open a tty for VT switching: %s", std::strerror(errno));
+    ourVt_ = activeVt;
+    initializeActiveVtWatch();
     return;
   }
   if (ioctl(ttyFd_, VT_GETMODE, &previousVtMode_) != 0) {
     debugLog("VT_GETMODE failed on /dev/tty: %s", std::strerror(errno));
     close(ttyFd_);
     ttyFd_ = -1;
-    int const activeVt = readActiveVt();
+    activeVt = readActiveVt();
     if (activeVt > 0) {
       std::string path = "/dev/tty" + std::to_string(activeVt);
       ttyFd_ = open(path.c_str(), O_RDWR | O_CLOEXEC);
       if (ttyFd_ >= 0) debugLog("retrying VT switching with %s", path.c_str());
     }
     if (ttyFd_ < 0 || ioctl(ttyFd_, VT_GETMODE, &previousVtMode_) != 0) {
-      debugLog("VT_GETMODE failed; VT switching fallback will use active VT polling only: %s", std::strerror(errno));
+      debugLog("VT_GETMODE failed; VT switching fallback will use active VT notifications: %s",
+               std::strerror(errno));
       if (ttyFd_ >= 0) {
         close(ttyFd_);
         ttyFd_ = -1;
       }
       ourVt_ = activeVt;
+      initializeActiveVtWatch();
       return;
     }
   }
@@ -742,13 +828,14 @@ void KmsApplication::initializeConsole() {
   if (ioctl(ttyFd_, VT_SETMODE, &mode) == 0) {
     vtProcessMode_ = true;
   } else {
-    debugLog("VT_SETMODE(VT_PROCESS) failed; active VT polling remains enabled: %s", std::strerror(errno));
+    debugLog("VT_SETMODE(VT_PROCESS) failed; active VT notification remains enabled: %s", std::strerror(errno));
   }
   if (ioctl(ttyFd_, KDSETMODE, KD_GRAPHICS) != 0) {
     debugLog("KDSETMODE(KD_GRAPHICS) failed: %s", std::strerror(errno));
   }
   consoleInitialized_ = true;
   vtForeground_ = true;
+  initializeActiveVtWatch();
   debugLog("initialized VT switching vt=%d processMode=%d", ourVt_, vtProcessMode_ ? 1 : 0);
 }
 
@@ -891,13 +978,12 @@ void KmsApplication::handlePendingVtSignal() {
 
 void KmsApplication::pollActiveVt() {
   if (ourVt_ <= 0) return;
-  int const activeVt = readActiveVt();
-  if (activeVt <= 0) return;
-  if (activeVt != ourVt_ && vtForeground_) {
-    releaseDrmMasterForVt(false);
-  } else if (activeVt == ourVt_ && !vtForeground_) {
-    acquireDrmMasterForVt(false);
-  }
+  if (activeVtNotifyFd_ >= 0) return;
+
+  std::int64_t const now = monotonicMillis();
+  if (now < nextActiveVtPollMs_) return;
+  nextActiveVtPollMs_ = now + (vtForeground_ ? 250 : 1000);
+  handleActiveVt(readActiveVt());
 }
 
 bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraFds) {
@@ -905,6 +991,7 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
   pollActiveVt();
   std::vector<pollfd> fds;
   if (isVtForeground() && inputFd() >= 0) fds.push_back({inputFd(), POLLIN, 0});
+  if (activeVtNotifyFd_ >= 0) fds.push_back({activeVtNotifyFd_, POLLIN, 0});
   if (wakePipe_[0] >= 0) fds.push_back({wakePipe_[0], POLLIN, 0});
   for (int fd : extraFds) {
     if (fd >= 0) fds.push_back({fd, POLLIN, 0});
@@ -919,7 +1006,11 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
       if (!alreadyPolled) fds.push_back({timerFd, POLLIN, 0});
     }
   }
-  int const effectiveTimeout = ourVt_ > 0 ? (timeoutMs < 0 ? 250 : std::min(timeoutMs, 250)) : timeoutMs;
+  int const activeVtFallbackTimeout = vtForeground_ ? 250 : 1000;
+  int const effectiveTimeout = ourVt_ > 0 && activeVtNotifyFd_ < 0
+                                   ? (timeoutMs < 0 ? activeVtFallbackTimeout
+                                                    : std::min(timeoutMs, activeVtFallbackTimeout))
+                                   : timeoutMs;
   int rc = poll(fds.data(), fds.size(), effectiveTimeout < 0 ? -1 : effectiveTimeout);
   if (rc < 0) {
     if (errno == EINTR) {
@@ -938,6 +1029,9 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
   }
   for (auto const& fd : fds) {
     if (fd.fd == wakePipe_[0] && (fd.revents & POLLIN)) drainWakePipe();
+    if (fd.fd == activeVtNotifyFd_ && (fd.revents & (POLLIN | POLLERR | POLLHUP))) {
+      drainActiveVtWatch();
+    }
   }
   handlePendingVtSignal();
   pollActiveVt();

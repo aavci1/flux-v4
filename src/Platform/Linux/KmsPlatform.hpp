@@ -82,6 +82,10 @@ private:
   void drainWakePipe();
   void initializeConsole();
   void restoreConsole();
+  void initializeActiveVtWatch();
+  void closeActiveVtWatch();
+  void drainActiveVtWatch();
+  void handleActiveVt(int activeVt);
   void installSignalHandlers();
   void uninstallSignalHandlers();
   void handlePendingTerminateSignal();
@@ -92,6 +96,8 @@ private:
 
   int drmFd_ = -1;
   int ttyFd_ = -1;
+  int activeVtNotifyFd_ = -1;
+  int activeVtWatch_ = -1;
   int wakePipe_[2]{-1, -1};
   udev* udev_ = nullptr;
   libinput* input_ = nullptr;
@@ -114,6 +120,7 @@ private:
   int previousConsoleMode_ = 0;
   vt_mode previousVtMode_{};
   int ourVt_ = 0;
+  std::int64_t nextActiveVtPollMs_ = 0;
 };
 
 KmsApplication& kmsApplication();

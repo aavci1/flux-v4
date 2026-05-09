@@ -53,7 +53,7 @@ void KmsApplication::handleInputDeviceAdded(libinput_device* device) {
     libinput_device_config_tap_set_enabled(device, LIBINPUT_CONFIG_TAP_ENABLED);
   }
   if (debugKmsInput()) {
-    std::fprintf(stderr, "Flux KMS input: device added: %s [keyboard=%d pointer=%d touch=%d tap_fingers=%d]\n",
+    std::fprintf(stderr, "[flux:kms:input] device added: %s [keyboard=%d pointer=%d touch=%d tap_fingers=%d]\n",
                  libinput_device_get_name(device),
                  libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD),
                  libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER),
@@ -83,7 +83,7 @@ void KmsApplication::routePointer(Point position, InputEvent::Kind kind, MouseBu
                            kind == InputEvent::Kind::PointerDown ? "down" :
                            kind == InputEvent::Kind::PointerUp ? "up" :
                            kind == InputEvent::Kind::Scroll ? "scroll" : "pointer";
-    std::fprintf(stderr, "Flux KMS input: pointer %s at %.1f,%.1f button=%u mask=%u\n",
+    std::fprintf(stderr, "[flux:kms:input] pointer %s at %.1f,%.1f button=%u mask=%u\n",
                  kindName, pointerPos_.x, pointerPos_.y, static_cast<unsigned int>(button),
                  static_cast<unsigned int>(pressedButtons_));
   }
@@ -126,7 +126,7 @@ void KmsApplication::dispatchPendingInput() {
   if (!input_) return;
   int const dispatchResult = libinput_dispatch(input_);
   if (dispatchResult != 0 && debugKmsInput()) {
-    std::fprintf(stderr, "Flux KMS input: libinput_dispatch returned %d\n", dispatchResult);
+    std::fprintf(stderr, "[flux:kms:input] libinput_dispatch returned %d\n", dispatchResult);
   }
   while (libinput_event* event = libinput_get_event(input_)) {
     switch (libinput_event_get_type(event)) {
@@ -136,7 +136,7 @@ void KmsApplication::dispatchPendingInput() {
     case LIBINPUT_EVENT_DEVICE_REMOVED:
       if (debugKmsInput()) {
         libinput_device* device = libinput_event_get_device(event);
-        std::fprintf(stderr, "Flux KMS input: device removed: %s\n",
+        std::fprintf(stderr, "[flux:kms:input] device removed: %s\n",
                      device ? libinput_device_get_name(device) : "(unknown)");
       }
       break;
@@ -231,7 +231,7 @@ void KmsApplication::dispatchPendingInput() {
     }
     default:
       if (debugKmsInput()) {
-        std::fprintf(stderr, "Flux KMS input: ignored libinput event type %d\n",
+        std::fprintf(stderr, "[flux:kms:input] ignored libinput event type %d\n",
                      static_cast<int>(libinput_event_get_type(event)));
       }
       break;

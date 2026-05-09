@@ -243,7 +243,7 @@ void KmsWindow::applyCursor() {
   }
   if (rc != 0) {
     if (!cursorVisible_) {
-      std::fprintf(stderr, "Flux KMS: failed to set hardware cursor on connector %s.\n", connector_.name.c_str());
+      std::fprintf(stderr, "[flux:kms] failed to set hardware cursor on connector %s.\n", connector_.name.c_str());
     }
     cursorVisible_ = false;
     return;
@@ -271,7 +271,7 @@ bool KmsWindow::ensureCursorBuffer() {
   create.height = height;
   create.bpp = 32;
   if (drmIoctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &create) != 0) {
-    std::fprintf(stderr, "Flux KMS: failed to create cursor buffer.\n");
+    std::fprintf(stderr, "[flux:kms] failed to create cursor buffer.\n");
     return false;
   }
   drm_mode_map_dumb map{};
@@ -280,7 +280,7 @@ bool KmsWindow::ensureCursorBuffer() {
     drm_mode_destroy_dumb destroy{};
     destroy.handle = create.handle;
     drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
-    std::fprintf(stderr, "Flux KMS: failed to map cursor buffer.\n");
+    std::fprintf(stderr, "[flux:kms] failed to map cursor buffer.\n");
     return false;
   }
   void* mapped = mmap(nullptr, create.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, map.offset);
@@ -288,7 +288,7 @@ bool KmsWindow::ensureCursorBuffer() {
     drm_mode_destroy_dumb destroy{};
     destroy.handle = create.handle;
     drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
-    std::fprintf(stderr, "Flux KMS: failed to mmap cursor buffer.\n");
+    std::fprintf(stderr, "[flux:kms] failed to mmap cursor buffer.\n");
     return false;
   }
   drawArrowCursor(static_cast<std::uint32_t*>(mapped), create.pitch / sizeof(std::uint32_t), height);
