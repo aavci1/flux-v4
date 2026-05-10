@@ -15,15 +15,15 @@ struct AssistTile : ViewModifiers<AssistTile> {
         auto theme = useEnvironment<ThemeKey>();
 
         auto motion = [theme] { return Transition::ease(theme().durationFast); };
-        auto bg = useAnimation([active = active, theme] {
+        auto bg = useAnimated([active = active, theme] {
             Theme const &t = theme();
             return active.evaluate() ? t.selectedContentBackgroundColor : t.controlBackgroundColor;
         }, motion);
-        auto border = useAnimation([active = active, theme] {
+        auto border = useAnimated([active = active, theme] {
             Theme const &t = theme();
             return active.evaluate() ? t.accentColor : t.separatorColor;
         }, motion);
-        auto labelColor = useAnimation([active = active, theme] {
+        auto labelColor = useAnimated([active = active, theme] {
             Theme const &t = theme();
             return active.evaluate() ? t.accentColor : t.labelColor;
         }, motion);

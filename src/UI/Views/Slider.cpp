@@ -149,7 +149,7 @@ Element Slider::body() const {
         return (isDisabled || dragging()) ? Transition::instant()
                                           : Transition::ease(theme().durationMedium);
     };
-    auto fractionAnim = useAnimation(fractionTarget, fractionMotion);
+    auto fractionAnim = useAnimated(fractionTarget, fractionMotion);
 
     return ZStack {
         .horizontalAlignment = Alignment::Start,

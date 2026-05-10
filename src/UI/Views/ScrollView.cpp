@@ -258,9 +258,9 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     indicatorOverlay->appendChild(std::move(indicator));
   }
   viewportNode->appendChild(std::move(indicatorOverlay));
-  Animation<float> indicatorOpacity{0.f};
+  Animated<float> indicatorOpacity{0.f};
   Reactive::Signal<float> indicatorOpacitySignal = indicatorOpacity.signal();
-  Animation<float> scrollIdleProgress{1.f};
+  Animated<float> scrollIdleProgress{1.f};
   Reactive::Signal<float> scrollIdleProgressSignal = scrollIdleProgress.signal();
   Reactive::SmallFn<void()> indicatorRedraw = ctx.redrawCallback();
   auto indicatorFadeTargetVisible = std::make_shared<bool>(false);

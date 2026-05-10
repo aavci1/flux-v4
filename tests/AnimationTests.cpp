@@ -78,8 +78,8 @@ scenegraph::RectNode const* findMovedThumb(scenegraph::SceneNode const& node) {
 
 } // namespace
 
-TEST_CASE("Animation repeats across finite iterations") {
-  Animation<float> value{0.f};
+TEST_CASE("Animated repeats across finite iterations") {
+  Animated<float> value{0.f};
   value.play(10.f, AnimationOptions {
       .transition = Transition::linear(1.f),
       .repeat = 3,
@@ -102,8 +102,8 @@ TEST_CASE("Animation repeats across finite iterations") {
   CHECK_FALSE(value.isRunning());
 }
 
-TEST_CASE("Animation autoreverse returns to its start on even iteration counts") {
-  Animation<float> value{0.f};
+TEST_CASE("Animated autoreverse returns to its start on even iteration counts") {
+  Animated<float> value{0.f};
   value.play(10.f, AnimationOptions {
       .transition = Transition::linear(1.f),
       .repeat = 2,
@@ -136,9 +136,9 @@ TEST_CASE("Animation options preserve transition and playback configuration") {
   CHECK(options.autoreverse);
 }
 
-TEST_CASE("Animation copies share playback state") {
-  Animation<float> original{0.f};
-  Animation<float> copy = original;
+TEST_CASE("Animated copies share playback state") {
+  Animated<float> original{0.f};
+  Animated<float> copy = original;
 
   copy.play(10.f, Transition::linear(1.f));
 

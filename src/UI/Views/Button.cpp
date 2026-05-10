@@ -137,9 +137,9 @@ Element Button::body() const {
     auto scaleTarget = [disabledBinding, pressed] {
         return (pressed() && !disabledBinding.evaluate()) ? 0.97f : 1.f;
     };
-    auto fillAnim = useAnimation(fillTarget, motion);
-    auto labelAnim = useAnimation(labelTarget, motion);
-    auto scaleAnim = useAnimation(scaleTarget, motion);
+    auto fillAnim = useAnimated(fillTarget, motion);
+    auto labelAnim = useAnimated(labelTarget, motion);
+    auto scaleAnim = useAnimated(scaleTarget, motion);
     Reactive::Bindable<ShadowStyle> const shadow{[disabledBinding, pressed, hovered, colors, theme] {
         if (disabledBinding.evaluate()) {
             return ShadowStyle::none();
@@ -223,7 +223,7 @@ Element LinkButton::body() const {
                hovered()                 ? lighten(accentResolved, 0.12f) :
                                            accentResolved;
     };
-    auto labelAnim = useAnimation(labelTarget, motion);
+    auto labelAnim = useAnimated(labelTarget, motion);
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {
@@ -286,7 +286,7 @@ Element IconButton::body() const {
                hovered()                 ? lighten(accentResolved, 0.12f) :
                                            accentResolved;
     };
-    auto iconAnim = useAnimation(iconTarget, motion);
+    auto iconAnim = useAnimated(iconTarget, motion);
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {

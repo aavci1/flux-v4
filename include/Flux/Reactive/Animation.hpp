@@ -38,12 +38,12 @@ inline double steadyNowSeconds() {
 } // namespace detail
 
 template<Interpolatable T>
-class Animation {
+class Animated {
 public:
-  Animation()
-      : Animation(T{}) {}
+  Animated()
+      : Animated(T{}) {}
 
-  explicit Animation(T initial)
+  explicit Animated(T initial)
       : state_(std::make_shared<State>(std::move(initial))) {}
 
   T const& get() const { return state().value.get(); }
@@ -73,7 +73,7 @@ public:
     AnimationClock::instance().registerAnimation(&self);
   }
 
-  Animation const& operator=(T value) const {
+  Animated const& operator=(T value) const {
     set(std::move(value), WithTransition::current());
     return *this;
   }
@@ -198,7 +198,7 @@ private:
   };
 
   State& state() const {
-    assert(state_ && "using an empty Animation handle");
+    assert(state_ && "using an empty Animated handle");
     return *state_;
   }
 

@@ -274,13 +274,13 @@ void useEffect(Fn&& fn) {
 }
 
 template<Interpolatable T>
-Animation<T> useAnimation(T initial = T{}) {
-  return Animation<T>(std::move(initial));
+Animated<T> useAnimated(T initial = T{}) {
+  return Animated<T>(std::move(initial));
 }
 
 template<Interpolatable T>
-Animation<T> useAnimation(T initial, AnimationOptions options) {
-  Animation<T> animation{std::move(initial)};
+Animated<T> useAnimated(T initial, AnimationOptions options) {
+  Animated<T> animation{std::move(initial)};
   animation.play(animation.get(), std::move(options));
   return animation;
 }
@@ -299,8 +299,8 @@ bool animationTargetChanged(T const& current, T const& next) {
 } // namespace detail
 
 template<Interpolatable T, typename TargetFn, typename TransitionFn>
-Animation<T> useAnimation(T initial, TargetFn&& target, TransitionFn&& transition) {
-  Animation<T> animation = useAnimation<T>(std::move(initial));
+Animated<T> useAnimated(T initial, TargetFn&& target, TransitionFn&& transition) {
+  Animated<T> animation = useAnimated<T>(std::move(initial));
   useEffect([animation,
              target = std::forward<TargetFn>(target),
              transition = std::forward<TransitionFn>(transition)]() mutable {
@@ -313,8 +313,8 @@ Animation<T> useAnimation(T initial, TargetFn&& target, TransitionFn&& transitio
 }
 
 template<Interpolatable T, typename TargetFn>
-Animation<T> useAnimation(T initial, TargetFn&& target, Transition transition) {
-  return useAnimation<T>(
+Animated<T> useAnimated(T initial, TargetFn&& target, Transition transition) {
+  return useAnimated<T>(
       std::move(initial),
       std::forward<TargetFn>(target),
       [transition] {
@@ -326,12 +326,12 @@ template<typename TargetFn, typename TransitionFn>
   requires std::is_invocable_v<TargetFn&> &&
            Interpolatable<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>> &&
            std::is_invocable_r_v<Transition, TransitionFn&>
-Animation<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
-useAnimation(TargetFn&& target, TransitionFn&& transition) {
+Animated<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+useAnimated(TargetFn&& target, TransitionFn&& transition) {
   using T = std::remove_cvref_t<std::invoke_result_t<TargetFn&>>;
   std::decay_t<TargetFn> targetFn{std::forward<TargetFn>(target)};
   T initial = targetFn();
-  return useAnimation<T>(
+  return useAnimated<T>(
       std::move(initial),
       std::move(targetFn),
       std::forward<TransitionFn>(transition));
@@ -340,19 +340,19 @@ useAnimation(TargetFn&& target, TransitionFn&& transition) {
 template<typename TargetFn>
   requires std::is_invocable_v<TargetFn&> &&
            Interpolatable<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
-Animation<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
-useAnimation(TargetFn&& target, Transition transition) {
+Animated<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+useAnimated(TargetFn&& target, Transition transition) {
   using T = std::remove_cvref_t<std::invoke_result_t<TargetFn&>>;
   std::decay_t<TargetFn> targetFn{std::forward<TargetFn>(target)};
   T initial = targetFn();
-  return useAnimation<T>(
+  return useAnimated<T>(
       std::move(initial),
       std::move(targetFn),
       std::move(transition));
 }
 
 /// Scope-owned frame callback for custom per-frame work that is not a single interpolated value.
-/// Prefer \ref useAnimation for normal control transitions.
+/// Prefer \ref useAnimated for normal control transitions.
 template<typename Fn>
 void useFrame(Fn&& callback) {
   ObserverHandle const handle =

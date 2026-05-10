@@ -33,8 +33,8 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
     Element body() const {
         auto theme = useEnvironment<ThemeKey>();
         auto expanded = useState(false);
-        auto detailHeight = useAnimation(0.f);
-        auto detailOpacity = useAnimation(0.f);
+        auto detailHeight = useAnimated(0.f);
+        auto detailOpacity = useAnimated(0.f);
         Color const accentColor = accent;
 
         auto bounds = useBounds();

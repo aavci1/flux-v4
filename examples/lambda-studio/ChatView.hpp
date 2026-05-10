@@ -714,7 +714,7 @@ struct ThinkingDots : ViewModifiers<ThinkingDots> {
     auto body() const {
         auto theme = useEnvironment<ThemeKey>();
 
-        auto phase = useAnimation<float>(
+        auto phase = useAnimated<float>(
             0.f,
             AnimationOptions {
                 .transition = Transition::linear(0.66f),

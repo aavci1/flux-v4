@@ -106,7 +106,7 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
     auto body() const {
         auto theme = useEnvironment<ThemeKey>();
 
-        auto progress = useAnimation<float>(0.f);
+        auto progress = useAnimated<float>(0.f);
 
         auto playOnce = [progress, theme] {
             progress.set(0.f, Transition::instant());
@@ -201,13 +201,13 @@ struct MorphLab : ViewModifiers<MorphLab> {
     auto body() const {
         auto theme = useEnvironment<ThemeKey>();
 
-        auto travel = useAnimation<float>(0.f);
-        auto width = useAnimation<float>(132.f);
-        auto height = useAnimation<float>(52.f);
-        auto radius = useAnimation<float>(16.f);
-        auto lift = useAnimation<float>(0.f);
-        auto rotation = useAnimation<float>(0.f);
-        auto fill = useAnimation<Color>(Color::accent());
+        auto travel = useAnimated<float>(0.f);
+        auto width = useAnimated<float>(132.f);
+        auto height = useAnimated<float>(52.f);
+        auto radius = useAnimated<float>(16.f);
+        auto lift = useAnimated<float>(0.f);
+        auto rotation = useAnimated<float>(0.f);
+        auto fill = useAnimated<Color>(Color::accent());
 
         auto calmPreset = [travel, width, height, radius, lift, rotation, fill, theme] {
             WithTransition transition {Transition::ease(std::max(0.01f, theme().durationSlow))};
@@ -232,7 +232,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
 
         return makeSectionCard(
             theme(), "WithTransition Scope",
-            "A single WithTransition scope lets several useAnimation handles share one easing or spring without repeating the transition at each call site.",
+            "A single WithTransition scope lets several useAnimated handles share one easing or spring without repeating the transition at each call site.",
             VStack {
                 .spacing = theme().space3,
                 .alignment = Alignment::Stretch,
@@ -400,7 +400,7 @@ struct AnimationDemoRoot {
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
-                            .text = "Detailed useAnimation walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and scoped frame callbacks.",
+                            .text = "Detailed useAnimated walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and scoped frame callbacks.",
                             .font = Font::body(),
                             .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,

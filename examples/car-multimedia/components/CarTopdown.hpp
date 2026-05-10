@@ -11,7 +11,7 @@ struct CarTopdown : ViewModifiers<CarTopdown> {
     Reactive::Bindable<bool> flowWind{false};
 
     auto body() const {
-        auto pulse = useAnimation<float>(0.f);
+        auto pulse = useAnimated<float>(0.f);
         if (!pulse.isRunning() && std::abs(*pulse) < 0.001f) {
             pulse.play(1.f, AnimationOptions{
                 .transition = Transition::ease(3.f),

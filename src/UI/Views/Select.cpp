@@ -220,7 +220,7 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
                    active ? hoverFill :
                             idleFill;
         };
-        auto fillAnim = useAnimation(fillTarget, motion);
+        auto fillAnim = useAnimated(fillTarget, motion);
         auto labelTarget = [disabled, isSelected, accentColor = style.accentColor, theme = theme] {
             return disabled ? theme.disabledTextColor :
                    isSelected() ? accentColor :
@@ -238,9 +238,9 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             }
             return color;
         };
-        auto labelAnim = useAnimation(labelTarget, motion);
-        auto detailAnim = useAnimation(detailTarget, motion);
-        auto iconAnim = useAnimation(iconTarget, motion);
+        auto labelAnim = useAnimated(labelTarget, motion);
+        auto detailAnim = useAnimated(detailTarget, motion);
+        auto iconAnim = useAnimated(iconTarget, motion);
 
         bool const hasDetail = !option.detail.empty();
         Element textBlock = Text {
@@ -499,10 +499,10 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                    isDisabled ? theme().disabledTextColor :
                    menuOpen.get() ? accent : theme().secondaryLabelColor;
         };
-        auto fillAnim = useAnimation(fillTarget, motion);
-        auto labelAnim = useAnimation(labelTarget, motion);
-        auto detailAnim = useAnimation(detailTarget, motion);
-        auto chevronAnim = useAnimation(chevronTarget, motion);
+        auto fillAnim = useAnimated(fillTarget, motion);
+        auto labelAnim = useAnimated(labelTarget, motion);
+        auto detailAnim = useAnimated(detailTarget, motion);
+        auto chevronAnim = useAnimated(chevronTarget, motion);
 
         float const triggerWidth = bounds.width > 0.f ? bounds.width : style.minMenuWidth;
         EdgeInsets const anchorOutsets = EdgeInsets {};

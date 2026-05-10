@@ -30,7 +30,7 @@ struct Transition {
 
 class WithTransition {
 public:
-  /// Lexical scope used by Animation::operator= on the current thread.
+  /// Lexical scope used by Animated::operator= on the current thread.
   ///
   /// Reactive effects suspend any ambient transition while executing. If an
   /// effect should animate its writes, create a WithTransition inside that

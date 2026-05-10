@@ -6,7 +6,7 @@ Flux v5 treats component `body()` functions as mount-time declarations. A compon
 
 - A component can expose `Element body() const`.
 - Advanced components can expose `std::unique_ptr<SceneNode> mount(MountContext&) const`.
-- Hooks such as `useState`, `useComputed`, `useEffect`, `useAnimation`, and keyed environment helpers must run while a reactive owner scope is active.
+- Hooks such as `useState`, `useComputed`, `useEffect`, `useAnimated`, and keyed environment helpers must run while a reactive owner scope is active.
 - Reactive changes should flow through `Signal`, `Computed`, `Bindable`, control-flow views, or explicit scene-node effects.
 
 ## Retention Model

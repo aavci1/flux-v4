@@ -185,9 +185,9 @@ struct ClockHands : flux::ViewModifiers<ClockHands> {
       return flux::Transition::spring(360.f, 28.f, 0.36f);
     };
 
-    auto second = flux::useAnimation(secondTarget, secondSpring);
-    auto minute = flux::useAnimation(minuteTarget, slowHandSpring);
-    auto hour = flux::useAnimation(hourTarget, slowHandSpring);
+    auto second = flux::useAnimated(secondTarget, secondSpring);
+    auto minute = flux::useAnimated(minuteTarget, slowHandSpring);
+    auto hour = flux::useAnimated(hourTarget, slowHandSpring);
 
     return flux::Render{
         .measureFn = [](flux::LayoutConstraints const& constraints, flux::LayoutHints const&) {

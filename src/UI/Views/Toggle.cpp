@@ -76,9 +76,9 @@ Element Toggle::body() const {
         return (pressed() && !isDisabled) ? 0.90f : 1.f;
     };
 
-    auto thumbXAnim = useAnimation(thumbXTarget, targetMotion);
-    auto trackFillAnim = useAnimation(trackFillTarget, targetMotion);
-    auto scaleAnim = useAnimation(scaleTarget, pressMotion);
+    auto thumbXAnim = useAnimated(thumbXTarget, targetMotion);
+    auto trackFillAnim = useAnimated(trackFillTarget, targetMotion);
+    auto scaleAnim = useAnimated(scaleTarget, pressMotion);
 
     auto handleToggle = [v, onChange = onChange, isDisabled]() {
         if (isDisabled) {

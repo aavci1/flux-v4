@@ -36,7 +36,7 @@ struct StylizedMap : ViewModifiers<StylizedMap> {
 
     auto body() const {
         constexpr MapPalette p = kMapPaletteNight;
-        auto ring = useAnimation<float>(0.f);
+        auto ring = useAnimated<float>(0.f);
         if (!ring.isRunning() && std::abs(*ring) < 0.001f) {
             ring.play(1.f, AnimationOptions{
                 .transition = Transition::ease(2.4f),
