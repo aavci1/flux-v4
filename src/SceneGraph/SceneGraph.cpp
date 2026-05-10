@@ -1,6 +1,6 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
 
@@ -65,7 +65,7 @@ struct SceneGraph::Impl {
 };
 
 SceneGraph::SceneGraph() : impl_(std::make_unique<Impl>()) {
-    impl_->root = std::make_unique<GroupNode>();
+    impl_->root = std::make_unique<SceneNode>();
 }
 
 SceneGraph::~SceneGraph() = default;
@@ -91,7 +91,7 @@ void SceneGraph::setRoot(std::unique_ptr<SceneNode> root) {
 
 std::unique_ptr<SceneNode> SceneGraph::releaseRoot() {
     std::unique_ptr<SceneNode> released = std::move(impl_->root);
-    impl_->root = std::make_unique<GroupNode>();
+    impl_->root = std::make_unique<SceneNode>();
     return released;
 }
 

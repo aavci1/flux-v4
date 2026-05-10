@@ -1,7 +1,7 @@
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 
 #include <Flux/Reactive/Effect.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 
 #include "SceneGraph/SceneBounds.hpp"
@@ -24,7 +24,7 @@ LayoutConstraints fixedConstraints(Size size) {
   };
 }
 
-void includeVisualBounds(scenegraph::GroupNode& group) {
+void includeVisualBounds(scenegraph::SceneNode& group) {
   Rect const visual = scenegraph::detail::subtreeLocalVisualBounds(group);
   Size size = group.size();
   size.width = std::max(size.width, visual.width);
@@ -58,7 +58,7 @@ Size ScaleAroundCenter::measure(MeasureContext& ctx, LayoutConstraints const& co
 
 std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ctx) const {
   Size const measured = measure(ctx.measureContext(), ctx.constraints(), ctx.hints(), ctx.textSystem());
-  auto group = std::make_unique<scenegraph::GroupNode>(
+  auto group = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, std::max(0.f, measured.width), std::max(0.f, measured.height)});
 
   MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(measured), ctx.hints());

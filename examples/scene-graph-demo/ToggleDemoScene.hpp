@@ -4,10 +4,9 @@
 #include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -20,7 +19,6 @@
 
 namespace flux::examples::scenegraphdemo {
 
-using scenegraph::GroupNode;
 using scenegraph::PathNode;
 using scenegraph::RectNode;
 using scenegraph::SceneNode;
@@ -101,7 +99,7 @@ inline PathNode *appendPathNode(SceneNode &parent, Rect bounds, Path path,
 }
 
 inline BuiltNode buildToggle(Theme const &theme, ToggleVisual visual) {
-    auto toggle = std::make_unique<GroupNode>(Rect {0.f, 0.f, visual.trackWidth, visual.trackHeight});
+    auto toggle = std::make_unique<SceneNode>(Rect {0.f, 0.f, visual.trackWidth, visual.trackHeight});
 
     Color trackColor = visual.value ? visual.onColor : theme.toggleOffColor;
     if (visual.disabled) {
@@ -265,7 +263,7 @@ inline BuiltNode buildMetricsRow(TextSystem &textSystem, Theme const &theme, flo
     float const height =
         std::max(enabled.size.height, std::max(notifications.size.height, connectivity.size.height));
 
-    auto row = std::make_unique<GroupNode>(Rect {0.f, 0.f, width, height});
+    auto row = std::make_unique<SceneNode>(Rect {0.f, 0.f, width, height});
 
     enabled.node->setPosition(Point {0.f, 0.f});
     notifications.node->setPosition(Point {tileWidth + spacing, 0.f});
@@ -338,7 +336,7 @@ inline std::unique_ptr<SceneNode> buildHeroAccent(Theme const &theme, float cont
     constexpr float badgeSize = 74.f;
     constexpr float glyphSize = 30.f;
 
-    auto accent = std::make_unique<GroupNode>(Rect {0.f, 0.f, badgeSize, badgeSize});
+    auto accent = std::make_unique<SceneNode>(Rect {0.f, 0.f, badgeSize, badgeSize});
 
     auto *badge = appendRectNode(
         *accent,
@@ -386,11 +384,11 @@ inline std::unique_ptr<SceneNode> buildToggleDemoScene(TextSystem &textSystem, T
     float const outerPadding = theme.space5;
     float const contentWidth = viewportWidth - outerPadding * 2.f;
 
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, viewportWidth, viewportHeight});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, viewportWidth, viewportHeight});
     auto viewport = std::make_unique<RectNode>(Rect {0.f, 0.f, viewportWidth, viewportHeight});
     viewport->setClipsContents(true);
 
-    auto content = std::make_unique<GroupNode>(Rect {0.f, 0.f, viewportWidth, viewportHeight});
+    auto content = std::make_unique<SceneNode>(Rect {0.f, 0.f, viewportWidth, viewportHeight});
 
     TextMeasure heroTitle =
         layoutText(textSystem, "Toggle Demo", theme.largeTitleFont, theme.labelColor, contentWidth);

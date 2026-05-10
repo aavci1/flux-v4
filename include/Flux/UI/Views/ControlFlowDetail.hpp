@@ -2,7 +2,7 @@
 
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -68,7 +68,7 @@ inline std::optional<Size> controlAssignedSlot(LayoutConstraints const& constrai
   return size;
 }
 
-inline void controlRelayoutSingleChildInSlot(scenegraph::GroupNode& group,
+inline void controlRelayoutSingleChildInSlot(scenegraph::SceneNode& group,
                                              std::optional<Size> const& assignedSlot) {
   if (!assignedSlot) {
     return;
@@ -105,7 +105,7 @@ controlMountElement(Element const& element, Reactive::Scope& owner,
   });
 }
 
-inline void controlLayoutVertical(scenegraph::GroupNode& group, Size frameSize, float spacing) {
+inline void controlLayoutVertical(scenegraph::SceneNode& group, Size frameSize, float spacing) {
   float y = 0.f;
   float width = frameSize.width;
   auto children = group.children();
@@ -122,7 +122,7 @@ inline void controlLayoutVertical(scenegraph::GroupNode& group, Size frameSize, 
   group.setSize(Size{controlFiniteOrZero(width), controlFiniteOrZero(std::max(frameSize.height, y))});
 }
 
-inline void controlLayoutSingle(scenegraph::GroupNode& group, Size frameSize) {
+inline void controlLayoutSingle(scenegraph::SceneNode& group, Size frameSize) {
   Size size = frameSize;
   auto children = group.children();
   if (!children.empty()) {

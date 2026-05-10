@@ -6,7 +6,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneInteraction.hpp>
@@ -222,7 +222,7 @@ std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& win
   return interaction;
 }
 
-void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windowSize,
+void insertBackdrop(scenegraph::SceneNode& root, OverlayEntry& entry, Size windowSize,
                     Window& window, bool dismissOnTap, bool captureScroll) {
   float const ox = -entry.resolvedFrame.x;
   float const oy = -entry.resolvedFrame.y;
@@ -256,7 +256,7 @@ void rebuildOverlayRoot(OverlayEntry& entry, Size windowSize, Window& window,
   Rect const contentBounds = contentBoundsFor(contentNode.get());
   entry.resolvedFrame = layout::resolveOverlayFrame(windowSize, entry.config, contentBounds);
 
-  auto root = std::make_unique<scenegraph::GroupNode>(
+  auto root = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, std::max(windowSize.width, entry.resolvedFrame.width),
            std::max(windowSize.height, entry.resolvedFrame.height)});
   bool capturesBackdrop = false;

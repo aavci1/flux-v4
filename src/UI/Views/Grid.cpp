@@ -1,6 +1,6 @@
 #include <Flux/UI/Views/Grid.hpp>
 
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Detail/MountPosition.hpp>
@@ -352,7 +352,7 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   }
 
   GridPlan const plan = planGrid(*this, ctx.constraints(), measured);
-  auto group = std::make_unique<scenegraph::GroupNode>(Rect{0.f, 0.f, plan.size.width, plan.size.height});
+  auto group = std::make_unique<scenegraph::SceneNode>(Rect{0.f, 0.f, plan.size.width, plan.size.height});
   struct MountedGridChild {
     scenegraph::SceneNode* node = nullptr;
     Point layoutOrigin{};

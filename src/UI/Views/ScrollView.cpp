@@ -2,7 +2,7 @@
 
 #include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Effect.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Detail/MountPosition.hpp>
@@ -165,7 +165,7 @@ std::unique_ptr<scenegraph::SceneNode> OffsetView::mount(MountContext& ctx) cons
   Size const content = layout::scrollContentSize(axis, childSizes);
   contentSize = content;
 
-  auto group = std::make_unique<scenegraph::GroupNode>(
+  auto group = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, std::max(0.f, content.width), std::max(0.f, content.height)});
   layout::ScrollContentLayout const layoutPlan =
       layout::layoutScrollContent(axis, *viewportSize, offset, childSizes);
@@ -206,7 +206,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   auto viewportNode = std::make_unique<scenegraph::RectNode>(Rect{0.f, 0.f, viewport.width, viewport.height});
   viewportNode->setClipsContents(true);
 
-  auto contentGroup = std::make_unique<scenegraph::GroupNode>(
+  auto contentGroup = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, std::max(0.f, content.width), std::max(0.f, content.height)});
 
   layout::ScrollContentLayout initialLayout =

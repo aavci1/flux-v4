@@ -65,6 +65,8 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     return "Unknown";
 }
 
+SceneNode::SceneNode(Rect bounds) : SceneNode(SceneNodeKind::Group, bounds) {}
+
 SceneNode::SceneNode(SceneNodeKind kind, Rect bounds) : kind_(kind), bounds_(bounds) {}
 
 SceneNode::~SceneNode() = default;

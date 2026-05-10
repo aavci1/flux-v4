@@ -4,7 +4,7 @@
 #include <Flux/Graphics/Path.hpp>
 #include <doctest/doctest.h>
 
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
@@ -160,8 +160,8 @@ class PreparedCountingRenderer final : public Renderer {
 };
 
 TEST_CASE("SceneRenderer accumulates parent-space bounds as local translations") {
-    auto root = std::make_unique<GroupNode>(Rect {10.f, 20.f, 300.f, 200.f});
-    auto panel = std::make_unique<GroupNode>(Rect {15.f, 25.f, 120.f, 80.f});
+    auto root = std::make_unique<SceneNode>(Rect {10.f, 20.f, 300.f, 200.f});
+    auto panel = std::make_unique<SceneNode>(Rect {15.f, 25.f, 120.f, 80.f});
     panel->appendChild(std::make_unique<RectNode>(Rect {5.f, 6.f, 100.f, 50.f}, FillStyle::solid(Colors::red)));
     root->appendChild(std::move(panel));
 
@@ -177,8 +177,8 @@ TEST_CASE("SceneRenderer accumulates parent-space bounds as local translations")
 }
 
 TEST_CASE("SceneRenderer skips stack pushes for identity group nodes") {
-    auto root = std::make_unique<GroupNode>(Rect {10.f, 20.f, 300.f, 200.f});
-    auto panel = std::make_unique<GroupNode>(Rect {15.f, 25.f, 120.f, 80.f});
+    auto root = std::make_unique<SceneNode>(Rect {10.f, 20.f, 300.f, 200.f});
+    auto panel = std::make_unique<SceneNode>(Rect {15.f, 25.f, 120.f, 80.f});
     panel->appendChild(std::make_unique<RectNode>(Rect {5.f, 6.f, 100.f, 50.f}, FillStyle::solid(Colors::red)));
     root->appendChild(std::move(panel));
 
@@ -198,7 +198,7 @@ TEST_CASE("TextNode renders its stored layout in node-local space") {
     auto layout = std::make_shared<TextLayout>();
     layout->measuredSize = Size {80.f, 20.f};
 
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 100.f});
     root->appendChild(std::make_unique<TextNode>(Rect {12.f, 18.f, 80.f, 20.f}, layout));
 
     SceneGraph graph {std::move(root)};
@@ -215,7 +215,7 @@ TEST_CASE("RectNode clipping scopes child traversal to the node bounds") {
     auto layout = std::make_shared<TextLayout>();
     layout->measuredSize = Size {40.f, 16.f};
 
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 120.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 120.f});
     auto container = std::make_unique<RectNode>(
         Rect {10.f, 20.f, 90.f, 60.f},
         FillStyle::none(),
@@ -244,7 +244,7 @@ TEST_CASE("PathNode renders through the scenegraph renderer") {
     Path path;
     path.rect(Rect {0.f, 0.f, 24.f, 12.f}, CornerRadius {4.f});
 
-    auto root = std::make_unique<GroupNode>(Rect {8.f, 6.f, 100.f, 80.f});
+    auto root = std::make_unique<SceneNode>(Rect {8.f, 6.f, 100.f, 80.f});
     root->appendChild(std::make_unique<PathNode>(
         Rect {10.f, 14.f, 24.f, 12.f},
         path,
@@ -264,7 +264,7 @@ TEST_CASE("PathNode renders through the scenegraph renderer") {
 
 TEST_CASE("ImageNode renders through the scenegraph renderer with its fill mode") {
     auto source = std::make_shared<DummyImage>(Size {320.f, 180.f});
-    auto root = std::make_unique<GroupNode>(Rect {8.f, 6.f, 120.f, 90.f});
+    auto root = std::make_unique<SceneNode>(Rect {8.f, 6.f, 120.f, 90.f});
     root->appendChild(std::make_unique<ImageNode>(Rect {10.f, 14.f, 64.f, 40.f}, source, ImageFillMode::Fit));
 
     SceneGraph graph {std::move(root)};
@@ -280,7 +280,7 @@ TEST_CASE("ImageNode renders through the scenegraph renderer with its fill mode"
 }
 
 TEST_CASE("RectNode subtree opacity multiplies through descendants") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 100.f});
     auto parent = std::make_unique<RectNode>(Rect {10.f, 12.f, 80.f, 40.f}, FillStyle::solid(Colors::red));
     parent->setOpacity(0.5f);
     auto child = std::make_unique<RectNode>(Rect {4.f, 6.f, 20.f, 10.f}, FillStyle::solid(Colors::blue));
@@ -300,7 +300,7 @@ TEST_CASE("RectNode subtree opacity multiplies through descendants") {
 }
 
 TEST_CASE("Scenegraph hit testing honors node transforms") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 120.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 120.f});
     auto rect = std::make_unique<RectNode>(Rect {20.f, 30.f, 40.f, 20.f}, FillStyle::solid(Colors::red));
     auto interaction = std::make_unique<InteractionData>();
     interaction->stableTargetKey = ComponentKey {LocalId::fromString("scaled")};
@@ -320,7 +320,7 @@ TEST_CASE("Scenegraph hit testing honors node transforms") {
 }
 
 TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 160.f, 160.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 160.f, 160.f});
     auto container = std::make_unique<RectNode>(Rect {20.f, 20.f, 100.f, 100.f}, FillStyle::none(),
                                                 StrokeStyle::none(), CornerRadius {40.f});
     container->setClipsContents(true);
@@ -340,7 +340,7 @@ TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
 }
 
 TEST_CASE("Scenegraph interaction lookup collects focusable keys") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 120.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 120.f});
 
     auto panel = std::make_unique<RectNode>(Rect {10.f, 10.f, 80.f, 40.f}, FillStyle::none());
     auto panelInteraction = std::make_unique<InteractionData>();
@@ -388,7 +388,7 @@ TEST_CASE("SceneGraph stores geometry keyed by component key") {
 }
 
 TEST_CASE("SceneGraph retains subtree geometry with translated origin") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 120.f, 80.f});
     auto child = std::make_unique<RectNode>(Rect {0.f, 0.f, 20.f, 10.f}, FillStyle::solid(Colors::red));
     SceneNode* rootNode = root.get();
     SceneNode* childNode = child.get();
@@ -418,11 +418,11 @@ TEST_CASE("SceneGraph retains subtree geometry with translated origin") {
 }
 
 TEST_CASE("SceneGraph replaceNodeForKey updates node mappings for repeated replacements") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
-    auto container = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 120.f, 80.f});
+    auto container = std::make_unique<SceneNode>(Rect {0.f, 0.f, 120.f, 80.f});
     auto leaf = std::make_unique<RectNode>(Rect {10.f, 12.f, 40.f, 20.f}, FillStyle::solid(Colors::red));
     SceneNode* originalLeaf = leaf.get();
-    GroupNode* containerNode = container.get();
+    SceneNode* containerNode = container.get();
     root->appendChild(std::move(container));
     containerNode->appendChild(std::move(leaf));
 
@@ -435,7 +435,7 @@ TEST_CASE("SceneGraph replaceNodeForKey updates node mappings for repeated repla
     graph.recordNode(alias, originalLeaf);
     graph.finishGeometryBuild();
 
-    auto placeholder = std::make_unique<GroupNode>(Rect {0.f, 0.f, 40.f, 20.f});
+    auto placeholder = std::make_unique<SceneNode>(Rect {0.f, 0.f, 40.f, 20.f});
     SceneNode* placeholderNode = placeholder.get();
     std::unique_ptr<SceneNode> removed = graph.replaceNodeForKey(key, std::move(placeholder));
     REQUIRE(removed.get() == originalLeaf);
@@ -457,7 +457,7 @@ TEST_CASE("SceneGraph replaceNodeForKey updates node mappings for repeated repla
 }
 
 TEST_CASE("SceneRenderer reuses prepared ops for position-only changes and rebuilds on content changes") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 100.f});
     auto rect = std::make_unique<RectNode>(Rect {10.f, 12.f, 50.f, 30.f}, FillStyle::solid(Colors::red));
     RectNode *rectNode = rect.get();
     root->appendChild(std::move(rect));
@@ -501,7 +501,7 @@ TEST_CASE("SceneRenderer reuses prepared ops for position-only changes and rebui
 }
 
 TEST_CASE("SceneRenderer does not reprepare parent paint for child-only content changes") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 240.f, 160.f});
     auto panel = std::make_unique<RectNode>(Rect {10.f, 12.f, 120.f, 80.f}, FillStyle::solid(Colors::red));
     auto child = std::make_unique<RectNode>(Rect {8.f, 10.f, 32.f, 20.f}, FillStyle::solid(Colors::green));
     RectNode *childNode = child.get();
@@ -525,7 +525,7 @@ TEST_CASE("SceneRenderer does not reprepare parent paint for child-only content 
 }
 
 TEST_CASE("SceneGraph invalidates prepared render caches") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 100.f});
     auto rect = std::make_unique<RectNode>(
         Rect {10.f, 12.f, 50.f, 30.f}, FillStyle::solid(Colors::red));
     RectNode* rectNode = rect.get();
@@ -557,7 +557,7 @@ TEST_CASE("SceneGraph invalidates prepared render caches") {
 }
 
 TEST_CASE("RasterCacheNode bypasses prepared ops for descendants") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 240.f, 160.f});
     auto raster = std::make_unique<RasterCacheNode>(Rect {20.f, 24.f, 120.f, 80.f});
     raster->setSubtree(std::make_unique<RectNode>(
         Rect {0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
@@ -574,7 +574,7 @@ TEST_CASE("RasterCacheNode bypasses prepared ops for descendants") {
 }
 
 TEST_CASE("SceneGraph invalidates raster cache boundaries") {
-    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 240.f, 160.f});
     auto raster = std::make_unique<RasterCacheNode>(Rect {20.f, 24.f, 120.f, 80.f});
     RasterCacheNode* rasterNode = raster.get();
     raster->setSubtree(std::make_unique<RectNode>(

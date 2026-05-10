@@ -3,7 +3,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
@@ -149,7 +149,7 @@ struct StretchBox {
     };
 
     flux::Size const initialSize = sizeFor(ctx.constraints());
-    auto group = std::make_unique<flux::scenegraph::GroupNode>(
+    auto group = std::make_unique<flux::scenegraph::SceneNode>(
         flux::Rect{0.f, 0.f, initialSize.width, initialSize.height});
     auto* rawGroup = group.get();
     rawGroup->setRelayout([rawGroup, sizeFor = std::move(sizeFor)](
@@ -180,7 +180,7 @@ struct RelayoutProbeFrame {
   }
 
   std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
-    auto group = std::make_unique<flux::scenegraph::GroupNode>(
+    auto group = std::make_unique<flux::scenegraph::SceneNode>(
         flux::Rect{0.f, 0.f, 100.f, 100.f});
     flux::MountContext childCtx = ctx.childWithSharedScope(fixedConstraints({100.f, 100.f}), ctx.hints());
     auto childNode = child.mount(childCtx);
@@ -213,7 +213,7 @@ struct RelayoutPassthroughFrame {
   }
 
   std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
-    auto group = std::make_unique<flux::scenegraph::GroupNode>();
+    auto group = std::make_unique<flux::scenegraph::SceneNode>();
     flux::MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
     auto childNode = child.mount(childCtx);
     flux::scenegraph::SceneNode* rawChild = childNode.get();
@@ -221,7 +221,7 @@ struct RelayoutPassthroughFrame {
       group->setSize(childNode->size());
       group->appendChild(std::move(childNode));
     }
-    flux::scenegraph::GroupNode* rawGroup = group.get();
+    flux::scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
     rawGroup->setRelayout([rawGroup, rawChild](flux::LayoutConstraints const& constraints) {
       if (rawChild) {
@@ -517,7 +517,7 @@ TEST_CASE("HStack flex children honor assigned main-axis size with explicit modi
   root.mount(sceneGraph);
 
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
-  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 4);
   CHECK(group.children()[0]->size().width == doctest::Approx(370.666f).epsilon(0.001));
   CHECK(group.children()[2]->size().width == doctest::Approx(185.333f).epsilon(0.001));
@@ -551,7 +551,7 @@ TEST_CASE("Spacer as composite expands to fill main axis in HStack") {
   root.mount(sceneGraph);
 
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
-  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 3);
   CHECK(group.children()[0]->size().width == doctest::Approx(20.f));
   CHECK(group.children()[1]->position().x == doctest::Approx(20.f));
@@ -585,7 +585,7 @@ TEST_CASE("Spacer as composite respects user-set minMainSize override") {
   root.mount(sceneGraph);
 
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
-  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 2);
   CHECK(group.children()[0]->size().width == doctest::Approx(40.f));
   CHECK(group.children()[1]->position().x == doctest::Approx(40.f));
@@ -678,9 +678,10 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
   root.mount(sceneGraph);
 
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
-  auto const& zstack = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  auto const& zstack = sceneGraph.root();
   REQUIRE(zstack.children().size() == 2);
-  auto const& row = static_cast<flux::scenegraph::GroupNode const&>(*zstack.children()[1]);
+  auto const& row = *zstack.children()[1];
+  REQUIRE(row.kind() == flux::scenegraph::SceneNodeKind::Group);
   REQUIRE(row.children().size() == 2);
   CHECK(row.position().y == doctest::Approx(40.f));
   CHECK(row.children()[1]->position().y == doctest::Approx(0.f));
@@ -914,9 +915,11 @@ TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   root.mount(sceneGraph);
 
   auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
-  auto const& content = static_cast<flux::scenegraph::GroupNode const&>(*viewport.children()[0]);
+  auto const& content = *viewport.children()[0];
+  REQUIRE(content.kind() == flux::scenegraph::SceneNodeKind::Group);
   auto const& paddedStack = static_cast<flux::scenegraph::RectNode const&>(*content.children()[0]);
-  auto const& stack = static_cast<flux::scenegraph::GroupNode const&>(*paddedStack.children()[0]);
+  auto const& stack = *paddedStack.children()[0];
+  REQUIRE(stack.kind() == flux::scenegraph::SceneNodeKind::Group);
   REQUIRE(stack.children().size() == 3);
   float const firstY = stack.children()[0]->position().y;
   float const secondY = stack.children()[1]->position().y;
@@ -1014,7 +1017,8 @@ TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
 
   auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
   REQUIRE(viewport.children().size() >= 1);
-  auto const& content = static_cast<flux::scenegraph::GroupNode const&>(*viewport.children()[0]);
+  auto const& content = *viewport.children()[0];
+  REQUIRE(content.kind() == flux::scenegraph::SceneNodeKind::Group);
   REQUIRE(content.children().size() == 2);
   CHECK(content.position().y == doctest::Approx(-20.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
@@ -1397,7 +1401,7 @@ TEST_CASE("container mounting composes slot origin with explicit child position"
   root.mount(sceneGraph);
 
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
-  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 2);
   CHECK(group.children()[0]->position() == flux::Point{0.f, 0.f});
   CHECK(group.children()[1]->position() == flux::Point{22.f, 4.f});

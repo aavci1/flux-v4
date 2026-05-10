@@ -45,7 +45,7 @@ public:
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
     Size const frameSize{};
-    auto group = std::make_unique<scenegraph::GroupNode>(
+    auto group = std::make_unique<scenegraph::SceneNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
 
@@ -59,7 +59,7 @@ public:
         ctx.textSystem(), ctx.constraints(), ctx.hints(),
         ctx.redrawCallback());
 
-    scenegraph::GroupNode* rawGroup = group.get();
+    scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
     rawGroup->setRelayout([state, rawGroup](LayoutConstraints const& constraints) {
       state->relayout(*rawGroup, constraints);
@@ -106,7 +106,7 @@ private:
       disposeBranch();
     }
 
-    void reconcile(scenegraph::GroupNode& group) {
+    void reconcile(scenegraph::SceneNode& group) {
       bool const nextBranch = detail::readCondition(condition);
       if (activeBranch && *activeBranch == nextBranch) {
         return;
@@ -132,7 +132,7 @@ private:
       }
     }
 
-    void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {
+    void relayout(scenegraph::SceneNode& group, LayoutConstraints const& nextConstraints) {
       if (scenegraph::detail::isTransientRelayout()) {
         assignedSlot = detail::controlAssignedSlot(nextConstraints);
       } else {

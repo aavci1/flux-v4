@@ -1,7 +1,7 @@
 #include <Flux/UI/MountContext.hpp>
 
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
 #include <Flux/UI/Element.hpp>
@@ -468,7 +468,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
                           mainLayout.itemSpacing, mainLayout.containerMainSize,
                           mainLayout.startOffset, assignedWidth, widthAssigned);
 
-  auto group = std::make_unique<scenegraph::GroupNode>(
+  auto group = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, finiteOrZero(stackLayout.containerSize.width),
            finiteOrZero(stackLayout.containerSize.height)});
   group->setLayoutFlow(scenegraph::LayoutFlow::VerticalStack);
@@ -601,7 +601,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
 
 std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountContext& ctx) {
   if (stack.children.empty()) {
-    return std::make_unique<scenegraph::GroupNode>();
+    return std::make_unique<scenegraph::SceneNode>();
   }
 
   float const assignedWidth = finiteSpan(ctx.constraints().maxWidth);
@@ -657,7 +657,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
                           mainLayout.itemSpacing, mainLayout.containerMainSize,
                           mainLayout.startOffset, rowCrossSize, heightConstrained);
 
-  auto group = std::make_unique<scenegraph::GroupNode>(
+  auto group = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, finiteOrZero(stackLayout.containerSize.width),
            finiteOrZero(stackLayout.containerSize.height)});
   group->setLayoutFlow(scenegraph::LayoutFlow::HorizontalStack);
@@ -841,7 +841,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     height = std::min(height, assignedHeight);
   }
 
-  auto group = std::make_unique<scenegraph::GroupNode>(
+  auto group = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, finiteOrZero(width), finiteOrZero(height)});
   auto mountedChildren = std::make_shared<std::vector<MountedLayoutChild>>();
 

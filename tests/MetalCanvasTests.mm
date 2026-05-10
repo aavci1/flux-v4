@@ -5,7 +5,7 @@
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 
 #include <Flux/Graphics/Image.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RasterCacheNode.hpp>
@@ -104,13 +104,13 @@ struct StressScene {
 
 static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<Image> const& image) {
   auto graph = std::make_unique<SceneGraph>();
-  auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
       flux::Rect{0.f, 0.f, 640.f, 480.f},
       FillStyle::solid(Color{0.08f, 0.09f, 0.11f, 1.f})
   ));
 
-  auto animatedGroup = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto animatedGroup = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
   SceneNode* animatedGroupPtr = animatedGroup.get();
 
   for (int i = 0; i < 256; ++i) {
@@ -289,7 +289,7 @@ TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
     canvas->resize(640, 480);
     canvas->updateDpiScale(2.f, 2.f);
 
-    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
         flux::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::white)
@@ -352,7 +352,7 @@ TEST_CASE("MetalCanvas shades linear gradient rect fills") {
     canvas->resize(640, 480);
     canvas->updateDpiScale(2.f, 2.f);
 
-    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
         flux::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::black)
@@ -398,7 +398,7 @@ TEST_CASE("MetalCanvas shades radial and conical gradient rect fills") {
     canvas->resize(640, 480);
     canvas->updateDpiScale(2.f, 2.f);
 
-    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
         flux::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::black)
@@ -462,7 +462,7 @@ TEST_CASE("MetalCanvas preserves rounded rect geometry when clipped by the viewp
     canvas->resize(640, 480);
     canvas->updateDpiScale(2.f, 2.f);
 
-    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
         flux::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::white)
@@ -528,7 +528,7 @@ TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
     std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas->gpuDevice());
     REQUIRE(image);
 
-    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
         flux::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::white)
@@ -589,7 +589,7 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Metal image"
     canvas->resize(640, 480);
     canvas->updateDpiScale(2.f, 2.f);
 
-    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 160.f, 120.f});
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 160.f, 120.f});
     auto raster = std::make_unique<RasterCacheNode>(flux::Rect{20.f, 24.f, 80.f, 40.f});
     RasterCacheNode* rasterNode = raster.get();
     raster->setSubtree(std::make_unique<RectNode>(

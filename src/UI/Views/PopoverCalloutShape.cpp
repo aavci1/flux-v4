@@ -1,6 +1,6 @@
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -57,7 +57,7 @@ std::unique_ptr<scenegraph::SceneNode> PopoverCalloutShape::mount(MountContext& 
   layout::PopoverCalloutLayout const layout =
       measureLayout(*this, ctx.measureContext(), ctx.constraints(), ctx.hints(), ctx.textSystem());
 
-  auto group = std::make_unique<scenegraph::GroupNode>(
+  auto group = std::make_unique<scenegraph::SceneNode>(
       Rect{0.f, 0.f, layout.totalSize.width, layout.totalSize.height});
   auto chrome = std::make_unique<scenegraph::PathNode>(
       Rect{0.f, 0.f, layout.totalSize.width, layout.totalSize.height},
@@ -78,7 +78,7 @@ std::unique_ptr<scenegraph::SceneNode> PopoverCalloutShape::mount(MountContext& 
     group->appendChild(std::move(contentNode));
   }
 
-  scenegraph::GroupNode* rawGroup = group.get();
+  scenegraph::SceneNode* rawGroup = group.get();
   PopoverCalloutShape shape = *this;
   rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, rawChrome, rawContent, shape](

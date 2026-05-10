@@ -4,7 +4,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountRoot.hpp>
@@ -62,9 +62,9 @@ flux::EnvironmentBinding testEnvironment() {
   return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
 }
 
-flux::scenegraph::GroupNode const& rootGroup(flux::scenegraph::SceneGraph const& sceneGraph) {
+flux::scenegraph::SceneNode const& rootGroup(flux::scenegraph::SceneGraph const& sceneGraph) {
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
-  return static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  return sceneGraph.root();
 }
 
 } // namespace

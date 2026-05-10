@@ -2,8 +2,9 @@
 
 /// \file Flux/SceneGraph/SceneNode.hpp
 ///
-/// Pure scene-graph base node type. Each node stores parent-space bounds and renders itself in
-/// local coordinates.
+/// Concrete scene-graph base node type. Each node stores parent-space bounds and renders itself in
+/// local coordinates. A bare SceneNode is a pure container: it holds children but has no draw
+/// payload of its own.
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
@@ -53,7 +54,7 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept;
 
 class SceneNode {
   public:
-    explicit SceneNode(SceneNodeKind kind, Rect bounds = {});
+    explicit SceneNode(Rect bounds = {});
     virtual ~SceneNode();
 
     SceneNode(SceneNode const &) = delete;
@@ -110,6 +111,8 @@ class SceneNode {
     virtual bool canPrepareRenderOps() const noexcept;
 
   protected:
+    SceneNode(SceneNodeKind kind, Rect bounds);
+
     void markDirty() noexcept;
     void markSubtreeDirty() noexcept;
 

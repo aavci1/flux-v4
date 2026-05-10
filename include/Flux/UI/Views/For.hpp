@@ -49,7 +49,7 @@ public:
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
     Size const frameSize{};
-    auto group = std::make_unique<scenegraph::GroupNode>(
+    auto group = std::make_unique<scenegraph::SceneNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
     group->setLayoutFlow(scenegraph::LayoutFlow::VerticalStack);
@@ -65,7 +65,7 @@ public:
     state->configureMount(ctx.environmentBinding(), ctx.textSystem(),
                           ctx.constraints(), ctx.redrawCallback());
 
-    scenegraph::GroupNode* rawGroup = group.get();
+    scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
     rawGroup->setRelayout([state, rawGroup](LayoutConstraints const& constraints) {
       state->relayout(*rawGroup, constraints);
@@ -163,7 +163,7 @@ private:
       disposeRows(rows);
     }
 
-    void reconcile(scenegraph::GroupNode& group, Items const& nextItems) {
+    void reconcile(scenegraph::SceneNode& group, Items const& nextItems) {
       if (disposed || !textSystem) {
         return;
       }
@@ -280,7 +280,7 @@ private:
       rows = std::move(nextRows);
     }
 
-    void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {
+    void relayout(scenegraph::SceneNode& group, LayoutConstraints const& nextConstraints) {
       if (disposed) {
         return;
       }
