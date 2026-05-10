@@ -220,7 +220,13 @@ if(FLUX_PLATFORM_MACOS)
 elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   find_package(PkgConfig REQUIRED)
   find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
+  pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
   pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+  if(NOT WAYLAND_PROTOCOLS_DIR)
+    message(FATAL_ERROR
+      "Flux: pkg-config package wayland-protocols did not provide pkgdatadir. "
+      "Install/reinstall wayland-protocols or fix PKG_CONFIG_PATH.")
+  endif()
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
   pkg_check_modules(WAYLAND_CURSOR REQUIRED IMPORTED_TARGET wayland-cursor)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
@@ -234,8 +240,17 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   set(FLUX_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${FLUX_WAYLAND_PROTOCOL_DIR})
   file(MAKE_DIRECTORY ${FLUX_VULKAN_GENERATED_DIR})
-  set(FLUX_XDG_SHELL_XML ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml)
-  set(FLUX_XDG_DECORATION_XML ${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml)
+  set(FLUX_XDG_SHELL_XML "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml")
+  set(FLUX_XDG_DECORATION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml")
+  foreach(_flux_wayland_protocol_xml IN ITEMS
+      "${FLUX_XDG_SHELL_XML}"
+      "${FLUX_XDG_DECORATION_XML}")
+    if(NOT EXISTS "${_flux_wayland_protocol_xml}")
+      message(FATAL_ERROR
+        "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
+        "Install the wayland-protocols development package or fix pkg-config's wayland-protocols path.")
+    endif()
+  endforeach()
   add_custom_command(
     OUTPUT
       ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-client-protocol.h
