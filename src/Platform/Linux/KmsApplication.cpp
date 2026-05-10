@@ -232,9 +232,28 @@ bool modeResolutionMatches(VkDisplayModePropertiesKHR const& mode, KmsConnector 
          mode.parameters.visibleRegion.height == connector.mode.vdisplay;
 }
 
+bool modeRefreshMatches(VkDisplayModePropertiesKHR const& mode, KmsConnector const& connector) {
+  std::uint32_t const target = refreshRateMilliHz(connector.mode);
+  std::uint32_t const actual = mode.parameters.refreshRate;
+  std::uint32_t const delta = actual > target ? actual - target : target - actual;
+  return delta <= 500u;
+}
+
+bool modeMatches(VkDisplayModePropertiesKHR const& mode, KmsConnector const& connector) {
+  return modeResolutionMatches(mode, connector) && modeRefreshMatches(mode, connector);
+}
+
+bool drmModeInfoMatches(drmModeModeInfo const& a, drmModeModeInfo const& b) {
+  return a.hdisplay == b.hdisplay && a.vdisplay == b.vdisplay && a.vrefresh == b.vrefresh &&
+         a.clock == b.clock;
+}
+
 bool connectorModeChanged(KmsConnector const& a, KmsConnector const& b) {
-  return a.mode.hdisplay != b.mode.hdisplay || a.mode.vdisplay != b.mode.vdisplay ||
-         a.mode.vrefresh != b.mode.vrefresh || a.mode.clock != b.mode.clock;
+  if (!drmModeInfoMatches(a.mode, b.mode) || a.modes.size() != b.modes.size()) return true;
+  for (std::size_t i = 0; i < a.modes.size(); ++i) {
+    if (!drmModeInfoMatches(a.modes[i], b.modes[i])) return true;
+  }
+  return false;
 }
 
 bool connectorDpiChanged(KmsConnector const& a, KmsConnector const& b) {
@@ -476,6 +495,7 @@ std::vector<KmsConnector> KmsApplication::scanConnectors() const {
       out.connectorId = connector->connector_id;
       out.encoderId = connector->encoder_id;
       out.crtcId = chooseCrtc(drmFd_, resources, *connector);
+      out.modes.assign(connector->modes, connector->modes + connector->count_modes);
       out.mode = chooseMode(*connector);
       out.widthMm = connector->mmWidth;
       out.heightMm = connector->mmHeight;
@@ -628,11 +648,9 @@ void KmsApplication::reEnumerateConnectors() {
                                                               .dpiY = 1.f});
       }
       if (modeChanged) {
-        Size const size{static_cast<float>(std::max(1, static_cast<int>(connector.mode.hdisplay))),
-                        static_cast<float>(std::max(1, static_cast<int>(connector.mode.vdisplay)))};
         Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
                                                               .handle = window->handle(),
-                                                              .size = size,
+                                                              .size = window->currentSize(),
                                                               .dpi = 1.f,
                                                               .dpiX = 1.f,
                                                               .dpiY = 1.f});
@@ -788,12 +806,12 @@ VkSurfaceKHR KmsApplication::createVulkanSurface(VkInstance instance, void* nati
     std::vector<VkDisplayModePropertiesKHR> modes(modeCount);
     vkGetDisplayModePropertiesKHR(candidate.physical, candidate.display.display, &modeCount, modes.data());
     std::sort(modes.begin(), modes.end(), [&](auto const& a, auto const& b) {
-      int const aExact = modeResolutionMatches(a, *connector) ? 1 : 0;
-      int const bExact = modeResolutionMatches(b, *connector) ? 1 : 0;
+      int const aExact = modeMatches(a, *connector) ? 2 : (modeResolutionMatches(a, *connector) ? 1 : 0);
+      int const bExact = modeMatches(b, *connector) ? 2 : (modeResolutionMatches(b, *connector) ? 1 : 0);
       return aExact > bExact;
     });
     for (auto const& mode : modes) {
-      if (!modeResolutionMatches(mode, *connector) && candidate.score == 0) {
+      if (!modeResolutionMatches(mode, *connector)) {
         continue;
       }
       if (VkSurfaceKHR surface = tryCreateDisplaySurface(instance, candidate.physical, candidate.display,

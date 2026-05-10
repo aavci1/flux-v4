@@ -32,6 +32,7 @@ struct KmsConnector {
   std::uint32_t encoderId = 0;
   std::uint32_t crtcId = 0;
   drmModeModeInfo mode{};
+  std::vector<drmModeModeInfo> modes;
   int widthMm = 0;
   int heightMm = 0;
   std::string name;
@@ -195,6 +196,9 @@ private:
   unsigned int handle_ = 0;
   Size size_{};
   std::string title_;
+  int requestedModeWidth_ = 0;
+  int requestedModeHeight_ = 0;
+  int requestedModeRefreshHz_ = 0;
   int frameTimerFd_ = -1;
   bool framePending_ = false;
   Cursor cursor_ = Cursor::Arrow;

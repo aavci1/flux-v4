@@ -39,9 +39,50 @@ std::chrono::nanoseconds frameInterval(drmModeModeInfo const& mode) {
   return std::chrono::nanoseconds(1'000'000'000ll / refresh);
 }
 
+std::uint32_t refreshRateMilliHz(drmModeModeInfo const& mode) {
+  if (mode.vrefresh > 0) return static_cast<std::uint32_t>(mode.vrefresh) * 1000u;
+  if (mode.clock > 0 && mode.htotal > 0 && mode.vtotal > 0) {
+    return static_cast<std::uint32_t>(
+        (static_cast<std::uint64_t>(mode.clock) * 1'000'000ull) /
+        (static_cast<std::uint64_t>(mode.htotal) * static_cast<std::uint64_t>(mode.vtotal)));
+  }
+  return 60'000u;
+}
+
 Size sizeForMode(drmModeModeInfo const& mode) {
   return Size(static_cast<float>(std::max(1, static_cast<int>(mode.hdisplay))),
               static_cast<float>(std::max(1, static_cast<int>(mode.vdisplay))));
+}
+
+drmModeModeInfo preferredMode(KmsConnector const& connector) {
+  if (!connector.modes.empty()) {
+    for (drmModeModeInfo const& mode : connector.modes) {
+      if ((mode.type & DRM_MODE_TYPE_PREFERRED) != 0) return mode;
+    }
+    return connector.modes.front();
+  }
+  return connector.mode;
+}
+
+bool refreshMatches(drmModeModeInfo const& mode, int refreshHz) {
+  if (refreshHz <= 0) return true;
+  std::uint32_t const target = static_cast<std::uint32_t>(refreshHz) * 1000u;
+  std::uint32_t const actual = refreshRateMilliHz(mode);
+  std::uint32_t const delta = actual > target ? actual - target : target - actual;
+  return delta <= 500u;
+}
+
+drmModeModeInfo selectMode(KmsConnector const& connector, int width, int height, int refreshHz) {
+  if (width <= 0 && height <= 0) return preferredMode(connector);
+  for (drmModeModeInfo const& mode : connector.modes) {
+    if (mode.hdisplay == width && mode.vdisplay == height && refreshMatches(mode, refreshHz)) {
+      return mode;
+    }
+  }
+  std::fprintf(stderr,
+               "[flux:kms] requested mode %dx%d@%d for connector %s is unavailable; using preferred mode.\n",
+               width, height, refreshHz, connector.name.c_str());
+  return preferredMode(connector);
 }
 
 std::uint32_t cursorDimension(int fd, std::uint64_t cap) {
@@ -96,8 +137,12 @@ void drawArrowCursor(std::uint32_t* pixels, std::uint32_t width, std::uint32_t h
 
 KmsWindow::KmsWindow(KmsApplication& app, KmsConnector connector, WindowConfig const& config)
     : app_(app), connector_(std::move(connector)), handle_(gNextHandle.fetch_add(1)),
-      size_(sizeForMode(connector_.mode)),
       title_(config.title) {
+  requestedModeWidth_ = config.displayMode.width;
+  requestedModeHeight_ = config.displayMode.height;
+  requestedModeRefreshHz_ = config.displayMode.refreshHz;
+  connector_.mode = selectMode(connector_, requestedModeWidth_, requestedModeHeight_, requestedModeRefreshHz_);
+  size_ = sizeForMode(connector_.mode);
   frameTimerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   if (frameTimerFd_ < 0) throw std::runtime_error("timerfd_create failed for KMS frame pump");
   app_.registerWindow(this);
@@ -191,6 +236,7 @@ void KmsWindow::resumeFromVtSwitch() {
 
 void KmsWindow::updateConnector(KmsConnector connector) {
   connector_ = std::move(connector);
+  connector_.mode = selectMode(connector_, requestedModeWidth_, requestedModeHeight_, requestedModeRefreshHz_);
   size_ = sizeForMode(connector_.mode);
   if (canvas_) {
     canvas_->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));

@@ -32,6 +32,13 @@ class SceneGraph;
 
 class OverlayManager;
 
+struct DisplayMode {
+  int width = 0;
+  int height = 0;
+  /// Refresh rate in Hz. A value of 0 means any refresh rate at the requested resolution.
+  int refreshHz = 0;
+};
+
 struct WindowConfig {
   Size size = {1280, 720};
   std::string title = "Flux Application";
@@ -43,6 +50,9 @@ struct WindowConfig {
   /// On KMS, bind this window to a named output connector (for example "HDMI-A-1" or "DP-1").
   /// Empty means the platform default output. Other backends currently ignore this value.
   std::string outputName;
+  /// On KMS, request a specific connector mode. Zero values use the output's preferred mode.
+  /// Other backends currently ignore this value.
+  DisplayMode displayMode{};
 };
 
 struct WindowState {
