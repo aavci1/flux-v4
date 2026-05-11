@@ -18,6 +18,7 @@
 #include <Flux/Reactive/Effect.hpp>
 
 #include "UI/Layout/Algorithms/StackLayout.hpp"
+#include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
@@ -436,6 +437,7 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
 }
 
 std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountContext& ctx) {
+  ContainerMeasureScope scope(ctx.measureContext());
   float const assignedWidth = finiteSpan(ctx.constraints().maxWidth);
   bool const widthAssigned = assignedWidth > 0.f && finiteWidthIsAssigned(ctx.hints());
   float const assignedHeight = finiteSpan(ctx.constraints().maxHeight);
@@ -490,6 +492,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       continue;
     }
 
+    ctx.measureContext().setChildIndex(childIndex);
     MountContext childCtx = ctx.childWithSharedScope(childConstraints, childHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
@@ -600,6 +603,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
 }
 
 std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountContext& ctx) {
+  ContainerMeasureScope scope(ctx.measureContext());
   if (stack.children.empty()) {
     return std::make_unique<scenegraph::SceneNode>();
   }
@@ -646,6 +650,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
     childMeasure.maxHeight = stretchCrossAxis ? assignedHeight
                                               : std::numeric_limits<float>::infinity();
     layout::clampLayoutMinToMax(childMeasure);
+    ctx.measureContext().setChildIndex(childIndex);
     Size const size = measureChild(stack.children[childIndex], ctx, childMeasure, rowHints);
     rowSizes.push_back(size);
     rowInnerHeight = std::max(rowInnerHeight, size.height);
@@ -679,6 +684,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       continue;
     }
 
+    ctx.measureContext().setChildIndex(childIndex);
     MountContext childCtx = ctx.childWithSharedScope(initialConstraints, rowHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
@@ -813,6 +819,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
 }
 
 std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountContext& ctx) {
+  ContainerMeasureScope scope(ctx.measureContext());
   float const assignedWidth = finiteSpan(ctx.constraints().maxWidth);
   float const assignedHeight = finiteSpan(ctx.constraints().maxHeight);
   float width = assignedWidth;
@@ -855,6 +862,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     if (stack.verticalAlignment == Alignment::Stretch || fillsStack) {
       childFrame.height = height;
     }
+    ctx.measureContext().setChildIndex(i);
     MountContext childCtx = ctx.childWithSharedScope(childMeasure, childHints);
     auto node = child.mount(childCtx);
     if (node) {

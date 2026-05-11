@@ -285,6 +285,15 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize, layoutResult);
 
   auto interaction = std::make_unique<scenegraph::InteractionData>();
+  if (ComponentKey const* scopeKey = detail::currentInteractionScopeKey()) {
+    ComponentKey targetKey = *scopeKey;
+    for (LocalId const id : ctx.measureContext().currentElementKey().materialize()) {
+      targetKey.push_back(id);
+    }
+    interaction->stableTargetKey = std::move(targetKey);
+  } else {
+    interaction->stableTargetKey = ctx.measureContext().currentElementKey();
+  }
   interaction->cursor = disabled ? Cursor::Inherit : Cursor::IBeam;
   interaction->focusable = !disabled;
   Signal<bool> focusState = interaction->focusSignal;

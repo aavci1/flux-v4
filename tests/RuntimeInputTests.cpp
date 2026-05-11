@@ -19,10 +19,12 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Show.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace {
@@ -70,6 +72,14 @@ struct RuntimeHarness {
     event.handle = window.handle();
     event.key = key;
     event.modifiers = modifiers;
+    runtime.handleInput(event);
+  }
+
+  void textInput(std::string text) {
+    flux::InputEvent event{};
+    event.kind = flux::InputEvent::Kind::TextInput;
+    event.handle = window.handle();
+    event.text = std::move(text);
     runtime.handleInput(event);
   }
 
@@ -130,6 +140,26 @@ struct SingleProbeRoot {
 
   flux::Element body() const {
     return ProbeView{hover, press, focus, keyboardFocus};
+  }
+};
+
+struct TextInputFocusRoot {
+  flux::Reactive::Signal<std::string>* first = nullptr;
+  flux::Reactive::Signal<std::string>* second = nullptr;
+
+  flux::Element body() const {
+    return flux::VStack{
+        .spacing = 8.f,
+        .children = flux::children(
+            flux::TextInput{
+                .value = *first,
+                .placeholder = "First",
+            },
+            flux::TextInput{
+                .value = *second,
+                .placeholder = "Second",
+            }),
+    };
   }
 };
 
@@ -499,6 +529,23 @@ TEST_CASE("keyboard focus signal differs from pointer focus") {
   harness.keyDown(flux::keys::Tab);
   CHECK(focus.get());
   CHECK(keyboardFocus.get());
+}
+
+TEST_CASE("text input participates in keyboard focus traversal") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<std::string> first{""};
+  flux::Reactive::Signal<std::string> second{""};
+  harness.setRoot(TextInputFocusRoot{.first = &first, .second = &second});
+
+  harness.keyDown(flux::keys::Tab);
+  CHECK(harness.runtime.focusTargetKey().has_value());
+  harness.textInput("A");
+
+  harness.keyDown(flux::keys::Tab);
+  harness.textInput("B");
+
+  CHECK(first.get() == "A");
+  CHECK(second.get() == "B");
 }
 
 TEST_CASE("view action fires only for the focused view") {
