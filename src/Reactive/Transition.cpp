@@ -24,6 +24,13 @@ Transition Transition::ease(float dur) {
   return t;
 }
 
+Transition Transition::custom(EasingFn easing, float dur) {
+  Transition t{};
+  t.duration = dur;
+  t.easing = easing ? easing : Easing::linear;
+  return t;
+}
+
 Transition Transition::spring(float k, float d, float dur) {
   Transition t{};
   t.duration = dur;

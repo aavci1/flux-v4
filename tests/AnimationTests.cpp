@@ -140,6 +140,10 @@ TEST_CASE("Animation options preserve transition and playback configuration") {
   CHECK(options.transition.delay == doctest::Approx(0.2f));
   CHECK(options.repeat == AnimationOptions::kRepeatForever);
   CHECK(options.autoreverse);
+
+  Transition const custom = Transition::custom(Easing::easeOut, 0.3f);
+  CHECK(custom.duration == doctest::Approx(0.3f));
+  CHECK(custom.easing == Easing::easeOut);
 }
 
 TEST_CASE("Animation clip samples from the timeline on read") {

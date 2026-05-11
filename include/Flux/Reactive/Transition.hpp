@@ -23,6 +23,7 @@ struct Transition {
   static Transition instant();
   static Transition linear(float dur);
   static Transition ease(float dur = 0.25f);
+  static Transition custom(EasingFn easing, float dur);
   static Transition spring(float k = 300.f, float d = 20.f, float dur = 0.6f);
 
   [[nodiscard]] Transition delayed(float seconds) const;

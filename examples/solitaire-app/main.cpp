@@ -301,12 +301,6 @@ float smoothstep(float t) {
   return t * t * (3.f - 2.f * t);
 }
 
-Transition transitionWithEasing(EasingFn easing, std::int64_t durationNanos) {
-  Transition transition = Transition::linear(static_cast<float>(durationSeconds(durationNanos)));
-  transition.easing = easing;
-  return transition;
-}
-
 std::uint32_t randomSeed() {
   static std::random_device randomDevice;
   std::uint64_t const nanos = static_cast<std::uint64_t>(nowNanos());
@@ -1725,7 +1719,9 @@ void addCardsAnimation(SolitaireState& state, std::vector<Card> cards,
   if (fromRects.empty()) {
     fromRects.push_back(Rect::sharp(0.f, 0.f, kCardW, kCardH));
   }
-  Transition transition = transitionWithEasing(smoothstep, durationNanos);
+  Transition transition = Transition::custom(
+      smoothstep,
+      static_cast<float>(durationSeconds(durationNanos)));
   std::erase_if(state.animations, [](CardFlight const& animation) { return !animation.active(); });
   state.animations.reserve(state.animations.size() + cards.size());
   for (std::size_t i = 0; i < cards.size(); ++i) {
@@ -2043,7 +2039,9 @@ void addSelectionScaleAnimation(SolitaireState& state, Selection selection, floa
           .from = fromScale,
           .to = toScale,
           .duration = durationSeconds(kSelectionScaleDurationNanos),
-          .transition = transitionWithEasing(smoothstep, kSelectionScaleDurationNanos),
+          .transition = Transition::custom(
+              smoothstep,
+              static_cast<float>(durationSeconds(kSelectionScaleDurationNanos))),
       }),
   });
 }
