@@ -2,6 +2,7 @@
 
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
@@ -297,6 +298,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   interaction->cursor = disabled ? Cursor::Inherit : Cursor::IBeam;
   interaction->focusable = !disabled;
   Signal<bool> focusState = interaction->focusSignal;
+  Animated<float> caretOpacity{1.f};
 
   auto selectionLayer = std::make_unique<scenegraph::RenderNode>(
       Rect{0.f, 0.f, frameSize->width, frameSize->height},
@@ -314,8 +316,9 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
 
   auto caretLayer = std::make_unique<scenegraph::RenderNode>(
       Rect{0.f, 0.f, frameSize->width, frameSize->height},
-      [layoutResult, selectionState, focusState, frameSize, resolved](Canvas& canvas, Rect) {
-        if (!focusState.peek()) {
+      [layoutResult, selectionState, focusState, frameSize, resolved, caretOpacity](
+          Canvas& canvas, Rect) {
+        if (!focusState.peek() || caretOpacity.peek() < 0.5f) {
           return;
         }
         drawCaret(canvas, *layoutResult, selectionState.peek(), *frameSize, resolved);
@@ -446,26 +449,49 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   });
 
   Reactive::withOwner(ctx.owner(), [rawWrapper, rawText, rawSelectionLayer, rawCaretLayer,
-                                    valueState, selectionState, focusState, input = *this,
+                                    valueState, selectionState, focusState, caretOpacity,
+                                    input = *this,
                                     resolved, frameSize, layoutResult, textSystem = &ctx.textSystem(),
                                     requestRedraw = ctx.redrawCallback()] {
+    Reactive::onCleanup([caretOpacity] {
+      caretOpacity.stop();
+    });
     Reactive::Effect([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, valueState,
-                      selectionState, focusState, input, resolved, frameSize, layoutResult,
-                      textSystem, requestRedraw] {
+                      selectionState, focusState, caretOpacity, input, resolved, frameSize,
+                      layoutResult, textSystem, requestRedraw] {
       std::string const& text = valueState.get();
+      detail::TextEditSelection currentSelection = selectionState.get();
       detail::TextEditSelection const clamped =
-          detail::clampSelection(text, selectionState.peek());
-      if (!sameSelection(selectionState.peek(), clamped)) {
+          detail::clampSelection(text, currentSelection);
+      if (!sameSelection(currentSelection, clamped)) {
         selectionState = clamped;
       }
       setTextLayout(*rawText, input, resolved, *textSystem, *frameSize, layoutResult);
       bool const focused = focusState.get();
+      if (focused && !input.disabled) {
+        caretOpacity.set(1.f, Transition::instant());
+        caretOpacity.play(0.f, AnimationOptions{
+            .transition = Transition::custom([](float t) { return t < 0.5f ? 0.f : 1.f; }, 1.06f),
+            .repeat = AnimationOptions::kRepeatForever,
+        });
+      } else {
+        caretOpacity.stop();
+        caretOpacity.set(1.f, Transition::instant());
+      }
       rawWrapper->setStroke(focused && !input.disabled
                                 ? StrokeStyle::solid(resolved.chrome.borderFocusColor,
                                                      resolved.chrome.borderFocusWidth)
                                 : StrokeStyle::solid(resolved.chrome.borderColor,
                                                      resolved.chrome.borderWidth));
       rawSelectionLayer->invalidate();
+      rawCaretLayer->invalidate();
+      if (requestRedraw) {
+        requestRedraw();
+      }
+    });
+    Reactive::Effect([rawCaretLayer, caretOpacity, focusState, requestRedraw] {
+      (void)caretOpacity.get();
+      (void)focusState.get();
       rawCaretLayer->invalidate();
       if (requestRedraw) {
         requestRedraw();
