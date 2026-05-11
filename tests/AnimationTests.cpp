@@ -55,6 +55,12 @@ EnvironmentBinding testEnvironment() {
   return EnvironmentBinding{}.withValue<ThemeKey>(Theme::light());
 }
 
+[[maybe_unused]] void compileFrameActionReturningUseFrame() {
+  useFrame([](AnimationTick const&) {
+    return FrameAction::StopAndRedraw;
+  });
+}
+
 scenegraph::RectNode const* findMovedThumb(scenegraph::SceneNode const& node) {
   if (node.kind() == scenegraph::SceneNodeKind::Rect) {
     auto const& rect = static_cast<scenegraph::RectNode const&>(node);
@@ -134,6 +140,98 @@ TEST_CASE("Animation options preserve transition and playback configuration") {
   CHECK(options.transition.delay == doctest::Approx(0.2f));
   CHECK(options.repeat == AnimationOptions::kRepeatForever);
   CHECK(options.autoreverse);
+}
+
+TEST_CASE("Animation clip samples from the timeline on read") {
+  auto clip = addAnimation<float>(AnimationParams<float>{
+      .from = 0.f,
+      .to = 10.f,
+      .duration = 2.0,
+      .delay = 0.5,
+      .startedAt = 100.0,
+      .transition = Transition::linear(1.f),
+  });
+
+  CHECK(clip.testValueAt(100.25) == doctest::Approx(0.f));
+  CHECK(clip.testValueAt(101.50) == doctest::Approx(5.f));
+  CHECK(clip.testValueAt(102.50) == doctest::Approx(10.f));
+  CHECK_FALSE(clip.testTick(102.50));
+}
+
+TEST_CASE("Animation clip completes exactly once on natural finish") {
+  int completionCount = 0;
+  auto clip = addAnimation<float>(AnimationParams<float>{
+      .from = 0.f,
+      .to = 1.f,
+      .duration = 1.0,
+      .startedAt = 10.0,
+      .transition = Transition::linear(1.f),
+      .onComplete = [&] {
+        ++completionCount;
+      },
+  });
+
+  CHECK(clip.testTick(10.50));
+  CHECK(completionCount == 0);
+
+  CHECK_FALSE(clip.testTick(11.00));
+  CHECK(completionCount == 1);
+
+  CHECK_FALSE(clip.testTick(12.00));
+  CHECK(completionCount == 1);
+}
+
+TEST_CASE("Animation clip continues to completion after handle is dropped") {
+  int completionCount = 0;
+  {
+    auto clip = addAnimation<float>(AnimationParams<float>{
+        .from = 0.f,
+        .to = 1.f,
+        .duration = 1.0,
+        .startedAt = 20.0,
+        .transition = Transition::linear(1.f),
+        .onComplete = [&] {
+          ++completionCount;
+        },
+    });
+    (void)clip;
+  }
+
+  CHECK(AnimationClock::instance().testOwnedAnimationCount() == 1u);
+  AnimationClock::instance().testTick(21.0);
+  CHECK(completionCount == 1);
+  CHECK(AnimationClock::instance().testOwnedAnimationCount() == 0u);
+}
+
+TEST_CASE("Animation clip cancel freezes the sampled value without completion") {
+  int completionCount = 0;
+  double const now = AnimationClock::nowSeconds();
+  auto clip = addAnimation<float>(AnimationParams<float>{
+      .from = 0.f,
+      .to = 10.f,
+      .duration = 2.0,
+      .startedAt = now - 1.0,
+      .transition = Transition::linear(1.f),
+      .onComplete = [&] {
+        ++completionCount;
+      },
+  });
+
+  clip.cancel();
+
+  CHECK(clip.isFinished());
+  CHECK(clip.value() == doctest::Approx(5.f).epsilon(0.02));
+  CHECK(completionCount == 0);
+}
+
+TEST_CASE("Timeline animations reject invalid timing") {
+  CHECK_THROWS_AS(
+      (void)addAnimation<float>(AnimationParams<float>{
+          .from = 0.f,
+          .to = 1.f,
+          .duration = -1.0,
+      }),
+      std::invalid_argument);
 }
 
 TEST_CASE("Animated copies share playback state") {

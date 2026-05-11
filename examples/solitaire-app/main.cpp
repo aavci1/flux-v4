@@ -39,6 +39,7 @@ constexpr float kMinBoardW = kCardW * 7.f + kColGap * 6.f;
 constexpr float kBoardH = 640.f;
 constexpr float kBoardTop = 108.f;
 constexpr float kBoardHorizontalInset = 40.f;
+constexpr std::int64_t kMoveFlyDurationNanos = 260'000'000;
 constexpr std::int64_t kDropFlyDurationNanos = 200'000'000;
 constexpr std::int64_t kDealFlyDurationNanos = 120'000'000;
 constexpr std::int64_t kDealFlyIntervalNanos = 120'000'000;
@@ -46,8 +47,6 @@ constexpr std::int64_t kAutoFlyDurationNanos = 85'000'000;
 constexpr std::int64_t kWinCelebrationDurationNanos = 8'000'000'000;
 constexpr std::int64_t kWinCardIntervalNanos = 160'000'000;
 constexpr std::int64_t kHintBounceCycleNanos = 380'000'000;
-constexpr int kHintBounceCount = 2;
-constexpr std::int64_t kHintAnimationDurationNanos = kHintBounceCycleNanos * kHintBounceCount;
 constexpr int kElapsedSaveIntervalSeconds = 15;
 constexpr float kHintBounceAmplitude = 16.f;
 constexpr float kSelectedCardScale = 1.035f;
@@ -105,13 +104,10 @@ struct Selection {
 struct SelectionScaleAnimation {
   Source source;
   int count = 0;
-  float fromScale = 1.f;
-  float toScale = 1.f;
-  std::int64_t startNanos = 0;
+  Animation<float> scale;
 
-  bool active(std::int64_t now) const {
-    return source.kind != PileKind::None && count > 0 &&
-           now < startNanos + kSelectionScaleDurationNanos;
+  bool active() const {
+    return source.kind != PileKind::None && count > 0 && !scale.isFinished();
   }
 
   bool operator==(SelectionScaleAnimation const&) const = default;
@@ -119,24 +115,19 @@ struct SelectionScaleAnimation {
 
 struct Hint {
   Source source;
-  std::int64_t startedNanos = 0;
+  Animation<float> progress;
 
-  bool active() const { return source.kind != PileKind::None; }
-  bool animating(std::int64_t now) const {
-    return active() && startedNanos > 0 &&
-           now < startedNanos + kHintAnimationDurationNanos;
-  }
+  bool active() const { return source.kind != PileKind::None && !progress.isFinished(); }
   bool operator==(Hint const&) const = default;
 };
 
-struct FlyAnimation {
-  std::vector<Card> cards;
-  std::vector<Rect> fromRects;
-  std::vector<Rect> toRects;
-  std::int64_t startNanos = 0;
-  std::int64_t durationNanos = 260'000'000;
+struct CardFlight {
+  Card card;
+  Animation<Rect> rect;
 
-  bool operator==(FlyAnimation const&) const = default;
+  bool active() const { return !rect.isFinished(); }
+
+  bool operator==(CardFlight const&) const = default;
 };
 
 struct PeekState {
@@ -167,7 +158,7 @@ struct DragState {
 struct SolitaireState {
   Board board;
   std::vector<HistoryEntry> history;
-  std::vector<FlyAnimation> animations;
+  std::vector<CardFlight> animations;
   std::vector<SelectionScaleAnimation> selectionScaleAnimations;
   Selection selection;
   Hint hint;
@@ -179,22 +170,51 @@ struct SolitaireState {
   std::uint32_t seed = 1;
   std::uint64_t saveRevision = 1;
   std::int64_t startedNanos = 0;
-  std::int64_t frameNanos = 0;
   bool completed = false;
-  bool dealing = false;
   bool autoFinishing = false;
-  std::int64_t celebrationStartNanos = 0;
+  Animation<float> celebration;
 
   bool operator==(SolitaireState const&) const = default;
 };
 
-bool dealAnimationRunning(SolitaireState const& state) {
-  return state.dealing && !state.animations.empty();
+bool hasActiveFlyAnimations(SolitaireState const& state) {
+  return std::any_of(state.animations.begin(), state.animations.end(), [](CardFlight const& animation) {
+    return animation.active();
+  });
+}
+
+void clearFlyAnimations(SolitaireState& state) {
+  for (CardFlight& animation : state.animations) {
+    animation.rect.cancel();
+  }
+  state.animations.clear();
+}
+
+void clearSelectionScaleAnimations(SolitaireState& state) {
+  for (SelectionScaleAnimation& animation : state.selectionScaleAnimations) {
+    animation.scale.cancel();
+  }
+  state.selectionScaleAnimations.clear();
+}
+
+void clearHint(SolitaireState& state) {
+  state.hint.progress.cancel();
+  state.hint = {};
+}
+
+void clearCelebration(SolitaireState& state) {
+  state.celebration.cancel();
+  state.celebration = {};
 }
 
 bool playControlsDisabled(SolitaireState const& state) {
-  return state.completed || state.autoFinishing || dealAnimationRunning(state);
+  return state.completed || state.autoFinishing || hasActiveFlyAnimations(state);
 }
+
+bool celebrationActive(SolitaireState const& state);
+void startCelebration(SolitaireState& state);
+void finishAnimationStep(Signal<SolitaireState> const& state);
+std::function<void()> finishAnimationStepCallback(Signal<SolitaireState> state);
 
 struct CardPosition {
   Card card;
@@ -266,6 +286,25 @@ std::int64_t nowNanos() {
   auto const nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now().time_since_epoch());
   return nanos.count();
+}
+
+double secondsFromNanos(std::int64_t nanos) {
+  return static_cast<double>(nanos) * 1e-9;
+}
+
+double durationSeconds(std::int64_t nanos) {
+  return static_cast<double>(std::max<std::int64_t>(0, nanos)) * 1e-9;
+}
+
+float smoothstep(float t) {
+  t = std::clamp(t, 0.f, 1.f);
+  return t * t * (3.f - 2.f * t);
+}
+
+Transition transitionWithEasing(EasingFn easing, std::int64_t durationNanos) {
+  Transition transition = Transition::linear(static_cast<float>(durationSeconds(durationNanos)));
+  transition.easing = easing;
+  return transition;
 }
 
 std::uint32_t randomSeed() {
@@ -384,10 +423,8 @@ SolitaireState stableForSave(SolitaireState state) {
   state.hint = {};
   state.peek = {};
   state.drag = {};
-  state.dealing = false;
   state.autoFinishing = false;
-  state.frameNanos = 0;
-  state.celebrationStartNanos = 0;
+  state.celebration = {};
   return state;
 }
 
@@ -498,7 +535,7 @@ void markSaveDirty(SolitaireState& state) {
 }
 
 bool saveBlockedByTransientState(SolitaireState const& state) {
-  return state.dealing || state.autoFinishing || !state.animations.empty() ||
+  return state.autoFinishing || hasActiveFlyAnimations(state) ||
          (state.drag.active() && state.drag.moved);
 }
 
@@ -601,17 +638,19 @@ bool canPlaceOnFoundation(Card const& moving, Card const* top) {
   return moving.suit == top->suit && rankValue(moving) == rankValue(*top) + 1;
 }
 
-void startDealAnimation(SolitaireState& state);
+void startDealAnimation(SolitaireState& state, std::function<void()> onComplete = {});
 Board makeWinnableBoard(std::uint32_t seed, int drawCount, std::uint32_t& resolvedSeed);
 
-SolitaireState makeState(std::uint32_t seed, int drawCount) {
+SolitaireState makeState(std::uint32_t seed, int drawCount, bool animateDeal = true) {
   std::uint32_t resolvedSeed = seed;
   SolitaireState state{
       .board = makeWinnableBoard(seed, drawCount, resolvedSeed),
       .seed = resolvedSeed,
       .startedNanos = nowNanos(),
   };
-  startDealAnimation(state);
+  if (animateDeal) {
+    startDealAnimation(state);
+  }
   return state;
 }
 
@@ -636,14 +675,14 @@ void refreshCompletion(SolitaireState& state) {
     state.elapsedSeconds = static_cast<int>(
         std::max<std::int64_t>(0, now - state.startedNanos) / 1'000'000'000);
     state.selection = {};
-    state.hint = {};
+    clearHint(state);
     state.peek = {};
     state.drag = {};
-    state.celebrationStartNanos = 0;
+    clearCelebration(state);
   }
   state.completed = complete;
   if (!complete) {
-    state.celebrationStartNanos = 0;
+    clearCelebration(state);
   }
 }
 
@@ -795,8 +834,8 @@ bool performMove(SolitaireState& state, Source source, Source dest, int count, b
   }
 
   state.selection = {};
-  state.selectionScaleAnimations.clear();
-  state.hint = {};
+  clearSelectionScaleAnimations(state);
+  clearHint(state);
   state.peek = {};
   state.drag = {};
   ++state.moves;
@@ -859,8 +898,8 @@ void drawStock(SolitaireState& state, int drawCount) {
     }
   }
   state.selection = {};
-  state.selectionScaleAnimations.clear();
-  state.hint = {};
+  clearSelectionScaleAnimations(state);
+  clearHint(state);
   state.peek = {};
   state.drag = {};
   ++state.moves;
@@ -1676,32 +1715,54 @@ Rect slotRect(PileKind kind, int index, BoardGeometry const& geometry) {
   return {};
 }
 
-void addCardAnimation(SolitaireState& state, Card card, Rect from, Rect to,
-                      std::int64_t startNanos, std::int64_t durationNanos) {
-  state.animations.push_back(FlyAnimation{
-      .cards = {card},
-      .fromRects = {from},
-      .toRects = {to},
-      .startNanos = startNanos,
-      .durationNanos = durationNanos,
-  });
+void addCardsAnimation(SolitaireState& state, std::vector<Card> cards,
+                       std::vector<Rect> fromRects, std::vector<Rect> toRects,
+                       std::int64_t durationNanos, std::function<void()> onComplete = {},
+                       std::int64_t staggerNanos = 0) {
+  if (cards.empty() || toRects.empty()) {
+    return;
+  }
+  if (fromRects.empty()) {
+    fromRects.push_back(Rect::sharp(0.f, 0.f, kCardW, kCardH));
+  }
+  Transition transition = transitionWithEasing(smoothstep, durationNanos);
+  std::erase_if(state.animations, [](CardFlight const& animation) { return !animation.active(); });
+  state.animations.reserve(state.animations.size() + cards.size());
+  for (std::size_t i = 0; i < cards.size(); ++i) {
+    Rect const from = i < fromRects.size() ? fromRects[i] : fromRects.front();
+    Rect const to = i < toRects.size() ? toRects[i] : from;
+    bool const isLast = i + 1 == cards.size();
+    state.animations.push_back(CardFlight{
+        .card = cards[i],
+        .rect = addAnimation<Rect>(AnimationParams<Rect>{
+            .from = from,
+            .to = to,
+            .duration = durationSeconds(durationNanos),
+            .delay = durationSeconds(staggerNanos * static_cast<std::int64_t>(i)),
+            .transition = transition,
+            .onComplete = isLast ? std::move(onComplete) : std::function<void()>{},
+        }),
+    });
+  }
 }
 
-void startDealAnimation(SolitaireState& state) {
+void startDealAnimation(SolitaireState& state, std::function<void()> onComplete) {
   BoardGeometry const geometry{};
   std::int64_t const now = nowNanos();
   Rect const stockTop = slotRect(PileKind::Stock, 0, geometry);
   Rect const from = Rect::sharp(stockTop.x, stockTop.y - 10.f, stockTop.width, stockTop.height);
   std::int64_t delay = 0;
 
-  state.animations.clear();
-  state.dealing = true;
+  clearFlyAnimations(state);
   state.autoFinishing = false;
   state.completed = false;
-  state.celebrationStartNanos = 0;
-  state.frameNanos = now;
+  clearCelebration(state);
 
   float const tableauTop = kCardH + kTopToTableauGap;
+  std::vector<Card> cards;
+  std::vector<Rect> destinations;
+  cards.reserve(28);
+  destinations.reserve(28);
   for (int row = 0; row < 7; ++row) {
     for (int col = row; col < 7; ++col) {
       auto const& column = state.board.tableau[static_cast<std::size_t>(col)];
@@ -1717,10 +1778,13 @@ void startDealAnimation(SolitaireState& state) {
       Card animatedCard = card;
       animatedCard.faceUp = false;
       Rect const to = Rect::sharp(columnX(geometry, col), y, kCardW, kCardH);
-      addCardAnimation(state, animatedCard, from, to, now + delay, kDealFlyDurationNanos);
+      cards.push_back(animatedCard);
+      destinations.push_back(to);
       delay += kDealFlyIntervalNanos;
     }
   }
+  addCardsAnimation(state, std::move(cards), {from}, std::move(destinations),
+                    kDealFlyDurationNanos, std::move(onComplete), kDealFlyIntervalNanos);
 
   state.startedNanos = now + delay + kDealFlyDurationNanos;
 }
@@ -1784,7 +1848,8 @@ std::optional<Source> dropDestinationForDrag(BoardGeometry const& geometry, Drag
 }
 
 bool moveWithAnimation(SolitaireState& state, Source source, Source dest, int count,
-                       int drawCount, BoardGeometry const& geometry, std::int64_t startNanos) {
+                       int drawCount, BoardGeometry const& geometry,
+                       std::function<void()> onComplete = {}) {
   std::vector<Card> moving = cardsFromSource(state.board, source, count);
   if (moving.empty()) {
     return false;
@@ -1808,18 +1873,13 @@ bool moveWithAnimation(SolitaireState& state, Source source, Source dest, int co
     toRects.push_back(rectForCard(after, card.id).value_or(slotRect(dest.kind, dest.index, geometry)));
   }
 
-  state.animations.push_back(FlyAnimation{
-      .cards = std::move(moving),
-      .fromRects = std::move(fromRects),
-      .toRects = std::move(toRects),
-      .startNanos = startNanos,
-  });
-  state.frameNanos = startNanos;
+  addCardsAnimation(state, std::move(moving), std::move(fromRects), std::move(toRects),
+                    kMoveFlyDurationNanos, std::move(onComplete));
   return true;
 }
 
 bool autoMoveWithAnimation(SolitaireState& state, Source source, int count, int drawCount,
-                           BoardGeometry const& geometry, std::int64_t startNanos) {
+                           BoardGeometry const& geometry, std::function<void()> onComplete = {}) {
   std::vector<Card> cards = cardsFromSource(state.board, source, count);
   if (cards.size() != 1) {
     return false;
@@ -1829,7 +1889,7 @@ bool autoMoveWithAnimation(SolitaireState& state, Source source, int count, int 
     return false;
   }
   return moveWithAnimation(state, source, Source{.kind = PileKind::Foundation, .index = *dest},
-                           1, drawCount, geometry, startNanos);
+                           1, drawCount, geometry, std::move(onComplete));
 }
 
 std::optional<Source> nextFoundationAutoSource(Board const& board) {
@@ -1857,8 +1917,8 @@ std::optional<Source> nextFoundationAutoSource(Board const& board) {
 }
 
 bool scheduleNextAutoFinishMove(SolitaireState& state, int drawCount, BoardGeometry const& geometry,
-                                std::int64_t startNanos, bool recordHistory) {
-  if (!state.animations.empty()) {
+                                bool recordHistory, std::function<void()> onComplete = {}) {
+  if (hasActiveFlyAnimations(state)) {
     return false;
   }
 
@@ -1892,29 +1952,53 @@ bool scheduleNextAutoFinishMove(SolitaireState& state, int drawCount, BoardGeome
   std::vector<CardPosition> const after = buildCardPositions(state.board, drawCount, geometry);
   Rect const to = rectForCard(after, moving.front().id)
                       .value_or(slotRect(PileKind::Foundation, *dest, geometry));
-  addCardAnimation(state, moving.front(), from, to, startNanos, kAutoFlyDurationNanos);
+  addCardsAnimation(state, std::move(moving), {from}, {to}, kAutoFlyDurationNanos, std::move(onComplete));
   state.selection = {};
-  state.hint = {};
+  clearHint(state);
   state.peek = {};
   state.drag = {};
   state.autoFinishing = true;
-  state.frameNanos = startNanos;
   return true;
 }
 
 bool autoFinishToFoundations(SolitaireState& state, int drawCount, BoardGeometry const& geometry,
-                             std::int64_t startNanos) {
-  if (playControlsDisabled(state) || !state.animations.empty()) {
+                             std::function<void()> onComplete = {}) {
+  if (playControlsDisabled(state) || hasActiveFlyAnimations(state)) {
     return false;
   }
-  return scheduleNextAutoFinishMove(state, drawCount, geometry, startNanos, true);
+  return scheduleNextAutoFinishMove(state, drawCount, geometry, true, std::move(onComplete));
+}
+
+void finishAnimationStep(Signal<SolitaireState> const& state) {
+  mutate(state, [state](SolitaireState& s) {
+    if (s.hint.source.kind != PileKind::None && !s.hint.active()) {
+      clearHint(s);
+    }
+    if (s.autoFinishing && !hasActiveFlyAnimations(s)) {
+      if (scheduleNextAutoFinishMove(
+              s,
+              kDrawCount,
+              BoardGeometry{},
+              false,
+              finishAnimationStepCallback(state))) {
+        return;
+      }
+      s.autoFinishing = false;
+    }
+    if (s.completed && !hasActiveFlyAnimations(s) && !s.autoFinishing && !s.celebration) {
+      startCelebration(s);
+    }
+  });
+}
+
+std::function<void()> finishAnimationStepCallback(Signal<SolitaireState> state) {
+  return [state] { finishAnimationStep(state); };
 }
 
 void autoFinish(Signal<SolitaireState> const& state) {
   BoardGeometry const geometry{};
-  std::int64_t const startNanos = nowNanos();
-  mutate(state, [geometry, startNanos](SolitaireState& s) {
-    autoFinishToFoundations(s, kDrawCount, geometry, startNanos);
+  mutate(state, [state, geometry](SolitaireState& s) {
+    autoFinishToFoundations(s, kDrawCount, geometry, finishAnimationStepCallback(state));
   });
 }
 
@@ -1928,70 +2012,57 @@ bool sourceMatches(Source a, Source b, bool includeStack) {
   return a.row == b.row;
 }
 
-float easeSelectionScale(float t) {
-  t = std::clamp(t, 0.f, 1.f);
-  return t * t * (3.f - 2.f * t);
-}
-
-float selectionAnimationScale(SelectionScaleAnimation const& animation, std::int64_t now) {
-  double const raw = static_cast<double>(now - animation.startNanos) /
-                     static_cast<double>(std::max<std::int64_t>(1, kSelectionScaleDurationNanos));
-  float const t = easeSelectionScale(static_cast<float>(raw));
-  return animation.fromScale + (animation.toScale - animation.fromScale) * t;
-}
-
-float selectionScaleForSource(SolitaireState const& state, Source source, std::int64_t now) {
+float selectionScaleForSource(SolitaireState const& state, Source source) {
   float scale = state.selection.active() && sourceMatches(source, state.selection.source, true)
                     ? kSelectedCardScale
                     : 1.f;
   for (SelectionScaleAnimation const& animation : state.selectionScaleAnimations) {
     if (sourceMatches(source, animation.source, true)) {
-      scale = animation.active(now) ? selectionAnimationScale(animation, now) : animation.toScale;
+      scale = animation.scale.value();
     }
   }
   return scale;
 }
 
-void addSelectionScaleAnimation(SolitaireState& state, Selection selection, float toScale,
-                                std::int64_t now) {
+void addSelectionScaleAnimation(SolitaireState& state, Selection selection, float toScale) {
   if (!selection.active()) {
     return;
   }
-  float const fromScale = selectionScaleForSource(state, selection.source, now);
-  state.selectionScaleAnimations.erase(
-      std::remove_if(state.selectionScaleAnimations.begin(), state.selectionScaleAnimations.end(),
-                     [source = selection.source](SelectionScaleAnimation const& animation) {
-                       return sourceMatches(animation.source, source, false);
-                     }),
-      state.selectionScaleAnimations.end());
+  float const fromScale = selectionScaleForSource(state, selection.source);
+  std::erase_if(state.selectionScaleAnimations,
+                [source = selection.source](SelectionScaleAnimation const& animation) {
+                  return sourceMatches(animation.source, source, false);
+                });
   if (std::abs(fromScale - toScale) < 0.001f) {
     return;
   }
   state.selectionScaleAnimations.push_back(SelectionScaleAnimation{
       .source = selection.source,
       .count = selection.count,
-      .fromScale = fromScale,
-      .toScale = toScale,
-      .startNanos = now,
+      .scale = addAnimation<float>(AnimationParams<float>{
+          .from = fromScale,
+          .to = toScale,
+          .duration = durationSeconds(kSelectionScaleDurationNanos),
+          .transition = transitionWithEasing(smoothstep, kSelectionScaleDurationNanos),
+      }),
   });
 }
 
-void setSelectionWithAnimation(SolitaireState& state, Selection next, std::int64_t now) {
+void setSelectionWithAnimation(SolitaireState& state, Selection next) {
   Selection const previous = state.selection;
   if (previous == next) {
     return;
   }
   if (previous.active()) {
-    addSelectionScaleAnimation(state, previous, 1.f, now);
+    addSelectionScaleAnimation(state, previous, 1.f);
   }
   if (next.active()) {
-    addSelectionScaleAnimation(state, next, kSelectedCardScale, now);
+    addSelectionScaleAnimation(state, next, kSelectedCardScale);
   }
   state.selection = next;
-  state.frameNanos = now;
 }
 
-bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now);
+bool cardIsAnimating(SolitaireState const& state, int cardId);
 
 void handleBoardClick(Signal<SolitaireState> const& state, Point localPoint, Size viewport) {
   SolitaireState const stateSnapshot = state.peek();
@@ -2002,9 +2073,8 @@ void handleBoardClick(Signal<SolitaireState> const& state, Point localPoint, Siz
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   if (p.x < -20.f || p.y < -20.f || p.x > geometry.layoutWidth + 20.f || p.y > geometry.layoutHeight + 80.f) {
-    std::int64_t const now = nowNanos();
-    mutate(state, [now](SolitaireState& s) {
-      setSelectionWithAnimation(s, {}, now);
+    mutate(state, [](SolitaireState& s) {
+      setSelectionWithAnimation(s, {});
       s.peek = {};
     });
     return;
@@ -2019,9 +2089,10 @@ void handleBoardClick(Signal<SolitaireState> const& state, Point localPoint, Siz
   if (current.selection.active()) {
     if (std::optional<Source> dest = hitDestination(geometry, p)) {
       if (canMove(current.board, current.selection.source, current.selection.count, *dest)) {
-        std::int64_t const startNanos = nowNanos();
-        mutate(state, [dest, drawCount, geometry, startNanos](SolitaireState& s) {
-          moveWithAnimation(s, s.selection.source, *dest, s.selection.count, drawCount, geometry, startNanos);
+        mutate(state, [state, dest, drawCount, geometry](SolitaireState& s) {
+          moveWithAnimation(
+              s, s.selection.source, *dest, s.selection.count, drawCount, geometry,
+              finishAnimationStepCallback(state));
         });
         return;
       }
@@ -2030,23 +2101,22 @@ void handleBoardClick(Signal<SolitaireState> const& state, Point localPoint, Siz
 
   if (std::optional<CardPosition> hit = hitCard(current.board, drawCount, geometry, p)) {
     if (current.selection.active() && sourceMatches(hit->source, current.selection.source, false)) {
-      std::int64_t const startNanos = nowNanos();
-      mutate(state, [drawCount, geometry, startNanos](SolitaireState& s) {
-        autoMoveWithAnimation(s, s.selection.source, s.selection.count, drawCount, geometry, startNanos);
+      mutate(state, [state, drawCount, geometry](SolitaireState& s) {
+        autoMoveWithAnimation(
+            s, s.selection.source, s.selection.count, drawCount, geometry,
+            finishAnimationStepCallback(state));
       });
       return;
     }
-    std::int64_t const now = nowNanos();
-    mutate(state, [hit, now](SolitaireState& s) {
-      setSelectionWithAnimation(s, Selection{.source = hit->source, .count = hit->count}, now);
-      s.hint = {};
+    mutate(state, [hit](SolitaireState& s) {
+      setSelectionWithAnimation(s, Selection{.source = hit->source, .count = hit->count});
+      clearHint(s);
     });
     return;
   }
 
-  std::int64_t const now = nowNanos();
-  mutate(state, [now](SolitaireState& s) {
-    setSelectionWithAnimation(s, {}, now);
+  mutate(state, [](SolitaireState& s) {
+    setSelectionWithAnimation(s, {});
     s.peek = {};
   });
 }
@@ -2059,10 +2129,9 @@ void startBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size 
   if (playControlsDisabled(current)) {
     return;
   }
-  std::int64_t const animationNow = current.frameNanos > 0 ? current.frameNanos : nowNanos();
 
   std::optional<CardPosition> hit = hitCard(current.board, drawCount, geometry, p);
-  if (!hit || cardIsAnimating(current, hit->card.id, animationNow)) {
+  if (!hit || cardIsAnimating(current, hit->card.id)) {
     return;
   }
 
@@ -2100,8 +2169,8 @@ void updateBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size
     s.drag.currentPoint = p;
     if (movedNow && !s.drag.moved) {
       s.selection = {};
-      s.selectionScaleAnimations.clear();
-      s.hint = {};
+      clearSelectionScaleAnimations(s);
+      clearHint(s);
       s.peek = {};
     }
     s.drag.moved = movedNow;
@@ -2137,8 +2206,7 @@ void finishBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size
 
   std::optional<Source> dest = dropDestinationForDrag(geometry, drag);
   if (dest && canMove(current.board, drag.source, drag.count, *dest)) {
-    std::int64_t const startNanos = nowNanos();
-    mutate(state, [drag, dest, drawCount, geometry, startNanos, fromRects = std::move(fromRects)](SolitaireState& s) mutable {
+    mutate(state, [state, drag, dest, drawCount, geometry, fromRects = std::move(fromRects)](SolitaireState& s) mutable {
       if (performMove(s, drag.source, *dest, drag.count)) {
         std::vector<CardPosition> const after = buildCardPositions(s.board, drawCount, geometry);
         std::vector<Rect> toRects;
@@ -2146,36 +2214,27 @@ void finishBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size
         for (Card const& card : drag.cards) {
           toRects.push_back(rectForCard(after, card.id).value_or(slotRect(dest->kind, dest->index, geometry)));
         }
-        s.animations.push_back(FlyAnimation{
-            .cards = drag.cards,
-            .fromRects = std::move(fromRects),
-            .toRects = std::move(toRects),
-            .startNanos = startNanos,
-            .durationNanos = kDropFlyDurationNanos,
-        });
-        s.frameNanos = startNanos;
+        addCardsAnimation(
+            s, drag.cards, std::move(fromRects), std::move(toRects),
+            kDropFlyDurationNanos,
+            finishAnimationStepCallback(state));
       }
       s.drag = {};
     });
     return;
   }
 
-  std::int64_t const startNanos = nowNanos();
   std::vector<CardPosition> const currentPositions = buildCardPositions(current.board, drawCount, geometry);
   std::vector<Rect> toRects;
   toRects.reserve(drag.cards.size());
   for (Card const& card : drag.cards) {
     toRects.push_back(rectForCard(currentPositions, card.id).value_or(slotRect(drag.source.kind, drag.source.index, geometry)));
   }
-  mutate(state, [drag, startNanos, fromRects = std::move(fromRects), toRects = std::move(toRects)](SolitaireState& s) mutable {
-    s.animations.push_back(FlyAnimation{
-        .cards = drag.cards,
-        .fromRects = std::move(fromRects),
-        .toRects = std::move(toRects),
-        .startNanos = startNanos,
-        .durationNanos = kDropFlyDurationNanos,
-    });
-    s.frameNanos = startNanos;
+  mutate(state, [state, drag, fromRects = std::move(fromRects), toRects = std::move(toRects)](SolitaireState& s) mutable {
+    addCardsAnimation(
+        s, drag.cards, std::move(fromRects), std::move(toRects),
+        kDropFlyDurationNanos,
+        finishAnimationStepCallback(state));
     s.drag = {};
   });
 }
@@ -2219,13 +2278,27 @@ void stopBoardPeek(Signal<SolitaireState> const& state) {
 }
 
 void showHint(Signal<SolitaireState> const& state) {
-  std::int64_t const hintNanos = nowNanos();
-  mutate(state, [hintNanos](SolitaireState& s) {
+  mutate(state, [state](SolitaireState& s) {
     if (playControlsDisabled(s)) {
       return;
     }
-    auto hint = [hintNanos](Source source) {
-      return Hint{.source = source, .startedNanos = hintNanos};
+    auto hint = [state](Source source) {
+      return Hint{
+          .source = source,
+          .progress = addAnimation<float>(AnimationParams<float>{
+              .from = 0.f,
+              .to = 1.f,
+              .duration = durationSeconds(kHintBounceCycleNanos * 2),
+              .transition = Transition::linear(static_cast<float>(durationSeconds(kHintBounceCycleNanos * 2))),
+              .onComplete = [state] {
+                mutate(state, [](SolitaireState& s) {
+                  if (s.hint.source.kind != PileKind::None && !s.hint.active()) {
+                    clearHint(s);
+                  }
+                });
+              },
+          }),
+      };
     };
     Board const& board = s.board;
     if (!board.waste.empty()) {
@@ -2233,7 +2306,6 @@ void showHint(Signal<SolitaireState> const& state) {
       Card const& card = board.waste.back();
       if (findFoundationFor(board, card)) {
         s.hint = hint(source);
-        s.frameNanos = hintNanos;
         return;
       }
       for (int col = 0; col < 7; ++col) {
@@ -2241,7 +2313,6 @@ void showHint(Signal<SolitaireState> const& state) {
         Card const* top = dest.empty() ? nullptr : &dest.back();
         if (canPlaceOnTableau(card, top)) {
           s.hint = hint(source);
-          s.frameNanos = hintNanos;
           return;
         }
       }
@@ -2257,7 +2328,6 @@ void showHint(Signal<SolitaireState> const& state) {
       Source topSource{.kind = PileKind::Tableau, .index = col, .row = topRow};
       if (top.faceUp && findFoundationFor(board, top)) {
         s.hint = hint(topSource);
-        s.frameNanos = hintNanos;
         return;
       }
       for (int row = 0; row < static_cast<int>(column.size()); ++row) {
@@ -2273,7 +2343,6 @@ void showHint(Signal<SolitaireState> const& state) {
           Card const* destTop = dest.empty() ? nullptr : &dest.back();
           if (canPlaceOnTableau(moving, destTop)) {
             s.hint = hint(Source{.kind = PileKind::Tableau, .index = col, .row = row});
-            s.frameNanos = hintNanos;
             return;
           }
         }
@@ -2281,7 +2350,6 @@ void showHint(Signal<SolitaireState> const& state) {
     }
 
     s.hint = hint(Source{.kind = PileKind::Stock});
-    s.frameNanos = hintNanos;
   });
 }
 
@@ -2297,15 +2365,13 @@ void undo(Signal<SolitaireState> const& state) {
     s.score = prev.score;
     s.completed = prev.completed;
     s.selection = {};
-    s.selectionScaleAnimations.clear();
-    s.hint = {};
+    clearSelectionScaleAnimations(s);
+    clearHint(s);
     s.peek = {};
     s.drag = {};
-    s.animations.clear();
-    s.frameNanos = 0;
-    s.dealing = false;
+    clearFlyAnimations(s);
     s.autoFinishing = false;
-    s.celebrationStartNanos = 0;
+    clearCelebration(s);
     markSaveDirty(s);
   });
 }
@@ -2315,7 +2381,13 @@ void newGame(Signal<SolitaireState> const& state) {
   if (nextSeed == state.peek().seed) {
     ++nextSeed;
   }
-  state = makeState(nextSeed, kDrawCount);
+  SolitaireState previous = state.peek();
+  clearFlyAnimations(previous);
+  clearSelectionScaleAnimations(previous);
+  clearHint(previous);
+  SolitaireState next = makeState(nextSeed, kDrawCount, false);
+  startDealAnimation(next, finishAnimationStepCallback(state));
+  state = std::move(next);
 }
 
 void drawText(Canvas& canvas, std::string_view text, Font font, Color color, Point origin,
@@ -2480,50 +2552,42 @@ void drawRotatedCard(Canvas& canvas, Card const& card, Rect rect, float radians)
   canvas.restore();
 }
 
-float hintBounceOffset(Hint const& hint, std::int64_t now) {
-  if (!hint.animating(now)) {
+float hintBounceOffset(Hint const& hint) {
+  if (!hint.active()) {
     return 0.f;
   }
-  std::int64_t const elapsed = std::max<std::int64_t>(0, now - hint.startedNanos);
-  double const phase = static_cast<double>(elapsed % kHintBounceCycleNanos) /
-                       static_cast<double>(kHintBounceCycleNanos);
-  return -kHintBounceAmplitude * std::sin(static_cast<float>(phase) * kPi);
+  float const cycles = hint.progress.value() * 2.f;
+  float const phase = cycles - std::floor(cycles);
+  return -std::sin(phase * kPi) * kHintBounceAmplitude;
 }
 
-Rect visualCardRect(CardPosition const& pos, SolitaireState const& state, std::int64_t now) {
-  bool const hinted = state.hint.animating(now) && sourceMatches(pos.source, state.hint.source, true);
-  float const offsetY = hinted ? hintBounceOffset(state.hint, now) : 0.f;
+Rect visualCardRect(CardPosition const& pos, SolitaireState const& state) {
+  bool const hinted = state.hint.active() && sourceMatches(pos.source, state.hint.source, true);
+  float const offsetY = hinted ? hintBounceOffset(state.hint) : 0.f;
   return Rect::sharp(pos.rect.x, pos.rect.y + offsetY, pos.rect.width, pos.rect.height);
 }
 
-float visualCardScale(CardPosition const& pos, SolitaireState const& state, std::int64_t now) {
-  return selectionScaleForSource(state, pos.source, now);
+float visualCardScale(CardPosition const& pos, SolitaireState const& state) {
+  return selectionScaleForSource(state, pos.source);
 }
 
-bool celebrationActive(SolitaireState const& state, std::int64_t now) {
-  if (state.celebrationStartNanos <= 0) {
-    return false;
-  }
-  return now < state.celebrationStartNanos + kWinCelebrationDurationNanos;
+bool celebrationActive(SolitaireState const& state) {
+  return state.celebration && !state.celebration.isFinished();
 }
 
-bool animationActive(FlyAnimation const& animation, std::int64_t now) {
-  return now < animation.startNanos + animation.durationNanos;
+void startCelebration(SolitaireState& state) {
+  state.celebration = addAnimation<float>(AnimationParams<float>{
+      .from = 0.f,
+      .to = 1.f,
+      .duration = durationSeconds(kWinCelebrationDurationNanos),
+      .transition = Transition::linear(static_cast<float>(durationSeconds(kWinCelebrationDurationNanos))),
+  });
 }
 
-bool animationVisible(FlyAnimation const& animation, std::int64_t now) {
-  return now >= animation.startNanos && animationActive(animation, now);
-}
-
-bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now) {
-  for (FlyAnimation const& animation : state.animations) {
-    if (!animationActive(animation, now)) {
-      continue;
-    }
-    for (Card const& card : animation.cards) {
-      if (card.id == cardId) {
-        return true;
-      }
+bool cardIsAnimating(SolitaireState const& state, int cardId) {
+  for (CardFlight const& animation : state.animations) {
+    if (animation.card.id == cardId && animation.active()) {
+      return true;
     }
   }
   return false;
@@ -2531,19 +2595,16 @@ bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now) 
 
 std::vector<int> hiddenCardIds(SolitaireState const& state, std::int64_t now) {
   std::vector<int> ids;
-  if (celebrationActive(state, now)) {
+  if (celebrationActive(state)) {
     for (auto const& pile : state.board.foundations) {
       for (Card const& card : pile) {
         ids.push_back(card.id);
       }
     }
   }
-  for (FlyAnimation const& animation : state.animations) {
-    if (!animationActive(animation, now)) {
-      continue;
-    }
-    for (Card const& card : animation.cards) {
-      ids.push_back(card.id);
+  for (CardFlight const& animation : state.animations) {
+    if (animation.active()) {
+      ids.push_back(animation.card.id);
     }
   }
   if (state.drag.active() && state.drag.moved) {
@@ -2578,46 +2639,33 @@ int winCelebrationLaunchIndex(Card const& card) {
   return std::clamp(13 - card.rank, 0, 12);
 }
 
-float easedProgress(FlyAnimation const& animation, std::int64_t now) {
-  double const raw = static_cast<double>(now - animation.startNanos) /
-                     static_cast<double>(std::max<std::int64_t>(1, animation.durationNanos));
-  float const t = std::clamp(static_cast<float>(raw), 0.f, 1.f);
-  return t * t * (3.f - 2.f * t);
-}
-
-Rect lerpRect(Rect from, Rect to, float t) {
+Rect liftRect(Rect rect, float t) {
   float const lift = std::sin(t * kPi) * 22.f;
   return Rect::sharp(
-      from.x + (to.x - from.x) * t,
-      from.y + (to.y - from.y) * t - lift,
-      from.width + (to.width - from.width) * t,
-      from.height + (to.height - from.height) * t);
+      rect.x,
+      rect.y - lift,
+      rect.width,
+      rect.height);
 }
 
-void drawFlyAnimations(Canvas& canvas, SolitaireState const& state, std::int64_t now) {
-  auto drawAnimation = [&](FlyAnimation const& animation) {
-    if (!animationVisible(animation, now)) {
-      return;
-    }
-    float const t = easedProgress(animation, now);
-    for (std::size_t i = 0; i < animation.cards.size(); ++i) {
-      Rect const from = i < animation.fromRects.size() ? animation.fromRects[i] : Rect::sharp(0.f, 0.f, kCardW, kCardH);
-      Rect const to = i < animation.toRects.size() ? animation.toRects[i] : from;
+void drawFlyAnimations(Canvas& canvas, SolitaireState const& state) {
+  for (CardFlight const& animation : state.animations) {
+    if (animation.rect.isActive()) {
+      float const t = smoothstep(animation.rect.progress());
       float const scale = 1.f + (kMovingCardScale - 1.f) * std::sin(t * kPi);
-      drawCard(canvas, animation.cards[i], scaledRect(lerpRect(from, to, t), scale));
+      drawCard(canvas, animation.card, scaledRect(liftRect(animation.rect.value(), t), scale));
     }
-  };
-
-  for (FlyAnimation const& animation : state.animations) {
-    drawAnimation(animation);
   }
 }
 
 void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeometry const& geometry,
                         std::int64_t now) {
-  if (!celebrationActive(state, now)) {
+  (void)now;
+  if (!celebrationActive(state)) {
     return;
   }
+  std::int64_t const celebrationNanos = static_cast<std::int64_t>(
+      state.celebration.progress() * static_cast<float>(kWinCelebrationDurationNanos));
 
   float const windowLeft = -geometry.origin.x / geometry.scale;
   float const windowRight = (geometry.viewport.width - geometry.origin.x) / geometry.scale;
@@ -2630,7 +2678,7 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
     for (int cardIndex = 0; cardIndex < static_cast<int>(pile.size()); ++cardIndex) {
       Card const& card = pile[static_cast<std::size_t>(cardIndex)];
       int const launchIndex = winCelebrationLaunchIndex(card);
-      std::int64_t const localNanos = now - state.celebrationStartNanos -
+      std::int64_t const localNanos = celebrationNanos -
                                       static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
       if (localNanos <= 0) {
         drawCard(canvas, card, base);
@@ -2745,10 +2793,9 @@ void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
            Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 24.f});
 }
 
-void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount,
-               std::int64_t frameNanos) {
+void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount) {
   BoardGeometry const geometry = boardGeometry(Size{frame.width, frame.height});
-  std::int64_t const animationNow = frameNanos > 0 ? frameNanos : nowNanos();
+  std::int64_t const animationNow = nowNanos();
   std::vector<int> const hiddenIds = hiddenCardIds(state, animationNow);
   canvas.save();
   canvas.translate(frame.x + geometry.origin.x, frame.y + geometry.origin.y);
@@ -2785,11 +2832,11 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   for (CardPosition const& pos : buildCardPositions(state.board, drawCount, geometry, hiddenIds)) {
-    drawCard(canvas, pos.card, scaledRect(visualCardRect(pos, state, animationNow),
-                                          visualCardScale(pos, state, animationNow)));
+    drawCard(canvas, pos.card, scaledRect(visualCardRect(pos, state),
+                                          visualCardScale(pos, state)));
   }
 
-  drawFlyAnimations(canvas, state, animationNow);
+  drawFlyAnimations(canvas, state);
   drawWinCelebration(canvas, state, geometry, animationNow);
   drawDraggedCards(canvas, state.drag);
   if (state.peek.active(animationNow)) {
@@ -2797,8 +2844,8 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   canvas.restore();
-  if (state.completed && state.animations.empty() && !state.autoFinishing &&
-      state.celebrationStartNanos > 0) {
+  if (state.completed && !hasActiveFlyAnimations(state) && !state.autoFinishing &&
+      state.celebration) {
     drawFloatingCompletionText(canvas, frame);
   }
 }
@@ -3037,7 +3084,7 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
                         .icon = IconName::Undo,
                         .disabled = [state = state] {
                                 auto const& s = state.evaluate();
-                                return s.completed || s.autoFinishing || dealAnimationRunning(s) ||
+                                return s.completed || s.autoFinishing || hasActiveFlyAnimations(s) ||
                                       s.history.empty(); },
                         .onTap = [state = state] { undo(state); },
                     }
@@ -3064,7 +3111,7 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
                         .icon = IconName::AutoAwesome,
                         .disabled = [state = state] {
                                 auto const& s = state.evaluate();
-                                return playControlsDisabled(s) || !s.animations.empty(); },
+                                return playControlsDisabled(s) || hasActiveFlyAnimations(s); },
                         .onTap = [state = state] { autoFinish(state); },
                     },
                     HudIconButton {
@@ -3226,7 +3273,6 @@ struct BoardTableSurface : ViewModifiers<BoardTableSurface> {
 
 struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
   Signal<SolitaireState> state;
-  Signal<std::int64_t> frameNanos;
 
   auto body() const {
     Rect const bounds = useBounds();
@@ -3236,7 +3282,6 @@ struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
     });
 
     auto stateSignal = state;
-    auto frameSignal = frameNanos;
 
     return Render{
         .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
@@ -3244,15 +3289,15 @@ struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
           float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 760.f;
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
-        .draw = [stateSignal, frameSignal, viewport](Canvas& canvas, Rect frame) {
+        .draw = [stateSignal, viewport](Canvas& canvas, Rect frame) {
           *viewport = Size{frame.width, frame.height};
-          drawBoard(canvas, frame, stateSignal.evaluate(), kDrawCount, frameSignal.evaluate());
+          drawBoard(canvas, frame, stateSignal.evaluate(), kDrawCount);
         },
     }
         .cursor(Cursor::Hand)
         .onPointerDown(std::function<void(Point, MouseButton)>{[stateSignal, viewport](Point p, MouseButton button) {
           SolitaireState const& snapshot = stateSignal.peek();
-          if (snapshot.completed && snapshot.celebrationStartNanos > 0) {
+          if (snapshot.completed && snapshot.celebration) {
             newGame(stateSignal);
             return;
           }
@@ -3279,9 +3324,54 @@ struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
   }
 
   bool operator==(BoardCardSurface const& other) const {
-    return state == other.state && frameNanos == other.frameNanos;
+    return state == other.state;
   }
 };
+
+void useSolitaireTimer(Signal<SolitaireState> state) {
+  auto timerId = std::make_shared<std::uint64_t>(
+      Application::instance().scheduleRepeatingTimer(std::chrono::seconds{1}));
+  Application::instance().eventQueue().on<TimerEvent>(
+      [state, timerId](TimerEvent const& event) {
+        if (!timerId || event.timerId != *timerId) {
+          return;
+        }
+        bool requestRedraw = false;
+        mutate(state, [deadlineNanos = event.deadlineNanos, &requestRedraw](SolitaireState& s) {
+          bool changed = false;
+          if (!s.completed) {
+            int const elapsed = static_cast<int>(
+                std::max<std::int64_t>(0, deadlineNanos - s.startedNanos) / 1'000'000'000);
+            if (elapsed != s.elapsedSeconds) {
+              s.elapsedSeconds = elapsed;
+              changed = true;
+            }
+          }
+          if (s.peek.source.kind != PileKind::None && !s.peek.active(deadlineNanos)) {
+            s.peek = {};
+            changed = true;
+          }
+          if (s.hint.source.kind != PileKind::None && !s.hint.active()) {
+            clearHint(s);
+            changed = true;
+          }
+          if (s.completed && !hasActiveFlyAnimations(s) && !s.autoFinishing && !s.celebration) {
+            startCelebration(s);
+            changed = true;
+          }
+          requestRedraw = changed;
+        });
+        if (requestRedraw) {
+          Application::instance().requestRedraw();
+        }
+      });
+  onCleanup([timerId] {
+    if (timerId && *timerId != 0 && Application::hasInstance()) {
+      Application::instance().cancelTimer(*timerId);
+      *timerId = 0;
+    }
+  });
+}
 
 struct RootView : ViewModifiers<RootView> {
   auto body() const {
@@ -3290,7 +3380,6 @@ struct RootView : ViewModifiers<RootView> {
         savedGame && !savedGame->state.completed && !gameComplete(savedGame->state.board);
     auto state = useState<SolitaireState>(
         useSavedBoard ? savedGame->state : makeState(randomSeed(), kDrawCount));
-    auto frameNanos = useState<std::int64_t>(0);
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
     (void)settingsPresented;
@@ -3299,99 +3388,7 @@ struct RootView : ViewModifiers<RootView> {
       saveGameIfNeeded(state.evaluate());
     });
 
-    useFrame([state, frameNanos](AnimationTick const& tick) {
-      SolitaireState const& snapshot = state.peek();
-      if (snapshot.completed && snapshot.animations.empty() && !snapshot.autoFinishing &&
-          !snapshot.dealing && !snapshot.hint.active() &&
-          snapshot.peek.source.kind == PileKind::None && !snapshot.drag.active() &&
-          celebrationActive(snapshot, tick.deadlineNanos)) {
-        frameNanos = tick.deadlineNanos;
-        return;
-      }
-
-      SolitaireState current = snapshot;
-      bool changed = false;
-      if (!current.completed) {
-        int const elapsed = static_cast<int>(std::max<std::int64_t>(0, tick.deadlineNanos - current.startedNanos) /
-                                             1'000'000'000);
-        if (elapsed != current.elapsedSeconds) {
-          current.elapsedSeconds = elapsed;
-          changed = true;
-        }
-      }
-      if (!current.animations.empty()) {
-        current.frameNanos = tick.deadlineNanos;
-        current.animations.erase(
-            std::remove_if(current.animations.begin(), current.animations.end(), [now = tick.deadlineNanos](FlyAnimation const& animation) {
-              return !animationActive(animation, now);
-            }),
-            current.animations.end());
-        changed = true;
-      }
-      if (current.autoFinishing && current.animations.empty()) {
-        if (scheduleNextAutoFinishMove(current, kDrawCount, BoardGeometry{}, tick.deadlineNanos, false)) {
-          changed = true;
-        } else {
-          current.autoFinishing = false;
-          if (!current.completed) {
-            current.frameNanos = 0;
-          }
-          changed = true;
-        }
-      }
-      if (current.dealing && current.animations.empty()) {
-        current.dealing = false;
-        if (!current.completed && !current.autoFinishing) {
-          current.frameNanos = 0;
-        }
-        changed = true;
-      }
-      if (current.completed && current.celebrationStartNanos == 0 && current.animations.empty()) {
-        current.celebrationStartNanos = tick.deadlineNanos;
-        current.frameNanos = tick.deadlineNanos;
-        changed = true;
-      }
-      if (current.hint.animating(tick.deadlineNanos)) {
-        current.frameNanos = tick.deadlineNanos;
-        changed = true;
-      } else if (current.hint.active()) {
-        current.hint = {};
-        if (current.animations.empty() && !celebrationActive(current, tick.deadlineNanos)) {
-          current.frameNanos = 0;
-        }
-        changed = true;
-      }
-      if (!current.selectionScaleAnimations.empty()) {
-        current.frameNanos = tick.deadlineNanos;
-        current.selectionScaleAnimations.erase(
-            std::remove_if(current.selectionScaleAnimations.begin(), current.selectionScaleAnimations.end(),
-                           [now = tick.deadlineNanos](SelectionScaleAnimation const& animation) {
-                             return !animation.active(now);
-                           }),
-            current.selectionScaleAnimations.end());
-        if (current.selectionScaleAnimations.empty() && current.animations.empty() &&
-            !current.hint.animating(tick.deadlineNanos) &&
-            !celebrationActive(current, tick.deadlineNanos)) {
-          current.frameNanos = 0;
-        }
-        changed = true;
-      }
-      if (celebrationActive(current, tick.deadlineNanos)) {
-        current.frameNanos = tick.deadlineNanos;
-        changed = true;
-      } else if (current.celebrationStartNanos > 0 && current.frameNanos != 0) {
-        current.frameNanos = 0;
-        changed = true;
-      }
-      if (current.peek.source.kind != PileKind::None && !current.peek.active(tick.deadlineNanos)) {
-        current.peek = {};
-        changed = true;
-      }
-      if (changed) {
-        frameNanos = current.frameNanos;
-        state = std::move(current);
-      }
-    });
+    useSolitaireTimer(state);
 
     auto openSettings = [showSettings, hideSettings, feltIndex] {
       showSettings(
@@ -3435,7 +3432,7 @@ struct RootView : ViewModifiers<RootView> {
             .shortcut = shortcuts::Undo,
             .isEnabled = [state = state] {
               auto const& s = state.evaluate();
-              return !s.completed && !s.autoFinishing && !dealAnimationRunning(s) &&
+              return !s.completed && !s.autoFinishing && !hasActiveFlyAnimations(s) &&
                      !s.history.empty();
             },
         });
@@ -3447,7 +3444,7 @@ struct RootView : ViewModifiers<RootView> {
             .shortcut = Shortcut{keys::Return, Modifiers::Meta},
             .isEnabled = [state = state] {
               auto const& s = state.evaluate();
-              return !playControlsDisabled(s) && s.animations.empty();
+              return !playControlsDisabled(s) && !hasActiveFlyAnimations(s);
             },
         });
     useWindowAction(
@@ -3465,7 +3462,7 @@ struct RootView : ViewModifiers<RootView> {
             .shortcut = Shortcut{keys::Escape, Modifiers::None},
             .isEnabled = [state = state] {
               auto const& s = state.evaluate();
-              return s.completed && s.celebrationStartNanos > 0;
+              return s.completed && s.celebration;
             },
         });
 
@@ -3475,7 +3472,7 @@ struct RootView : ViewModifiers<RootView> {
         .children = children(
             BoardTableSurface{.feltIndex = feltIndex}
                 .flex(1.f, 1.f),
-            BoardCardSurface{.state = state, .frameNanos = frameNanos}
+            BoardCardSurface{.state = state}
                 .flex(1.f, 1.f),
             SolitaireHud{
                 .state = state,

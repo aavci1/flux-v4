@@ -9,7 +9,13 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <functional>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace flux {
 
@@ -25,6 +31,8 @@ class AnimationBase {
 public:
   virtual ~AnimationBase() = default;
   virtual bool tick(double nowSeconds) = 0;
+  virtual bool requestsRedraw() const noexcept { return false; }
+  virtual void cancelFromClock(double) {}
 };
 
 namespace detail {
@@ -35,7 +43,270 @@ inline double steadyNowSeconds() {
   return static_cast<double>(ns.count()) * 1e-9;
 }
 
+inline float applyTimelineTransition(Transition const& transition, float progress) {
+  float t = std::clamp(progress, 0.f, 1.f);
+  if (transition.springFn) {
+    return (*transition.springFn)(t);
+  }
+  if (transition.easing) {
+    return std::clamp(transition.easing(t), 0.f, 1.f);
+  }
+  return t;
+}
+
+inline void validateTimelineTiming(double duration, double delay, char const* apiName) {
+  if (duration < 0.0) {
+    throw std::invalid_argument(std::string{apiName} + ": duration must be non-negative");
+  }
+  if (delay < 0.0) {
+    throw std::invalid_argument(std::string{apiName} + ": delay must be non-negative");
+  }
+}
+
+enum class TimelineClipStatus {
+  Running,
+  Finished,
+  Cancelled,
+};
+
 } // namespace detail
+
+template<Interpolatable T>
+struct AnimationParams {
+  T from{};
+  T to{};
+  /// Clip duration in seconds, excluding delay. Zero-duration clips finish on the next clock tick.
+  double duration = 0.0;
+  /// Seconds to hold `from` before interpolation begins.
+  double delay = 0.0;
+  /// Absolute monotonic clock time at which the delay begins.
+  double startedAt = AnimationClock::nowSeconds();
+  /// Interpolation curve. `duration` and `delay` are taken from this parameter struct.
+  Transition transition = Transition::ease();
+  /// Fired once on natural completion. Explicit cancellation and shutdown do not fire it.
+  std::function<void()> onComplete;
+};
+
+template<Interpolatable T>
+class Animation;
+
+/// Submits a single-segment timeline clip to the shared animation clock.
+template<Interpolatable T>
+Animation<T> addAnimation(AnimationParams<T> params);
+
+namespace detail {
+
+template<Interpolatable T>
+class AnimationClipState final : public AnimationBase {
+public:
+  explicit AnimationClipState(AnimationParams<T> params)
+      : from_(std::move(params.from))
+      , to_(std::move(params.to))
+      , duration_(params.duration)
+      , delay_(params.delay)
+      , startedAt_(params.startedAt)
+      , transition_(std::move(params.transition))
+      , onComplete_(std::move(params.onComplete)) {}
+
+  bool tick(double nowSeconds) override {
+    if (isTerminal()) {
+      return false;
+    }
+    double const elapsed = elapsedSeconds(nowSeconds);
+    if (elapsed < 0.0) {
+      return true;
+    }
+    if (duration_ <= 0.0 || elapsed >= duration_) {
+      finish();
+      return false;
+    }
+    return true;
+  }
+
+  bool requestsRedraw() const noexcept override {
+    return !isTerminal();
+  }
+
+  void cancelFromClock(double nowSeconds) override {
+    cancel(nowSeconds);
+  }
+
+  T sample(double nowSeconds) const {
+    if (status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled) {
+      return cachedValue_;
+    }
+    double const elapsed = elapsedSeconds(nowSeconds);
+    if (elapsed <= 0.0) {
+      return from_;
+    }
+    if (duration_ <= 0.0 || elapsed >= duration_) {
+      return to_;
+    }
+    float const t = static_cast<float>(elapsed / duration_);
+    return lerp(from_, to_, applyTimelineTransition(transition_, t));
+  }
+
+  bool isStarted(double nowSeconds) const {
+    if (status_ == TimelineClipStatus::Cancelled) {
+      return true;
+    }
+    return nowSeconds >= startedAt_ + delay_;
+  }
+
+  bool isFinished(double nowSeconds) const {
+    if (status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled) {
+      return true;
+    }
+    return nowSeconds >= startedAt_ + delay_ + duration_;
+  }
+
+  float progress(double nowSeconds) const {
+    if (status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled) {
+      return 1.f;
+    }
+    double const elapsed = elapsedSeconds(nowSeconds);
+    if (elapsed <= 0.0) {
+      return 0.f;
+    }
+    if (duration_ <= 0.0 || elapsed >= duration_) {
+      return 1.f;
+    }
+    return static_cast<float>(std::clamp(elapsed / duration_, 0.0, 1.0));
+  }
+
+  void cancel(double nowSeconds) {
+    if (isTerminal()) {
+      return;
+    }
+    cachedValue_ = sample(nowSeconds);
+    onComplete_ = {};
+    status_ = TimelineClipStatus::Cancelled;
+  }
+
+#if defined(FLUX_TESTING)
+  void testSetStartedAt(double startedAt) { startedAt_ = startedAt; }
+#endif
+
+private:
+  bool isTerminal() const noexcept {
+    return status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled;
+  }
+
+  double elapsedSeconds(double nowSeconds) const {
+    return nowSeconds - startedAt_ - delay_;
+  }
+
+  void finish() {
+    if (isTerminal()) {
+      return;
+    }
+    cachedValue_ = to_;
+    status_ = TimelineClipStatus::Finished;
+    std::function<void()> onComplete = std::move(onComplete_);
+    onComplete_ = {};
+    if (onComplete) {
+      onComplete();
+    }
+  }
+
+  T from_{};
+  T to_{};
+  double duration_ = 0.0;
+  double delay_ = 0.0;
+  double startedAt_ = 0.0;
+  Transition transition_ = Transition::ease();
+  std::function<void()> onComplete_;
+  T cachedValue_{};
+  TimelineClipStatus status_ = TimelineClipStatus::Running;
+};
+
+} // namespace detail
+
+/// Handle to a single-segment timeline clip. The clock owns the running clip; dropping the handle does not cancel it.
+template<Interpolatable T>
+class Animation {
+public:
+  Animation() = default;
+
+  /// Samples the clip at the current animation-clock time.
+  T value() const {
+    if (!state_) {
+      return T{};
+    }
+    return state_->sample(AnimationClock::nowSeconds());
+  }
+
+  bool isStarted() const {
+    return !state_ || state_->isStarted(AnimationClock::nowSeconds());
+  }
+
+  bool isFinished() const {
+    return !state_ || state_->isFinished(AnimationClock::nowSeconds());
+  }
+
+  bool isActive() const {
+    return isStarted() && !isFinished();
+  }
+
+  float progress() const {
+    if (!state_) {
+      return 1.f;
+    }
+    return state_->progress(AnimationClock::nowSeconds());
+  }
+
+  bool operator==(Animation const& other) const {
+    return state_ == other.state_;
+  }
+
+  explicit operator bool() const noexcept {
+    return static_cast<bool>(state_);
+  }
+
+  void cancel() {
+    if (!state_) {
+      return;
+    }
+    state_->cancel(AnimationClock::nowSeconds());
+    AnimationClock::instance().unregisterAnimation(state_.get());
+  }
+
+#if defined(FLUX_TESTING)
+  T testValueAt(double nowSeconds) const { return state_ ? state_->sample(nowSeconds) : T{}; }
+  bool testTick(double nowSeconds) const {
+    if (!state_) {
+      return false;
+    }
+    bool const running = state_->tick(nowSeconds);
+    if (!running) {
+      AnimationClock::instance().unregisterAnimation(state_.get());
+    }
+    return running;
+  }
+  void testSetStartedAt(double startedAt) const {
+    if (state_) {
+      state_->testSetStartedAt(startedAt);
+    }
+  }
+#endif
+
+private:
+  explicit Animation(std::shared_ptr<detail::AnimationClipState<T>> state)
+      : state_(std::move(state)) {}
+
+  std::shared_ptr<detail::AnimationClipState<T>> state_;
+
+  friend Animation<T> addAnimation<T>(AnimationParams<T> params);
+};
+
+template<Interpolatable T>
+Animation<T> addAnimation(AnimationParams<T> params) {
+  detail::validateTimelineTiming(params.duration, params.delay, "addAnimation");
+  auto state = std::make_shared<detail::AnimationClipState<T>>(std::move(params));
+  Animation<T> handle{state};
+  AnimationClock::instance().registerAnimation(std::static_pointer_cast<AnimationBase>(state));
+  return handle;
+}
 
 template<Interpolatable T>
 class Animated {

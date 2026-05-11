@@ -355,11 +355,30 @@ useAnimated(TargetFn&& target, Transition transition) {
 /// Prefer \ref useAnimated for normal control transitions.
 template<typename Fn>
 void useFrame(Fn&& callback) {
-  ObserverHandle const handle =
-      AnimationClock::instance().subscribe(Reactive::SmallFn<void(AnimationTick const&)>{std::forward<Fn>(callback)});
-  Reactive::onCleanup([handle] {
-    AnimationClock::instance().unsubscribe(handle);
-  });
+  using Callback = std::decay_t<Fn>;
+  if constexpr (std::is_invocable_v<Callback&, AnimationTick const&>) {
+    using Result = std::invoke_result_t<Callback&, AnimationTick const&>;
+    static_assert(std::is_void_v<Result> || std::is_same_v<Result, FrameAction>,
+                  "useFrame callback must return void or FrameAction");
+    Callback storedCallback{std::forward<Fn>(callback)};
+    ObserverHandle const handle =
+        AnimationClock::instance().subscribe(
+            Reactive::SmallFn<FrameAction(AnimationTick const&)>{
+                [callback = std::move(storedCallback)](AnimationTick const& tick) mutable -> FrameAction {
+                  if constexpr (std::is_void_v<Result>) {
+                    callback(tick);
+                    return FrameAction::Continue;
+                  } else {
+                    return callback(tick);
+                  }
+                }});
+    Reactive::onCleanup([handle] {
+      AnimationClock::instance().unsubscribe(handle);
+    });
+  } else {
+    static_assert(std::is_invocable_v<Callback&, AnimationTick const&>,
+                  "useFrame callback must accept AnimationTick const&");
+  }
 }
 
 inline Reactive::Signal<bool> useFocus() {
