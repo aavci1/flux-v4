@@ -333,7 +333,7 @@ public:
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
+    queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
   }
@@ -574,7 +574,7 @@ private:
                                                           .dpi = self->dpiScaleX_,
                                                           .dpiX = self->dpiScaleX_,
                                                           .dpiY = self->dpiScaleY_});
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
+    self->queueResizeEvent();
     self->applyCursor(self->currentCursor_);
     self->requestResizeRedraw();
   }
@@ -585,7 +585,7 @@ private:
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
+    queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
   }
@@ -694,8 +694,13 @@ private:
                                                           .dpi = dpiScaleX_,
                                                           .dpiX = dpiScaleX_,
                                                           .dpiY = dpiScaleY_});
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, size_});
+    queueResizeEvent();
     requestResizeRedraw();
+  }
+
+  void queueResizeEvent() {
+    pendingResizeEvent_ = true;
+    pendingResizeSize_ = size_;
   }
 
   void requestResizeRedraw() {
@@ -729,10 +734,13 @@ private:
   }
 
   void flushDeferredRedraw() {
-    if (!resizeRedrawPending_) return;
+    if (!resizeRedrawPending_ && !pendingResizeEvent_) return;
     resizeRedrawPending_ = false;
+    if (pendingResizeEvent_) {
+      pendingResizeEvent_ = false;
+      Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, pendingResizeSize_});
+    }
     Application::instance().eventQueue().dispatch();
-    Application::instance().flushRedraw();
   }
 
   static inline wl_callback_listener frameCallbackListener_{frameDone};
@@ -774,6 +782,8 @@ private:
   std::uint8_t pressedButtons_ = 0;
   Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
+  bool pendingResizeEvent_ = false;
+  Size pendingResizeSize_{};
   bool framePending_ = false;
   int wakePipe_[2]{-1, -1};
 };
