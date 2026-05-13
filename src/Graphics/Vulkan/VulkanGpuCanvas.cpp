@@ -139,6 +139,7 @@ struct DrawOp {
   Texture *texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
+  Rect clip{};
   float blurRadius = 0.f;
 };
 
@@ -1117,7 +1118,7 @@ public:
     inst.params[3] = opacity;
     std::uint32_t first = static_cast<std::uint32_t>(rects_.size());
     rects_.push_back(inst);
-    ops_.push_back(DrawOp{DrawOp::Kind::Rect, nullptr, first, 1});
+    ops_.push_back(makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
   }
 
@@ -1246,7 +1247,7 @@ public:
     if (count > 0) {
       Texture *atlas = &resources().atlas;
       batches_.push_back(ImageBatch{atlas, first, count});
-      ops_.push_back(DrawOp{DrawOp::Kind::Image, atlas, first, count});
+      ops_.push_back(makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
       debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
     }
   }
@@ -1297,7 +1298,7 @@ public:
     std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(q);
     batches_.push_back(ImageBatch{texture, first, 1});
-    ops_.push_back(DrawOp{DrawOp::Kind::Image, texture, first, 1});
+    ops_.push_back(makeDrawOp(DrawOp::Kind::Image, texture, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }
 
@@ -1352,7 +1353,7 @@ public:
     q.radii[3] = cr.bottomLeft;
     std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(q);
-    DrawOp op{DrawOp::Kind::BackdropBlur, nullptr, first, 1};
+    DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, 1);
     op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
     ops_.push_back(op);
   }
@@ -1405,6 +1406,16 @@ private:
       maxY = std::max(maxY, p.y);
     }
     return Rect::sharp(minX, minY, maxX - minX, maxY - minY);
+  }
+
+  DrawOp makeDrawOp(DrawOp::Kind kind, Texture *texture, std::uint32_t first, std::uint32_t count) const {
+    DrawOp op{};
+    op.kind = kind;
+    op.texture = texture;
+    op.first = first;
+    op.count = count;
+    op.clip = state_.clip;
+    return op;
   }
 
   bool clipLineToCurrentClip(Point &a, Point &b) const {
@@ -1897,8 +1908,8 @@ private:
       std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
       pathVerts_.insert(pathVerts_.end(), it->second.vertices.begin(), it->second.vertices.end());
       if (!it->second.vertices.empty()) {
-        ops_.push_back(DrawOp{DrawOp::Kind::Path, nullptr, firstVertex,
-                              static_cast<std::uint32_t>(it->second.vertices.size())});
+        ops_.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex,
+                                  static_cast<std::uint32_t>(it->second.vertices.size())));
       }
       return;
     }
@@ -1966,7 +1977,7 @@ private:
         pathCacheLru_.erase(lruIt);
       }
       trimPathCache();
-      ops_.push_back(DrawOp{DrawOp::Kind::Path, nullptr, firstVertex, vertexCount});
+      ops_.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
     }
   }
 
@@ -2191,7 +2202,6 @@ private:
   void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
     if (count == 0)
       return;
-    setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipeline);
@@ -2204,7 +2214,6 @@ private:
   void drawPathRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
     if (count == 0)
       return;
-    setViewportScissor(commandBuffer);
     VkDeviceSize offset = 0;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resources().pathPipeline);
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pathBuffer_.buffer, &offset);
@@ -2214,7 +2223,6 @@ private:
   void drawImageRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count) {
     if (!texture || !texture->descriptor || count == 0)
       return;
-    setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipeline);
@@ -2229,7 +2237,6 @@ private:
   void drawBackdropRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count) {
     if (!texture || !texture->descriptor || count == 0)
       return;
-    setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipeline);
@@ -2245,7 +2252,7 @@ private:
   void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first) {
     if (!texture || !texture->descriptor)
       return;
-    setViewportScissor(commandBuffer);
+    setViewportScissor(commandBuffer, Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_)));
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
@@ -2277,6 +2284,10 @@ private:
     std::size_t const opEnd = std::min(end, ops_.size());
     for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
       DrawOp const &op = ops_[index];
+      if (op.clip.width <= 0.f || op.clip.height <= 0.f) {
+        continue;
+      }
+      setViewportScissor(commandBuffer, op.clip);
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         drawRectRange(commandBuffer, op.first, op.count);
@@ -2310,10 +2321,24 @@ private:
     vkCmdBeginRendering(commandBuffer, &rendering);
   }
 
-  void setViewportScissor(VkCommandBuffer commandBuffer) {
+  void setViewportScissor(VkCommandBuffer commandBuffer, Rect clip) {
     VkViewport vp{0.f, 0.f, static_cast<float>(swapExtent_.width), static_cast<float>(swapExtent_.height), 0.f, 1.f};
-    VkRect2D sc{{0, 0}, swapExtent_};
     vkCmdSetViewport(commandBuffer, 0, 1, &vp);
+
+    float const scaleX = static_cast<float>(swapExtent_.width) / std::max(1.f, static_cast<float>(width_));
+    float const scaleY = static_cast<float>(swapExtent_.height) / std::max(1.f, static_cast<float>(height_));
+    float const maxX = static_cast<float>(swapExtent_.width);
+    float const maxY = static_cast<float>(swapExtent_.height);
+    float const x0f = std::clamp(std::floor(clip.x * scaleX), 0.f, maxX);
+    float const y0f = std::clamp(std::floor(clip.y * scaleY), 0.f, maxY);
+    float const x1f = std::clamp(std::ceil((clip.x + clip.width) * scaleX), 0.f, maxX);
+    float const y1f = std::clamp(std::ceil((clip.y + clip.height) * scaleY), 0.f, maxY);
+    std::uint32_t const x0 = static_cast<std::uint32_t>(x0f);
+    std::uint32_t const y0 = static_cast<std::uint32_t>(y0f);
+    std::uint32_t const x1 = static_cast<std::uint32_t>(x1f);
+    std::uint32_t const y1 = static_cast<std::uint32_t>(y1f);
+    VkRect2D sc{{static_cast<std::int32_t>(x0), static_cast<std::int32_t>(y0)},
+                {x1 > x0 ? x1 - x0 : 0u, y1 > y0 ? y1 - y0 : 0u}};
     vkCmdSetScissor(commandBuffer, 0, 1, &sc);
   }
 
