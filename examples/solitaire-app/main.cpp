@@ -2843,10 +2843,10 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   canvas.restore();
-  // if (state.completed && !hasActiveFlyAnimations(state) && !state.autoFinishing &&
-  //     state.celebration) {
+  if (state.completed && !hasActiveFlyAnimations(state) && !state.autoFinishing &&
+      state.celebration) {
     drawFloatingCompletionText(canvas, frame);
-  // }
+  }
 }
 
 struct StatView : ViewModifiers<StatView> {
