@@ -1936,6 +1936,21 @@ private:
     return true;
   }
 
+  bool encodeBackdropBlur(id<MTLTexture> sceneTexture, id<MTLTexture> scratchTexture,
+                          id<MTLTexture> blurredTexture, float radius) {
+    constexpr int kIterations = 3;
+    float const passRadius = radius / std::sqrt(static_cast<float>(kIterations));
+    id<MTLTexture> source = sceneTexture;
+    for (int i = 0; i < kIterations; ++i) {
+      if (!encodeBackdropBlurPass(source, scratchTexture, passRadius, simd_make_float2(1.f, 0.f)) ||
+          !encodeBackdropBlurPass(scratchTexture, blurredTexture, passRadius, simd_make_float2(0.f, 1.f))) {
+        return false;
+      }
+      source = blurredTexture;
+    }
+    return true;
+  }
+
   bool encodeFrameWithBackdropBlur(id<MTLTexture> renderTargetTexture, id<MTLTexture> resolveTexture,
                                    std::uint32_t renderSampleCount) {
     id<MTLTexture> sceneTexture = ensureBackdropSceneTexture(frameDrawablePixelsW_, frameDrawablePixelsH_);
@@ -1982,8 +1997,7 @@ private:
     [sceneEnc endEncoding];
 
     float const blurRadius = maxBackdropBlurRadius(frame_);
-    if (!encodeBackdropBlurPass(sceneTexture, scratchTexture, blurRadius, simd_make_float2(1.f, 0.f)) ||
-        !encodeBackdropBlurPass(scratchTexture, blurredTexture, blurRadius, simd_make_float2(0.f, 1.f))) {
+    if (!encodeBackdropBlur(sceneTexture, scratchTexture, blurredTexture, blurRadius)) {
       return false;
     }
 

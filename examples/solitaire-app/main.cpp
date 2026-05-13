@@ -2769,26 +2769,27 @@ void drawBoardTable(Canvas& canvas, Rect frame, int feltIndex) {
 
 void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
   Point const center{frame.x + frame.width * 0.5f,
-                     frame.y + frame.height * 0.46f};
-  float panelWidth = std::clamp(frame.width * 0.42f, 360.f, 560.f);
-  panelWidth = std::min(panelWidth, std::max(0.f, frame.width - 48.f));
-  Rect const panel = Rect::sharp(center.x - panelWidth * 0.5f, center.y - 55.f, panelWidth, 110.f);
+                     frame.y + frame.height * 0.44f};
+  float panelWidth = std::clamp(frame.width * 0.58f, 520.f, 760.f);
+  panelWidth = std::min(panelWidth, std::max(0.f, frame.width - 64.f));
+  Rect const panel = Rect::sharp(center.x - panelWidth * 0.5f, center.y - 120.f, panelWidth, 240.f);
+  CornerRadius const panelRadius{32.f};
 
-  canvas.drawRect(panel, CornerRadius {24.f},
-                  // FillStyle::solid(Color {20.f / 255.f, 22.f / 255.f, 28.f / 255.f, 0.58f}),
-                  glassFill(),
+  canvas.drawBackdropBlur(panel, 34.f, Color{0.06f, 0.07f, 0.09f, 0.36f}, panelRadius);
+  canvas.drawRect(panel, panelRadius,
+                  FillStyle::solid(Color{1.f, 1.f, 1.f, 0.08f}),
                   glassStroke(),
-                  ShadowStyle {.radius = 18.f, .offset = {0.f, 5.f}, .color = Color {0.f, 0.f, 0.f, 0.22f}});
+                  ShadowStyle {.radius = 28.f, .offset = {0.f, 10.f}, .color = Color {0.f, 0.f, 0.f, 0.28f}});
 
   auto shadowed = [&](std::string_view text, Font font, Color color, Point point) {
     drawCenteredText(canvas, text, font, Color{0.f, 0.f, 0.f, 0.32f},
                      Point{point.x, point.y + 2.f});
     drawCenteredText(canvas, text, font, color, point);
   };
-  shadowed("Congratulations!", Font{.size = 30.f, .weight = 750.f},
-           Color{1.f, 1.f, 1.f, 0.96f}, Point{center.x, center.y - 16.f});
-  shadowed("Click anywhere to start a new game.", Font{.size = 14.f, .weight = 600.f},
-           Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 24.f});
+  shadowed("Congratulations!", Font{.size = 42.f, .weight = 800.f},
+           Color{1.f, 1.f, 1.f, 0.98f}, Point{center.x, center.y - 24.f});
+  shadowed("Click anywhere to start a new game.", Font{.size = 17.f, .weight = 650.f},
+           Color{1.f, 1.f, 1.f, 0.86f}, Point{center.x, center.y + 34.f});
 }
 
 void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount) {
@@ -2842,10 +2843,10 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   canvas.restore();
-  if (state.completed && !hasActiveFlyAnimations(state) && !state.autoFinishing &&
-      state.celebration) {
+  // if (state.completed && !hasActiveFlyAnimations(state) && !state.autoFinishing &&
+  //     state.celebration) {
     drawFloatingCompletionText(canvas, frame);
-  }
+  // }
 }
 
 struct StatView : ViewModifiers<StatView> {

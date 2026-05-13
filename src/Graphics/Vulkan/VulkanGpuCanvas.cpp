@@ -895,7 +895,9 @@ public:
     std::uint32_t verticalBlurQuad = 0;
     if (backdropFrame) {
       ensureBackdropSceneTarget();
-      float const blurRadius = maxBackdropBlurRadius();
+      constexpr int kBackdropBlurIterations = 3;
+      float const blurRadius = maxBackdropBlurRadius() /
+                               std::sqrt(static_cast<float>(kBackdropBlurIterations));
       sceneCopyQuad = appendSceneCopyQuad();
       horizontalBlurQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f);
       verticalBlurQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f);
@@ -925,31 +927,35 @@ public:
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropSceneTexture_);
 
-      VkRenderPassBeginInfo horizontalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      horizontalRp.renderPass = resources().renderPass;
-      horizontalRp.framebuffer = backdropScratchFramebuffer_;
-      horizontalRp.renderArea.extent = swapExtent_;
-      horizontalRp.clearValueCount = 1;
-      horizontalRp.pClearValues = &clear;
-      vkCmdBeginRenderPass(commandBuffer, &horizontalRp, VK_SUBPASS_CONTENTS_INLINE);
-      drawBackdropBlurPass(commandBuffer, &backdropSceneTexture_, horizontalBlurQuad);
-      vkCmdEndRenderPass(commandBuffer);
-      transition(commandBuffer, backdropScratchTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropScratchTexture_);
+      Texture* blurSource = &backdropSceneTexture_;
+      for (int i = 0; i < kBackdropBlurIterations; ++i) {
+        VkRenderPassBeginInfo horizontalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        horizontalRp.renderPass = resources().renderPass;
+        horizontalRp.framebuffer = backdropScratchFramebuffer_;
+        horizontalRp.renderArea.extent = swapExtent_;
+        horizontalRp.clearValueCount = 1;
+        horizontalRp.pClearValues = &clear;
+        vkCmdBeginRenderPass(commandBuffer, &horizontalRp, VK_SUBPASS_CONTENTS_INLINE);
+        drawBackdropBlurPass(commandBuffer, blurSource, horizontalBlurQuad);
+        vkCmdEndRenderPass(commandBuffer);
+        transition(commandBuffer, backdropScratchTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ensureTextureDescriptor(backdropScratchTexture_);
 
-      VkRenderPassBeginInfo verticalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      verticalRp.renderPass = resources().renderPass;
-      verticalRp.framebuffer = backdropBlurFramebuffer_;
-      verticalRp.renderArea.extent = swapExtent_;
-      verticalRp.clearValueCount = 1;
-      verticalRp.pClearValues = &clear;
-      vkCmdBeginRenderPass(commandBuffer, &verticalRp, VK_SUBPASS_CONTENTS_INLINE);
-      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
-      vkCmdEndRenderPass(commandBuffer);
-      transition(commandBuffer, backdropBlurTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropBlurTexture_);
+        VkRenderPassBeginInfo verticalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        verticalRp.renderPass = resources().renderPass;
+        verticalRp.framebuffer = backdropBlurFramebuffer_;
+        verticalRp.renderArea.extent = swapExtent_;
+        verticalRp.clearValueCount = 1;
+        verticalRp.pClearValues = &clear;
+        vkCmdBeginRenderPass(commandBuffer, &verticalRp, VK_SUBPASS_CONTENTS_INLINE);
+        drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
+        vkCmdEndRenderPass(commandBuffer);
+        transition(commandBuffer, backdropBlurTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ensureTextureDescriptor(backdropBlurTexture_);
+        blurSource = &backdropBlurTexture_;
+      }
 
       VkClearValue finalClear{};
       VkRenderPassBeginInfo finalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
