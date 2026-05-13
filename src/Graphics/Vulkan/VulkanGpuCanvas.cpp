@@ -49,6 +49,7 @@ class VulkanCanvas;
 namespace {
 
 constexpr std::size_t kMaxFramesInFlight = 2;
+constexpr int kBackdropBlurIterations = 3;
 
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const* image);
@@ -895,7 +896,6 @@ public:
     std::uint32_t verticalBlurQuad = 0;
     if (backdropFrame) {
       ensureBackdropSceneTarget();
-      constexpr int kBackdropBlurIterations = 3;
       float const blurRadius = maxBackdropBlurRadius() /
                                std::sqrt(static_cast<float>(kBackdropBlurIterations));
       sceneCopyQuad = appendSceneCopyQuad();
