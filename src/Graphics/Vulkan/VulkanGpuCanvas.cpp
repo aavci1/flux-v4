@@ -6,17 +6,28 @@
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include "Core/PlatformApplication.hpp"
-#include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
+#include "Graphics/PathFlattener.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
+#include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/path_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/path_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/rect_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/rect_vert_spv.hpp"
-#include "Graphics/PathFlattener.hpp"
 
 #include <vulkan/vulkan.h>
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#endif
+#define VMA_IMPLEMENTATION
+#include "vma/vk_mem_alloc.h"
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 #include <algorithm>
 #include <array>
@@ -52,7 +63,7 @@ constexpr std::size_t kMaxFramesInFlight = 2;
 constexpr int kBackdropBlurIterations = 3;
 
 struct VulkanImage;
-void evictImageTexturesFor(VulkanImage const* image);
+void evictImageTexturesFor(VulkanImage const *image);
 
 struct Rgba {
   std::uint8_t r = 0, g = 0, b = 0, a = 255;
@@ -63,7 +74,7 @@ struct VulkanImage final : Image {
   int height = 0;
   std::vector<Rgba> pixels;
   mutable VkImage image = VK_NULL_HANDLE;
-  mutable VkDeviceMemory memory = VK_NULL_HANDLE;
+  mutable VmaAllocation allocation = VK_NULL_HANDLE;
   mutable VkImageView view = VK_NULL_HANDLE;
   mutable VkDescriptorSet descriptor = VK_NULL_HANDLE;
   mutable bool uploaded = false;
@@ -75,15 +86,16 @@ struct VulkanImage final : Image {
 
 struct Buffer {
   VkBuffer buffer = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
+  VmaAllocation allocation = VK_NULL_HANDLE;
   VkDeviceSize capacity = 0;
 };
 
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
+  VmaAllocation allocation = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
   VkDescriptorSet descriptor = VK_NULL_HANDLE;
+  VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
   int width = 0;
   int height = 0;
 };
@@ -113,15 +125,18 @@ struct QuadInstance {
 };
 
 struct ImageBatch {
-  Texture* texture = nullptr;
+  Texture *texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
 };
 
 struct DrawOp {
-  enum class Kind : std::uint8_t { Rect, Path, Image, BackdropBlur };
+  enum class Kind : std::uint8_t { Rect,
+                                   Path,
+                                   Image,
+                                   BackdropBlur };
   Kind kind = Kind::Rect;
-  Texture* texture = nullptr;
+  Texture *texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
   float blurRadius = 0.f;
@@ -148,11 +163,11 @@ struct PathCacheKey {
   int viewportW = 0;
   int viewportH = 0;
 
-  bool operator==(PathCacheKey const&) const = default;
+  bool operator==(PathCacheKey const &) const = default;
 };
 
 struct PathCacheKeyHash {
-  std::size_t operator()(PathCacheKey const& key) const noexcept {
+  std::size_t operator()(PathCacheKey const &key) const noexcept {
     std::size_t h = static_cast<std::size_t>(key.pathHash);
     h ^= static_cast<std::size_t>(key.styleHash + 0x9e3779b97f4a7c15ULL + (h << 6u) + (h >> 2u));
     h ^= static_cast<std::size_t>(key.viewportW) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
@@ -170,11 +185,11 @@ struct GlyphKey {
   std::uint32_t fontId = 0;
   std::uint16_t glyphId = 0;
   std::uint16_t size = 0;
-  bool operator==(GlyphKey const&) const = default;
+  bool operator==(GlyphKey const &) const = default;
 };
 
 struct GlyphKeyHash {
-  std::size_t operator()(GlyphKey const& k) const noexcept {
+  std::size_t operator()(GlyphKey const &k) const noexcept {
     return (static_cast<std::size_t>(k.fontId) << 32u) ^
            (static_cast<std::size_t>(k.glyphId) << 16u) ^ k.size;
   }
@@ -196,32 +211,32 @@ void putColor(float out[4], Color c, float opacity = 1.f) {
   out[3] = c.a * opacity;
 }
 
-void hashBytes(std::uint64_t& h, void const* data, std::size_t size) {
-  auto const* bytes = static_cast<std::uint8_t const*>(data);
+void hashBytes(std::uint64_t &h, void const *data, std::size_t size) {
+  auto const *bytes = static_cast<std::uint8_t const *>(data);
   for (std::size_t i = 0; i < size; ++i) {
     h ^= bytes[i];
     h *= 1099511628211ULL;
   }
 }
 
-template<typename T>
-void hashValue(std::uint64_t& h, T const& value) {
+template <typename T>
+void hashValue(std::uint64_t &h, T const &value) {
   hashBytes(h, &value, sizeof(value));
 }
 
-void hashColor(std::uint64_t& h, Color c) {
+void hashColor(std::uint64_t &h, Color c) {
   hashValue(h, c.r);
   hashValue(h, c.g);
   hashValue(h, c.b);
   hashValue(h, c.a);
 }
 
-void hashPoint(std::uint64_t& h, Point p) {
+void hashPoint(std::uint64_t &h, Point p) {
   hashValue(h, p.x);
   hashValue(h, p.y);
 }
 
-void hashStops(std::uint64_t& h, std::array<GradientStop, kMaxGradientStops> const& stops, std::uint8_t count) {
+void hashStops(std::uint64_t &h, std::array<GradientStop, kMaxGradientStops> const &stops, std::uint8_t count) {
   hashValue(h, count);
   for (std::uint8_t i = 0; i < count; ++i) {
     hashValue(h, stops[i].position);
@@ -229,7 +244,7 @@ void hashStops(std::uint64_t& h, std::array<GradientStop, kMaxGradientStops> con
   }
 }
 
-std::uint64_t hashFill(FillStyle const& fill) {
+std::uint64_t hashFill(FillStyle const &fill) {
   std::uint64_t h = 14695981039346656037ULL;
   hashValue(h, fill.fillRule);
   hashValue(h, fill.data.index());
@@ -258,7 +273,7 @@ std::uint64_t hashFill(FillStyle const& fill) {
   return h;
 }
 
-std::uint64_t hashStroke(StrokeStyle const& stroke) {
+std::uint64_t hashStroke(StrokeStyle const &stroke) {
   std::uint64_t h = 14695981039346656037ULL;
   hashValue(h, stroke.type);
   hashColor(h, stroke.color);
@@ -269,7 +284,7 @@ std::uint64_t hashStroke(StrokeStyle const& stroke) {
   return h;
 }
 
-std::uint64_t hashTransform(Mat3 const& transform, float opacity) {
+std::uint64_t hashTransform(Mat3 const &transform, float opacity) {
   std::uint64_t h = 14695981039346656037ULL;
   for (float value : transform.m) {
     hashValue(h, value);
@@ -286,7 +301,7 @@ Rect unionRects(Rect a, Rect b) {
   return Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
 }
 
-void vkCheck(VkResult result, char const* what) {
+void vkCheck(VkResult result, char const *what) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(std::string(what) + " failed");
   }
@@ -296,12 +311,12 @@ struct SharedVulkanCore {
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice physical = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
+  VmaAllocator allocator = VK_NULL_HANDLE;
   VkQueue queue = VK_NULL_HANDLE;
   std::uint32_t queueFamily = 0;
   struct Resources {
     bool initialized = false;
     VkFormat renderFormat = VK_FORMAT_UNDEFINED;
-    VkRenderPass renderPass = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout rectDescriptorLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout quadDescriptorLayout = VK_NULL_HANDLE;
@@ -332,22 +347,23 @@ struct SharedVulkanCore {
 
 std::mutex gVulkanCoreMutex;
 SharedVulkanCore gVulkanCore;
-void destroySharedVulkanResources(SharedVulkanCore& core);
+void destroySharedVulkanResources(SharedVulkanCore &core);
 
 std::mutex gCanvasRegistryMutex;
-std::vector<::flux::VulkanCanvas*> gCanvases;
+std::vector<::flux::VulkanCanvas *> gCanvases;
 
 VkInstance ensureSharedVulkanInstanceImpl() {
   std::lock_guard lock(gVulkanCoreMutex);
-  if (gVulkanCore.instance) return gVulkanCore.instance;
-  std::span<char const* const> const exts =
+  if (gVulkanCore.instance)
+    return gVulkanCore.instance;
+  std::span<char const *const> const exts =
       Application::instance().platformApp().requiredVulkanInstanceExtensions();
   if (exts.empty()) {
     throw std::runtime_error("Platform did not provide Vulkan instance extensions");
   }
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
   app.pApplicationName = "Flux";
-  app.apiVersion = VK_API_VERSION_1_0;
+  app.apiVersion = VK_API_VERSION_1_3;
   VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   info.pApplicationInfo = &app;
   info.enabledExtensionCount = static_cast<std::uint32_t>(exts.size());
@@ -356,7 +372,7 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   return gVulkanCore.instance;
 }
 
-std::string hexBytes(std::uint8_t const* bytes, std::size_t size) {
+std::string hexBytes(std::uint8_t const *bytes, std::size_t size) {
   std::ostringstream out;
   out << std::hex << std::setfill('0');
   for (std::size_t i = 0; i < size; ++i) {
@@ -388,9 +404,10 @@ std::filesystem::path pipelineCachePath(VkPhysicalDevice physical) {
   return std::filesystem::path(Application::instance().cacheDir()) / ("flux-vulkan-" + identity + ".cache");
 }
 
-void createPipelineCache(SharedVulkanCore& core) {
-  auto& res = core.resources;
-  if (res.pipelineCache) return;
+void createPipelineCache(SharedVulkanCore &core) {
+  auto &res = core.resources;
+  if (res.pipelineCache)
+    return;
   res.pipelineCacheFile = pipelineCachePath(core.physical);
   std::vector<std::uint8_t> initialData;
   if (std::ifstream in(res.pipelineCacheFile, std::ios::binary); in) {
@@ -410,8 +427,9 @@ void createPipelineCache(SharedVulkanCore& core) {
   vkCheck(result, "vkCreatePipelineCache");
 }
 
-void saveAndDestroyPipelineCache(VkDevice device, SharedVulkanCore::Resources& res) {
-  if (!res.pipelineCache) return;
+void saveAndDestroyPipelineCache(VkDevice device, SharedVulkanCore::Resources &res) {
+  if (!res.pipelineCache)
+    return;
   std::size_t size = 0;
   if (vkGetPipelineCacheData(device, res.pipelineCache, &size, nullptr) == VK_SUCCESS && size > 0) {
     std::vector<std::uint8_t> data(size);
@@ -419,7 +437,7 @@ void saveAndDestroyPipelineCache(VkDevice device, SharedVulkanCore::Resources& r
       try {
         std::filesystem::create_directories(res.pipelineCacheFile.parent_path());
         std::ofstream out(res.pipelineCacheFile, std::ios::binary | std::ios::trunc);
-        out.write(reinterpret_cast<char const*>(data.data()), static_cast<std::streamsize>(size));
+        out.write(reinterpret_cast<char const *>(data.data()), static_cast<std::streamsize>(size));
       } catch (...) {
       }
     }
@@ -428,7 +446,7 @@ void saveAndDestroyPipelineCache(VkDevice device, SharedVulkanCore::Resources& r
   res.pipelineCache = VK_NULL_HANDLE;
 }
 
-SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
+SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
   std::lock_guard lock(gVulkanCoreMutex);
   if (!gVulkanCore.instance) {
     throw std::runtime_error("Vulkan instance was not initialized");
@@ -436,10 +454,23 @@ SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
   if (!gVulkanCore.device) {
     std::uint32_t count = 0;
     vkEnumeratePhysicalDevices(gVulkanCore.instance, &count, nullptr);
-    if (!count) throw std::runtime_error("No Vulkan physical devices");
+    if (!count)
+      throw std::runtime_error("No Vulkan physical devices");
     std::vector<VkPhysicalDevice> devices(count);
     vkEnumeratePhysicalDevices(gVulkanCore.instance, &count, devices.data());
     for (VkPhysicalDevice d : devices) {
+      VkPhysicalDeviceProperties props{};
+      vkGetPhysicalDeviceProperties(d, &props);
+      if (props.apiVersion < VK_API_VERSION_1_3) {
+        continue;
+      }
+      VkPhysicalDeviceVulkan13Features vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+      VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+      features.pNext = &vk13;
+      vkGetPhysicalDeviceFeatures2(d, &features);
+      if (!vk13.dynamicRendering || !vk13.synchronization2) {
+        continue;
+      }
       std::uint32_t familiesCount = 0;
       vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, nullptr);
       std::vector<VkQueueFamilyProperties> families(familiesCount);
@@ -455,13 +486,23 @@ SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
           q.queueFamilyIndex = i;
           q.queueCount = 1;
           q.pQueuePriorities = &priority;
-          char const* exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+          VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+          enabled13.synchronization2 = VK_TRUE;
+          enabled13.dynamicRendering = VK_TRUE;
+          char const *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
           VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+          info.pNext = &enabled13;
           info.queueCreateInfoCount = 1;
           info.pQueueCreateInfos = &q;
           info.enabledExtensionCount = 1;
           info.ppEnabledExtensionNames = exts;
           vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
+          VmaAllocatorCreateInfo allocatorInfo{};
+          allocatorInfo.physicalDevice = gVulkanCore.physical;
+          allocatorInfo.device = gVulkanCore.device;
+          allocatorInfo.instance = gVulkanCore.instance;
+          allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+          vkCheck(vmaCreateAllocator(&allocatorInfo, &gVulkanCore.allocator), "vmaCreateAllocator");
           vkGetDeviceQueue(gVulkanCore.device, gVulkanCore.queueFamily, 0, &gVulkanCore.queue);
           ++gVulkanCore.refs;
           return &gVulkanCore;
@@ -481,12 +522,18 @@ SharedVulkanCore* acquireSharedVulkanCore(VkSurfaceKHR surface) {
 
 void releaseSharedVulkanCore() {
   std::lock_guard lock(gVulkanCoreMutex);
-  if (gVulkanCore.refs == 0) return;
+  if (gVulkanCore.refs == 0)
+    return;
   --gVulkanCore.refs;
-  if (gVulkanCore.refs != 0) return;
+  if (gVulkanCore.refs != 0)
+    return;
   if (gVulkanCore.device) {
     vkDeviceWaitIdle(gVulkanCore.device);
     destroySharedVulkanResources(gVulkanCore);
+    if (gVulkanCore.allocator) {
+      vmaDestroyAllocator(gVulkanCore.allocator);
+      gVulkanCore.allocator = VK_NULL_HANDLE;
+    }
     vkDestroyDevice(gVulkanCore.device, nullptr);
   }
   if (gVulkanCore.instance) {
@@ -495,46 +542,50 @@ void releaseSharedVulkanCore() {
   gVulkanCore = {};
 }
 
-void destroySharedTexture(VkDevice device, Texture& tex) {
-  if (tex.view) vkDestroyImageView(device, tex.view, nullptr);
-  if (tex.image) vkDestroyImage(device, tex.image, nullptr);
-  if (tex.memory) vkFreeMemory(device, tex.memory, nullptr);
+void destroySharedTexture(VkDevice device, VmaAllocator allocator, Texture &tex) {
+  if (tex.view)
+    vkDestroyImageView(device, tex.view, nullptr);
+  if (tex.image)
+    vmaDestroyImage(allocator, tex.image, tex.allocation);
   tex = {};
 }
 
-void destroySharedVulkanResources(SharedVulkanCore& core) {
-  auto& res = core.resources;
+void destroySharedVulkanResources(SharedVulkanCore &core) {
+  auto &res = core.resources;
   VkDevice const device = core.device;
-  if (!device) return;
-  destroySharedTexture(device, res.atlas);
-  if (res.pathPipeline) vkDestroyPipeline(device, res.pathPipeline, nullptr);
-  if (res.rectPipeline) vkDestroyPipeline(device, res.rectPipeline, nullptr);
-  if (res.imagePipeline) vkDestroyPipeline(device, res.imagePipeline, nullptr);
-  if (res.backdropPipeline) vkDestroyPipeline(device, res.backdropPipeline, nullptr);
-  if (res.backdropBlurPipeline) vkDestroyPipeline(device, res.backdropBlurPipeline, nullptr);
-  if (res.pathPipelineLayout) vkDestroyPipelineLayout(device, res.pathPipelineLayout, nullptr);
-  if (res.rectPipelineLayout) vkDestroyPipelineLayout(device, res.rectPipelineLayout, nullptr);
-  if (res.imagePipelineLayout) vkDestroyPipelineLayout(device, res.imagePipelineLayout, nullptr);
-  if (res.backdropPipelineLayout) vkDestroyPipelineLayout(device, res.backdropPipelineLayout, nullptr);
-  if (res.sampler) vkDestroySampler(device, res.sampler, nullptr);
-  if (res.rectDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.rectDescriptorLayout, nullptr);
-  if (res.quadDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.quadDescriptorLayout, nullptr);
-  if (res.textureDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.textureDescriptorLayout, nullptr);
-  if (res.descriptorPool) vkDestroyDescriptorPool(device, res.descriptorPool, nullptr);
-  if (res.renderPass) vkDestroyRenderPass(device, res.renderPass, nullptr);
+  if (!device)
+    return;
+  destroySharedTexture(device, core.allocator, res.atlas);
+  if (res.pathPipeline)
+    vkDestroyPipeline(device, res.pathPipeline, nullptr);
+  if (res.rectPipeline)
+    vkDestroyPipeline(device, res.rectPipeline, nullptr);
+  if (res.imagePipeline)
+    vkDestroyPipeline(device, res.imagePipeline, nullptr);
+  if (res.backdropPipeline)
+    vkDestroyPipeline(device, res.backdropPipeline, nullptr);
+  if (res.backdropBlurPipeline)
+    vkDestroyPipeline(device, res.backdropBlurPipeline, nullptr);
+  if (res.pathPipelineLayout)
+    vkDestroyPipelineLayout(device, res.pathPipelineLayout, nullptr);
+  if (res.rectPipelineLayout)
+    vkDestroyPipelineLayout(device, res.rectPipelineLayout, nullptr);
+  if (res.imagePipelineLayout)
+    vkDestroyPipelineLayout(device, res.imagePipelineLayout, nullptr);
+  if (res.backdropPipelineLayout)
+    vkDestroyPipelineLayout(device, res.backdropPipelineLayout, nullptr);
+  if (res.sampler)
+    vkDestroySampler(device, res.sampler, nullptr);
+  if (res.rectDescriptorLayout)
+    vkDestroyDescriptorSetLayout(device, res.rectDescriptorLayout, nullptr);
+  if (res.quadDescriptorLayout)
+    vkDestroyDescriptorSetLayout(device, res.quadDescriptorLayout, nullptr);
+  if (res.textureDescriptorLayout)
+    vkDestroyDescriptorSetLayout(device, res.textureDescriptorLayout, nullptr);
+  if (res.descriptorPool)
+    vkDestroyDescriptorPool(device, res.descriptorPool, nullptr);
   saveAndDestroyPipelineCache(device, res);
   res = {};
-}
-
-std::uint32_t findMemoryType(VkPhysicalDevice physical, std::uint32_t typeBits, VkMemoryPropertyFlags flags) {
-  VkPhysicalDeviceMemoryProperties props{};
-  vkGetPhysicalDeviceMemoryProperties(physical, &props);
-  for (std::uint32_t i = 0; i < props.memoryTypeCount; ++i) {
-    if ((typeBits & (1u << i)) && ((props.memoryTypes[i].propertyFlags & flags) == flags)) {
-      return i;
-    }
-  }
-  throw std::runtime_error("No compatible Vulkan memory type");
 }
 
 CornerRadius clampRadii(CornerRadius r, float w, float h) {
@@ -543,7 +594,7 @@ CornerRadius clampRadii(CornerRadius r, float w, float h) {
   r.topRight = std::clamp(r.topRight, 0.f, maxR);
   r.bottomRight = std::clamp(r.bottomRight, 0.f, maxR);
   r.bottomLeft = std::clamp(r.bottomLeft, 0.f, maxR);
-  auto fit = [](float& a, float& b, float len) {
+  auto fit = [](float &a, float &b, float len) {
     if (a + b > len && len > 0.f) {
       float s = len / (a + b);
       a *= s;
@@ -557,17 +608,18 @@ CornerRadius clampRadii(CornerRadius r, float w, float h) {
   return r;
 }
 
-VkShaderModule shaderModule(VkDevice device, unsigned char const* bytes, unsigned int len) {
+VkShaderModule shaderModule(VkDevice device, unsigned char const *bytes, unsigned int len) {
   VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   info.codeSize = len;
-  info.pCode = reinterpret_cast<std::uint32_t const*>(bytes);
+  info.pCode = reinterpret_cast<std::uint32_t const *>(bytes);
   VkShaderModule module = VK_NULL_HANDLE;
   vkCheck(vkCreateShaderModule(device, &info, nullptr, &module), "vkCreateShaderModule");
   return module;
 }
 
-bool representativeFillColor(FillStyle const& fill, Color* out) {
-  if (fill.solidColor(out)) return true;
+bool representativeFillColor(FillStyle const &fill, Color *out) {
+  if (fill.solidColor(out))
+    return true;
   LinearGradient linear{};
   if (fill.linearGradient(&linear) && linear.stopCount > 0) {
     *out = linear.stops[0].color;
@@ -586,13 +638,13 @@ bool representativeFillColor(FillStyle const& fill, Color* out) {
   return false;
 }
 
-Rect boundsOfSubpaths(std::vector<std::vector<Point>> const& subpaths) {
+Rect boundsOfSubpaths(std::vector<std::vector<Point>> const &subpaths) {
   float minX = std::numeric_limits<float>::infinity();
   float minY = std::numeric_limits<float>::infinity();
   float maxX = -std::numeric_limits<float>::infinity();
   float maxY = -std::numeric_limits<float>::infinity();
-  for (auto const& subpath : subpaths) {
-    for (Point const& point : subpath) {
+  for (auto const &subpath : subpaths) {
+    for (Point const &point : subpath) {
       minX = std::min(minX, point.x);
       minY = std::min(minY, point.y);
       maxX = std::max(maxX, point.x);
@@ -605,13 +657,13 @@ Rect boundsOfSubpaths(std::vector<std::vector<Point>> const& subpaths) {
   return Rect::sharp(minX, minY, maxX - minX, maxY - minY);
 }
 
-void putPathGradient(VulkanPathVertex& out, FillStyle const& fill, Point local) {
+void putPathGradient(VulkanPathVertex &out, FillStyle const &fill, Point local) {
   out.local[0] = local.x;
   out.local[1] = local.y;
-  auto putStops = [&](auto const& gradient, int type) {
+  auto putStops = [&](auto const &gradient, int type) {
     out.params[0] = static_cast<float>(type);
     out.params[1] = static_cast<float>(gradient.stopCount);
-    std::array<float*, 4> colors{out.fill0, out.fill1, out.fill2, out.fill3};
+    std::array<float *, 4> colors{out.fill0, out.fill1, out.fill2, out.fill3};
     for (std::uint8_t i = 0; i < gradient.stopCount && i < colors.size(); ++i) {
       putColor(colors[i], gradient.stops[i].color, 1.f);
       out.stops[i] = gradient.stops[i].position;
@@ -643,7 +695,7 @@ void putPathGradient(VulkanPathVertex& out, FillStyle const& fill, Point local) 
   }
 }
 
-VulkanPathVertex makeVulkanPathVertex(PathVertex const& src, FillStyle const* fill, Rect bounds, float opacity) {
+VulkanPathVertex makeVulkanPathVertex(PathVertex const &src, FillStyle const *fill, Rect bounds, float opacity) {
   VulkanPathVertex out{};
   out.x = src.x;
   out.y = src.y;
@@ -665,17 +717,18 @@ VulkanPathVertex makeVulkanPathVertex(PathVertex const& src, FillStyle const* fi
 
 class VulkanCanvas final : public Canvas {
 public:
-  VulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem)
+  VulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem &textSystem)
       : handle_(handle), textSystem_(textSystem), surface_(surface) {
     instance_ = ensureSharedVulkanInstanceImpl();
     if (!surface_) {
       throw std::runtime_error("Vulkan canvas requires a valid platform surface");
     }
-    SharedVulkanCore* shared = acquireSharedVulkanCore(surface_);
+    SharedVulkanCore *shared = acquireSharedVulkanCore(surface_);
     ownsSharedVulkanCore_ = true;
     shared_ = shared;
     physical_ = shared->physical;
     device_ = shared->device;
+    allocator_ = shared->allocator;
     queue_ = shared->queue;
     queueFamily_ = shared->queueFamily;
     createCommandObjects();
@@ -690,22 +743,10 @@ public:
     }
     unregisterCanvas();
     destroySwapchain();
-    if (backdropSceneFramebuffer_) {
-      vkDestroyFramebuffer(device_, backdropSceneFramebuffer_, nullptr);
-      backdropSceneFramebuffer_ = VK_NULL_HANDLE;
-    }
-    if (backdropScratchFramebuffer_) {
-      vkDestroyFramebuffer(device_, backdropScratchFramebuffer_, nullptr);
-      backdropScratchFramebuffer_ = VK_NULL_HANDLE;
-    }
-    if (backdropBlurFramebuffer_) {
-      vkDestroyFramebuffer(device_, backdropBlurFramebuffer_, nullptr);
-      backdropBlurFramebuffer_ = VK_NULL_HANDLE;
-    }
     destroyTexture(backdropSceneTexture_);
     destroyTexture(backdropScratchTexture_);
     destroyTexture(backdropBlurTexture_);
-    for (auto& kv : imageTextures_) {
+    for (auto &kv : imageTextures_) {
       if (kv.second) {
         destroyTexture(*kv.second);
       }
@@ -715,17 +756,23 @@ public:
     destroyBuffer(rectBuffer_);
     destroyBuffer(quadBuffer_);
     for (VkSemaphore semaphore : imageAvailable_) {
-      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+      if (semaphore)
+        vkDestroySemaphore(device_, semaphore, nullptr);
     }
     for (VkSemaphore semaphore : imageRenderFinished_) {
-      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+      if (semaphore)
+        vkDestroySemaphore(device_, semaphore, nullptr);
     }
     for (VkFence fence : frameFences_) {
-      if (fence) vkDestroyFence(device_, fence, nullptr);
+      if (fence)
+        vkDestroyFence(device_, fence, nullptr);
     }
-    if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
-    if (surface_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
-    if (ownsSharedVulkanCore_) releaseSharedVulkanCore();
+    if (commandPool_)
+      vkDestroyCommandPool(device_, commandPool_, nullptr);
+    if (surface_)
+      vkDestroySurfaceKHR(instance_, surface_, nullptr);
+    if (ownsSharedVulkanCore_)
+      releaseSharedVulkanCore();
   }
 
   Backend backend() const noexcept override { return Backend::Vulkan; }
@@ -764,8 +811,9 @@ public:
 
   void clear(Color color = Colors::transparent) override { clearColor_ = color; }
 
-  std::shared_ptr<Image> rasterize(Size logicalSize, RasterizeDrawCallback const& draw, float dpiScale) {
-    if (!draw || logicalSize.width <= 0.f || logicalSize.height <= 0.f) return nullptr;
+  std::shared_ptr<Image> rasterize(Size logicalSize, RasterizeDrawCallback const &draw, float dpiScale) {
+    if (!draw || logicalSize.width <= 0.f || logicalSize.height <= 0.f)
+      return nullptr;
     float const scale = dpiScale > 0.f ? dpiScale : std::max(dpiScaleX_, dpiScaleY_);
     int const logicalW = std::max(1, static_cast<int>(std::ceil(logicalSize.width)));
     int const logicalH = std::max(1, static_cast<int>(std::ceil(logicalSize.height)));
@@ -847,15 +895,17 @@ public:
   }
 
   void present() override {
-    if (width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0) return;
+    if (width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0)
+      return;
     debug::perf::ScopedTimer timer(debug::perf::TimedMetric::CanvasPresent);
     try {
       if (swapchainDirty_ || !swapchain_) {
         recreateSwapchain();
       }
-      if (!swapchain_) return;
+      if (!swapchain_)
+        return;
       presentImpl();
-    } catch (std::exception const& e) {
+    } catch (std::exception const &e) {
       recoverResetFrameFence();
       std::fprintf(stderr, "Flux Vulkan: present failed: %s\n", e.what());
       swapchainDirty_ = true;
@@ -912,92 +962,74 @@ public:
     clear.color.float32[1] = clearColor_.g;
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
-    if (backdropFrame && backdropSceneFramebuffer_ && backdropScratchFramebuffer_ && backdropBlurFramebuffer_) {
+    if (backdropFrame && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
       std::size_t const firstBlur = firstBackdropBlurOp();
-      VkRenderPassBeginInfo sceneRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      sceneRp.renderPass = resources().renderPass;
-      sceneRp.framebuffer = backdropSceneFramebuffer_;
-      sceneRp.renderArea.extent = swapExtent_;
-      sceneRp.clearValueCount = 1;
-      sceneRp.pClearValues = &clear;
-      vkCmdBeginRenderPass(commandBuffer, &sceneRp, VK_SUBPASS_CONTENTS_INLINE);
+      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, backdropSceneTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
       drawOps(commandBuffer, 0, firstBlur);
-      vkCmdEndRenderPass(commandBuffer);
-      transition(commandBuffer, backdropSceneTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      vkCmdEndRendering(commandBuffer);
+      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropSceneTexture_);
 
-      Texture* blurSource = &backdropSceneTexture_;
+      Texture *blurSource = &backdropSceneTexture_;
       for (int i = 0; i < kBackdropBlurIterations; ++i) {
-        VkRenderPassBeginInfo horizontalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        horizontalRp.renderPass = resources().renderPass;
-        horizontalRp.framebuffer = backdropScratchFramebuffer_;
-        horizontalRp.renderArea.extent = swapExtent_;
-        horizontalRp.clearValueCount = 1;
-        horizontalRp.pClearValues = &clear;
-        vkCmdBeginRenderPass(commandBuffer, &horizontalRp, VK_SUBPASS_CONTENTS_INLINE);
+        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+        beginColorRendering(commandBuffer, backdropScratchTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
         drawBackdropBlurPass(commandBuffer, blurSource, horizontalBlurQuad);
-        vkCmdEndRenderPass(commandBuffer);
-        transition(commandBuffer, backdropScratchTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vkCmdEndRendering(commandBuffer);
+        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
         ensureTextureDescriptor(backdropScratchTexture_);
 
-        VkRenderPassBeginInfo verticalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        verticalRp.renderPass = resources().renderPass;
-        verticalRp.framebuffer = backdropBlurFramebuffer_;
-        verticalRp.renderArea.extent = swapExtent_;
-        verticalRp.clearValueCount = 1;
-        verticalRp.pClearValues = &clear;
-        vkCmdBeginRenderPass(commandBuffer, &verticalRp, VK_SUBPASS_CONTENTS_INLINE);
+        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+        beginColorRendering(commandBuffer, backdropBlurTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
         drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
-        vkCmdEndRenderPass(commandBuffer);
-        transition(commandBuffer, backdropBlurTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vkCmdEndRendering(commandBuffer);
+        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
         ensureTextureDescriptor(backdropBlurTexture_);
         blurSource = &backdropBlurTexture_;
       }
 
       VkClearValue finalClear{};
-      VkRenderPassBeginInfo finalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      finalRp.renderPass = resources().renderPass;
-      finalRp.framebuffer = framebuffers_[imageIndex];
-      finalRp.renderArea.extent = swapExtent_;
-      finalRp.clearValueCount = 1;
-      finalRp.pClearValues = &finalClear;
-      vkCmdBeginRenderPass(commandBuffer, &finalRp, VK_SUBPASS_CONTENTS_INLINE);
+      transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
+                 VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, swapchainViews_[imageIndex], swapExtent_, finalClear,
+                          VK_ATTACHMENT_LOAD_OP_CLEAR);
       drawBackdropRange(commandBuffer, &backdropSceneTexture_, sceneCopyQuad, 1);
       drawOps(commandBuffer, firstBlur, ops_.size(), &backdropBlurTexture_);
-      vkCmdEndRenderPass(commandBuffer);
+      vkCmdEndRendering(commandBuffer);
     } else {
-      VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      rp.renderPass = resources().renderPass;
-      rp.framebuffer = framebuffers_[imageIndex];
-      rp.renderArea.extent = swapExtent_;
-      rp.clearValueCount = 1;
-      rp.pClearValues = &clear;
-      vkCmdBeginRenderPass(commandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+      transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
+                 VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, swapchainViews_[imageIndex], swapExtent_, clear,
+                          VK_ATTACHMENT_LOAD_OP_CLEAR);
       drawOps(commandBuffer);
-      vkCmdEndRenderPass(commandBuffer);
+      vkCmdEndRendering(commandBuffer);
     }
-    transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     writeDebugScreenshotIfRequested(commandBuffer, swapchainImages_[imageIndex]);
     transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &imageAvailable;
-    submit.pWaitDstStageMask = &waitStage;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &commandBuffer;
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &renderFinished;
+    VkSemaphoreSubmitInfo waitSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    waitSemaphore.semaphore = imageAvailable;
+    waitSemaphore.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    commandBufferInfo.commandBuffer = commandBuffer;
+    VkSemaphoreSubmitInfo signalSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    signalSemaphore.semaphore = renderFinished;
+    signalSemaphore.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submit.waitSemaphoreInfoCount = 1;
+    submit.pWaitSemaphoreInfos = &waitSemaphore;
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &commandBufferInfo;
+    submit.signalSemaphoreInfoCount = 1;
+    submit.pSignalSemaphoreInfos = &signalSemaphore;
     resetFrameFenceIndex_ = currentFrame_;
     vkCheck(vkResetFences(device_, 1, &frameFence), "vkResetFences");
-    VkResult const submitted = vkQueueSubmit(queue_, 1, &submit, frameFence);
+    VkResult const submitted = vkQueueSubmit2(queue_, 1, &submit, frameFence);
     if (submitted != VK_SUCCESS) {
       recoverResetFrameFence();
       vkCheck(submitted, "vkQueueSubmit");
@@ -1028,8 +1060,8 @@ public:
       stateStack_.pop_back();
     }
   }
-  void setTransform(Mat3 const& m) override { state_.transform = m; }
-  void transform(Mat3 const& m) override { state_.transform = state_.transform * m; }
+  void setTransform(Mat3 const &m) override { state_.transform = m; }
+  void transform(Mat3 const &m) override { state_.transform = state_.transform * m; }
   void translate(Point p) override { transform(Mat3::translate(p)); }
   void translate(float x, float y) override { translate({x, y}); }
   void scale(float sx, float sy) override { transform(Mat3::scale(sx, sy)); }
@@ -1038,7 +1070,7 @@ public:
   void rotate(float r, Point p) override { transform(Mat3::rotate(r, p)); }
   Mat3 currentTransform() const override { return state_.transform; }
 
-  void clipRect(Rect rect, CornerRadius const&, bool) override {
+  void clipRect(Rect rect, CornerRadius const &, bool) override {
     Rect r = transformedBounds(rect);
     float x0 = std::max(state_.clip.x, r.x);
     float y0 = std::max(state_.clip.y, r.y);
@@ -1053,19 +1085,29 @@ public:
   void setBlendMode(BlendMode mode) override { state_.blendMode = mode; }
   BlendMode blendMode() const override { return state_.blendMode; }
 
-  void pushRectInstance(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fill,
-                        StrokeStyle const& stroke, float opacity) {
-    if (rect.width <= 0.f || rect.height <= 0.f) return;
+  void pushRectInstance(Rect const &rect, CornerRadius const &cornerRadius, FillStyle const &fill,
+                        StrokeStyle const &stroke, float opacity) {
+    if (rect.width <= 0.f || rect.height <= 0.f)
+      return;
     Point const p0 = state_.transform.apply({rect.x, rect.y});
     Point const p1 = state_.transform.apply({rect.x + rect.width, rect.y});
     Point const p3 = state_.transform.apply({rect.x, rect.y + rect.height});
     RectInstance inst{};
-    inst.rect[0] = 0.f; inst.rect[1] = 0.f; inst.rect[2] = rect.width; inst.rect[3] = rect.height;
-    inst.axisX[0] = p0.x; inst.axisX[1] = p0.y; inst.axisX[2] = p1.x - p0.x; inst.axisX[3] = p1.y - p0.y;
-    inst.axisY[0] = p3.x - p0.x; inst.axisY[1] = p3.y - p0.y;
+    inst.rect[0] = 0.f;
+    inst.rect[1] = 0.f;
+    inst.rect[2] = rect.width;
+    inst.rect[3] = rect.height;
+    inst.axisX[0] = p0.x;
+    inst.axisX[1] = p0.y;
+    inst.axisX[2] = p1.x - p0.x;
+    inst.axisX[3] = p1.y - p0.y;
+    inst.axisY[0] = p3.x - p0.x;
+    inst.axisY[1] = p3.y - p0.y;
     CornerRadius cr = clampRadii(cornerRadius, rect.width, rect.height);
-    inst.radii[0] = cr.topLeft; inst.radii[1] = cr.topRight;
-    inst.radii[2] = cr.bottomRight; inst.radii[3] = cr.bottomLeft;
+    inst.radii[0] = cr.topLeft;
+    inst.radii[1] = cr.topRight;
+    inst.radii[2] = cr.bottomRight;
+    inst.radii[3] = cr.bottomLeft;
     encodeFill(fill, inst);
     Color sc{};
     if (stroke.solidColor(&sc) && stroke.width > 0.f) {
@@ -1079,9 +1121,10 @@ public:
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
   }
 
-  void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fill,
-                StrokeStyle const& stroke, ShadowStyle const& shadow) override {
-    if (rect.width <= 0.f || rect.height <= 0.f) return;
+  void drawRect(Rect const &rect, CornerRadius const &cornerRadius, FillStyle const &fill,
+                StrokeStyle const &stroke, ShadowStyle const &shadow) override {
+    if (rect.width <= 0.f || rect.height <= 0.f)
+      return;
     Rect rejectBounds = transformedBounds(rect);
     if (!shadow.isNone()) {
       float const pad = shadow.radius;
@@ -1089,7 +1132,8 @@ public:
                                           rect.width + pad * 2.f, rect.height + pad * 2.f);
       rejectBounds = unionRects(rejectBounds, transformedBounds(shadowRect));
     }
-    if (rejectBounds.width <= 0.f || rejectBounds.height <= 0.f || !state_.clip.intersects(rejectBounds)) return;
+    if (rejectBounds.width <= 0.f || rejectBounds.height <= 0.f || !state_.clip.intersects(rejectBounds))
+      return;
 
     if (!shadow.isNone()) {
       if (shadow.radius <= 0.f) {
@@ -1118,11 +1162,13 @@ public:
     pushRectInstance(rect, cornerRadius, fill, stroke, state_.opacity);
   }
 
-  void drawLine(Point from, Point to, StrokeStyle const& stroke) override {
-    if (stroke.isNone()) return;
+  void drawLine(Point from, Point to, StrokeStyle const &stroke) override {
+    if (stroke.isNone())
+      return;
     Point a = state_.transform.apply(from);
     Point b = state_.transform.apply(to);
-    if (!clipLineToCurrentClip(a, b)) return;
+    if (!clipLineToCurrentClip(a, b))
+      return;
     StrokeStyle scaled = stroke;
     float const sx = std::hypot(state_.transform.m[0], state_.transform.m[1]);
     float const sy = std::hypot(state_.transform.m[3], state_.transform.m[4]);
@@ -1136,7 +1182,7 @@ public:
     appendPath(path, FillStyle::none(), scaled);
     state_ = saved;
   }
-  void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke, ShadowStyle const& shadow) override {
+  void drawPath(Path const &path, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) override {
     if (!shadow.isNone()) {
       DrawState saved = state_;
       state_.transform = state_.transform * Mat3::translate(shadow.offset);
@@ -1145,29 +1191,30 @@ public:
     }
     appendPath(path, fill, stroke);
   }
-  void drawCircle(Point center, float radius, FillStyle const& fill, StrokeStyle const& stroke) override {
+  void drawCircle(Point center, float radius, FillStyle const &fill, StrokeStyle const &stroke) override {
     Rect r{center.x - radius, center.y - radius, radius * 2.f, radius * 2.f};
     drawRect(r, CornerRadius::pill(r), fill, stroke, ShadowStyle::none());
   }
 
-  void drawTextLayout(TextLayout const& layout, Point origin) override {
+  void drawTextLayout(TextLayout const &layout, Point origin) override {
     try {
       ensureAtlasDescriptor();
-    } catch (std::exception const& e) {
+    } catch (std::exception const &e) {
       std::fprintf(stderr, "Flux Vulkan: glyph atlas descriptor setup failed: %s\n", e.what());
       return;
     }
     std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
-    for (TextLayout::PlacedRun const& placed : layout.runs) {
+    for (TextLayout::PlacedRun const &placed : layout.runs) {
       for (std::size_t i = 0; i < placed.run.glyphIds.size(); ++i) {
-        GlyphSlot const* slot = nullptr;
+        GlyphSlot const *slot = nullptr;
         try {
           slot = glyphSlot(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
-        } catch (std::exception const& e) {
+        } catch (std::exception const &e) {
           std::fprintf(stderr, "Flux Vulkan: glyph atlas update failed: %s\n", e.what());
           continue;
         }
-        if (!slot || slot->w == 0 || slot->h == 0) continue;
+        if (!slot || slot->w == 0 || slot->h == 0)
+          continue;
         Point pos = origin + placed.origin + placed.run.positions[i];
         Rect glyphRect = Rect::sharp(pos.x + slot->bearing.x / dpiScaleX_,
                                      pos.y - slot->bearing.y / dpiScaleY_,
@@ -1177,11 +1224,16 @@ public:
         Point p10 = state_.transform.apply({glyphRect.x + glyphRect.width, glyphRect.y});
         Point p01 = state_.transform.apply({glyphRect.x, glyphRect.y + glyphRect.height});
         QuadInstance q{};
-        q.rect[0] = 0.f; q.rect[1] = 0.f;
-        q.rect[2] = glyphRect.width; q.rect[3] = glyphRect.height;
-        q.axisX[0] = p00.x; q.axisX[1] = p00.y;
-        q.axisX[2] = p10.x - p00.x; q.axisX[3] = p10.y - p00.y;
-        q.axisY[0] = p01.x - p00.x; q.axisY[1] = p01.y - p00.y;
+        q.rect[0] = 0.f;
+        q.rect[1] = 0.f;
+        q.rect[2] = glyphRect.width;
+        q.rect[3] = glyphRect.height;
+        q.axisX[0] = p00.x;
+        q.axisX[1] = p00.y;
+        q.axisX[2] = p10.x - p00.x;
+        q.axisX[3] = p10.y - p00.y;
+        q.axisY[0] = p01.x - p00.x;
+        q.axisY[1] = p01.y - p00.y;
         q.uv[0] = slot->u0;
         q.uv[1] = slot->v0;
         q.uv[2] = slot->u1;
@@ -1192,24 +1244,26 @@ public:
     }
     std::uint32_t count = static_cast<std::uint32_t>(quads_.size()) - first;
     if (count > 0) {
-      Texture* atlas = &resources().atlas;
+      Texture *atlas = &resources().atlas;
       batches_.push_back(ImageBatch{atlas, first, count});
       ops_.push_back(DrawOp{DrawOp::Kind::Image, atlas, first, count});
       debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
     }
   }
 
-  void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners, float opacity) override {
-    auto const* vi = dynamic_cast<VulkanImage const*>(&image);
-    if (!vi || src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) return;
-    Texture* texture = nullptr;
+  void drawImage(Image const &image, Rect const &src, Rect const &dst, CornerRadius const &corners, float opacity) override {
+    auto const *vi = dynamic_cast<VulkanImage const *>(&image);
+    if (!vi || src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f)
+      return;
+    Texture *texture = nullptr;
     try {
       texture = ensureImageTexture(*vi);
-    } catch (std::exception const& e) {
+    } catch (std::exception const &e) {
       std::fprintf(stderr, "Flux Vulkan: image texture upload failed: %s\n", e.what());
       return;
     }
-    if (!texture) return;
+    if (!texture)
+      return;
     Point p00 = state_.transform.apply({dst.x, dst.y});
     Point p10 = state_.transform.apply({dst.x + dst.width, dst.y});
     Point p01 = state_.transform.apply({dst.x, dst.y + dst.height});
@@ -1219,15 +1273,22 @@ public:
     float const u1 = (src.x + src.width) / sz.width;
     float const v1 = (src.y + src.height) / sz.height;
     QuadInstance q{};
-    q.rect[0] = 0.f; q.rect[1] = 0.f; q.rect[2] = dst.width; q.rect[3] = dst.height;
-    q.axisX[0] = p00.x; q.axisX[1] = p00.y;
-    q.axisX[2] = p10.x - p00.x; q.axisX[3] = p10.y - p00.y;
-    q.axisY[0] = p01.x - p00.x; q.axisY[1] = p01.y - p00.y;
+    q.rect[0] = 0.f;
+    q.rect[1] = 0.f;
+    q.rect[2] = dst.width;
+    q.rect[3] = dst.height;
+    q.axisX[0] = p00.x;
+    q.axisX[1] = p00.y;
+    q.axisX[2] = p10.x - p00.x;
+    q.axisX[3] = p10.y - p00.y;
+    q.axisY[0] = p01.x - p00.x;
+    q.axisY[1] = p01.y - p00.y;
     q.uv[0] = u0;
     q.uv[1] = v0;
     q.uv[2] = u1;
     q.uv[3] = v1;
-    q.color[0] = q.color[1] = q.color[2] = 1.f; q.color[3] = opacity * state_.opacity;
+    q.color[0] = q.color[1] = q.color[2] = 1.f;
+    q.color[3] = opacity * state_.opacity;
     CornerRadius cr = clampRadii(corners, dst.width, dst.height);
     q.radii[0] = cr.topLeft;
     q.radii[1] = cr.topRight;
@@ -1240,9 +1301,10 @@ public:
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }
 
-  void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners, float opacity) override {
+  void drawImageTiled(Image const &image, Rect const &dst, CornerRadius const &corners, float opacity) override {
     Size sz = image.size();
-    if (sz.width <= 0.f || sz.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) return;
+    if (sz.width <= 0.f || sz.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f)
+      return;
     int const cols = static_cast<int>(std::ceil(dst.width / sz.width));
     int const rows = static_cast<int>(std::ceil(dst.height / sz.height));
     for (int row = 0; row < rows; ++row) {
@@ -1257,19 +1319,27 @@ public:
     }
   }
 
-  void drawBackdropBlur(Rect const& rect, float radius, Color tint, CornerRadius const& corners) override {
-    if (radius <= 0.f || rect.width <= 0.f || rect.height <= 0.f) return;
+  void drawBackdropBlur(Rect const &rect, float radius, Color tint, CornerRadius const &corners) override {
+    if (radius <= 0.f || rect.width <= 0.f || rect.height <= 0.f)
+      return;
     Rect const bounds = transformedBounds(rect);
-    if (!state_.clip.intersects(bounds)) return;
+    if (!state_.clip.intersects(bounds))
+      return;
 
     Point p00 = state_.transform.apply({rect.x, rect.y});
     Point p10 = state_.transform.apply({rect.x + rect.width, rect.y});
     Point p01 = state_.transform.apply({rect.x, rect.y + rect.height});
     QuadInstance q{};
-    q.rect[0] = 0.f; q.rect[1] = 0.f; q.rect[2] = rect.width; q.rect[3] = rect.height;
-    q.axisX[0] = p00.x; q.axisX[1] = p00.y;
-    q.axisX[2] = p10.x - p00.x; q.axisX[3] = p10.y - p00.y;
-    q.axisY[0] = p01.x - p00.x; q.axisY[1] = p01.y - p00.y;
+    q.rect[0] = 0.f;
+    q.rect[1] = 0.f;
+    q.rect[2] = rect.width;
+    q.rect[3] = rect.height;
+    q.axisX[0] = p00.x;
+    q.axisX[1] = p00.y;
+    q.axisX[2] = p10.x - p00.x;
+    q.axisX[3] = p10.y - p00.y;
+    q.axisY[0] = p01.x - p00.x;
+    q.axisY[1] = p01.y - p00.y;
     q.uv[0] = p00.x / std::max(1.f, static_cast<float>(width_));
     q.uv[1] = p00.y / std::max(1.f, static_cast<float>(height_));
     q.uv[2] = p10.x / std::max(1.f, static_cast<float>(width_));
@@ -1287,11 +1357,12 @@ public:
     ops_.push_back(op);
   }
 
-  void* gpuDevice() const override { return device_; }
+  void *gpuDevice() const override { return device_; }
 
-  void evictImageTexture(VulkanImage const* image) {
+  void evictImageTexture(VulkanImage const *image) {
     auto it = imageTextures_.find(image);
-    if (it == imageTextures_.end()) return;
+    if (it == imageTextures_.end())
+      return;
     pendingTextureDestroys_.push_back(PendingTextureDestroy{std::move(it->second), kMaxFramesInFlight + 1u});
     imageTextures_.erase(it);
   }
@@ -1328,13 +1399,15 @@ private:
     };
     float minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
     for (Point p : pts) {
-      minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
-      minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
+      minX = std::min(minX, p.x);
+      maxX = std::max(maxX, p.x);
+      minY = std::min(minY, p.y);
+      maxY = std::max(maxY, p.y);
     }
     return Rect::sharp(minX, minY, maxX - minX, maxY - minY);
   }
 
-  bool clipLineToCurrentClip(Point& a, Point& b) const {
+  bool clipLineToCurrentClip(Point &a, Point &b) const {
     float t0 = 0.f;
     float t1 = 1.f;
     float const dx = b.x - a.x;
@@ -1344,14 +1417,19 @@ private:
     float const xMax = state_.clip.x + state_.clip.width;
     float const yMax = state_.clip.y + state_.clip.height;
     auto edge = [&](float p, float q) {
-      if (std::abs(p) < 1e-6f) return q >= 0.f;
+      if (std::abs(p) < 1e-6f)
+        return q >= 0.f;
       float const r = q / p;
       if (p < 0.f) {
-        if (r > t1) return false;
-        if (r > t0) t0 = r;
+        if (r > t1)
+          return false;
+        if (r > t0)
+          t0 = r;
       } else {
-        if (r < t0) return false;
-        if (r < t1) t1 = r;
+        if (r < t0)
+          return false;
+        if (r < t1)
+          t1 = r;
       }
       return true;
     };
@@ -1365,7 +1443,7 @@ private:
     return state_.clip.width > 0.f && state_.clip.height > 0.f;
   }
 
-  void encodeFill(FillStyle const& fill, RectInstance& inst) {
+  void encodeFill(FillStyle const &fill, RectInstance &inst) {
     Color c{};
     if (fill.solidColor(&c)) {
       putColor(inst.fill0, c, 1.f);
@@ -1373,10 +1451,10 @@ private:
       inst.params[1] = 1.f;
       return;
     }
-    auto writeStops = [&](auto const& g) {
+    auto writeStops = [&](auto const &g) {
       inst.params[1] = static_cast<float>(g.stopCount);
       for (std::uint8_t i = 0; i < g.stopCount && i < 4; ++i) {
-        float* colors[] = {inst.fill0, inst.fill1, inst.fill2, inst.fill3};
+        float *colors[] = {inst.fill0, inst.fill1, inst.fill2, inst.fill3};
         putColor(colors[i], g.stops[i].color, 1.f);
         inst.stops[i] = g.stops[i].position;
       }
@@ -1384,22 +1462,28 @@ private:
     LinearGradient lg{};
     if (fill.linearGradient(&lg) && lg.stopCount > 0) {
       inst.params[0] = 1.f;
-      inst.gradient[0] = lg.start.x; inst.gradient[1] = lg.start.y;
-      inst.gradient[2] = lg.end.x; inst.gradient[3] = lg.end.y;
+      inst.gradient[0] = lg.start.x;
+      inst.gradient[1] = lg.start.y;
+      inst.gradient[2] = lg.end.x;
+      inst.gradient[3] = lg.end.y;
       writeStops(lg);
       return;
     }
     RadialGradient rg{};
     if (fill.radialGradient(&rg) && rg.stopCount > 0) {
       inst.params[0] = 2.f;
-      inst.gradient[0] = rg.center.x; inst.gradient[1] = rg.center.y; inst.gradient[2] = rg.radius;
+      inst.gradient[0] = rg.center.x;
+      inst.gradient[1] = rg.center.y;
+      inst.gradient[2] = rg.radius;
       writeStops(rg);
       return;
     }
     ConicalGradient cg{};
     if (fill.conicalGradient(&cg) && cg.stopCount > 0) {
       inst.params[0] = 3.f;
-      inst.gradient[0] = cg.center.x; inst.gradient[1] = cg.center.y; inst.gradient[2] = cg.startAngleRadians;
+      inst.gradient[0] = cg.center.x;
+      inst.gradient[1] = cg.center.y;
+      inst.gradient[2] = cg.startAngleRadians;
       writeStops(cg);
       return;
     }
@@ -1435,7 +1519,7 @@ private:
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     VkFence newFence = VK_NULL_HANDLE;
     if (vkCreateFence(device_, &fence, nullptr, &newFence) == VK_SUCCESS) {
-      for (VkFence& imageFence : imageInFlightFences_) {
+      for (VkFence &imageFence : imageInFlightFences_) {
         if (imageFence == oldFence) {
           imageFence = newFence;
         }
@@ -1448,14 +1532,14 @@ private:
     resetFrameFenceIndex_ = kNoResetFrameFence;
   }
 
-  SharedVulkanCore::Resources& resources() {
+  SharedVulkanCore::Resources &resources() {
     if (!shared_) {
       throw std::runtime_error("Vulkan shared resources are unavailable");
     }
     return shared_->resources;
   }
 
-  SharedVulkanCore::Resources const& resources() const {
+  SharedVulkanCore::Resources const &resources() const {
     if (!shared_) {
       throw std::runtime_error("Vulkan shared resources are unavailable");
     }
@@ -1463,7 +1547,7 @@ private:
   }
 
   void ensureSharedResources() {
-    auto& res = resources();
+    auto &res = resources();
     VkFormat const format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM
                                                                          : surfaceFormat_.format;
     if (res.initialized) {
@@ -1475,7 +1559,6 @@ private:
     res.renderFormat = format;
     createDescriptors();
     createSampler();
-    createRenderPass();
     createPipelineCache(*shared_);
     createPipelines();
     createAtlas();
@@ -1483,7 +1566,7 @@ private:
   }
 
   void createDescriptors() {
-    auto& res = resources();
+    auto &res = resources();
     VkDescriptorPoolSize sizes[3]{
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 512},
@@ -1524,35 +1607,13 @@ private:
   }
 
   void createSampler() {
-    auto& res = resources();
+    auto &res = resources();
     VkSamplerCreateInfo s{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     s.magFilter = VK_FILTER_LINEAR;
     s.minFilter = VK_FILTER_LINEAR;
     s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     s.addressModeU = s.addressModeV = s.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     vkCheck(vkCreateSampler(device_, &s, nullptr, &res.sampler), "vkCreateSampler");
-  }
-
-  void createRenderPass() {
-    auto& res = resources();
-    VkAttachmentDescription color{};
-    color.format = res.renderFormat;
-    color.samples = VK_SAMPLE_COUNT_1_BIT;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    color.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkSubpassDescription sub{};
-    sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    sub.colorAttachmentCount = 1;
-    sub.pColorAttachments = &ref;
-    VkRenderPassCreateInfo info{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-    info.attachmentCount = 1;
-    info.pAttachments = &color;
-    info.subpassCount = 1;
-    info.pSubpasses = &sub;
-    vkCheck(vkCreateRenderPass(device_, &info, nullptr, &res.renderPass), "vkCreateRenderPass");
   }
 
   void chooseSurfaceFormat() {
@@ -1563,7 +1624,7 @@ private:
     surfaceFormat_ = formats.empty() ? VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}
                                      : formats[0];
     auto choose = [&](VkFormat format) {
-      for (auto const& fmt : formats) {
+      for (auto const &fmt : formats) {
         if (fmt.format == format) {
           surfaceFormat_ = fmt;
           return true;
@@ -1575,7 +1636,7 @@ private:
         choose(VK_FORMAT_A8B8G8R8_UNORM_PACK32)) {
       return;
     }
-    for (auto const& fmt : formats) {
+    for (auto const &fmt : formats) {
       if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB || fmt.format == VK_FORMAT_R8G8B8A8_SRGB ||
           fmt.format == VK_FORMAT_A8B8G8R8_SRGB_PACK32) {
         surfaceFormat_ = fmt;
@@ -1585,14 +1646,14 @@ private:
   }
 
   struct VertexInput {
-    VkVertexInputBindingDescription const* bindings = nullptr;
+    VkVertexInputBindingDescription const *bindings = nullptr;
     std::uint32_t bindingCount = 0;
-    VkVertexInputAttributeDescription const* attrs = nullptr;
+    VkVertexInputAttributeDescription const *attrs = nullptr;
     std::uint32_t attrCount = 0;
   };
 
   void createPipelines() {
-    auto& res = resources();
+    auto &res = resources();
     res.rectPipelineLayout = createPipelineLayout({res.rectDescriptorLayout}, true);
     res.imagePipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.backdropPipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
@@ -1645,8 +1706,8 @@ private:
     return out;
   }
 
-  VkPipeline createPipeline(VkPipelineLayout layout, unsigned char const* vertBytes, unsigned int vertLen,
-                            unsigned char const* fragBytes, unsigned int fragLen, VertexInput input) {
+  VkPipeline createPipeline(VkPipelineLayout layout, unsigned char const *vertBytes, unsigned int vertLen,
+                            unsigned char const *fragBytes, unsigned int fragLen, VertexInput input) {
     VkShaderModule vert = shaderModule(device_, vertBytes, vertLen);
     VkShaderModule frag = shaderModule(device_, fragBytes, fragLen);
     VkPipelineShaderStageCreateInfo stages[2]{{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
@@ -1693,6 +1754,11 @@ private:
     dyn.dynamicStateCount = 2;
     dyn.pDynamicStates = states;
     VkGraphicsPipelineCreateInfo info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    VkPipelineRenderingCreateInfo rendering{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    VkFormat const colorFormat = resources().renderFormat;
+    rendering.colorAttachmentCount = 1;
+    rendering.pColorAttachmentFormats = &colorFormat;
+    info.pNext = &rendering;
     info.stageCount = 2;
     info.pStages = stages;
     info.pVertexInputState = &vi;
@@ -1703,7 +1769,6 @@ private:
     info.pColorBlendState = &cb;
     info.pDynamicState = &dyn;
     info.layout = layout;
-    info.renderPass = resources().renderPass;
     VkPipeline out = VK_NULL_HANDLE;
     vkCheck(vkCreateGraphicsPipelines(device_, resources().pipelineCache, 1, &info, nullptr, &out),
             "vkCreateGraphicsPipelines");
@@ -1713,18 +1778,18 @@ private:
   }
 
   void recreateSwapchain() {
-    if (!device_) return;
+    if (!device_)
+      return;
     for (VkFence fence : frameFences_) {
-      if (fence) vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
+      if (fence)
+        vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
     }
     VkSwapchainKHR oldSwapchain = swapchain_;
     std::vector<VkImageView> oldViews = std::move(swapchainViews_);
-    std::vector<VkFramebuffer> oldFramebuffers = std::move(framebuffers_);
     std::vector<VkSemaphore> oldImageRenderFinished = std::move(imageRenderFinished_);
     swapchain_ = VK_NULL_HANDLE;
     swapchainImages_.clear();
     swapchainViews_.clear();
-    framebuffers_.clear();
     imageRenderFinished_.clear();
     VkSurfaceCapabilitiesKHR caps{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &caps);
@@ -1769,7 +1834,6 @@ private:
     imageInFlightFences_.assign(count, VK_NULL_HANDLE);
     imageRenderFinished_.resize(count, VK_NULL_HANDLE);
     swapchainViews_.resize(count);
-    framebuffers_.resize(count);
     VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
       vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageRenderFinished_[i]), "vkCreateSemaphore");
@@ -1781,32 +1845,26 @@ private:
       view.subresourceRange.levelCount = 1;
       view.subresourceRange.layerCount = 1;
       vkCheck(vkCreateImageView(device_, &view, nullptr, &swapchainViews_[i]), "vkCreateImageView");
-      VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-      fb.renderPass = resources().renderPass;
-      fb.attachmentCount = 1;
-      fb.pAttachments = &swapchainViews_[i];
-      fb.width = swapExtent_.width;
-      fb.height = swapExtent_.height;
-      fb.layers = 1;
-      vkCheck(vkCreateFramebuffer(device_, &fb, nullptr, &framebuffers_[i]), "vkCreateFramebuffer");
     }
     for (VkSemaphore semaphore : oldImageRenderFinished) {
-      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+      if (semaphore)
+        vkDestroySemaphore(device_, semaphore, nullptr);
     }
-    for (VkFramebuffer fb : oldFramebuffers) vkDestroyFramebuffer(device_, fb, nullptr);
-    for (VkImageView view : oldViews) vkDestroyImageView(device_, view, nullptr);
-    if (oldSwapchain) vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
+    for (VkImageView view : oldViews)
+      vkDestroyImageView(device_, view, nullptr);
+    if (oldSwapchain)
+      vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
     swapchainDirty_ = false;
   }
 
   void destroySwapchain() {
-    for (VkFramebuffer fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
-    framebuffers_.clear();
-    for (VkImageView view : swapchainViews_) vkDestroyImageView(device_, view, nullptr);
+    for (VkImageView view : swapchainViews_)
+      vkDestroyImageView(device_, view, nullptr);
     swapchainViews_.clear();
     swapchainImages_.clear();
     for (VkSemaphore semaphore : imageRenderFinished_) {
-      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+      if (semaphore)
+        vkDestroySemaphore(device_, semaphore, nullptr);
     }
     imageRenderFinished_.clear();
     if (swapchain_) {
@@ -1816,7 +1874,7 @@ private:
   }
 
   void createAtlas() {
-    auto& res = resources();
+    auto &res = resources();
     res.atlas.width = 2048;
     res.atlas.height = 2048;
     res.atlasPixels.assign(static_cast<std::size_t>(res.atlas.width) * res.atlas.height, Rgba{255, 255, 255, 0});
@@ -1824,8 +1882,9 @@ private:
     ensureTextureDescriptor(res.atlas);
   }
 
-  void appendPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
-    if (path.isEmpty()) return;
+  void appendPath(Path const &path, FillStyle const &fill, StrokeStyle const &stroke) {
+    if (path.isEmpty())
+      return;
     PathCacheKey const cacheKey{
         .pathHash = path.contentHash(),
         .styleHash = hashFill(fill) ^ (hashStroke(stroke) + 0x9e3779b97f4a7c15ULL) ^
@@ -1844,19 +1903,21 @@ private:
       return;
     }
     auto subpaths = PathFlattener::flattenSubpaths(path);
-    if (subpaths.empty()) return;
+    if (subpaths.empty())
+      return;
     std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
-    for (auto& sp : subpaths) {
-      for (Point& p : sp) p = state_.transform.apply(p);
+    for (auto &sp : subpaths) {
+      for (Point &p : sp)
+        p = state_.transform.apply(p);
     }
     Rect const bounds = boundsOfSubpaths(subpaths);
-    auto append = [&](TessellatedPath&& tess, FillStyle const* gradientSource = nullptr) {
+    auto append = [&](TessellatedPath &&tess, FillStyle const *gradientSource = nullptr) {
       if (gradientSource) {
-        for (PathVertex const& vertex : tess.vertices) {
+        for (PathVertex const &vertex : tess.vertices) {
           pathVerts_.push_back(makeVulkanPathVertex(vertex, gradientSource, bounds, state_.opacity));
         }
       } else {
-        for (PathVertex const& vertex : tess.vertices) {
+        for (PathVertex const &vertex : tess.vertices) {
           pathVerts_.push_back(makeVulkanPathVertex(vertex, nullptr, bounds, 1.f));
         }
       }
@@ -1866,8 +1927,9 @@ private:
       if (representativeFillColor(fill, &fc)) {
         fc.a *= state_.opacity;
         std::vector<std::vector<Point>> nonempty;
-        for (auto const& sp : subpaths) {
-          if (sp.size() >= 3) nonempty.push_back(sp);
+        for (auto const &sp : subpaths) {
+          if (sp.size() >= 3)
+            nonempty.push_back(sp);
         }
         if (!nonempty.empty()) {
           append(PathFlattener::tessellateFillContours(nonempty, fc, static_cast<float>(width_),
@@ -1884,7 +1946,7 @@ private:
         float const sx = std::hypot(state_.transform.m[0], state_.transform.m[1]);
         float const sy = std::hypot(state_.transform.m[3], state_.transform.m[4]);
         float const s = (sx > 0.f || sy > 0.f) ? (sx + sy) * 0.5f : 1.f;
-        for (auto const& sp : subpaths) {
+        for (auto const &sp : subpaths) {
           if (sp.size() >= 2) {
             append(PathFlattener::tessellateStroke(sp, stroke.width * s, sc, static_cast<float>(width_),
                                                    static_cast<float>(height_), stroke.join, stroke.cap));
@@ -1935,8 +1997,7 @@ private:
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     upload(quadBuffer_, quads_.data(), quads_.size() * sizeof(QuadInstance));
     ensureStorageDescriptor(quadDescriptorSet_, resources().quadDescriptorLayout, quadBuffer_);
-    ensureBuffer(pathBuffer_, std::max<VkDeviceSize>(sizeof(VulkanPathVertex),
-                                                     pathVerts_.size() * sizeof(VulkanPathVertex)),
+    ensureBuffer(pathBuffer_, std::max<VkDeviceSize>(sizeof(VulkanPathVertex), pathVerts_.size() * sizeof(VulkanPathVertex)),
                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     upload(pathBuffer_, pathVerts_.data(), pathVerts_.size() * sizeof(VulkanPathVertex));
   }
@@ -1944,17 +2005,8 @@ private:
   std::shared_ptr<Image> renderCurrentOpsToImage(int pixelW, int pixelH) {
     Texture target{};
     Buffer readback{};
-    VkFramebuffer framebuffer = VK_NULL_HANDLE;
     try {
       createRenderTargetTexture(target, pixelW, pixelH);
-      VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-      fb.renderPass = resources().renderPass;
-      fb.attachmentCount = 1;
-      fb.pAttachments = &target.view;
-      fb.width = static_cast<std::uint32_t>(pixelW);
-      fb.height = static_cast<std::uint32_t>(pixelH);
-      fb.layers = 1;
-      vkCheck(vkCreateFramebuffer(device_, &fb, nullptr, &framebuffer), "vkCreateFramebuffer");
 
       uploadFrameBuffers();
       uploadAtlasIfNeeded();
@@ -1968,17 +2020,14 @@ private:
       clear.color.float32[1] = clearColor_.g;
       clear.color.float32[2] = clearColor_.b;
       clear.color.float32[3] = clearColor_.a;
-      VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-      rp.renderPass = resources().renderPass;
-      rp.framebuffer = framebuffer;
-      rp.renderArea.extent = VkExtent2D{static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH)};
-      rp.clearValueCount = 1;
-      rp.pClearValues = &clear;
-      vkCmdBeginRenderPass(commandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+      transition(commandBuffer, target, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, target.view,
+                          VkExtent2D{static_cast<std::uint32_t>(pixelW),
+                                     static_cast<std::uint32_t>(pixelH)},
+                          clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
       drawOps(commandBuffer);
-      vkCmdEndRenderPass(commandBuffer);
-      transition(commandBuffer, target.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+      vkCmdEndRendering(commandBuffer);
+      transition(commandBuffer, target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
       VkBufferImageCopy copy{};
       copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
       copy.imageSubresource.layerCount = 1;
@@ -1988,9 +2037,10 @@ private:
       endImmediate(commandBuffer);
 
       std::vector<Rgba> pixels(static_cast<std::size_t>(pixelW) * pixelH);
-      void* mapped = nullptr;
-      vkMapMemory(device_, readback.memory, 0, byteSize, 0, &mapped);
-      auto const* bytes = static_cast<std::uint8_t const*>(mapped);
+      void *mapped = nullptr;
+      vkCheck(vmaInvalidateAllocation(allocator_, readback.allocation, 0, byteSize), "vmaInvalidateAllocation");
+      vkCheck(vmaMapMemory(allocator_, readback.allocation, &mapped), "vmaMapMemory");
+      auto const *bytes = static_cast<std::uint8_t const *>(mapped);
       bool const bgra = surfaceFormat_.format == VK_FORMAT_B8G8R8A8_UNORM ||
                         surfaceFormat_.format == VK_FORMAT_B8G8R8A8_SRGB;
       for (int i = 0; i < pixelW * pixelH; ++i) {
@@ -2002,54 +2052,51 @@ private:
                                                      bytes[i * 4 + 2], bytes[i * 4 + 3]};
         }
       }
-      vkUnmapMemory(device_, readback.memory);
+      vmaUnmapMemory(allocator_, readback.allocation);
 
       destroyBuffer(readback);
-      if (framebuffer) vkDestroyFramebuffer(device_, framebuffer, nullptr);
       destroyTexture(target);
       return std::make_shared<VulkanImage>(pixelW, pixelH, std::move(pixels));
     } catch (...) {
       destroyBuffer(readback);
-      if (framebuffer) vkDestroyFramebuffer(device_, framebuffer, nullptr);
       destroyTexture(target);
       throw;
     }
   }
 
-  void ensureBuffer(Buffer& buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
-    if (buffer.buffer && buffer.capacity >= size) return;
+  void ensureBuffer(Buffer &buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
+    if (buffer.buffer && buffer.capacity >= size)
+      return;
     destroyBuffer(buffer);
     buffer.capacity = std::max<VkDeviceSize>(size, 1024);
     VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     info.size = buffer.capacity;
     info.usage = usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vkCheck(vkCreateBuffer(device_, &info, nullptr, &buffer.buffer), "vkCreateBuffer");
-    VkMemoryRequirements req{};
-    vkGetBufferMemoryRequirements(device_, buffer.buffer, &req);
-    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    alloc.allocationSize = req.size;
-    alloc.memoryTypeIndex = findMemoryType(physical_, req.memoryTypeBits,
-                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    vkCheck(vkAllocateMemory(device_, &alloc, nullptr, &buffer.memory), "vkAllocateMemory");
-    vkBindBufferMemory(device_, buffer.buffer, buffer.memory, 0);
+    VmaAllocationCreateInfo allocation{};
+    allocation.usage = VMA_MEMORY_USAGE_AUTO;
+    allocation.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+    vkCheck(vmaCreateBuffer(allocator_, &info, &allocation, &buffer.buffer, &buffer.allocation, nullptr),
+            "vmaCreateBuffer");
   }
 
-  void upload(Buffer& buffer, void const* data, std::size_t size) {
-    if (!size) return;
-    void* mapped = nullptr;
-    vkMapMemory(device_, buffer.memory, 0, size, 0, &mapped);
+  void upload(Buffer &buffer, void const *data, std::size_t size) {
+    if (!size)
+      return;
+    void *mapped = nullptr;
+    vkCheck(vmaMapMemory(allocator_, buffer.allocation, &mapped), "vmaMapMemory");
     std::memcpy(mapped, data, size);
-    vkUnmapMemory(device_, buffer.memory);
+    vkCheck(vmaFlushAllocation(allocator_, buffer.allocation, 0, size), "vmaFlushAllocation");
+    vmaUnmapMemory(allocator_, buffer.allocation);
   }
 
-  void destroyBuffer(Buffer& buffer) {
-    if (buffer.buffer) vkDestroyBuffer(device_, buffer.buffer, nullptr);
-    if (buffer.memory) vkFreeMemory(device_, buffer.memory, nullptr);
+  void destroyBuffer(Buffer &buffer) {
+    if (buffer.buffer)
+      vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
     buffer = {};
   }
 
-  void ensureStorageDescriptor(VkDescriptorSet& set, VkDescriptorSetLayout layout, Buffer const& buffer) {
+  void ensureStorageDescriptor(VkDescriptorSet &set, VkDescriptorSetLayout layout, Buffer const &buffer) {
     if (!set) {
       VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
       alloc.descriptorPool = resources().descriptorPool;
@@ -2070,39 +2117,34 @@ private:
   void ensureBackdropSceneTarget() {
     int const targetW = static_cast<int>(std::max(1u, swapExtent_.width));
     int const targetH = static_cast<int>(std::max(1u, swapExtent_.height));
-    auto ensure = [&](Texture& texture, VkFramebuffer& framebuffer) {
-      if (texture.image && texture.width == targetW && texture.height == targetH && framebuffer) {
+    auto ensure = [&](Texture &texture) {
+      if (texture.image && texture.width == targetW && texture.height == targetH) {
         return;
-      }
-      if (framebuffer) {
-        vkDestroyFramebuffer(device_, framebuffer, nullptr);
-        framebuffer = VK_NULL_HANDLE;
       }
       destroyTexture(texture);
       createRenderTargetTexture(texture, targetW, targetH);
-      VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-      fb.renderPass = resources().renderPass;
-      fb.attachmentCount = 1;
-      fb.pAttachments = &texture.view;
-      fb.width = static_cast<std::uint32_t>(targetW);
-      fb.height = static_cast<std::uint32_t>(targetH);
-      fb.layers = 1;
-      vkCheck(vkCreateFramebuffer(device_, &fb, nullptr, &framebuffer), "vkCreateFramebuffer");
     };
-    ensure(backdropSceneTexture_, backdropSceneFramebuffer_);
-    ensure(backdropScratchTexture_, backdropScratchFramebuffer_);
-    ensure(backdropBlurTexture_, backdropBlurFramebuffer_);
+    ensure(backdropSceneTexture_);
+    ensure(backdropScratchTexture_);
+    ensure(backdropBlurTexture_);
   }
 
   std::uint32_t appendSceneCopyQuad() {
     QuadInstance q{};
-    q.rect[0] = 0.f; q.rect[1] = 0.f;
+    q.rect[0] = 0.f;
+    q.rect[1] = 0.f;
     q.rect[2] = static_cast<float>(width_);
     q.rect[3] = static_cast<float>(height_);
-    q.axisX[0] = 0.f; q.axisX[1] = 0.f;
-    q.axisX[2] = static_cast<float>(width_); q.axisX[3] = 0.f;
-    q.axisY[0] = 0.f; q.axisY[1] = static_cast<float>(height_);
-    q.uv[0] = 0.f; q.uv[1] = 0.f; q.uv[2] = 1.f; q.uv[3] = 1.f;
+    q.axisX[0] = 0.f;
+    q.axisX[1] = 0.f;
+    q.axisX[2] = static_cast<float>(width_);
+    q.axisX[3] = 0.f;
+    q.axisY[0] = 0.f;
+    q.axisY[1] = static_cast<float>(height_);
+    q.uv[0] = 0.f;
+    q.uv[1] = 0.f;
+    q.uv[2] = 1.f;
+    q.uv[3] = 1.f;
     q.color[0] = q.color[1] = q.color[2] = q.color[3] = 0.f;
     q.radii[0] = 0.f;
     std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
@@ -2112,13 +2154,20 @@ private:
 
   std::uint32_t appendBackdropBlurQuad(float radiusPx, float axisX, float axisY) {
     QuadInstance q{};
-    q.rect[0] = 0.f; q.rect[1] = 0.f;
+    q.rect[0] = 0.f;
+    q.rect[1] = 0.f;
     q.rect[2] = static_cast<float>(width_);
     q.rect[3] = static_cast<float>(height_);
-    q.axisX[0] = 0.f; q.axisX[1] = 0.f;
-    q.axisX[2] = static_cast<float>(width_); q.axisX[3] = 0.f;
-    q.axisY[0] = 0.f; q.axisY[1] = static_cast<float>(height_);
-    q.uv[0] = 0.f; q.uv[1] = 0.f; q.uv[2] = 1.f; q.uv[3] = 1.f;
+    q.axisX[0] = 0.f;
+    q.axisX[1] = 0.f;
+    q.axisX[2] = static_cast<float>(width_);
+    q.axisX[3] = 0.f;
+    q.axisY[0] = 0.f;
+    q.axisY[1] = static_cast<float>(height_);
+    q.uv[0] = 0.f;
+    q.uv[1] = 0.f;
+    q.uv[2] = 1.f;
+    q.uv[3] = 1.f;
     q.color[0] = q.color[1] = q.color[2] = q.color[3] = 0.f;
     q.radii[0] = radiusPx;
     q.radii[1] = axisX;
@@ -2131,7 +2180,7 @@ private:
 
   float maxBackdropBlurRadius() const {
     float radius = 0.f;
-    for (DrawOp const& op : ops_) {
+    for (DrawOp const &op : ops_) {
       if (op.kind == DrawOp::Kind::BackdropBlur) {
         radius = std::max(radius, op.blurRadius);
       }
@@ -2140,10 +2189,11 @@ private:
   }
 
   void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
-    if (count == 0) return;
+    if (count == 0)
+      return;
     setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    auto const& res = resources();
+    auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipelineLayout, 0, 1,
                             &rectDescriptorSet_, 0, nullptr);
@@ -2152,7 +2202,8 @@ private:
   }
 
   void drawPathRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
-    if (count == 0) return;
+    if (count == 0)
+      return;
     setViewportScissor(commandBuffer);
     VkDeviceSize offset = 0;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resources().pathPipeline);
@@ -2160,11 +2211,12 @@ private:
     vkCmdDraw(commandBuffer, count, 1, first, 0);
   }
 
-  void drawImageRange(VkCommandBuffer commandBuffer, Texture* texture, std::uint32_t first, std::uint32_t count) {
-    if (!texture || !texture->descriptor || count == 0) return;
+  void drawImageRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count) {
+    if (!texture || !texture->descriptor || count == 0)
+      return;
     setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    auto const& res = resources();
+    auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 0, 1,
                             &quadDescriptorSet_, 0, nullptr);
@@ -2174,11 +2226,12 @@ private:
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawBackdropRange(VkCommandBuffer commandBuffer, Texture* texture, std::uint32_t first, std::uint32_t count) {
-    if (!texture || !texture->descriptor || count == 0) return;
+  void drawBackdropRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count) {
+    if (!texture || !texture->descriptor || count == 0)
+      return;
     setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    auto const& res = resources();
+    auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
                             &quadDescriptorSet_, 0, nullptr);
@@ -2189,11 +2242,12 @@ private:
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture* texture, std::uint32_t first) {
-    if (!texture || !texture->descriptor) return;
+  void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first) {
+    if (!texture || !texture->descriptor)
+      return;
     setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    auto const& res = resources();
+    auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
                             &quadDescriptorSet_, 0, nullptr);
@@ -2205,13 +2259,13 @@ private:
   }
 
   bool hasBackdropBlurOps() const {
-    return std::any_of(ops_.begin(), ops_.end(), [](DrawOp const& op) {
+    return std::any_of(ops_.begin(), ops_.end(), [](DrawOp const &op) {
       return op.kind == DrawOp::Kind::BackdropBlur;
     });
   }
 
   std::size_t firstBackdropBlurOp() const {
-    auto const it = std::find_if(ops_.begin(), ops_.end(), [](DrawOp const& op) {
+    auto const it = std::find_if(ops_.begin(), ops_.end(), [](DrawOp const &op) {
       return op.kind == DrawOp::Kind::BackdropBlur;
     });
     return it == ops_.end() ? ops_.size() : static_cast<std::size_t>(std::distance(ops_.begin(), it));
@@ -2219,10 +2273,10 @@ private:
 
   void drawOps(VkCommandBuffer commandBuffer, std::size_t start = 0,
                std::size_t end = std::numeric_limits<std::size_t>::max(),
-               Texture* backdropSource = nullptr) {
+               Texture *backdropSource = nullptr) {
     std::size_t const opEnd = std::min(end, ops_.size());
     for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
-      DrawOp const& op = ops_[index];
+      DrawOp const &op = ops_[index];
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         drawRectRange(commandBuffer, op.first, op.count);
@@ -2240,6 +2294,22 @@ private:
     }
   }
 
+  void beginColorRendering(VkCommandBuffer commandBuffer, VkImageView view, VkExtent2D extent,
+                           VkClearValue const &clear, VkAttachmentLoadOp loadOp) {
+    VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    color.imageView = view;
+    color.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    color.loadOp = loadOp;
+    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color.clearValue = clear;
+    VkRenderingInfo rendering{VK_STRUCTURE_TYPE_RENDERING_INFO};
+    rendering.renderArea.extent = extent;
+    rendering.layerCount = 1;
+    rendering.colorAttachmentCount = 1;
+    rendering.pColorAttachments = &color;
+    vkCmdBeginRendering(commandBuffer, &rendering);
+  }
+
   void setViewportScissor(VkCommandBuffer commandBuffer) {
     VkViewport vp{0.f, 0.f, static_cast<float>(swapExtent_.width), static_cast<float>(swapExtent_.height), 0.f, 1.f};
     VkRect2D sc{{0, 0}, swapExtent_};
@@ -2247,7 +2317,7 @@ private:
     vkCmdSetScissor(commandBuffer, 0, 1, &sc);
   }
 
-  bool atlasHasSpace(SharedVulkanCore::Resources const& res, std::uint32_t width, std::uint32_t height) const {
+  bool atlasHasSpace(SharedVulkanCore::Resources const &res, std::uint32_t width, std::uint32_t height) const {
     int const pad = 1;
     int x = res.atlasX;
     int y = res.atlasY;
@@ -2259,7 +2329,7 @@ private:
     return y + static_cast<int>(height) + pad < res.atlas.height;
   }
 
-  void placeGlyphInAtlas(SharedVulkanCore::Resources& res, GlyphSlot& slot) {
+  void placeGlyphInAtlas(SharedVulkanCore::Resources &res, GlyphSlot &slot) {
     int const pad = 1;
     if (res.atlasX + static_cast<int>(slot.w) + pad >= res.atlas.width) {
       res.atlasX = pad;
@@ -2272,7 +2342,7 @@ private:
     res.atlasRowH = std::max(res.atlasRowH, static_cast<int>(slot.h));
     for (std::uint32_t row = 0; row < slot.h; ++row) {
       for (std::uint32_t col = 0; col < slot.w; ++col) {
-        Rgba& px = res.atlasPixels[static_cast<std::size_t>(slot.y + row) * res.atlas.width + slot.x + col];
+        Rgba &px = res.atlasPixels[static_cast<std::size_t>(slot.y + row) * res.atlas.width + slot.x + col];
         px = {255, 255, 255, slot.alpha[static_cast<std::size_t>(row) * slot.w + col]};
       }
     }
@@ -2282,15 +2352,15 @@ private:
     slot.v1 = static_cast<float>(slot.y + static_cast<int>(slot.h)) / res.atlas.height;
   }
 
-  void rebuildAtlas(SharedVulkanCore::Resources& res) {
+  void rebuildAtlas(SharedVulkanCore::Resources &res) {
     std::vector<std::pair<GlyphKey, GlyphSlot>> slots;
     slots.reserve(res.glyphs.size());
-    for (auto const& [key, slot] : res.glyphs) {
+    for (auto const &[key, slot] : res.glyphs) {
       if (slot.w > 0 && slot.h > 0 && !slot.alpha.empty()) {
         slots.push_back({key, slot});
       }
     }
-    std::sort(slots.begin(), slots.end(), [](auto const& a, auto const& b) {
+    std::sort(slots.begin(), slots.end(), [](auto const &a, auto const &b) {
       return a.second.lastUsed > b.second.lastUsed;
     });
     res.atlasPixels.assign(static_cast<std::size_t>(res.atlas.width) * res.atlas.height, Rgba{255, 255, 255, 0});
@@ -2298,7 +2368,7 @@ private:
     res.atlasY = 1;
     res.atlasRowH = 0;
     res.glyphs.clear();
-    for (auto& [key, slot] : slots) {
+    for (auto &[key, slot] : slots) {
       if (!atlasHasSpace(res, slot.w, slot.h)) {
         continue;
       }
@@ -2308,7 +2378,7 @@ private:
     res.atlasDirty = true;
   }
 
-  bool evictGlyphsForAtlasSpace(SharedVulkanCore::Resources& res, std::uint32_t width, std::uint32_t height) {
+  bool evictGlyphsForAtlasSpace(SharedVulkanCore::Resources &res, std::uint32_t width, std::uint32_t height) {
     if (width + 2u >= static_cast<std::uint32_t>(res.atlas.width) ||
         height + 2u >= static_cast<std::uint32_t>(res.atlas.height)) {
       return false;
@@ -2316,13 +2386,14 @@ private:
     while (!atlasHasSpace(res, width, height) && !res.glyphs.empty()) {
       std::vector<std::pair<GlyphKey, std::uint64_t>> byAge;
       byAge.reserve(res.glyphs.size());
-      for (auto const& [key, slot] : res.glyphs) {
+      for (auto const &[key, slot] : res.glyphs) {
         if (slot.w > 0 && slot.h > 0) {
           byAge.push_back({key, slot.lastUsed});
         }
       }
-      if (byAge.empty()) return false;
-      std::sort(byAge.begin(), byAge.end(), [](auto const& a, auto const& b) {
+      if (byAge.empty())
+        return false;
+      std::sort(byAge.begin(), byAge.end(), [](auto const &a, auto const &b) {
         return a.second < b.second;
       });
       std::size_t const eraseCount = std::max<std::size_t>(1, byAge.size() / 4);
@@ -2334,8 +2405,8 @@ private:
     return atlasHasSpace(res, width, height);
   }
 
-  GlyphSlot const* glyphSlot(std::uint32_t fontId, std::uint16_t glyphId, float fontSize) {
-    auto& res = resources();
+  GlyphSlot const *glyphSlot(std::uint32_t fontId, std::uint16_t glyphId, float fontSize) {
+    auto &res = resources();
     std::uint16_t size = static_cast<std::uint16_t>(std::clamp(std::round(fontSize * dpiScaleY_), 1.f, 512.f));
     GlyphKey key{fontId, glyphId, size};
     auto it = res.glyphs.find(key);
@@ -2354,7 +2425,8 @@ private:
       (void)ok;
       return &inserted->second;
     }
-    if (!atlasHasSpace(res, gw, gh) && !evictGlyphsForAtlasSpace(res, gw, gh)) return nullptr;
+    if (!atlasHasSpace(res, gw, gh) && !evictGlyphsForAtlasSpace(res, gw, gh))
+      return nullptr;
     GlyphSlot slot{};
     slot.w = gw;
     slot.h = gh;
@@ -2371,15 +2443,17 @@ private:
   void ensureAtlasDescriptor() { ensureTextureDescriptor(resources().atlas); }
 
   void uploadAtlasIfNeeded() {
-    auto& res = resources();
-    if (!res.atlasDirty) return;
+    auto &res = resources();
+    if (!res.atlasDirty)
+      return;
     uploadTexture(res.atlas, res.atlasPixels.data());
     res.atlasDirty = false;
   }
 
-  Texture* ensureImageTexture(VulkanImage const& image) {
+  Texture *ensureImageTexture(VulkanImage const &image) {
     auto it = imageTextures_.find(&image);
-    if (it != imageTextures_.end()) return it->second.get();
+    if (it != imageTextures_.end())
+      return it->second.get();
     auto tex = std::make_unique<Texture>();
     try {
       createTexture(*tex, image.width, image.height, image.pixels.data(), true);
@@ -2409,7 +2483,7 @@ private:
     }
   }
 
-  void createTexture(Texture& tex, int width, int height, Rgba const* pixels, bool uploadNow) {
+  void createTexture(Texture &tex, int width, int height, Rgba const *pixels, bool uploadNow) {
     tex.width = width;
     tex.height = height;
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
@@ -2422,14 +2496,10 @@ private:
     image.tiling = VK_IMAGE_TILING_OPTIMAL;
     image.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    vkCheck(vkCreateImage(device_, &image, nullptr, &tex.image), "vkCreateImage");
-    VkMemoryRequirements req{};
-    vkGetImageMemoryRequirements(device_, tex.image, &req);
-    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    alloc.allocationSize = req.size;
-    alloc.memoryTypeIndex = findMemoryType(physical_, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    vkCheck(vkAllocateMemory(device_, &alloc, nullptr, &tex.memory), "vkAllocateMemory");
-    vkBindImageMemory(device_, tex.image, tex.memory, 0);
+    VmaAllocationCreateInfo allocation{};
+    allocation.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    vkCheck(vmaCreateImage(allocator_, &image, &allocation, &tex.image, &tex.allocation, nullptr),
+            "vmaCreateImage");
     VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view.image = tex.image;
     view.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -2438,11 +2508,12 @@ private:
     view.subresourceRange.levelCount = 1;
     view.subresourceRange.layerCount = 1;
     vkCheck(vkCreateImageView(device_, &view, nullptr, &tex.view), "vkCreateImageView");
-    transitionImmediate(tex.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    if (uploadNow) uploadTexture(tex, pixels);
+    transitionImmediate(tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    if (uploadNow)
+      uploadTexture(tex, pixels);
   }
 
-  void createRenderTargetTexture(Texture& tex, int width, int height) {
+  void createRenderTargetTexture(Texture &tex, int width, int height) {
     tex.width = width;
     tex.height = height;
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
@@ -2456,14 +2527,10 @@ private:
     image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    vkCheck(vkCreateImage(device_, &image, nullptr, &tex.image), "vkCreateImage");
-    VkMemoryRequirements req{};
-    vkGetImageMemoryRequirements(device_, tex.image, &req);
-    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    alloc.allocationSize = req.size;
-    alloc.memoryTypeIndex = findMemoryType(physical_, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    vkCheck(vkAllocateMemory(device_, &alloc, nullptr, &tex.memory), "vkAllocateMemory");
-    vkBindImageMemory(device_, tex.image, tex.memory, 0);
+    VmaAllocationCreateInfo allocation{};
+    allocation.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    vkCheck(vmaCreateImage(allocator_, &image, &allocation, &tex.image, &tex.allocation, nullptr),
+            "vmaCreateImage");
     VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view.image = tex.image;
     view.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -2472,35 +2539,38 @@ private:
     view.subresourceRange.levelCount = 1;
     view.subresourceRange.layerCount = 1;
     vkCheck(vkCreateImageView(device_, &view, nullptr, &tex.view), "vkCreateImageView");
+    tex.layout = VK_IMAGE_LAYOUT_UNDEFINED;
   }
 
-  void uploadTexture(Texture& tex, Rgba const* pixels) {
-    if (!pixels || tex.width <= 0 || tex.height <= 0) return;
+  void uploadTexture(Texture &tex, Rgba const *pixels) {
+    if (!pixels || tex.width <= 0 || tex.height <= 0)
+      return;
     Buffer staging{};
     VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * sizeof(Rgba);
     ensureBuffer(staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     upload(staging, pixels, static_cast<std::size_t>(size));
     VkCommandBuffer cmd = beginImmediate();
-    transition(cmd, tex.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transition(cmd, tex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkBufferImageCopy copy{};
     copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     copy.imageSubresource.layerCount = 1;
     copy.imageExtent = {static_cast<std::uint32_t>(tex.width), static_cast<std::uint32_t>(tex.height), 1};
     vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-    transition(cmd, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transition(cmd, tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
     endImmediate(cmd);
     destroyBuffer(staging);
   }
 
-  void ensureTextureDescriptor(Texture& tex) {
-    if (tex.descriptor) return;
+  void ensureTextureDescriptor(Texture &tex) {
+    if (tex.descriptor)
+      return;
     VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     alloc.descriptorPool = resources().descriptorPool;
     alloc.descriptorSetCount = 1;
     VkDescriptorSetLayout const layout = resources().textureDescriptorLayout;
     alloc.pSetLayouts = &layout;
     vkCheck(vkAllocateDescriptorSets(device_, &alloc, &tex.descriptor), "vkAllocateDescriptorSets");
-    VkDescriptorImageInfo ii{resources().sampler, tex.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkDescriptorImageInfo ii{resources().sampler, tex.view, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.dstSet = tex.descriptor;
     write.dstBinding = 0;
@@ -2510,10 +2580,11 @@ private:
     vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   }
 
-  void destroyTexture(Texture& tex) {
-    if (tex.view) vkDestroyImageView(device_, tex.view, nullptr);
-    if (tex.image) vkDestroyImage(device_, tex.image, nullptr);
-    if (tex.memory) vkFreeMemory(device_, tex.memory, nullptr);
+  void destroyTexture(Texture &tex) {
+    if (tex.view)
+      vkDestroyImageView(device_, tex.view, nullptr);
+    if (tex.image)
+      vmaDestroyImage(allocator_, tex.image, tex.allocation);
     tex = {};
   }
 
@@ -2532,46 +2603,89 @@ private:
 
   void endImmediate(VkCommandBuffer cmd) {
     vkCheck(vkEndCommandBuffer(cmd), "vkEndCommandBuffer");
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
-    vkCheck(vkQueueSubmit(queue_, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit");
+    VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    commandBufferInfo.commandBuffer = cmd;
+    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &commandBufferInfo;
+    vkCheck(vkQueueSubmit2(queue_, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit2");
     vkQueueWaitIdle(queue_);
     vkFreeCommandBuffers(device_, commandPool_, 1, &cmd);
   }
 
-  void transitionImmediate(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
+  void transitionImmediate(Texture &texture, VkImageLayout newLayout) {
     VkCommandBuffer cmd = beginImmediate();
-    transition(cmd, image, oldLayout, newLayout);
+    transition(cmd, texture, newLayout);
     endImmediate(cmd);
   }
 
+  static VkPipelineStageFlags2 stageMaskForLayout(VkImageLayout layout) {
+    switch (layout) {
+    case VK_IMAGE_LAYOUT_UNDEFINED:
+      return VK_PIPELINE_STAGE_2_NONE;
+    case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
+      return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+      return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
+      return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+      return VK_PIPELINE_STAGE_2_NONE;
+    default:
+      return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    }
+  }
+
+  static VkAccessFlags2 accessMaskForLayout(VkImageLayout layout, bool source) {
+    switch (layout) {
+    case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
+      return source ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+                    : VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+      return VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+      return VK_ACCESS_2_TRANSFER_READ_BIT;
+    case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
+      return VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    default:
+      return VK_ACCESS_2_NONE;
+    }
+  }
+
   void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
-    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-    b.oldLayout = oldLayout;
-    b.newLayout = newLayout;
-    b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.image = image;
-    b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    b.subresourceRange.levelCount = 1;
-    b.subresourceRange.layerCount = 1;
-    b.srcAccessMask = oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : 0;
-    b.dstAccessMask = newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                          ? VK_ACCESS_TRANSFER_WRITE_BIT
-                          : (newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                                 ? VK_ACCESS_TRANSFER_READ_BIT
-                                 : (newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                        ? VK_ACCESS_SHADER_READ_BIT
-                                        : 0));
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-                         0, nullptr, 0, nullptr, 1, &b);
+    if (oldLayout == newLayout)
+      return;
+    VkImageMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    barrier.srcStageMask = stageMaskForLayout(oldLayout);
+    barrier.srcAccessMask = accessMaskForLayout(oldLayout, true);
+    barrier.dstStageMask = stageMaskForLayout(newLayout);
+    barrier.dstAccessMask = accessMaskForLayout(newLayout, false);
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    dependency.imageMemoryBarrierCount = 1;
+    dependency.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd, &dependency);
+  }
+
+  void transition(VkCommandBuffer cmd, Texture &texture, VkImageLayout newLayout) {
+    transition(cmd, texture.image, texture.layout, newLayout);
+    texture.layout = newLayout;
   }
 
   void writeDebugScreenshotIfRequested(VkCommandBuffer commandBuffer, VkImage source) {
-    if (debugScreenshotWritten_) return;
-    char const* path = std::getenv("FLUX_DEBUG_SCREENSHOT_PATH");
-    if (!path || !*path) return;
+    if (debugScreenshotWritten_)
+      return;
+    char const *path = std::getenv("FLUX_DEBUG_SCREENSHOT_PATH");
+    if (!path || !*path)
+      return;
     Buffer staging{};
     VkDeviceSize size = static_cast<VkDeviceSize>(framebufferWidth_) * framebufferHeight_ * 4u;
     ensureBuffer(staging, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -2588,13 +2702,17 @@ private:
   }
 
   void flushScreenshot() {
-    if (!pendingScreenshotBuffer_.buffer || pendingScreenshotPath_.empty()) return;
+    if (!pendingScreenshotBuffer_.buffer || pendingScreenshotPath_.empty())
+      return;
     vkDeviceWaitIdle(device_);
-    void* mapped = nullptr;
-    vkMapMemory(device_, pendingScreenshotBuffer_.memory, 0, pendingScreenshotSize_, 0, &mapped);
+    void *mapped = nullptr;
+    vkCheck(vmaInvalidateAllocation(allocator_, pendingScreenshotBuffer_.allocation, 0, pendingScreenshotSize_),
+            "vmaInvalidateAllocation");
+    vkCheck(vmaMapMemory(allocator_, pendingScreenshotBuffer_.allocation, &mapped), "vmaMapMemory");
     std::ofstream out(pendingScreenshotPath_, std::ios::binary);
-    out << "P6\n" << framebufferWidth_ << " " << framebufferHeight_ << "\n255\n";
-    auto* bytes = static_cast<std::uint8_t const*>(mapped);
+    out << "P6\n"
+        << framebufferWidth_ << " " << framebufferHeight_ << "\n255\n";
+    auto *bytes = static_cast<std::uint8_t const *>(mapped);
     bool const bgra = surfaceFormat_.format == VK_FORMAT_B8G8R8A8_UNORM ||
                       surfaceFormat_.format == VK_FORMAT_B8G8R8A8_SRGB;
     for (int i = 0; i < framebufferWidth_ * framebufferHeight_; ++i) {
@@ -2602,13 +2720,13 @@ private:
       out.put(static_cast<char>(bytes[i * 4 + 1]));
       out.put(static_cast<char>(bytes[i * 4 + (bgra ? 0 : 2)]));
     }
-    vkUnmapMemory(device_, pendingScreenshotBuffer_.memory);
+    vmaUnmapMemory(allocator_, pendingScreenshotBuffer_.allocation);
     destroyBuffer(pendingScreenshotBuffer_);
     pendingScreenshotPath_.clear();
   }
 
   unsigned int handle_ = 0;
-  TextSystem& textSystem_;
+  TextSystem &textSystem_;
   int width_ = 1;
   int height_ = 1;
   int framebufferWidth_ = 1;
@@ -2631,8 +2749,9 @@ private:
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;
   VkPhysicalDevice physical_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
+  VmaAllocator allocator_ = VK_NULL_HANDLE;
   VkQueue queue_ = VK_NULL_HANDLE;
-  SharedVulkanCore* shared_ = nullptr;
+  SharedVulkanCore *shared_ = nullptr;
   std::uint32_t queueFamily_ = 0;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
@@ -2647,14 +2766,10 @@ private:
   std::vector<VkImage> swapchainImages_;
   std::vector<VkFence> imageInFlightFences_;
   std::vector<VkImageView> swapchainViews_;
-  std::vector<VkFramebuffer> framebuffers_;
   std::vector<VkSemaphore> imageRenderFinished_;
   Texture backdropSceneTexture_;
-  VkFramebuffer backdropSceneFramebuffer_ = VK_NULL_HANDLE;
   Texture backdropScratchTexture_;
-  VkFramebuffer backdropScratchFramebuffer_ = VK_NULL_HANDLE;
   Texture backdropBlurTexture_;
-  VkFramebuffer backdropBlurFramebuffer_ = VK_NULL_HANDLE;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;
@@ -2665,18 +2780,20 @@ private:
   std::string pendingScreenshotPath_;
   bool debugScreenshotWritten_ = false;
   bool swapchainDirty_ = true;
-  std::unordered_map<VulkanImage const*, std::unique_ptr<Texture>> imageTextures_;
+  std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
   bool ownsSharedVulkanCore_ = false;
 };
 
 namespace {
 
-void evictImageTexturesFor(VulkanImage const* image) {
-  if (!image) return;
+void evictImageTexturesFor(VulkanImage const *image) {
+  if (!image)
+    return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::flux::VulkanCanvas* canvas : gCanvases) {
-    if (canvas) canvas->evictImageTexture(image);
+  for (::flux::VulkanCanvas *canvas : gCanvases) {
+    if (canvas)
+      canvas->evictImageTexture(image);
   }
 }
 
@@ -2686,22 +2803,26 @@ VkInstance ensureSharedVulkanInstance() {
   return ensureSharedVulkanInstanceImpl();
 }
 
-std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem) {
+std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem &textSystem) {
   return std::make_unique<VulkanCanvas>(surface, handle, textSystem);
 }
 
-std::shared_ptr<Image> loadImageFromFile(std::string_view path, void*) {
-  using WebPGetInfoFn = int (*)(std::uint8_t const*, std::size_t, int*, int*);
-  using WebPDecodeRGBAFn = std::uint8_t* (*)(std::uint8_t const*, std::size_t, int*, int*);
-  using WebPFreeFn = void (*)(void*);
+std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
+  using WebPGetInfoFn = int (*)(std::uint8_t const *, std::size_t, int *, int *);
+  using WebPDecodeRGBAFn = std::uint8_t *(*)(std::uint8_t const *, std::size_t, int *, int *);
+  using WebPFreeFn = void (*)(void *);
 
   std::ifstream in(std::filesystem::path(std::string(path)), std::ios::binary);
-  if (!in) return nullptr;
+  if (!in)
+    return nullptr;
   std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  if (data.empty()) return nullptr;
-  void* lib = dlopen("libwebp.so.7", RTLD_LAZY | RTLD_LOCAL);
-  if (!lib) lib = dlopen("libwebp.so", RTLD_LAZY | RTLD_LOCAL);
-  if (!lib) return nullptr;
+  if (data.empty())
+    return nullptr;
+  void *lib = dlopen("libwebp.so.7", RTLD_LAZY | RTLD_LOCAL);
+  if (!lib)
+    lib = dlopen("libwebp.so", RTLD_LAZY | RTLD_LOCAL);
+  if (!lib)
+    return nullptr;
   auto getInfo = reinterpret_cast<WebPGetInfoFn>(dlsym(lib, "WebPGetInfo"));
   auto decode = reinterpret_cast<WebPDecodeRGBAFn>(dlsym(lib, "WebPDecodeRGBA"));
   auto freeWebP = reinterpret_cast<WebPFreeFn>(dlsym(lib, "WebPFree"));
@@ -2715,9 +2836,10 @@ std::shared_ptr<Image> loadImageFromFile(std::string_view path, void*) {
     return nullptr;
   }
   int decodedWidth = 0, decodedHeight = 0;
-  std::uint8_t* decoded = decode(data.data(), data.size(), &decodedWidth, &decodedHeight);
+  std::uint8_t *decoded = decode(data.data(), data.size(), &decodedWidth, &decodedHeight);
   if (!decoded || decodedWidth != width || decodedHeight != height) {
-    if (decoded) freeWebP(decoded);
+    if (decoded)
+      freeWebP(decoded);
     dlclose(lib);
     return nullptr;
   }
@@ -2728,9 +2850,10 @@ std::shared_ptr<Image> loadImageFromFile(std::string_view path, void*) {
   return std::make_shared<VulkanImage>(width, height, std::move(rgba));
 }
 
-std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize, RasterizeDrawCallback draw, float dpiScale) {
-  auto* vulkan = dynamic_cast<VulkanCanvas*>(&canvas);
-  if (!vulkan) return nullptr;
+std::shared_ptr<Image> rasterizeToImage(Canvas &canvas, Size logicalSize, RasterizeDrawCallback draw, float dpiScale) {
+  auto *vulkan = dynamic_cast<VulkanCanvas *>(&canvas);
+  if (!vulkan)
+    return nullptr;
   return vulkan->rasterize(logicalSize, draw, dpiScale);
 }
 
