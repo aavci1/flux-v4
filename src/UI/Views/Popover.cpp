@@ -147,6 +147,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
         .offset = popoverOverlayGapOffset(resolved, gap),
         .modal = false,
         .backdropColor = resolvePopoverBackdropColor(popover.backdropColor, theme),
+        .backdropBlurRadius = resolveFloat(popover.backdropBlurRadius, theme.popoverBackdropBlurRadius),
         .dismissOnOutsideTap = popover.dismissOnOutsideTap,
         .dismissOnEscape = popover.dismissOnEscape,
         .onDismiss = popover.onDismiss,

@@ -146,6 +146,7 @@ add_library(flux STATIC
   src/UI/Overlay.cpp
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/Alert.cpp
+  src/UI/Views/BackdropBlur.cpp
   src/UI/Views/Badge.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Card.cpp
@@ -274,7 +275,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     VERBATIM
   )
   set(_flux_vulkan_shader_headers)
-  foreach(_flux_shader rect.vert rect.frag image.vert image.frag path.vert path.frag)
+  foreach(_flux_shader rect.vert rect.frag image.vert image.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
     string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
     set(_flux_shader_src ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Vulkan/shaders/${_flux_shader})
     set(_flux_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_flux_shader}.spv)
@@ -325,7 +326,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   set(FLUX_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${FLUX_VULKAN_GENERATED_DIR})
   set(_flux_vulkan_shader_headers)
-  foreach(_flux_shader rect.vert rect.frag image.vert image.frag path.vert path.frag)
+  foreach(_flux_shader rect.vert rect.frag image.vert image.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
     string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
     set(_flux_shader_src ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Vulkan/shaders/${_flux_shader})
     set(_flux_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_flux_shader}.spv)

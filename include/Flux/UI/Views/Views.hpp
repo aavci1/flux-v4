@@ -12,6 +12,7 @@
 
 /// Layout containers (`#include <Flux/UI/Element.hpp>`).
 #include <Flux/UI/Views/Alert.hpp>
+#include <Flux/UI/Views/BackdropBlur.hpp>
 #include <Flux/UI/Views/Badge.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Card.hpp>
@@ -25,6 +26,7 @@
 #include <Flux/UI/Views/ListView.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/ProgressBar.hpp>
+#include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/SegmentedControl.hpp>
 #include <Flux/UI/Views/Select.hpp>

@@ -17,7 +17,7 @@ class SceneRenderer;
 
 void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        std::optional<scenegraph::SceneGraph> const& sceneGraph,
-                       OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
+                       Size windowSize, OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
                        TextCacheRingBuffer& textCacheRing);
 
 } // namespace flux

@@ -107,6 +107,12 @@ public:
   void drawImage(Image const& image, Rect const& dst, ImageFillMode fillMode = ImageFillMode::Cover,
                  CornerRadius const& corners = {}, float opacity = 1.f);
 
+  /// Draw a transparent backdrop-filter region. `radius` is expressed in logical pixels.
+  /// Backends blur the already-rendered base scene once per frame, then draw each backdrop
+  /// region by sampling that blurred texture through this region's bounds and corners.
+  virtual void drawBackdropBlur(Rect const& rect, float radius, Color tint = Colors::transparent,
+                                CornerRadius const& corners = {}) = 0;
+
   /// Metal: `id<MTLDevice>` as `void*` (use with `loadImageFromFile(path, canvas.gpuDevice())`). Null if unavailable.
   virtual void* gpuDevice() const = 0;
 

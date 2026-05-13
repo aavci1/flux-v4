@@ -6,6 +6,8 @@
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include "Core/PlatformApplication.hpp"
+#include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
+#include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/path_frag_spv.hpp"
@@ -27,6 +29,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <limits>
 #include <list>
 #include <memory>
@@ -115,11 +118,12 @@ struct ImageBatch {
 };
 
 struct DrawOp {
-  enum class Kind : std::uint8_t { Rect, Path, Image };
+  enum class Kind : std::uint8_t { Rect, Path, Image, BackdropBlur };
   Kind kind = Kind::Rect;
   Texture* texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
+  float blurRadius = 0.f;
 };
 
 struct VulkanPathVertex {
@@ -304,9 +308,12 @@ struct SharedVulkanCore {
     VkSampler sampler = VK_NULL_HANDLE;
     VkPipelineLayout rectPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout backdropPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
     VkPipeline rectPipeline = VK_NULL_HANDLE;
     VkPipeline imagePipeline = VK_NULL_HANDLE;
+    VkPipeline backdropPipeline = VK_NULL_HANDLE;
+    VkPipeline backdropBlurPipeline = VK_NULL_HANDLE;
     VkPipeline pathPipeline = VK_NULL_HANDLE;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     std::filesystem::path pipelineCacheFile;
@@ -502,9 +509,12 @@ void destroySharedVulkanResources(SharedVulkanCore& core) {
   if (res.pathPipeline) vkDestroyPipeline(device, res.pathPipeline, nullptr);
   if (res.rectPipeline) vkDestroyPipeline(device, res.rectPipeline, nullptr);
   if (res.imagePipeline) vkDestroyPipeline(device, res.imagePipeline, nullptr);
+  if (res.backdropPipeline) vkDestroyPipeline(device, res.backdropPipeline, nullptr);
+  if (res.backdropBlurPipeline) vkDestroyPipeline(device, res.backdropBlurPipeline, nullptr);
   if (res.pathPipelineLayout) vkDestroyPipelineLayout(device, res.pathPipelineLayout, nullptr);
   if (res.rectPipelineLayout) vkDestroyPipelineLayout(device, res.rectPipelineLayout, nullptr);
   if (res.imagePipelineLayout) vkDestroyPipelineLayout(device, res.imagePipelineLayout, nullptr);
+  if (res.backdropPipelineLayout) vkDestroyPipelineLayout(device, res.backdropPipelineLayout, nullptr);
   if (res.sampler) vkDestroySampler(device, res.sampler, nullptr);
   if (res.rectDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.rectDescriptorLayout, nullptr);
   if (res.quadDescriptorLayout) vkDestroyDescriptorSetLayout(device, res.quadDescriptorLayout, nullptr);
@@ -679,6 +689,21 @@ public:
     }
     unregisterCanvas();
     destroySwapchain();
+    if (backdropSceneFramebuffer_) {
+      vkDestroyFramebuffer(device_, backdropSceneFramebuffer_, nullptr);
+      backdropSceneFramebuffer_ = VK_NULL_HANDLE;
+    }
+    if (backdropScratchFramebuffer_) {
+      vkDestroyFramebuffer(device_, backdropScratchFramebuffer_, nullptr);
+      backdropScratchFramebuffer_ = VK_NULL_HANDLE;
+    }
+    if (backdropBlurFramebuffer_) {
+      vkDestroyFramebuffer(device_, backdropBlurFramebuffer_, nullptr);
+      backdropBlurFramebuffer_ = VK_NULL_HANDLE;
+    }
+    destroyTexture(backdropSceneTexture_);
+    destroyTexture(backdropScratchTexture_);
+    destroyTexture(backdropBlurTexture_);
     for (auto& kv : imageTextures_) {
       if (kv.second) {
         destroyTexture(*kv.second);
@@ -863,8 +888,19 @@ public:
     }
     VkSemaphore const renderFinished = imageRenderFinished_[imageIndex];
 
-    uploadFrameBuffers();
     uploadAtlasIfNeeded();
+    bool const backdropFrame = hasBackdropBlurOps();
+    std::uint32_t sceneCopyQuad = 0;
+    std::uint32_t horizontalBlurQuad = 0;
+    std::uint32_t verticalBlurQuad = 0;
+    if (backdropFrame) {
+      ensureBackdropSceneTarget();
+      float const blurRadius = maxBackdropBlurRadius();
+      sceneCopyQuad = appendSceneCopyQuad();
+      horizontalBlurQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f);
+      verticalBlurQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f);
+    }
+    uploadFrameBuffers();
 
     vkResetCommandBuffer(commandBuffer, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -874,15 +910,69 @@ public:
     clear.color.float32[1] = clearColor_.g;
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
-    VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    rp.renderPass = resources().renderPass;
-    rp.framebuffer = framebuffers_[imageIndex];
-    rp.renderArea.extent = swapExtent_;
-    rp.clearValueCount = 1;
-    rp.pClearValues = &clear;
-    vkCmdBeginRenderPass(commandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
-    drawOps(commandBuffer);
-    vkCmdEndRenderPass(commandBuffer);
+    if (backdropFrame && backdropSceneFramebuffer_ && backdropScratchFramebuffer_ && backdropBlurFramebuffer_) {
+      std::size_t const firstBlur = firstBackdropBlurOp();
+      VkRenderPassBeginInfo sceneRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      sceneRp.renderPass = resources().renderPass;
+      sceneRp.framebuffer = backdropSceneFramebuffer_;
+      sceneRp.renderArea.extent = swapExtent_;
+      sceneRp.clearValueCount = 1;
+      sceneRp.pClearValues = &clear;
+      vkCmdBeginRenderPass(commandBuffer, &sceneRp, VK_SUBPASS_CONTENTS_INLINE);
+      drawOps(commandBuffer, 0, firstBlur);
+      vkCmdEndRenderPass(commandBuffer);
+      transition(commandBuffer, backdropSceneTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropSceneTexture_);
+
+      VkRenderPassBeginInfo horizontalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      horizontalRp.renderPass = resources().renderPass;
+      horizontalRp.framebuffer = backdropScratchFramebuffer_;
+      horizontalRp.renderArea.extent = swapExtent_;
+      horizontalRp.clearValueCount = 1;
+      horizontalRp.pClearValues = &clear;
+      vkCmdBeginRenderPass(commandBuffer, &horizontalRp, VK_SUBPASS_CONTENTS_INLINE);
+      drawBackdropBlurPass(commandBuffer, &backdropSceneTexture_, horizontalBlurQuad);
+      vkCmdEndRenderPass(commandBuffer);
+      transition(commandBuffer, backdropScratchTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropScratchTexture_);
+
+      VkRenderPassBeginInfo verticalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      verticalRp.renderPass = resources().renderPass;
+      verticalRp.framebuffer = backdropBlurFramebuffer_;
+      verticalRp.renderArea.extent = swapExtent_;
+      verticalRp.clearValueCount = 1;
+      verticalRp.pClearValues = &clear;
+      vkCmdBeginRenderPass(commandBuffer, &verticalRp, VK_SUBPASS_CONTENTS_INLINE);
+      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
+      vkCmdEndRenderPass(commandBuffer);
+      transition(commandBuffer, backdropBlurTexture_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropBlurTexture_);
+
+      VkClearValue finalClear{};
+      VkRenderPassBeginInfo finalRp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      finalRp.renderPass = resources().renderPass;
+      finalRp.framebuffer = framebuffers_[imageIndex];
+      finalRp.renderArea.extent = swapExtent_;
+      finalRp.clearValueCount = 1;
+      finalRp.pClearValues = &finalClear;
+      vkCmdBeginRenderPass(commandBuffer, &finalRp, VK_SUBPASS_CONTENTS_INLINE);
+      drawBackdropRange(commandBuffer, &backdropSceneTexture_, sceneCopyQuad, 1);
+      drawOps(commandBuffer, firstBlur, ops_.size(), &backdropBlurTexture_);
+      vkCmdEndRenderPass(commandBuffer);
+    } else {
+      VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      rp.renderPass = resources().renderPass;
+      rp.framebuffer = framebuffers_[imageIndex];
+      rp.renderArea.extent = swapExtent_;
+      rp.clearValueCount = 1;
+      rp.pClearValues = &clear;
+      vkCmdBeginRenderPass(commandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+      drawOps(commandBuffer);
+      vkCmdEndRenderPass(commandBuffer);
+    }
     transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     writeDebugScreenshotIfRequested(commandBuffer, swapchainImages_[imageIndex]);
@@ -1159,6 +1249,36 @@ public:
         drawImage(image, src, tile, corners, opacity);
       }
     }
+  }
+
+  void drawBackdropBlur(Rect const& rect, float radius, Color tint, CornerRadius const& corners) override {
+    if (radius <= 0.f || rect.width <= 0.f || rect.height <= 0.f) return;
+    Rect const bounds = transformedBounds(rect);
+    if (!state_.clip.intersects(bounds)) return;
+
+    Point p00 = state_.transform.apply({rect.x, rect.y});
+    Point p10 = state_.transform.apply({rect.x + rect.width, rect.y});
+    Point p01 = state_.transform.apply({rect.x, rect.y + rect.height});
+    QuadInstance q{};
+    q.rect[0] = 0.f; q.rect[1] = 0.f; q.rect[2] = rect.width; q.rect[3] = rect.height;
+    q.axisX[0] = p00.x; q.axisX[1] = p00.y;
+    q.axisX[2] = p10.x - p00.x; q.axisX[3] = p10.y - p00.y;
+    q.axisY[0] = p01.x - p00.x; q.axisY[1] = p01.y - p00.y;
+    q.uv[0] = p00.x / std::max(1.f, static_cast<float>(width_));
+    q.uv[1] = p00.y / std::max(1.f, static_cast<float>(height_));
+    q.uv[2] = p10.x / std::max(1.f, static_cast<float>(width_));
+    q.uv[3] = p01.y / std::max(1.f, static_cast<float>(height_));
+    putColor(q.color, tint, state_.opacity);
+    CornerRadius cr = clampRadii(corners, rect.width, rect.height);
+    q.radii[0] = cr.topLeft;
+    q.radii[1] = cr.topRight;
+    q.radii[2] = cr.bottomRight;
+    q.radii[3] = cr.bottomLeft;
+    std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
+    quads_.push_back(q);
+    DrawOp op{DrawOp::Kind::BackdropBlur, nullptr, first, 1};
+    op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
+    ops_.push_back(op);
   }
 
   void* gpuDevice() const override { return device_; }
@@ -1469,11 +1589,17 @@ private:
     auto& res = resources();
     res.rectPipelineLayout = createPipelineLayout({res.rectDescriptorLayout}, true);
     res.imagePipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
+    res.backdropPipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.pathPipelineLayout = createPipelineLayout({}, false);
     res.rectPipeline = createPipeline(res.rectPipelineLayout, flux_rect_vert_spv, flux_rect_vert_spv_len,
                                       flux_rect_frag_spv, flux_rect_frag_spv_len, {});
     res.imagePipeline = createPipeline(res.imagePipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
                                        flux_image_frag_spv, flux_image_frag_spv_len, {});
+    res.backdropPipeline = createPipeline(res.backdropPipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
+                                          flux_backdrop_frag_spv, flux_backdrop_frag_spv_len, {});
+    res.backdropBlurPipeline =
+        createPipeline(res.backdropPipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
+                       flux_backdrop_blur_frag_spv, flux_backdrop_blur_frag_spv_len, {});
     std::array<VkVertexInputBindingDescription, 1> binding{};
     binding[0].binding = 0;
     binding[0].stride = sizeof(VulkanPathVertex);
@@ -1935,6 +2061,78 @@ private:
     vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   }
 
+  void ensureBackdropSceneTarget() {
+    int const targetW = static_cast<int>(std::max(1u, swapExtent_.width));
+    int const targetH = static_cast<int>(std::max(1u, swapExtent_.height));
+    auto ensure = [&](Texture& texture, VkFramebuffer& framebuffer) {
+      if (texture.image && texture.width == targetW && texture.height == targetH && framebuffer) {
+        return;
+      }
+      if (framebuffer) {
+        vkDestroyFramebuffer(device_, framebuffer, nullptr);
+        framebuffer = VK_NULL_HANDLE;
+      }
+      destroyTexture(texture);
+      createRenderTargetTexture(texture, targetW, targetH);
+      VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+      fb.renderPass = resources().renderPass;
+      fb.attachmentCount = 1;
+      fb.pAttachments = &texture.view;
+      fb.width = static_cast<std::uint32_t>(targetW);
+      fb.height = static_cast<std::uint32_t>(targetH);
+      fb.layers = 1;
+      vkCheck(vkCreateFramebuffer(device_, &fb, nullptr, &framebuffer), "vkCreateFramebuffer");
+    };
+    ensure(backdropSceneTexture_, backdropSceneFramebuffer_);
+    ensure(backdropScratchTexture_, backdropScratchFramebuffer_);
+    ensure(backdropBlurTexture_, backdropBlurFramebuffer_);
+  }
+
+  std::uint32_t appendSceneCopyQuad() {
+    QuadInstance q{};
+    q.rect[0] = 0.f; q.rect[1] = 0.f;
+    q.rect[2] = static_cast<float>(width_);
+    q.rect[3] = static_cast<float>(height_);
+    q.axisX[0] = 0.f; q.axisX[1] = 0.f;
+    q.axisX[2] = static_cast<float>(width_); q.axisX[3] = 0.f;
+    q.axisY[0] = 0.f; q.axisY[1] = static_cast<float>(height_);
+    q.uv[0] = 0.f; q.uv[1] = 0.f; q.uv[2] = 1.f; q.uv[3] = 1.f;
+    q.color[0] = q.color[1] = q.color[2] = q.color[3] = 0.f;
+    q.radii[0] = 0.f;
+    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
+    quads_.push_back(q);
+    return first;
+  }
+
+  std::uint32_t appendBackdropBlurQuad(float radiusPx, float axisX, float axisY) {
+    QuadInstance q{};
+    q.rect[0] = 0.f; q.rect[1] = 0.f;
+    q.rect[2] = static_cast<float>(width_);
+    q.rect[3] = static_cast<float>(height_);
+    q.axisX[0] = 0.f; q.axisX[1] = 0.f;
+    q.axisX[2] = static_cast<float>(width_); q.axisX[3] = 0.f;
+    q.axisY[0] = 0.f; q.axisY[1] = static_cast<float>(height_);
+    q.uv[0] = 0.f; q.uv[1] = 0.f; q.uv[2] = 1.f; q.uv[3] = 1.f;
+    q.color[0] = q.color[1] = q.color[2] = q.color[3] = 0.f;
+    q.radii[0] = radiusPx;
+    q.radii[1] = axisX;
+    q.radii[2] = axisY;
+    q.radii[3] = 0.f;
+    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
+    quads_.push_back(q);
+    return first;
+  }
+
+  float maxBackdropBlurRadius() const {
+    float radius = 0.f;
+    for (DrawOp const& op : ops_) {
+      if (op.kind == DrawOp::Kind::BackdropBlur) {
+        radius = std::max(radius, op.blurRadius);
+      }
+    }
+    return radius;
+  }
+
   void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
     if (count == 0) return;
     setViewportScissor(commandBuffer);
@@ -1970,8 +2168,55 @@ private:
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawOps(VkCommandBuffer commandBuffer) {
-    for (DrawOp const& op : ops_) {
+  void drawBackdropRange(VkCommandBuffer commandBuffer, Texture* texture, std::uint32_t first, std::uint32_t count) {
+    if (!texture || !texture->descriptor || count == 0) return;
+    setViewportScissor(commandBuffer);
+    float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
+    auto const& res = resources();
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
+                            &quadDescriptorSet_, 0, nullptr);
+    vkCmdPushConstants(commandBuffer, res.backdropPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(viewport), viewport);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
+                            &texture->descriptor, 0, nullptr);
+    vkCmdDraw(commandBuffer, 6, count, 0, first);
+  }
+
+  void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture* texture, std::uint32_t first) {
+    if (!texture || !texture->descriptor) return;
+    setViewportScissor(commandBuffer);
+    float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
+    auto const& res = resources();
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
+                            &quadDescriptorSet_, 0, nullptr);
+    vkCmdPushConstants(commandBuffer, res.backdropPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(viewport), viewport);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
+                            &texture->descriptor, 0, nullptr);
+    vkCmdDraw(commandBuffer, 6, 1, 0, first);
+  }
+
+  bool hasBackdropBlurOps() const {
+    return std::any_of(ops_.begin(), ops_.end(), [](DrawOp const& op) {
+      return op.kind == DrawOp::Kind::BackdropBlur;
+    });
+  }
+
+  std::size_t firstBackdropBlurOp() const {
+    auto const it = std::find_if(ops_.begin(), ops_.end(), [](DrawOp const& op) {
+      return op.kind == DrawOp::Kind::BackdropBlur;
+    });
+    return it == ops_.end() ? ops_.size() : static_cast<std::size_t>(std::distance(ops_.begin(), it));
+  }
+
+  void drawOps(VkCommandBuffer commandBuffer, std::size_t start = 0,
+               std::size_t end = std::numeric_limits<std::size_t>::max(),
+               Texture* backdropSource = nullptr) {
+    std::size_t const opEnd = std::min(end, ops_.size());
+    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
+      DrawOp const& op = ops_[index];
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         drawRectRange(commandBuffer, op.first, op.count);
@@ -1981,6 +2226,9 @@ private:
         break;
       case DrawOp::Kind::Image:
         drawImageRange(commandBuffer, op.texture, op.first, op.count);
+        break;
+      case DrawOp::Kind::BackdropBlur:
+        drawBackdropRange(commandBuffer, backdropSource, op.first, op.count);
         break;
       }
     }
@@ -2199,7 +2447,7 @@ private:
     image.arrayLayers = 1;
     image.samples = VK_SAMPLE_COUNT_1_BIT;
     image.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     vkCheck(vkCreateImage(device_, &image, nullptr, &tex.image), "vkCreateImage");
@@ -2305,7 +2553,11 @@ private:
     b.srcAccessMask = oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : 0;
     b.dstAccessMask = newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                           ? VK_ACCESS_TRANSFER_WRITE_BIT
-                          : (newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ? VK_ACCESS_TRANSFER_READ_BIT : 0);
+                          : (newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                 ? VK_ACCESS_TRANSFER_READ_BIT
+                                 : (newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                        ? VK_ACCESS_SHADER_READ_BIT
+                                        : 0));
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
                          0, nullptr, 0, nullptr, 1, &b);
   }
@@ -2391,6 +2643,12 @@ private:
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkFramebuffer> framebuffers_;
   std::vector<VkSemaphore> imageRenderFinished_;
+  Texture backdropSceneTexture_;
+  VkFramebuffer backdropSceneFramebuffer_ = VK_NULL_HANDLE;
+  Texture backdropScratchTexture_;
+  VkFramebuffer backdropScratchFramebuffer_ = VK_NULL_HANDLE;
+  Texture backdropBlurTexture_;
+  VkFramebuffer backdropBlurFramebuffer_ = VK_NULL_HANDLE;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;

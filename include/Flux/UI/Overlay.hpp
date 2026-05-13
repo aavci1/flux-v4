@@ -59,6 +59,9 @@ struct OverlayConfig {
   std::optional<Size> maxSize;
   bool modal = false;
   Color backdropColor = Colors::transparent;
+  /// Transparent backdrop blur radius in logical pixels. `kFloatFromTheme` resolves to the
+  /// modal or popover backdrop blur token depending on `modal`.
+  float backdropBlurRadius = kFloatFromTheme;
   bool dismissOnOutsideTap = true;
   bool dismissOnEscape = true;
   std::function<void()> onDismiss;

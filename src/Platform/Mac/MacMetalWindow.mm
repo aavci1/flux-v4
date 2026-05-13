@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <dispatch/dispatch.h>
 #include <memory>
@@ -512,14 +513,17 @@ void postTextInput(FluxMetalView* view, std::string text) {
   if (!fw) {
     return;
   }
-  flux::Application::instance().eventQueue().post(flux::WindowEvent{flux::WindowEvent::Kind::Resize, fw->handle(),
-                                                       platform->currentSize(), 1.0f});
+  flux::Size const currentSize = platform->currentSize();
+  flux::Application::instance().eventQueue().post(
+      flux::WindowEvent{flux::WindowEvent::Kind::Resize, fw->handle(), currentSize, 1.0f});
   // Live resize runs in NSEventTrackingRunLoopMode; our main loop waits in NSDefaultRunLoopMode, so it does not
   // run the redraw pass until tracking ends. Dispatch + flush presents immediately during the drag.
   flux::Application::instance().eventQueue().dispatch();
   // `flushRedraw` only presents when `requestRedraw` has been set. Declarative windows get this from
   // `Runtime`'s resize subscription; imperative apps must not rely on that — always request here.
   flux::Application::instance().requestRedraw();
+  fw->canvas().resize(static_cast<int>(std::lround(currentSize.width)),
+                      static_cast<int>(std::lround(currentSize.height)));
   platform->setMetalLayerPresentsWithTransaction(true);
   flux::setSyncPresentForCanvas(&fw->canvas(), true);
   flux::Application::instance().flushRedraw();

@@ -6,6 +6,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
@@ -37,6 +38,14 @@ LayoutConstraints overlayConstraints(Size windowSize, OverlayConfig const& confi
     }
   }
   return constraints;
+}
+
+void resolveOverlayBackdropDefaults(OverlayConfig& config, Theme const& theme) {
+  if (config.backdropBlurRadius != kFloatFromTheme) {
+    return;
+  }
+  config.backdropBlurRadius = config.modal ? theme.modalBackdropBlurRadius
+                                           : theme.popoverBackdropBlurRadius;
 }
 
 Rect contentBoundsFor(scenegraph::SceneNode const* contentNode) {
@@ -226,10 +235,12 @@ void insertBackdrop(scenegraph::SceneNode& root, OverlayEntry& entry, Size windo
                     Window& window, bool dismissOnTap, bool captureScroll) {
   float const ox = -entry.resolvedFrame.x;
   float const oy = -entry.resolvedFrame.y;
-  auto backdrop = std::make_unique<scenegraph::RectNode>(
-      Rect{ox, oy, windowSize.width, windowSize.height},
-      FillStyle::solid(entry.config.backdropColor));
-  root.appendChild(std::move(backdrop));
+  if (entry.config.backdropBlurRadius <= 0.f) {
+    auto backdrop = std::make_unique<scenegraph::RectNode>(
+        Rect{ox, oy, windowSize.width, windowSize.height},
+        FillStyle::solid(entry.config.backdropColor));
+    root.appendChild(std::move(backdrop));
+  }
 
   auto capture = std::make_unique<scenegraph::RectNode>(Rect{ox, oy, windowSize.width, windowSize.height});
   capture->setInteraction(makeBackdropInteraction(window, entry, dismissOnTap, captureScroll));
@@ -388,6 +399,7 @@ void OverlayManager::remountEntry(OverlayId id, Runtime& runtime) {
 }
 
 OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* runtime) {
+  resolveOverlayBackdropDefaults(config, runtime ? runtime->window().theme() : Theme::light());
   auto entry = std::make_unique<OverlayEntry>();
   entry->id = OverlayId{nextId_++};
   entry->content.emplace(std::move(content));

@@ -11,15 +11,19 @@ namespace flux {
 
 void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        std::optional<scenegraph::SceneGraph> const& sceneGraph,
-                       OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
+                       Size windowSize, OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
                        TextCacheRingBuffer& textCacheRing) {
   canvas.clear(clearColor);
   if (sceneGraph) {
     renderer.render(*sceneGraph);
   }
 
+  Rect const windowBounds = Rect::sharp(0.f, 0.f, windowSize.width, windowSize.height);
   for (std::unique_ptr<OverlayEntry> const& up : overlays.entries()) {
     OverlayEntry const& entry = *up;
+    if (entry.config.backdropBlurRadius > 0.f) {
+      canvas.drawBackdropBlur(windowBounds, entry.config.backdropBlurRadius, entry.config.backdropColor);
+    }
     canvas.save();
     canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
     renderer.render(entry.sceneGraph);
@@ -27,8 +31,7 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
   }
 
   if (runtime && runtime->textCacheOverlayEnabled()) {
-    Rect const clipBounds = canvas.clipBounds();
-    renderTextCacheDebugOverlay(canvas, clipBounds, textCacheRing);
+    renderTextCacheDebugOverlay(canvas, windowBounds, textCacheRing);
   }
 }
 

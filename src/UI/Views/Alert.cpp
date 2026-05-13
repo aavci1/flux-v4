@@ -120,6 +120,7 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
         OverlayConfig{
             .modal = true,
             .backdropColor = backdrop,
+            .backdropBlurRadius = resolveFloat(alert.backdropBlurRadius, theme.modalBackdropBlurRadius),
             .dismissOnOutsideTap = false,
             .dismissOnEscape = dismissEsc,
             .onDismiss = hideOverlay,
