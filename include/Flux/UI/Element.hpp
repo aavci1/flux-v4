@@ -11,7 +11,7 @@
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 

@@ -1,6 +1,6 @@
 // Demonstrates Alert + useAlert: informational, confirmation, three-button, Escape, disabled.
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>

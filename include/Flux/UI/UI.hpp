@@ -6,8 +6,8 @@
 
 
 #include <Flux/UI/Component.hpp>
-#include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Core/Identity.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
+#include <Flux/UI/WindowUI.hpp>

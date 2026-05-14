@@ -6,7 +6,7 @@
 /// \c resolveColor / \c resolveFloat blocks. Shell decoration uses
 /// \ref applyOuterInputFieldDecoration.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
 
 namespace flux {

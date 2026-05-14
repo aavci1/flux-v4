@@ -1,5 +1,5 @@
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/WindowUI.hpp>
 
 #include "RootView.hpp"
 #include "Theme.hpp"

@@ -1,7 +1,7 @@
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include <vulkan/vulkan.h>
 
-#include "Core/PlatformApplication.hpp"
+#include "UI/Platform/PlatformApplication.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 

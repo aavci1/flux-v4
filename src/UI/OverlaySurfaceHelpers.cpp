@@ -1,6 +1,7 @@
 #include <Flux/UI/OverlaySurfaceHelpers.hpp>
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/UI/Theme.hpp>
 
 namespace flux {

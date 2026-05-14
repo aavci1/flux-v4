@@ -4,10 +4,10 @@
 ///
 /// Static SVG-like vector document view.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
 #include <cstdint>

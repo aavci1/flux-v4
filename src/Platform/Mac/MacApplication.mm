@@ -1,6 +1,6 @@
-#include "Core/PlatformApplication.hpp"
+#include "UI/Platform/PlatformApplication.hpp"
 
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 
 #include <algorithm>
 #include <filesystem>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 
 namespace flux::detail {

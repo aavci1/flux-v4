@@ -4,7 +4,7 @@
 ///
 /// Pure scene-graph rendering interface used by `SceneNode` and `SceneRenderer`.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>

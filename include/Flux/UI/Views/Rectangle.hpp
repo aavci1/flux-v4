@@ -5,7 +5,7 @@
 /// Axis-aligned rounded rectangle primitive; fill, stroke, and shadow come from \ref Element modifiers
 /// (\c fill, \c stroke, \c shadow).
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 

@@ -1,9 +1,10 @@
 #pragma once
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Clipboard.hpp>
-#include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Core/Types.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Clipboard.hpp>
+#include <Flux/UI/KeyCodes.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>

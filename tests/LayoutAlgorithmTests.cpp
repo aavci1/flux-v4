@@ -3,9 +3,9 @@
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
-#include "UI/Layout/Algorithms/OverlayLayout.hpp"
-#include "UI/Layout/Algorithms/ScrollLayout.hpp"
-#include "UI/Layout/Algorithms/StackLayout.hpp"
+#include "UI/ViewLayout/OverlayLayout.hpp"
+#include "UI/ViewLayout/ScrollLayout.hpp"
+#include "Layout/Algorithms/StackLayout.hpp"
 
 #include <cmath>
 #include <limits>

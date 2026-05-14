@@ -5,9 +5,9 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Core/Action.hpp>
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Types.hpp>
+#include <Flux/UI/Action.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/UI/Input.hpp>
 
 #include <functional>
 #include <cstdint>

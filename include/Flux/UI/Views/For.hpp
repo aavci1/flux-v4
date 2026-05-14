@@ -6,7 +6,7 @@
 
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/UI/Alignment.hpp>
+#include <Flux/Layout/Alignment.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
 
 #include <algorithm>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/Clipboard.hpp>
+#include <Flux/UI/Clipboard.hpp>
 
 namespace flux {
 

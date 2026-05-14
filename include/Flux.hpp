@@ -6,14 +6,15 @@
 /// graphics (Canvas, styles). Prefer including specific `<Flux/...>` headers when you only need a
 /// subset to reduce compile time.
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Cursor.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/Events.hpp>
-#include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Core/Types.hpp>
-#include <Flux/Core/Window.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Cursor.hpp>
+#include <Flux/UI/EventQueue.hpp>
+#include <Flux/UI/Events.hpp>
+#include <Flux/UI/KeyCodes.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Color.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/SvgPath.hpp>

@@ -4,7 +4,7 @@
 ///
 /// Pure, stateless UTF-8 and text-layout helpers for text editing.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 
 #include <cstdint>

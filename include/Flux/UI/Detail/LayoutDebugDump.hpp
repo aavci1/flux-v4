@@ -5,8 +5,8 @@
 /// Opt-in layout tree dump when \c FLUX_DEBUG_LAYOUT is set (stderr). Internal API.
 
 #include <Flux/Debug/DebugFlags.hpp>
-#include <Flux/Core/Types.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 
 namespace flux {
 
@@ -18,8 +18,12 @@ namespace detail {
 void layoutDebugRecordMeasureSlow(LayoutConstraints const& constraints, Size sz);
 } // namespace detail
 
+bool layoutDebugEnabled();
 void layoutDebugBeginPass();
 void layoutDebugEndPass();
+void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph);
+void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph);
+void layoutDebugDumpAttached(char const* reason);
 
 inline void layoutDebugRecordMeasure(LayoutConstraints const& constraints, Size sz) {
   if (!debug::layoutEnabled()) {
@@ -27,9 +31,5 @@ inline void layoutDebugRecordMeasure(LayoutConstraints const& constraints, Size 
   }
   detail::layoutDebugRecordMeasureSlow(constraints, sz);
 }
-
-void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph);
-void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph);
-void layoutDebugDumpAttached(char const* reason);
 
 } // namespace flux

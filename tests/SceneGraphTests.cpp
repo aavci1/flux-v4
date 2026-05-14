@@ -1,5 +1,5 @@
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Cursor.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/UI/Cursor.hpp>
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/Path.hpp>
 #include <doctest/doctest.h>

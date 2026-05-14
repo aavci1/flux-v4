@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/UI/Input.hpp>
 
 #include <cstdint>
 #include <string>

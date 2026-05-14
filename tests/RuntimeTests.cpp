@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Core/Shortcut.hpp>
+#include <Flux/UI/KeyCodes.hpp>
+#include <Flux/UI/Shortcut.hpp>
 #include <Flux/UI/ActionRegistry.hpp>
 
 #include <unordered_map>

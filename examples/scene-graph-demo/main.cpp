@@ -1,5 +1,5 @@
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Window.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>

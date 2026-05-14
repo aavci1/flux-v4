@@ -4,12 +4,12 @@
 ///
 /// Interaction payload attached directly to scenegraph nodes.
 
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Cursor.hpp>
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Reactive/Bindable.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/SceneGraph/InteractionTypes.hpp>
 
 #include <string>
 

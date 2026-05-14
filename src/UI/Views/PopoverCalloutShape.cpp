@@ -5,8 +5,8 @@
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 
-#include "UI/Layout/Algorithms/OverlayLayout.hpp"
-#include "UI/Layout/ContainerScope.hpp"
+#include "UI/ViewLayout/OverlayLayout.hpp"
+#include "UI/ViewLayout/ContainerScope.hpp"
 
 #include <algorithm>
 #include <memory>

@@ -4,10 +4,10 @@
 ///
 /// Context for \ref Element::measure during retained-scene layout.
 
-#include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Core/Identity.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 
 #include <cstddef>
 #include <optional>

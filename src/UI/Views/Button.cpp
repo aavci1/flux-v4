@@ -9,7 +9,7 @@
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 
 #include <cmath>
 #include <cstdint>

@@ -1,7 +1,7 @@
 #include <Flux/UI/Views/Select.hpp>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>

@@ -17,9 +17,9 @@
 
 #include <Flux/Reactive/Effect.hpp>
 
-#include "UI/Layout/Algorithms/StackLayout.hpp"
-#include "UI/Layout/ContainerScope.hpp"
-#include "UI/Layout/LayoutHelpers.hpp"
+#include "Layout/Algorithms/StackLayout.hpp"
+#include "UI/ViewLayout/ContainerScope.hpp"
+#include "Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>

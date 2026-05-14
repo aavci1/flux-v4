@@ -4,7 +4,7 @@
 ///
 /// Internal helpers shared by \c TextSystem.cpp and \c CoreTextSystem.mm (not public API).
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 

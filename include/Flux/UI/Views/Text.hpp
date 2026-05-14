@@ -5,7 +5,8 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Reactive/Bindable.hpp>

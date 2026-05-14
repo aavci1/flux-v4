@@ -1,7 +1,7 @@
 #include <Flux/UI/Views/Toast.hpp>
 
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/HStack.hpp>

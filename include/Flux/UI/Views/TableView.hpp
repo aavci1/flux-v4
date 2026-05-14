@@ -4,7 +4,7 @@
 ///
 /// Part of the Flux public API.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>

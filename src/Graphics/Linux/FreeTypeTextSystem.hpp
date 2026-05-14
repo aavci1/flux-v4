@@ -2,13 +2,15 @@
 
 #include <Flux/Graphics/TextSystem.hpp>
 
+#include <functional>
 #include <memory>
+#include <string>
 
 namespace flux {
 
 class FreeTypeTextSystem final : public TextSystem {
 public:
-  FreeTypeTextSystem();
+  explicit FreeTypeTextSystem(std::function<std::string()> appNameProvider = {});
   ~FreeTypeTextSystem() override;
 
   std::shared_ptr<TextLayout const> layout(AttributedString const& text, float maxWidth = 0.f,

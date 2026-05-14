@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Cursor.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Cursor.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Theme.hpp>

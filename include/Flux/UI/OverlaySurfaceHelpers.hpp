@@ -5,7 +5,8 @@
 /// Shared theme resolution for floating card surfaces (\ref Alert card, \ref Popover body / backdrop).
 /// Not a substitute for \ref Element modifiers — keeps overlay colour math in one place.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
 
 namespace flux {

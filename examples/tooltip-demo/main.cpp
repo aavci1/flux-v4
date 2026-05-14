@@ -1,6 +1,6 @@
 // Demonstrates useTooltip: hover delay, placement, dismiss on tap, and toggle target.
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>

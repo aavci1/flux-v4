@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Detail/RootHolder.hpp>
+#include <Flux/UI/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>

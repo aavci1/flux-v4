@@ -1,6 +1,6 @@
 #include <Flux/UI/InputFieldLayout.hpp>
 
-#include <Flux/Core/Application.hpp>
+#include <Flux/UI/Application.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 

@@ -4,8 +4,8 @@
 ///
 /// Pure scene-graph container. Owns a single root node.
 
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/Core/Geometry.hpp>
 
 #include <memory>
 #include <optional>

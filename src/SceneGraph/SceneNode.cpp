@@ -2,10 +2,9 @@
 
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
-#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
+#include "SceneGraph/LayoutDebugHooks.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
-#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -186,7 +185,7 @@ bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstra
     if (effectiveStoreConstraints) {
         setLayoutConstraints(constraints);
     }
-    bool const shouldDump = ::flux::layout::layoutDebugLayoutEnabled() && gRelayoutDepth == 0;
+    bool const shouldDump = ::flux::layoutDebugEnabled() && gRelayoutDepth == 0;
     ++gRelayoutDepth;
     TransientRelayoutScope const transientScope{!storeConstraints};
     relayout_(constraints);

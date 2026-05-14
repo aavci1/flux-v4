@@ -1,9 +1,9 @@
 // Unified TextInput demo: single-line and multiline modes in one example.
 
 #include <Flux.hpp>
-#include <Flux/Core/Action.hpp>
-#include <Flux/Core/Shortcut.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Action.hpp>
+#include <Flux/UI/Shortcut.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Card.hpp>

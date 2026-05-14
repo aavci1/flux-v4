@@ -6,9 +6,9 @@
 /// local coordinates. A bare SceneNode is a pure container: it holds children but has no draw
 /// payload of its own.
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/SceneGraph/LayoutConstraints.hpp>
 
 #include <concepts>
 #include <cstddef>

@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/UI/Alignment.hpp>
+#include <Flux/Layout/Alignment.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 

@@ -1,9 +1,9 @@
 #include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Reactive/Animation.hpp>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/Events.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/EventQueue.hpp>
+#include <Flux/UI/Events.hpp>
 
 #include <algorithm>
 #include <chrono>

@@ -4,17 +4,17 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Cursor.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/Events.hpp>
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Window.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Cursor.hpp>
+#include <Flux/UI/EventQueue.hpp>
+#include <Flux/UI/Events.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Window.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Profile.hpp>
 
-#include "Core/PlatformWindow.hpp"
-#include "Core/PlatformWindowCreate.hpp"
+#include "UI/Platform/PlatformWindow.hpp"
+#include "UI/Platform/PlatformWindowCreate.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "UI/DebugFlags.hpp"
 
@@ -876,7 +876,9 @@ std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {
   if (!layerPtr) {
     return nullptr;
   }
-  return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem());
+  return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem(), [] {
+    Application::instance().requestRedraw();
+  });
 }
 
 void MacMetalPlatformWindow::processEvents() {

@@ -1,6 +1,6 @@
 #include <Flux/UI/MountRoot.hpp>
 
-#include <Flux/Detail/RootHolder.hpp>
+#include <Flux/UI/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>

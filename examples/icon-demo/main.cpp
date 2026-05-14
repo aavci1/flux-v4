@@ -1,7 +1,7 @@
 // Showcases Flux Icon (Material Symbols Rounded): grid of all curated icons,
 // size scale, semantic colours.
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Views.hpp>
 

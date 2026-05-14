@@ -1,12 +1,12 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Events.hpp>
-#include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Core/Shortcut.hpp>
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/RootHolder.hpp>
-#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Events.hpp>
+#include <Flux/UI/KeyCodes.hpp>
+#include <Flux/UI/Shortcut.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/Detail/RootHolder.hpp>
+#include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>

@@ -1,9 +1,9 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
-#include "Core/PlatformWindowCreate.hpp"
+#include "UI/Platform/PlatformWindowCreate.hpp"
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/EventQueue.hpp>
 
 #include <fcntl.h>
 #include <libinput.h>

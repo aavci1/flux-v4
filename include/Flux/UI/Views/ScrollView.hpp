@@ -4,8 +4,7 @@
 ///
 /// Part of the Flux public API.
 
-#include <Flux/Core/Types.hpp>
-#include <Flux/Graphics/Styles.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/OffsetView.hpp>

@@ -1,6 +1,6 @@
 #include <Flux/UI/Views/TextInput.hpp>
 
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Effect.hpp>

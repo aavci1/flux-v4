@@ -6,7 +6,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>

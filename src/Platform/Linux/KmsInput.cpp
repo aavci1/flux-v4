@@ -1,7 +1,7 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/EventQueue.hpp>
 
 #include "Platform/Linux/Common/XkbState.hpp"
 

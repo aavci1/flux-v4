@@ -1,6 +1,5 @@
 #include <Flux/Graphics/TextCacheDebugOverlay.hpp>
 
-#include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -72,8 +71,9 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
 
 } // namespace
 
-void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring) {
-  TextCacheStats const cur = Application::instance().textSystem().stats();
+void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring,
+                                 TextSystem& textSystem) {
+  TextCacheStats const cur = textSystem.stats();
   ring.samples[ring.writeIdx] = cur;
   ring.writeIdx = (ring.writeIdx + 1) % 60;
   ring.count = std::min(ring.count + 1, std::size_t{60});
@@ -98,7 +98,7 @@ void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuf
   opts.wrapping = TextWrapping::Wrap;
   opts.suppressCacheStats = true;
 
-  auto layout = Application::instance().textSystem().layout(
+  auto layout = textSystem.layout(
       text, font, Color{0.95f, 0.95f, 0.98f, 1.f}, panelW, opts);
 
   canvas.save();

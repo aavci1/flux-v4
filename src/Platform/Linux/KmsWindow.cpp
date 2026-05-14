@@ -1,10 +1,10 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/Window.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/EventQueue.hpp>
+#include <Flux/UI/Window.hpp>
 
-#include "Core/PlatformApplication.hpp"
+#include "UI/Platform/PlatformApplication.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include <drm.h>
@@ -171,6 +171,7 @@ void KmsWindow::show() {
 }
 
 std::unique_ptr<Canvas> KmsWindow::createCanvas(Window&) {
+  configureVulkanCanvasRuntime(app_.requiredVulkanInstanceExtensions(), app_.cacheDir());
   VkInstance instance = ensureSharedVulkanInstance();
   VkSurfaceKHR surface = app_.createVulkanSurface(instance, &connector_);
   auto canvas = createVulkanCanvas(surface, handle_, Application::instance().textSystem());

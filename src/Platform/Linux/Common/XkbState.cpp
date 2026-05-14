@@ -1,6 +1,6 @@
 #include "Platform/Linux/Common/XkbState.hpp"
 
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 
 #include <sys/mman.h>
 #include <unistd.h>

@@ -9,8 +9,8 @@
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Theme.hpp>
 
-#include "UI/Layout/Algorithms/ScrollLayout.hpp"
-#include "UI/Layout/ContainerScope.hpp"
+#include "UI/ViewLayout/ScrollLayout.hpp"
+#include "UI/ViewLayout/ContainerScope.hpp"
 
 #include <algorithm>
 #include <cmath>

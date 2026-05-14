@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Views.hpp>
 

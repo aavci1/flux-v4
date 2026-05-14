@@ -9,7 +9,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Alert.hpp>
 
-#include "UI/Layout/Algorithms/OverlayLayout.hpp"
+#include "UI/ViewLayout/OverlayLayout.hpp"
 #include "UI/Views/AlertActionHelpers.hpp"
 
 #include <functional>

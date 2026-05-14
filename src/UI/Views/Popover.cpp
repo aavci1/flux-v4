@@ -1,7 +1,7 @@
 #include <Flux/UI/Views/Popover.hpp>
 
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/UI/OverlaySurfaceHelpers.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 

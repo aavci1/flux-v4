@@ -4,7 +4,7 @@
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Environment.hpp>
 
-#include "UI/Layout/ContainerScope.hpp"
+#include "UI/ViewLayout/ContainerScope.hpp"
 #include "UI/Element/ModifierLayoutHelpers.hpp"
 
 #include <algorithm>

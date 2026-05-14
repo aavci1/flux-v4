@@ -8,12 +8,12 @@
 #include <Flux/Reactive/Computed.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/Runtime.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/EnvironmentKeys.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>

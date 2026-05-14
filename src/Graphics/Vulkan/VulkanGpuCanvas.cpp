@@ -1,11 +1,9 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
-#include <Flux/Core/Application.hpp>
 #include <Flux/Debug/PerfCounters.hpp>
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
-#include "Core/PlatformApplication.hpp"
 #include "Graphics/PathFlattener.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
@@ -348,6 +346,8 @@ struct SharedVulkanCore {
 
 std::mutex gVulkanCoreMutex;
 SharedVulkanCore gVulkanCore;
+std::vector<char const*> gRequiredInstanceExtensions;
+std::filesystem::path gPipelineCacheDir;
 void destroySharedVulkanResources(SharedVulkanCore &core);
 
 std::mutex gCanvasRegistryMutex;
@@ -357,9 +357,7 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   std::lock_guard lock(gVulkanCoreMutex);
   if (gVulkanCore.instance)
     return gVulkanCore.instance;
-  std::span<char const *const> const exts =
-      Application::instance().platformApp().requiredVulkanInstanceExtensions();
-  if (exts.empty()) {
+  if (gRequiredInstanceExtensions.empty()) {
     throw std::runtime_error("Platform did not provide Vulkan instance extensions");
   }
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -367,8 +365,8 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   app.apiVersion = VK_API_VERSION_1_3;
   VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   info.pApplicationInfo = &app;
-  info.enabledExtensionCount = static_cast<std::uint32_t>(exts.size());
-  info.ppEnabledExtensionNames = exts.data();
+  info.enabledExtensionCount = static_cast<std::uint32_t>(gRequiredInstanceExtensions.size());
+  info.ppEnabledExtensionNames = gRequiredInstanceExtensions.data();
   vkCheck(vkCreateInstance(&info, nullptr, &gVulkanCore.instance), "vkCreateInstance");
   return gVulkanCore.instance;
 }
@@ -402,7 +400,10 @@ std::filesystem::path pipelineCachePath(VkPhysicalDevice physical) {
   if (identity.empty() || identity == std::string(VK_UUID_SIZE * 2, '0')) {
     identity = std::to_string(props.vendorID) + "-" + std::to_string(props.deviceID);
   }
-  return std::filesystem::path(Application::instance().cacheDir()) / ("flux-vulkan-" + identity + ".cache");
+  std::filesystem::path cacheDir = gPipelineCacheDir.empty()
+      ? std::filesystem::temp_directory_path()
+      : gPipelineCacheDir;
+  return cacheDir / ("flux-vulkan-" + identity + ".cache");
 }
 
 void createPipelineCache(SharedVulkanCore &core) {
@@ -2823,6 +2824,14 @@ void evictImageTexturesFor(VulkanImage const *image) {
 }
 
 } // namespace
+
+void configureVulkanCanvasRuntime(std::span<char const* const> requiredInstanceExtensions,
+                                  std::filesystem::path cacheDir) {
+  std::lock_guard lock(gVulkanCoreMutex);
+  gRequiredInstanceExtensions.assign(requiredInstanceExtensions.begin(),
+                                     requiredInstanceExtensions.end());
+  gPipelineCacheDir = std::move(cacheDir);
+}
 
 VkInstance ensureSharedVulkanInstance() {
   return ensureSharedVulkanInstanceImpl();

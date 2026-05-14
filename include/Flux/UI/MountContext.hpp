@@ -4,7 +4,7 @@
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 
 #include <memory>
 

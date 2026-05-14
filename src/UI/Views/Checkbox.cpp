@@ -1,6 +1,6 @@
 #include <Flux/UI/Views/Checkbox.hpp>
 
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>

@@ -1,10 +1,10 @@
-#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Detail/Runtime.hpp>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/RootHolder.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/EventQueue.hpp>
+#include <Flux/UI/KeyCodes.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/Detail/RootHolder.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>

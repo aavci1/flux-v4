@@ -4,14 +4,14 @@
 ///
 /// Internal retained-UI state used by `Element` measurement/build plumbing.
 
-#include <Flux/Core/Cursor.hpp>
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Types.hpp>
+#include <Flux/UI/Cursor.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Environment.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 
 #include <cmath>
 #include <functional>

@@ -1,6 +1,6 @@
 #include <Flux/UI/Views/Slider.hpp>
 
-#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Hooks.hpp>

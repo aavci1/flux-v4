@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>

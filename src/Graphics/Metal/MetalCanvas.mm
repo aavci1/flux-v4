@@ -3,7 +3,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 
-#include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -30,12 +29,14 @@ class Window;
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace flux {
@@ -533,8 +534,12 @@ private:
 
 class MetalCanvas final : public Canvas {
 public:
-  MetalCanvas(Window* /*window*/, CAMetalLayer* layer, unsigned int handle, TextSystem& textSystem)
-      : textSystem_(textSystem), metal_(layer), windowHandle_(handle) {
+  MetalCanvas(Window* /*window*/, CAMetalLayer* layer, unsigned int handle, TextSystem& textSystem,
+              std::function<void()> requestRedraw)
+      : textSystem_(textSystem)
+      , metal_(layer)
+      , windowHandle_(handle)
+      , requestRedraw_(std::move(requestRedraw)) {
     glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
     glyphAtlas_->setBeforeGrowCallback([this]() {
       MetalFrameRecorder const& recorder = activeRecorder();
@@ -656,8 +661,8 @@ public:
       inFrame_ = false;
       syncPresent_ = false;
       frame_.clear();
-      if (Application::hasInstance()) {
-        Application::instance().requestRedraw();
+      if (requestRedraw_) {
+        requestRedraw_();
       }
       return;
     }
@@ -1547,6 +1552,7 @@ private:
   std::unique_ptr<GlyphAtlas> glyphAtlas_;
   MetalDeviceResources metal_;
   unsigned int windowHandle_{0};
+  std::function<void()> requestRedraw_;
 
   dispatch_semaphore_t frameSem_{nullptr};
   id<MTLCommandBuffer> cmdBuf_{nil};
@@ -2848,8 +2854,10 @@ public:
 };
 
 std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
-                                          TextSystem& textSystem) {
-  return std::make_unique<MetalCanvas>(window, (__bridge CAMetalLayer*)caMetalLayer, handle, textSystem);
+                                          TextSystem& textSystem,
+                                          std::function<void()> requestRedraw) {
+  return std::make_unique<MetalCanvas>(window, (__bridge CAMetalLayer*)caMetalLayer, handle,
+                                       textSystem, std::move(requestRedraw));
 }
 
 void setSyncPresentForCanvas(Canvas* canvas, bool sync) {

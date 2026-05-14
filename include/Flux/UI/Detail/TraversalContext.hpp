@@ -1,7 +1,8 @@
 #pragma once
 
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Layout/LayoutEngine.hpp>
 
 #include <cstddef>
 #include <optional>

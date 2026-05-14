@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Core/PlatformApplication.hpp"
-#include "Core/PlatformWindow.hpp"
+#include "UI/Platform/PlatformApplication.hpp"
+#include "UI/Platform/PlatformWindow.hpp"
 
-#include <Flux/Core/Events.hpp>
+#include <Flux/UI/Events.hpp>
 
 #include <linux/vt.h>
 #include <xf86drmMode.h>

@@ -119,17 +119,51 @@ if(FLUX_PLATFORM_MACOS)
   add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 endif()
 
-add_library(flux STATIC
-  src/Core/EventQueue.cpp
+set(FLUX_CORE_SOURCES
+  src/Core/Identity.cpp
+)
+
+set(FLUX_REACTIVE_SOURCES
   src/Reactive/Observer.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
   src/Reactive/AnimationClock.cpp
-  src/Core/ComponentKey.cpp
-  src/Core/ComponentKeyUtil.cpp
-  src/Core/MenuRoleDefaults.cpp
-  src/Core/Window.cpp
-  src/Core/WindowRender.cpp
+)
+
+set(FLUX_GRAPHICS_SOURCES
+  src/Graphics/Styles.cpp
+  src/Graphics/AttributedString.cpp
+  src/Graphics/Canvas.cpp
+  src/Graphics/TextCacheDebugOverlay.cpp
+  src/Graphics/TextSystem.cpp
+  src/Graphics/xxhash_impl.c
+  src/Graphics/Path.cpp
+  src/Graphics/PathFlattener.cpp
+  src/Graphics/SvgPath.cpp
+)
+
+set(FLUX_SCENEGRAPH_SOURCES
+  src/SceneGraph/SceneNode.cpp
+  src/SceneGraph/RasterCacheNode.cpp
+  src/SceneGraph/RectNode.cpp
+  src/SceneGraph/TextNode.cpp
+  src/SceneGraph/ImageNode.cpp
+  src/SceneGraph/PathNode.cpp
+  src/SceneGraph/RenderNode.cpp
+  src/SceneGraph/SceneGraph.cpp
+  src/SceneGraph/SceneInteraction.cpp
+  src/SceneGraph/SceneRenderer.cpp
+)
+
+set(FLUX_LAYOUT_SOURCES
+  src/Layout/Algorithms/StackLayout.cpp
+)
+
+set(FLUX_UI_SOURCES
+  src/UI/EventQueue.cpp
+  src/UI/MenuRoleDefaults.cpp
+  src/UI/Window.cpp
+  src/UI/WindowRender.cpp
   src/UI/MeasureContext.cpp
   src/UI/ActionRegistry.cpp
   src/UI/InputFieldChrome.cpp
@@ -140,6 +174,9 @@ add_library(flux STATIC
   src/UI/Element/ElementMeasurement.cpp
   src/UI/Element/ElementModifiers.cpp
   src/UI/Element/ElementTypeErasure.cpp
+  src/UI/LayoutDebugDump.cpp
+  src/UI/ViewLayout/ScrollLayout.cpp
+  src/UI/ViewLayout/OverlayLayout.cpp
   src/UI/MountContext.cpp
   src/UI/MountRoot.cpp
   src/UI/Runtime.cpp
@@ -177,34 +214,27 @@ add_library(flux STATIC
   src/UI/Views/Tooltip.cpp
   src/UI/Views/TransformViews.cpp
   src/UI/Views/Toggle.cpp
-  src/UI/Layout/Algorithms/ScrollLayout.cpp
-  src/UI/Layout/Algorithms/OverlayLayout.cpp
-  src/UI/Layout/Algorithms/StackLayout.cpp
-  src/UI/LayoutDebugDump.cpp
-  src/SceneGraph/SceneNode.cpp
-  src/SceneGraph/RasterCacheNode.cpp
-  src/SceneGraph/RectNode.cpp
-  src/SceneGraph/TextNode.cpp
-  src/SceneGraph/ImageNode.cpp
-  src/SceneGraph/PathNode.cpp
-  src/SceneGraph/RenderNode.cpp
-  src/SceneGraph/SceneGraph.cpp
-  src/SceneGraph/SceneInteraction.cpp
-  src/SceneGraph/SceneRenderer.cpp
-  src/Graphics/Styles.cpp
-  src/Graphics/AttributedString.cpp
-  src/Graphics/Canvas.cpp
-  src/Graphics/TextCacheDebugOverlay.cpp
-  src/Graphics/TextSystem.cpp
-  src/Graphics/xxhash_impl.c
-  src/Graphics/Path.cpp
-  src/Graphics/PathFlattener.cpp
-  src/Graphics/SvgPath.cpp
+)
+
+add_library(flux STATIC
+  ${FLUX_CORE_SOURCES}
+  ${FLUX_REACTIVE_SOURCES}
+  ${FLUX_GRAPHICS_SOURCES}
+  ${FLUX_SCENEGRAPH_SOURCES}
+  ${FLUX_LAYOUT_SOURCES}
+  ${FLUX_UI_SOURCES}
+)
+
+add_custom_target(flux_module_dependency_check
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_dependencies.sh
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  COMMENT "Check Flux public header module dependencies"
+  VERBATIM
 )
 
 if(FLUX_PLATFORM_MACOS)
   target_sources(flux PRIVATE
-    src/Core/Application.mm
+    src/UI/Application.mm
     src/Graphics/CoreTextSystem.mm
     src/Graphics/Metal/MetalFrameRecorder.mm
     src/Graphics/Metal/GlyphAtlas.mm
@@ -302,7 +332,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   )
   add_dependencies(flux flux_vulkan_shaders)
   target_sources(flux PRIVATE
-    src/Core/Application.cpp
+    src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
     src/Platform/Linux/Common/XkbState.cpp
@@ -353,7 +383,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   )
   add_dependencies(flux flux_vulkan_shaders)
   target_sources(flux PRIVATE
-    src/Core/Application.cpp
+    src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
     src/Platform/Linux/Common/XkbState.cpp

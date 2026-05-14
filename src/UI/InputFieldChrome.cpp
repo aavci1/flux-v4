@@ -1,6 +1,5 @@
 #include <Flux/UI/InputFieldChrome.hpp>
 
-#include <Flux/Core/Types.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Theme.hpp>
 

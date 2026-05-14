@@ -1,7 +1,8 @@
 #pragma once
 
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Identity.hpp>
+#include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Color.hpp>
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>

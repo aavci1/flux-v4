@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 
 #include <memory>
 #include <string_view>

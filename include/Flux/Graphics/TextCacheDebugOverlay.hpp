@@ -5,7 +5,7 @@
 /// Text-cache stats panel (enable via \ref Runtime::setTextCacheOverlayEnabled). Rolling window
 /// state is stored per \ref Window (see \ref TextCacheRingBuffer).
 
-#include <Flux/Core/Types.hpp>
+#include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/TextCacheStats.hpp>
 
 #include <array>
@@ -14,6 +14,7 @@
 namespace flux {
 
 class Canvas;
+class TextSystem;
 
 /// Per-window rolling samples for the overlay (last 60 frames).
 struct TextCacheRingBuffer {
@@ -23,6 +24,7 @@ struct TextCacheRingBuffer {
 };
 
 /// Draws the text-cache stats panel in the top-left of the window (call after scene + overlay render).
-void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring);
+void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring,
+                                 TextSystem& textSystem);
 
 } // namespace flux

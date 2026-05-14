@@ -1,14 +1,14 @@
-#include "Core/PlatformWindowCreate.hpp"
-#include "Core/PlatformApplication.hpp"
+#include "UI/Platform/PlatformWindowCreate.hpp"
+#include "UI/Platform/PlatformApplication.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/Events.hpp>
-#include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Core/Window.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/EventQueue.hpp>
+#include <Flux/UI/Events.hpp>
+#include <Flux/UI/KeyCodes.hpp>
+#include <Flux/UI/Window.hpp>
 
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
@@ -319,6 +319,8 @@ public:
 
   std::unique_ptr<Canvas> createCanvas(Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
+    configureVulkanCanvasRuntime(Application::instance().platformApp().requiredVulkanInstanceExtensions(),
+                                 Application::instance().cacheDir());
     VkInstance instance = ensureSharedVulkanInstance();
     VkSurfaceKHR surface = Application::instance().platformApp().createVulkanSurface(instance, &nativeSurface_);
     auto canvas = createVulkanCanvas(surface, handle_, Application::instance().textSystem());

@@ -1,9 +1,8 @@
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
+#include <Flux/Debug/DebugFlags.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
-
-#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -82,8 +81,12 @@ void dumpSceneNode(scenegraph::SceneNode const& node, int depth) {
 
 } // namespace
 
+bool layoutDebugEnabled() {
+  return debug::layoutEnabled();
+}
+
 void layoutDebugBeginPass() {
-  if (!flux::layout::layoutDebugLayoutEnabled()) {
+  if (!layoutDebugEnabled()) {
     return;
   }
   gMeasureCount = 0;
@@ -91,7 +94,7 @@ void layoutDebugBeginPass() {
 }
 
 void layoutDebugEndPass() {
-  if (!flux::layout::layoutDebugLayoutEnabled()) {
+  if (!layoutDebugEnabled()) {
     return;
   }
   std::fprintf(stderr, "[flux:layout] --- end ---\n");
@@ -106,7 +109,7 @@ void layoutDebugRecordMeasureSlow(LayoutConstraints const&, Size) {
 } // namespace detail
 
 void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
-  if (!flux::layout::layoutDebugLayoutEnabled()) {
+  if (!layoutDebugEnabled()) {
     return;
   }
 
@@ -147,7 +150,7 @@ void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph) {
 }
 
 void layoutDebugDumpAttached(char const* reason) {
-  if (!flux::layout::layoutDebugLayoutEnabled() || !gAttachedSceneGraph) {
+  if (!layoutDebugEnabled() || !gAttachedSceneGraph) {
     return;
   }
   layoutDebugBeginPass();

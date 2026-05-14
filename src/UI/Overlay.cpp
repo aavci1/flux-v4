@@ -1,8 +1,8 @@
 #include <Flux/UI/Overlay.hpp>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Application.hpp>
+#include <Flux/UI/Window.hpp>
+#include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -12,7 +12,7 @@
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneInteraction.hpp>
 
-#include "UI/Layout/Algorithms/OverlayLayout.hpp"
+#include "UI/ViewLayout/OverlayLayout.hpp"
 
 #include <algorithm>
 #include <cassert>
