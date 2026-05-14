@@ -26,7 +26,9 @@ namespace flux {
 
 class EventQueue;
 class TextSystem;
-class PlatformApplication;
+namespace platform {
+class Application;
+}
 
 class Application {
 public:
@@ -97,7 +99,7 @@ public:
   EventQueue& eventQueue();
 
   TextSystem& textSystem();
-  PlatformApplication& platformApp();
+  platform::Application& platformApp();
 
   /// Returns the process-wide system clipboard.
   /// The returned reference is valid for the lifetime of the Application.

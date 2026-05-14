@@ -12,19 +12,21 @@ namespace flux {
 class Window;
 class Canvas;
 
-/// Internal abstract platform window; implemented in platform translation units. Not part of the public API.
-class PlatformWindow {
-public:
-  virtual ~PlatformWindow() = default;
+namespace platform {
 
-  virtual void setFluxWindow(Window* window) = 0;
+/// Internal abstract platform window; implemented in platform translation units. Not part of the public API.
+class Window {
+public:
+  virtual ~Window() = default;
+
+  virtual void setFluxWindow(::flux::Window* window) = 0;
 
   /// Present the native window after the Flux `Window` is registered and `setFluxWindow` has run.
   /// Implementations should not order the window on screen before this (so lifecycle callbacks see a
   /// valid `Window*`). Default: no-op.
   virtual void show() {}
 
-  virtual std::unique_ptr<Canvas> createCanvas(Window& owner) = 0;
+  virtual std::unique_ptr<::flux::Canvas> createCanvas(::flux::Window& owner) = 0;
 
   virtual void resize(const Size& newSize) = 0;
   virtual void setMinSize(Size /*size*/) {}
@@ -63,4 +65,5 @@ public:
   virtual void setCursor(Cursor /*kind*/) {}
 };
 
+} // namespace platform
 } // namespace flux

@@ -105,7 +105,7 @@ Flux v5 mounts UI once and updates retained scene nodes through reactive depende
 
 ## Platform Abstraction
 
-`PlatformWindow` is private to `src/Core`. Portable core code calls `flux::detail::createPlatformWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
+`platform::Window` is private to `src/UI/Platform`. Portable UI code calls `flux::platform::createWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
 
 ## Includes
 

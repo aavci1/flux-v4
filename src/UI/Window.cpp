@@ -19,15 +19,15 @@
 #include <memory>
 #include <utility>
 
-#include "UI/Platform/PlatformWindow.hpp"
-#include "UI/Platform/PlatformWindowCreate.hpp"
+#include "UI/Platform/Window.hpp"
+#include "UI/Platform/WindowFactory.hpp"
 #include "UI/WindowRender.hpp"
 #include <optional>
 
 namespace flux {
 
 struct Window::Impl {
-  std::unique_ptr<PlatformWindow> platform_;
+  std::unique_ptr<platform::Window> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
   std::optional<scenegraph::SceneGraph> sceneGraph_;
@@ -52,7 +52,7 @@ struct Window::Impl {
   }
   ~Impl();
 
-  PlatformWindow* platformWindow() const { return platform_.get(); }
+  platform::Window* platformWindow() const { return platform_.get(); }
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
   void shutdown();
 };
@@ -84,7 +84,7 @@ void Window::Impl::shutdown() {
 
 Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>(*this, config);
-  d->platform_ = detail::createPlatformWindow(config);
+  d->platform_ = platform::createWindow(config);
   d->platform_->setFluxWindow(this);
   Application::instance().eventQueue().post(WindowLifecycleEvent{
       .kind = WindowLifecycleEvent::Kind::Registered,
@@ -158,7 +158,7 @@ void Window::setCursor(Cursor kind) {
   d->platform_->setCursor(kind);
 }
 
-PlatformWindow* Window::platformWindow() const {
+platform::Window* Window::platformWindow() const {
   return d->platformWindow();
 }
 

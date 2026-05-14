@@ -1,5 +1,5 @@
-#include "UI/Platform/PlatformWindowCreate.hpp"
-#include "UI/Platform/PlatformApplication.hpp"
+#include "UI/Platform/WindowFactory.hpp"
+#include "UI/Platform/Application.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
@@ -256,7 +256,7 @@ void releaseWaylandConnection() {
 
 } // namespace
 
-class WaylandWindow final : public PlatformWindow {
+class WaylandWindow final : public platform::Window {
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
@@ -309,7 +309,7 @@ public:
     if (wakePipe_[1] >= 0) close(wakePipe_[1]);
   }
 
-  void setFluxWindow(Window* window) override { fluxWindow_ = window; }
+  void setFluxWindow(::flux::Window* window) override { fluxWindow_ = window; }
 
   void show() override {
     updateCanvasDpi();
@@ -317,7 +317,7 @@ public:
     Application::instance().flushRedraw();
   }
 
-  std::unique_ptr<Canvas> createCanvas(Window&) override {
+  std::unique_ptr<Canvas> createCanvas(::flux::Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
     configureVulkanCanvasRuntime(Application::instance().platformApp().requiredVulkanInstanceExtensions(),
                                  Application::instance().cacheDir());
@@ -764,7 +764,7 @@ private:
   Canvas* canvas_ = nullptr;
   SharedWaylandConnection* shared_ = nullptr;
 
-  Window* fluxWindow_ = nullptr;
+  ::flux::Window* fluxWindow_ = nullptr;
   unsigned int handle_ = 0;
   Size size_{};
   std::string title_;
@@ -974,11 +974,11 @@ std::vector<std::string> availableWaylandOutputs() {
 
 } // namespace linux_platform
 
-namespace detail {
+namespace platform {
 
-std::unique_ptr<PlatformWindow> createPlatformWindow(WindowConfig const& config) {
+std::unique_ptr<Window> createWindow(WindowConfig const& config) {
   return std::make_unique<WaylandWindow>(config);
 }
 
-} // namespace detail
+} // namespace platform
 } // namespace flux

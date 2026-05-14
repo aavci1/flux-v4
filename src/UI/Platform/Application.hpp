@@ -17,7 +17,7 @@ struct VkSurfaceKHR_T;
 using VkSurfaceKHR = VkSurfaceKHR_T*;
 #endif
 
-namespace flux {
+namespace flux::platform {
 
 struct ShortcutKey {
   KeyCode key = 0;
@@ -35,9 +35,9 @@ struct ShortcutKeyHash {
 
 using MenuActionDispatcher = std::function<bool(std::string const&)>;
 
-class PlatformApplication {
+class Application {
 public:
-  virtual ~PlatformApplication() = default;
+  virtual ~Application() = default;
 
   virtual void initialize() = 0;
   virtual void setApplicationName(std::string name) = 0;
@@ -54,8 +54,6 @@ public:
   virtual VkSurfaceKHR createVulkanSurface(VkInstance, void*) { return nullptr; }
 };
 
-namespace detail {
-std::unique_ptr<PlatformApplication> createPlatformApplication();
-}
+std::unique_ptr<Application> createApplication();
 
-} // namespace flux
+} // namespace flux::platform

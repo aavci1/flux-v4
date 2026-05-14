@@ -1,7 +1,7 @@
 #pragma once
 
-#include "UI/Platform/PlatformApplication.hpp"
-#include "UI/Platform/PlatformWindow.hpp"
+#include "UI/Platform/Application.hpp"
+#include "UI/Platform/Window.hpp"
 
 #include <Flux/UI/Events.hpp>
 
@@ -38,7 +38,7 @@ struct KmsConnector {
   std::string name;
 };
 
-class KmsApplication final : public PlatformApplication {
+class KmsApplication final : public platform::Application {
 public:
   KmsApplication();
   ~KmsApplication() override;
@@ -46,10 +46,10 @@ public:
   void initialize() override;
   void setApplicationName(std::string name) override;
   std::string applicationName() const override;
-  void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) override;
+  void setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) override;
   void setTerminateHandler(std::function<void()> handler) override;
   void requestTerminate() override;
-  std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const override;
+  std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> menuClaimedShortcuts() const override;
   void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) override;
   std::string userDataDir() const override;
   std::string cacheDir() const override;
@@ -57,7 +57,7 @@ public:
   std::span<char const* const> requiredVulkanInstanceExtensions() const override;
   VkSurfaceKHR createVulkanSurface(VkInstance instance, void* nativeHandle) override;
 
-  std::unique_ptr<PlatformWindow> createWindow(WindowConfig const& config);
+  std::unique_ptr<platform::Window> createWindow(WindowConfig const& config);
   int drmFd() const noexcept { return drmFd_; }
   int inputFd() const noexcept;
   int wakeFd() const noexcept { return wakePipe_[0]; }
@@ -119,9 +119,9 @@ private:
   std::vector<KmsConnector> connectors_;
   std::vector<KmsWindow*> windows_;
   KmsWindow* pointerFocus_ = nullptr;
-  MenuActionDispatcher dispatcher_;
+  platform::MenuActionDispatcher dispatcher_;
   std::function<void()> terminateHandler_;
-  std::unordered_set<ShortcutKey, ShortcutKeyHash> claimedShortcuts_;
+  std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_ = "flux";
   Point pointerPos_{};
   std::uint8_t pressedButtons_ = 0;
@@ -139,14 +139,14 @@ private:
 
 KmsApplication& kmsApplication();
 
-class KmsWindow final : public PlatformWindow {
+class KmsWindow final : public platform::Window {
 public:
   KmsWindow(KmsApplication& app, KmsConnector connector, WindowConfig const& config);
   ~KmsWindow() override;
 
-  void setFluxWindow(Window* window) override;
+  void setFluxWindow(::flux::Window* window) override;
   void show() override;
-  std::unique_ptr<Canvas> createCanvas(Window& owner) override;
+  std::unique_ptr<Canvas> createCanvas(::flux::Window& owner) override;
   void resize(Size const& newSize) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(std::string const& title) override;
@@ -191,7 +191,7 @@ private:
 
   KmsApplication& app_;
   KmsConnector connector_;
-  Window* fluxWindow_ = nullptr;
+  ::flux::Window* fluxWindow_ = nullptr;
   Canvas* canvas_ = nullptr;
   unsigned int handle_ = 0;
   Size size_{};

@@ -1,6 +1,6 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
-#include "UI/Platform/PlatformWindowCreate.hpp"
+#include "UI/Platform/WindowFactory.hpp"
 
 #include <Flux/UI/Application.hpp>
 #include <Flux/UI/EventQueue.hpp>
@@ -670,7 +670,7 @@ std::string KmsApplication::applicationName() const {
   return appName_.empty() ? "flux" : appName_;
 }
 
-void KmsApplication::setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) {
+void KmsApplication::setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) {
   claimedShortcuts_.clear();
   collectShortcuts(menu);
   dispatcher_ = std::move(dispatcher);
@@ -687,7 +687,7 @@ void KmsApplication::requestTerminate() {
   wakeEventLoop();
 }
 
-std::unordered_set<ShortcutKey, ShortcutKeyHash> KmsApplication::menuClaimedShortcuts() const {
+std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> KmsApplication::menuClaimedShortcuts() const {
   return claimedShortcuts_;
 }
 
@@ -1285,7 +1285,7 @@ KmsWindow* KmsApplication::windowForConnector(std::uint32_t connectorId) const {
 
 void KmsApplication::collectShortcuts(MenuItem const& item) {
   if (!item.actionName.empty() && (item.shortcut.key != 0 || item.shortcut.modifiers != Modifiers::None)) {
-    claimedShortcuts_.insert(ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers});
+    claimedShortcuts_.insert(platform::ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers});
   }
   for (MenuItem const& child : item.children) collectShortcuts(child);
 }
@@ -1299,11 +1299,11 @@ KmsApplication& kmsApplication() {
   return *gKmsApplication;
 }
 
-namespace detail {
+namespace platform {
 
-std::unique_ptr<PlatformApplication> createPlatformApplication() {
+std::unique_ptr<Application> createApplication() {
   return std::make_unique<KmsApplication>();
 }
 
-} // namespace detail
+} // namespace platform
 } // namespace flux

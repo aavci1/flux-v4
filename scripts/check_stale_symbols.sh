@@ -13,7 +13,7 @@ add_failure() {
 
 is_allowed_header_only_class() {
   case "$1" in
-    AnimationBase|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|PreparedRenderOps|Renderer|Scope|ScopedTimer|ShowView|Signal|SmallFn|SmallVector|SwitchView)
+    Animation|AnimationBase|AnimationClipState|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|PreparedRenderOps|Renderer|Scope|ScopedTimer|ShowView|Signal|SmallFn|SmallVector|SwitchView)
       return 0
       ;;
   esac
@@ -22,7 +22,7 @@ is_allowed_header_only_class() {
 
 is_allowed_forward_without_direct_instantiation() {
   case "$1" in
-    GestureTracker|PlatformWindow|PreparedRenderOps|Renderer|TextSystem)
+    GestureTracker|PreparedRenderOps|Renderer|TextSystem)
       return 0
       ;;
   esac

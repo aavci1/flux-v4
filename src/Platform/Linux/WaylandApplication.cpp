@@ -1,7 +1,7 @@
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include <vulkan/vulkan.h>
 
-#include "UI/Platform/PlatformApplication.hpp"
+#include "UI/Platform/Application.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
@@ -49,7 +49,7 @@ std::string appDir(std::string const& base, std::string const& appName) {
   return path.string();
 }
 
-class WaylandApplication final : public PlatformApplication {
+class WaylandApplication final : public platform::Application {
 public:
   void initialize() override {}
 
@@ -61,7 +61,7 @@ public:
     return appName_.empty() ? "flux" : appName_;
   }
 
-  void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) override {
+  void setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) override {
     claimedShortcuts_.clear();
     collectShortcuts(menu);
     dispatcher_ = std::move(dispatcher);
@@ -77,7 +77,7 @@ public:
     }
   }
 
-  std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const override {
+  std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> menuClaimedShortcuts() const override {
     return claimedShortcuts_;
   }
 
@@ -119,7 +119,7 @@ public:
 private:
   void collectShortcuts(MenuItem const& item) {
     if (!item.actionName.empty() && (item.shortcut.key != 0 || item.shortcut.modifiers != Modifiers::None)) {
-      claimedShortcuts_.insert(ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers});
+      claimedShortcuts_.insert(platform::ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers});
     }
     for (MenuItem const& child : item.children) {
       collectShortcuts(child);
@@ -132,19 +132,19 @@ private:
     }
   }
 
-  MenuActionDispatcher dispatcher_;
+  platform::MenuActionDispatcher dispatcher_;
   std::function<void()> terminateHandler_;
-  std::unordered_set<ShortcutKey, ShortcutKeyHash> claimedShortcuts_;
+  std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_ = "flux";
 };
 
 } // namespace
 
-namespace detail {
+namespace platform {
 
-std::unique_ptr<PlatformApplication> createPlatformApplication() {
+std::unique_ptr<Application> createApplication() {
   return std::make_unique<WaylandApplication>();
 }
 
-} // namespace detail
+} // namespace platform
 } // namespace flux

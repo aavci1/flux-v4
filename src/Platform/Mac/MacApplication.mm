@@ -1,4 +1,4 @@
-#include "UI/Platform/PlatformApplication.hpp"
+#include "UI/Platform/Application.hpp"
 
 #include <Flux/UI/KeyCodes.hpp>
 
@@ -237,7 +237,7 @@ NSURL* directoryURL(NSSearchPathDirectory directory, std::string const& explicit
 
 } // namespace
 
-class MacApplication final : public PlatformApplication {
+class MacApplication final : public platform::Application {
 public:
   void initialize() override {
     [NSApplication sharedApplication];
@@ -256,7 +256,7 @@ public:
     return appNameFromBundle();
   }
 
-  void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) override {
+  void setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) override {
     dispatcher_ = std::move(dispatcher);
     claimedShortcuts_.clear();
 
@@ -303,7 +303,7 @@ public:
     }
   }
 
-  std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const override {
+  std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> menuClaimedShortcuts() const override {
     return claimedShortcuts_;
   }
 
@@ -435,24 +435,24 @@ private:
     }
     if (shortcut.matches(shortcut.key, shortcut.modifiers)) {
       nsItem.keyEquivalentModifierMask = modifierMask(shortcut.modifiers);
-      claimedShortcuts_.insert(ShortcutKey{.key = shortcut.key, .modifiers = shortcut.modifiers});
+      claimedShortcuts_.insert(platform::ShortcutKey{.key = shortcut.key, .modifiers = shortcut.modifiers});
     }
     [menu addItem:nsItem];
   }
 
   __strong FluxAppDelegate* delegate_{nil};
-  MenuActionDispatcher dispatcher_;
+  platform::MenuActionDispatcher dispatcher_;
   std::function<void()> terminateHandler_;
   std::function<bool(std::string const&)> isEnabled_;
-  std::unordered_set<ShortcutKey, ShortcutKeyHash> claimedShortcuts_;
+  std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_;
 };
 
-namespace detail {
-std::unique_ptr<PlatformApplication> createPlatformApplication() {
+namespace platform {
+std::unique_ptr<Application> createApplication() {
   return std::make_unique<MacApplication>();
 }
-} // namespace detail
+} // namespace platform
 
 } // namespace flux
 

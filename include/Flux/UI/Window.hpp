@@ -26,7 +26,9 @@ struct OverlayId;
 
 class Application;
 class Canvas;
-class PlatformWindow;
+namespace platform {
+class Window;
+}
 namespace scenegraph {
 class SceneGraph;
 }
@@ -175,7 +177,7 @@ private:
   void applyRestoredWindowState(WindowState const& state);
 
   /// Used by `Application` (friend); implementation on `Impl`.
-  PlatformWindow* platformWindow() const;
+  platform::Window* platformWindow() const;
   /// Used by `Window::setView` in `<Flux/UI/WindowUI.hpp>`; implementation on `Impl`.
   void setViewRoot(std::unique_ptr<RootHolder> holder);
 

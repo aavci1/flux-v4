@@ -13,8 +13,8 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Profile.hpp>
 
-#include "UI/Platform/PlatformWindow.hpp"
-#include "UI/Platform/PlatformWindowCreate.hpp"
+#include "UI/Platform/Window.hpp"
+#include "UI/Platform/WindowFactory.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "UI/DebugFlags.hpp"
 
@@ -28,10 +28,10 @@
 #include <string>
 
 namespace flux {
-class MacMetalPlatformWindow;
+class MacMetalWindow;
 class Window;
-Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform);
-CVReturn fluxHandleDisplayLinkTick(MacMetalPlatformWindow* platform);
+::flux::Window* fluxWindowForPlatform(MacMetalWindow* platform);
+CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform);
 } // namespace flux
 
 /// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
@@ -41,7 +41,7 @@ CVReturn fluxHandleDisplayLinkTick(MacMetalPlatformWindow* platform);
 @end
 
 @interface FluxMetalView : NSView <NSTextInputClient>
-@property(nonatomic, assign) flux::MacMetalPlatformWindow* fluxPlatform;
+@property(nonatomic, assign) flux::MacMetalWindow* fluxPlatform;
 - (CAMetalLayer*)fluxMetalLayer;
 - (void)updateDrawableSize;
 - (BOOL)fluxWantsTextInput;
@@ -240,7 +240,7 @@ void postTextInput(FluxMetalView* view, std::string text);
 }
 
 - (BOOL)fluxWantsTextInput {
-  flux::MacMetalPlatformWindow* platform = self.fluxPlatform;
+  flux::MacMetalWindow* platform = self.fluxPlatform;
   flux::Window* window = flux::fluxWindowForPlatform(platform);
   return window && window->wantsTextInput();
 }
@@ -254,7 +254,7 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 - (void)fluxHandleDisplayLink:(id)displayLink {
   (void)displayLink;
-  flux::MacMetalPlatformWindow* platform = self.fluxPlatform;
+  flux::MacMetalWindow* platform = self.fluxPlatform;
   if (!platform) {
     return;
   }
@@ -271,7 +271,7 @@ void postTextInput(FluxMetalView* view, std::string text);
 @end
 
 @interface FluxWindowDelegate : NSObject <NSWindowDelegate>
-@property (nonatomic, assign) flux::MacMetalPlatformWindow* platform;
+@property (nonatomic, assign) flux::MacMetalWindow* platform;
 @end
 
 namespace flux {
@@ -287,12 +287,12 @@ std::int64_t nowSteadyClockNanos() {
 
 } // namespace
 
-class MacMetalPlatformWindow : public PlatformWindow {
+class MacMetalWindow : public platform::Window {
 public:
-  explicit MacMetalPlatformWindow(const WindowConfig& config);
-  ~MacMetalPlatformWindow() override;
+  explicit MacMetalWindow(const WindowConfig& config);
+  ~MacMetalWindow() override;
 
-  void setFluxWindow(Window* window) override;
+  void setFluxWindow(::flux::Window* window) override;
   void show() override;
   void resize(const Size& newSize) override;
   void setMinSize(Size size) override;
@@ -306,7 +306,7 @@ public:
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
 
-  std::unique_ptr<Canvas> createCanvas(Window& owner) override;
+  std::unique_ptr<Canvas> createCanvas(::flux::Window& owner) override;
 
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
@@ -317,7 +317,7 @@ public:
 
   void setCursor(Cursor kind) override;
 
-  Window* fluxWindow() const;
+  ::flux::Window* fluxWindow() const;
   CVReturn onDisplayLinkTick();
 
   /// Enables CAMetalLayer transaction presentation only for resize flushes (paired with MetalCanvas sync present).
@@ -333,18 +333,18 @@ private:
 CVReturn displayLinkOutputCallback(CVDisplayLinkRef /*displayLink*/, CVTimeStamp const* /*now*/,
                                    CVTimeStamp const* /*outputTime*/, CVOptionFlags /*flagsIn*/,
                                    CVOptionFlags* /*flagsOut*/, void* userInfo) {
-  auto* platform = static_cast<MacMetalPlatformWindow*>(userInfo);
+  auto* platform = static_cast<MacMetalWindow*>(userInfo);
   if (!platform) {
     return kCVReturnSuccess;
   }
   return platform->onDisplayLinkTick();
 }
 
-struct MacMetalPlatformWindow::Impl {
+struct MacMetalWindow::Impl {
   NSWindow* window_{nil};
   FluxMetalView* metalView_{nil};
   FluxWindowDelegate* delegate_{nil};
-  Window* fluxWindow_{nullptr};
+  ::flux::Window* fluxWindow_{nullptr};
   unsigned int handle_{0};
   id displayLink_ = nil;
   CVDisplayLinkRef legacyDisplayLink_{nullptr};
@@ -392,7 +392,7 @@ bool fluxDebugInputMacPost() {
 }
 
 void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {
-  MacMetalPlatformWindow* p = view.fluxPlatform;
+  MacMetalWindow* p = view.fluxPlatform;
   if (!p || !p->fluxWindow()) {
     if (fluxDebugInputMacPost()) {
       std::fprintf(stderr, "[flux:input:mac] postInputFromView: no platform/window (dropped)\n");
@@ -465,7 +465,7 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
 }
 
 void postTextInput(FluxMetalView* view, std::string text) {
-  MacMetalPlatformWindow* p = view.fluxPlatform;
+  MacMetalWindow* p = view.fluxPlatform;
   if (!p || !p->fluxWindow()) {
     return;
   }
@@ -485,7 +485,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 - (void)windowWillClose:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalPlatformWindow* platform = self.platform;
+  flux::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -505,7 +505,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
-  flux::MacMetalPlatformWindow* platform = self.platform;
+  flux::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -532,7 +532,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalPlatformWindow* platform = self.platform;
+  flux::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -547,7 +547,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 - (void)windowDidResignKey:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalPlatformWindow* platform = self.platform;
+  flux::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -561,7 +561,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification {
   NSWindow* win = static_cast<NSWindow*>(notification.object);
-  flux::MacMetalPlatformWindow* platform = self.platform;
+  flux::MacMetalWindow* platform = self.platform;
   if (!platform || !platform->fluxWindow()) {
     return;
   }
@@ -615,22 +615,22 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 namespace flux {
 
-Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform) {
+::flux::Window* fluxWindowForPlatform(MacMetalWindow* platform) {
   return platform ? platform->fluxWindow() : nullptr;
 }
 
-CVReturn fluxHandleDisplayLinkTick(MacMetalPlatformWindow* platform) {
+CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform) {
   if (!platform) {
     return kCVReturnSuccess;
   }
   return platform->onDisplayLinkTick();
 }
 
-Window* MacMetalPlatformWindow::fluxWindow() const {
+::flux::Window* MacMetalWindow::fluxWindow() const {
   return d ? d->fluxWindow_ : nullptr;
 }
 
-MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
+MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
   d->handle_ = gNextHandle.fetch_add(1, std::memory_order_relaxed);
   d->fluxWindow_ = nullptr;
   d->window_ = nil;
@@ -707,7 +707,7 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
   // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setFluxWindow`.
 }
 
-MacMetalPlatformWindow::~MacMetalPlatformWindow() {
+MacMetalWindow::~MacMetalWindow() {
   if (d && d->displayLink_) {
     [d->displayLink_ invalidate];
     d->displayLink_ = nil;
@@ -737,11 +737,11 @@ MacMetalPlatformWindow::~MacMetalPlatformWindow() {
   d.reset();
 }
 
-void MacMetalPlatformWindow::setFluxWindow(Window* window) {
+void MacMetalWindow::setFluxWindow(::flux::Window* window) {
   d->fluxWindow_ = window;
 }
 
-void MacMetalPlatformWindow::show() {
+void MacMetalWindow::show() {
   if (!d->window_ || !d->metalView_) {
     return;
   }
@@ -749,7 +749,7 @@ void MacMetalPlatformWindow::show() {
   [d->window_ makeFirstResponder:d->metalView_];
 }
 
-void MacMetalPlatformWindow::resize(const Size& newSize) {
+void MacMetalWindow::resize(const Size& newSize) {
   if (!d->window_) {
     return;
   }
@@ -757,7 +757,7 @@ void MacMetalPlatformWindow::resize(const Size& newSize) {
   [d->window_ setContentSize:sz];
 }
 
-void MacMetalPlatformWindow::setMinSize(Size size) {
+void MacMetalWindow::setMinSize(Size size) {
   if (!d->window_) {
     return;
   }
@@ -765,7 +765,7 @@ void MacMetalPlatformWindow::setMinSize(Size size) {
                                            static_cast<CGFloat>(std::max(0.f, size.height)))];
 }
 
-void MacMetalPlatformWindow::setMaxSize(Size size) {
+void MacMetalWindow::setMaxSize(Size size) {
   if (!d->window_) {
     return;
   }
@@ -774,7 +774,7 @@ void MacMetalPlatformWindow::setMaxSize(Size size) {
   [d->window_ setContentMaxSize:NSMakeSize(maxW, maxH)];
 }
 
-void MacMetalPlatformWindow::setFullscreen(bool fullscreen) {
+void MacMetalWindow::setFullscreen(bool fullscreen) {
   if (!d->window_) {
     return;
   }
@@ -785,7 +785,7 @@ void MacMetalPlatformWindow::setFullscreen(bool fullscreen) {
   [d->window_ toggleFullScreen:nil];
 }
 
-void MacMetalPlatformWindow::setTitle(const std::string& title) {
+void MacMetalWindow::setTitle(const std::string& title) {
   if (!d->window_) {
     return;
   }
@@ -796,7 +796,7 @@ void MacMetalPlatformWindow::setTitle(const std::string& title) {
   [d->window_ setTitle:nsTitle];
 }
 
-Size MacMetalPlatformWindow::currentSize() const {
+Size MacMetalWindow::currentSize() const {
   if (!d->window_ || !d->metalView_) {
     return {};
   }
@@ -804,7 +804,7 @@ Size MacMetalPlatformWindow::currentSize() const {
   return Size{static_cast<float>(bounds.size.width), static_cast<float>(bounds.size.height)};
 }
 
-std::optional<Rect> MacMetalPlatformWindow::currentFrame() const {
+std::optional<Rect> MacMetalWindow::currentFrame() const {
   if (!d->window_) {
     return std::nullopt;
   }
@@ -815,7 +815,7 @@ std::optional<Rect> MacMetalPlatformWindow::currentFrame() const {
                      static_cast<float>(frame.size.height));
 }
 
-void MacMetalPlatformWindow::setFrame(Rect frame) {
+void MacMetalWindow::setFrame(Rect frame) {
   if (!d->window_ || frame.width <= 0.f || frame.height <= 0.f) {
     return;
   }
@@ -842,25 +842,25 @@ void MacMetalPlatformWindow::setFrame(Rect frame) {
   [d->window_ setFrame:nsFrame display:NO];
 }
 
-bool MacMetalPlatformWindow::isFullscreen() const {
+bool MacMetalWindow::isFullscreen() const {
   if (!d->window_) {
     return false;
   }
   return ([d->window_ styleMask] & NSWindowStyleMaskFullScreen) != 0;
 }
 
-unsigned int MacMetalPlatformWindow::handle() const {
+unsigned int MacMetalWindow::handle() const {
   return d->handle_;
 }
 
-void* MacMetalPlatformWindow::nativeGraphicsSurface() const {
+void* MacMetalWindow::nativeGraphicsSurface() const {
   if (!d->metalView_) {
     return nullptr;
   }
   return (__bridge void*)d->metalView_.layer;
 }
 
-void MacMetalPlatformWindow::setMetalLayerPresentsWithTransaction(bool enable) {
+void MacMetalWindow::setMetalLayerPresentsWithTransaction(bool enable) {
   if (!d->metalView_) {
     return;
   }
@@ -870,7 +870,7 @@ void MacMetalPlatformWindow::setMetalLayerPresentsWithTransaction(bool enable) {
   }
 }
 
-std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {
+std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::flux::Window& owner) {
   (void)owner;
   void* layerPtr = nativeGraphicsSurface();
   if (!layerPtr) {
@@ -881,7 +881,7 @@ std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {
   });
 }
 
-void MacMetalPlatformWindow::processEvents() {
+void MacMetalWindow::processEvents() {
   if (!d->window_) {
     return;
   }
@@ -894,7 +894,7 @@ void MacMetalPlatformWindow::processEvents() {
   }
 }
 
-void MacMetalPlatformWindow::waitForEvents(int timeoutMs) {
+void MacMetalWindow::waitForEvents(int timeoutMs) {
   if (!d->window_) {
     return;
   }
@@ -915,7 +915,7 @@ void MacMetalPlatformWindow::waitForEvents(int timeoutMs) {
   }
 }
 
-void MacMetalPlatformWindow::wakeEventLoop() {
+void MacMetalWindow::wakeEventLoop() {
   if (!NSApp) {
     return;
   }
@@ -940,7 +940,7 @@ void MacMetalPlatformWindow::wakeEventLoop() {
   CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
-void MacMetalPlatformWindow::requestAnimationFrame() {
+void MacMetalWindow::requestAnimationFrame() {
   bool const wasRequested = d->frameRequested_.exchange(true, std::memory_order_acq_rel);
   if (wasRequested) {
     return;
@@ -960,11 +960,11 @@ void MacMetalPlatformWindow::requestAnimationFrame() {
   }
 }
 
-void MacMetalPlatformWindow::acknowledgeAnimationFrameTick() {
+void MacMetalWindow::acknowledgeAnimationFrameTick() {
   d->frameEventQueued_.store(false, std::memory_order_release);
 }
 
-void MacMetalPlatformWindow::completeAnimationFrame(bool needsAnotherFrame) {
+void MacMetalWindow::completeAnimationFrame(bool needsAnotherFrame) {
   d->frameRequested_.store(needsAnotherFrame, std::memory_order_release);
   if (d->displayLink_) {
     if (!needsAnotherFrame) {
@@ -983,7 +983,7 @@ void MacMetalPlatformWindow::completeAnimationFrame(bool needsAnotherFrame) {
   }
 }
 
-CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
+CVReturn MacMetalWindow::onDisplayLinkTick() {
   Reactive::detail::profile::frameBoundary();
   if (!d->frameRequested_.load(std::memory_order_acquire)) {
     return kCVReturnSuccess;
@@ -1010,7 +1010,7 @@ CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
   return kCVReturnSuccess;
 }
 
-void MacMetalPlatformWindow::setModernDisplayLinkPaused(bool paused) {
+void MacMetalWindow::setModernDisplayLinkPaused(bool paused) {
   id link = d ? d->displayLink_ : nil;
   if (!link) {
     return;
@@ -1026,7 +1026,7 @@ void MacMetalPlatformWindow::setModernDisplayLinkPaused(bool paused) {
   CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
-void MacMetalPlatformWindow::setCursor(Cursor kind) {
+void MacMetalWindow::setCursor(Cursor kind) {
   NSCursor* c = nil;
   switch (kind) {
   case Cursor::Inherit:
@@ -1069,12 +1069,12 @@ void MacMetalPlatformWindow::setCursor(Cursor kind) {
   }
 }
 
-namespace detail {
+namespace platform {
 
-std::unique_ptr<PlatformWindow> createPlatformWindow(const WindowConfig& config) {
-  return std::make_unique<MacMetalPlatformWindow>(config);
+std::unique_ptr<Window> createWindow(const WindowConfig& config) {
+  return std::make_unique<MacMetalWindow>(config);
 }
 
-} // namespace detail
+} // namespace platform
 
 } // namespace flux

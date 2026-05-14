@@ -13,7 +13,7 @@ A real Klondike Solitaire — not a tech demo. ~3150 lines in one file, but the 
 - **HUD**: New game / hint / undo / auto-finish / settings buttons in a glass pill, plus elapsed time and stats.
 - **Drag with peek**: hold to peek face-down cards, drag to move stacks.
 - Proper **HiDPI / retina** via `backingScaleFactor` (already in the platform layer).
-- **Fullscreen support** already wired in `MacMetalPlatformWindow::setFullscreen`.
+- **Fullscreen support** already wired in `MacMetalWindow::setFullscreen`.
 - **`NSBundle pathForResource`** font loading already works for both bundled and unbundled execution — Material Symbols Rounded font is registered at startup.
 
 This is well above demo quality. As an actual game it could ship.

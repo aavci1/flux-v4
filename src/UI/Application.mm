@@ -7,8 +7,8 @@
 #include <Flux/Reactive/AnimationClock.hpp>
 
 #include "UI/MenuRoleDefaults.hpp"
-#include "UI/Platform/PlatformWindow.hpp"
-#include "UI/Platform/PlatformApplication.hpp"
+#include "UI/Platform/Window.hpp"
+#include "UI/Platform/Application.hpp"
 #include "Debug/PerfCounters.hpp"
 #include "Graphics/CoreTextSystem.hpp"
 #include "Platform/Mac/MacClipboard.hpp"
@@ -137,7 +137,7 @@ void saveWindowStatesToDisk(std::filesystem::path const& path,
 
 void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::function<void()>>& handlers,
                       std::unordered_map<std::string, std::function<bool()>>& enabled,
-                      std::unordered_map<ShortcutKey, std::string, ShortcutKeyHash>& shortcuts,
+                      std::unordered_map<platform::ShortcutKey, std::string, platform::ShortcutKeyHash>& shortcuts,
                       std::uint64_t& nextId) {
   if (item.actionName.empty()) {
     item.actionName = detail::standardRoleActionName(item.role);
@@ -153,7 +153,7 @@ void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::funct
     enabled[item.actionName] = item.isEnabled;
   }
   if (!item.actionName.empty() && (item.shortcut.key != 0 || item.shortcut.modifiers != Modifiers::None)) {
-    shortcuts[ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers}] = item.actionName;
+    shortcuts[platform::ShortcutKey{.key = item.shortcut.key, .modifiers = item.shortcut.modifiers}] = item.actionName;
   }
   for (MenuItem& child : item.children) {
     collectMenuState(child, handlers, enabled, shortcuts, nextId);
@@ -178,12 +178,12 @@ struct Application::Impl {
 
   std::unique_ptr<CoreTextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
-  std::unique_ptr<PlatformApplication> platformApp_;
+  std::unique_ptr<platform::Application> platformApp_;
   std::thread::id mainThreadId_;
   MenuBar menuBar_;
   std::unordered_map<std::string, std::function<void()>> menuHandlers_;
   std::unordered_map<std::string, std::function<bool()>> menuEnabled_;
-  std::unordered_map<ShortcutKey, std::string, ShortcutKeyHash> menuShortcuts_;
+  std::unordered_map<platform::ShortcutKey, std::string, platform::ShortcutKeyHash> menuShortcuts_;
   std::uint64_t nextMenuHandlerId_ = 1;
   mutable bool windowStatesLoaded_ = false;
   mutable std::unordered_map<std::string, WindowState> windowStates_;
@@ -235,7 +235,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   d->mainThreadId_ = std::this_thread::get_id();
   d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->clipboard_ = std::make_unique<MacClipboard>();
-  d->platformApp_ = detail::createPlatformApplication();
+  d->platformApp_ = platform::createApplication();
   d->platformApp_->initialize();
   d->platformApp_->setTerminateHandler([this] {
     saveOpenWindowStates();
@@ -371,7 +371,7 @@ void Application::unregisterWindowHandle(unsigned int handle) {
 EventQueue& Application::eventQueue() { return d->eventQueue_; }
 
 TextSystem& Application::textSystem() { return *d->textSystem_; }
-PlatformApplication& Application::platformApp() { return *d->platformApp_; }
+platform::Application& Application::platformApp() { return *d->platformApp_; }
 
 Clipboard& Application::clipboard() { return *d->clipboard_; }
 
@@ -435,7 +435,7 @@ bool Application::isActionEnabled(std::string const& name) const {
 }
 
 bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const {
-  ShortcutKey const shortcut{.key = key, .modifiers = modifiers};
+  platform::ShortcutKey const shortcut{.key = key, .modifiers = modifiers};
   if (d->menuShortcuts_.contains(shortcut)) {
     return true;
   }
@@ -444,7 +444,7 @@ bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const 
 }
 
 bool Application::dispatchActionForShortcut(KeyCode key, Modifiers modifiers) {
-  auto it = d->menuShortcuts_.find(ShortcutKey{.key = key, .modifiers = modifiers});
+  auto it = d->menuShortcuts_.find(platform::ShortcutKey{.key = key, .modifiers = modifiers});
   if (it == d->menuShortcuts_.end()) {
     return false;
   }

@@ -4,7 +4,7 @@
 #include <Flux/UI/EventQueue.hpp>
 #include <Flux/UI/Window.hpp>
 
-#include "UI/Platform/PlatformApplication.hpp"
+#include "UI/Platform/Application.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include <drm.h>
@@ -155,7 +155,7 @@ KmsWindow::~KmsWindow() {
   if (frameTimerFd_ >= 0) close(frameTimerFd_);
 }
 
-void KmsWindow::setFluxWindow(Window* window) {
+void KmsWindow::setFluxWindow(::flux::Window* window) {
   fluxWindow_ = window;
 }
 
@@ -170,7 +170,7 @@ void KmsWindow::show() {
   Application::instance().flushRedraw();
 }
 
-std::unique_ptr<Canvas> KmsWindow::createCanvas(Window&) {
+std::unique_ptr<Canvas> KmsWindow::createCanvas(::flux::Window&) {
   configureVulkanCanvasRuntime(app_.requiredVulkanInstanceExtensions(), app_.cacheDir());
   VkInstance instance = ensureSharedVulkanInstance();
   VkSurfaceKHR surface = app_.createVulkanSurface(instance, &connector_);
@@ -362,7 +362,7 @@ bool KmsWindow::ensureCursorBuffer() {
   return true;
 }
 
-std::unique_ptr<PlatformWindow> KmsApplication::createWindow(WindowConfig const& config) {
+std::unique_ptr<platform::Window> KmsApplication::createWindow(WindowConfig const& config) {
   if (connectors_.empty()) throw std::runtime_error("No KMS connector is available for window creation");
   auto connector = connectors_.begin();
   if (!config.outputName.empty()) {
@@ -379,11 +379,11 @@ std::unique_ptr<PlatformWindow> KmsApplication::createWindow(WindowConfig const&
   return std::make_unique<KmsWindow>(*this, *connector, config);
 }
 
-namespace detail {
+namespace platform {
 
-std::unique_ptr<PlatformWindow> createPlatformWindow(WindowConfig const& config) {
+std::unique_ptr<Window> createWindow(WindowConfig const& config) {
   return kmsApplication().createWindow(config);
 }
 
-} // namespace detail
+} // namespace platform
 } // namespace flux
