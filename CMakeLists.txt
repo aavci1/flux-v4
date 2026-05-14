@@ -228,7 +228,7 @@ add_library(flux STATIC
 add_custom_target(flux_module_dependency_check
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_dependencies.sh
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  COMMENT "Check Flux public header module dependencies"
+  COMMENT "Check Flux module dependencies"
   VERBATIM
 )
 

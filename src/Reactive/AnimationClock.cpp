@@ -1,24 +1,13 @@
 #include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Reactive/Animation.hpp>
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Events.hpp>
-
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace flux {
-
-namespace {
-
-struct AnimationFramePulse {
-  std::int64_t deadlineNanos = 0;
-};
-
-} // namespace
 
 AnimationClock::AnimationClock() = default;
 
@@ -33,29 +22,27 @@ double AnimationClock::nowSeconds() {
   return static_cast<double>(ns.count()) * 1e-9;
 }
 
-void AnimationClock::install(EventQueue& q) {
-  if (installed_) {
+void AnimationClock::setFrameDriver(std::function<void()> requestFrame,
+                                    std::function<void()> requestRedraw) {
+  requestFrame_ = std::move(requestFrame);
+  requestRedraw_ = std::move(requestRedraw);
+  if (needsFramePump()) {
+    startFramePump();
+  }
+}
+
+void AnimationClock::clearFrameDriver() {
+  requestFrame_ = {};
+  requestRedraw_ = {};
+  running_ = false;
+}
+
+void AnimationClock::notifyFrame(std::int64_t deadlineNanos) {
+  if (!running_) {
     return;
   }
-  installed_ = true;
-  q.on<FrameEvent>([this, &q](FrameEvent const& e) {
-    if (!running_ || framePulseQueued_) {
-      return;
-    }
-    framePulseQueued_ = true;
-    q.post(AnimationFramePulse{.deadlineNanos = e.deadlineNanos});
-  });
-  q.on<AnimationFramePulse>([this](AnimationFramePulse const& pulse) {
-    framePulseQueued_ = false;
-    if (!running_) {
-      return;
-    }
-    onTick(pulse.deadlineNanos);
-    if (needsFramePump()) {
-      startFramePump();
-    }
-  });
-  if (needsFramePump() && !running_) {
+  onTick(deadlineNanos);
+  if (needsFramePump()) {
     startFramePump();
   }
 }
@@ -72,10 +59,10 @@ void AnimationClock::shutdown() {
   ownedActive_.clear();
   subscribers_.clear();
   nextSubscriberId_ = 1;
-  framePulseQueued_ = false;
+  requestFrame_ = {};
+  requestRedraw_ = {};
   dispatchingSubscribers_ = false;
   subscribersNeedCompaction_ = false;
-  installed_ = false;
 }
 
 bool AnimationClock::needsFramePump() const {
@@ -217,8 +204,8 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
     subscribersNeedCompaction_ = false;
   }
 
-  if (requestRedraw && Application::hasInstance()) {
-    Application::instance().requestRedraw();
+  if (requestRedraw && requestRedraw_) {
+    requestRedraw_();
   }
 
   if (!needsFramePump()) {
@@ -227,13 +214,13 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
 }
 
 void AnimationClock::startFramePump() {
-  if (!Application::hasInstance()) {
+  if (!requestFrame_) {
     return;
   }
   if (!running_) {
     running_ = true;
   }
-  Application::instance().requestAnimationFrames();
+  requestFrame_();
 }
 
 void AnimationClock::stopFramePump() {
@@ -241,7 +228,6 @@ void AnimationClock::stopFramePump() {
     return;
   }
   running_ = false;
-  framePulseQueued_ = false;
 }
 
 } // namespace flux

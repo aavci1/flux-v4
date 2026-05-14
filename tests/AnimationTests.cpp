@@ -207,6 +207,39 @@ TEST_CASE("Animation clip continues to completion after handle is dropped") {
   CHECK(AnimationClock::instance().testOwnedAnimationCount() == 0u);
 }
 
+TEST_CASE("AnimationClock delegates frame pump and redraw to installed driver") {
+  AnimationClock& clock = AnimationClock::instance();
+  clock.shutdown();
+
+  int frameRequests = 0;
+  int redrawRequests = 0;
+  clock.setFrameDriver([&] {
+    ++frameRequests;
+  }, [&] {
+    ++redrawRequests;
+  });
+
+  auto clip = addAnimation<float>(AnimationParams<float>{
+      .from = 0.f,
+      .to = 1.f,
+      .duration = 1.0,
+      .startedAt = 30.0,
+      .transition = Transition::linear(1.f),
+  });
+  (void)clip;
+
+  CHECK(frameRequests == 1);
+  clock.notifyFrame(30'500'000'000LL);
+  CHECK(redrawRequests == 1);
+  CHECK(frameRequests == 2);
+
+  clock.notifyFrame(31'000'000'000LL);
+  CHECK(redrawRequests == 2);
+  CHECK_FALSE(clock.needsFramePump());
+
+  clock.shutdown();
+}
+
 TEST_CASE("Animation clip cancel freezes the sampled value without completion") {
   int completionCount = 0;
   double const now = AnimationClock::nowSeconds();

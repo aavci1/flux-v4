@@ -48,6 +48,10 @@ namespace {
 
 Application* gCurrent = nullptr;
 
+struct AnimationFramePulse {
+  std::int64_t deadlineNanos = 0;
+};
+
 std::string jsonEscape(std::string const& input) {
   std::string out;
   out.reserve(input.size());
@@ -200,6 +204,7 @@ struct Application::Impl {
   };
   std::vector<TimerEntry> timers_;
   std::uint64_t nextTimerId_ = 1;
+  bool animationFramePulseQueued_ = false;
 
   int nextTimerTimeoutMs() const {
     using namespace std::chrono;
@@ -236,6 +241,13 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     saveOpenWindowStates();
     d->quit_ = true;
   });
+  AnimationClock::instance().setFrameDriver(
+      [this] {
+        requestAnimationFrames();
+      },
+      [this] {
+        requestRedraw();
+      });
 
   {
     NSBundle* const bundle = [NSBundle mainBundle];
@@ -294,6 +306,10 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   });
 
   d->eventQueue_.on<FrameEvent>([this](FrameEvent const& ev) {
+    if (!d->animationFramePulseQueued_ && AnimationClock::instance().needsFramePump()) {
+      d->animationFramePulseQueued_ = true;
+      d->eventQueue_.post(AnimationFramePulse{.deadlineNanos = ev.deadlineNanos});
+    }
     if (ev.windowHandle == 0) {
       return;
     }
@@ -311,8 +327,10 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     windowIt->second->platformWindow()->acknowledgeAnimationFrameTick();
   });
 
-  AnimationClock::instance().install(d->eventQueue_);
-
+  d->eventQueue_.on<AnimationFramePulse>([this](AnimationFramePulse const& pulse) {
+    d->animationFramePulseQueued_ = false;
+    AnimationClock::instance().notifyFrame(pulse.deadlineNanos);
+  });
 }
 
 Application::~Application() {

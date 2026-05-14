@@ -10,20 +10,17 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
 namespace flux {
 
 class AnimationBase;
-class Application;
-class EventQueue;
-template<typename Fn>
-void useFrame(Fn&& callback);
 
-/// One tick from the shared frame pump (`steady_clock` domain, same as `FrameEvent::deadlineNanos`).
+/// One tick from the shared frame pump (`steady_clock` domain).
 struct AnimationTick {
-  /// `steady_clock` time since epoch in nanoseconds (matches `FrameEvent::deadlineNanos`).
+  /// `steady_clock` time since epoch in nanoseconds.
   std::int64_t deadlineNanos = 0;
   /// Monotonic time in seconds (same domain as `AnimationBase::tick`).
   double nowSeconds = 0.;
@@ -45,12 +42,21 @@ public:
   static AnimationClock& instance();
   static double nowSeconds();
 
-  void install(EventQueue& q);
+  /// Framework integration: UI installs callbacks that arm the native frame pump and request redraws.
+  void setFrameDriver(std::function<void()> requestFrame, std::function<void()> requestRedraw);
+  void clearFrameDriver();
+  /// Called by the owning platform/UI layer when a frame boundary is reached.
+  void notifyFrame(std::int64_t deadlineNanos);
   void shutdown();
 
+  bool needsFramePump() const;
   void registerAnimation(AnimationBase* animation);
   void registerAnimation(std::shared_ptr<AnimationBase> animation);
   void unregisterAnimation(AnimationBase* animation);
+
+  /// Subscribe to the shared animation tick. Return a redraw action when output actually changes.
+  ObserverHandle subscribe(Reactive::SmallFn<FrameAction(AnimationTick const&)> callback);
+  void unsubscribe(ObserverHandle handle);
 
 #if defined(FLUX_TESTING)
   void testTick(double nowSeconds) { onTick(static_cast<std::int64_t>(nowSeconds * 1e9)); }
@@ -58,16 +64,8 @@ public:
 #endif
 
 private:
-  friend class Application;
-  template<typename Fn>
-  friend void useFrame(Fn&& callback);
-
   AnimationClock();
 
-  bool needsFramePump() const;
-  /// Subscribe to the shared animation tick. Return a redraw action when output actually changes.
-  ObserverHandle subscribe(Reactive::SmallFn<FrameAction(AnimationTick const&)> callback);
-  void unsubscribe(ObserverHandle handle);
   void onTick(std::int64_t deadlineNanos);
   void startFramePump();
   void stopFramePump();
@@ -82,10 +80,10 @@ private:
   std::vector<std::shared_ptr<AnimationBase>> ownedActive_;
   std::vector<Subscriber> subscribers_;
   std::uint64_t nextSubscriberId_ = 1;
+  std::function<void()> requestFrame_;
+  std::function<void()> requestRedraw_;
 
   bool running_ = false;
-  bool installed_ = false;
-  bool framePulseQueued_ = false;
   bool dispatchingSubscribers_ = false;
   bool subscribersNeedCompaction_ = false;
 };
