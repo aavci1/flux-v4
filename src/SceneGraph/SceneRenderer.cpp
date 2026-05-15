@@ -301,7 +301,15 @@ struct SceneRenderer::Impl {
         std::shared_ptr<Image> cached =
             node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
         if (!cached) {
-            cached = rasterizeToImage(*canvas, logicalSize, [this, &node](Canvas&, Rect) {
+            cached = rasterizeToImage(*canvas, logicalSize, [this, &node](Canvas& targetCanvas, Rect) {
+                CanvasRenderer targetRenderer(targetCanvas);
+                struct RendererRestore {
+                    Renderer*& renderer;
+                    Renderer* saved;
+                    ~RendererRestore() { renderer = saved; }
+                };
+                RendererRestore restore {renderer, renderer};
+                renderer = &targetRenderer;
                 for (std::unique_ptr<SceneNode> const &child : node.children()) {
                     renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
                 }

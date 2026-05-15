@@ -64,6 +64,9 @@ constexpr int kBackdropBlurIterations = 3;
 
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
+struct SharedVulkanCore;
+SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface);
+void releaseSharedVulkanCore();
 
 struct Rgba {
   std::uint8_t r = 0, g = 0, b = 0, a = 255;
@@ -80,6 +83,10 @@ struct VulkanImage final : Image {
   mutable VkDescriptorSet descriptor = VK_NULL_HANDLE;
   mutable bool uploaded = false;
   bool external = false;
+  bool ownsGpuResource = false;
+  bool ownsCoreReference = false;
+  VkDevice owningDevice = VK_NULL_HANDLE;
+  VmaAllocator owningAllocator = VK_NULL_HANDLE;
 
   VulkanImage(int w, int h, std::vector<Rgba> p) : width(w), height(h), pixels(std::move(p)) {}
   VulkanImage(VkImage externalImage, VkImageView externalView, VkFormat externalFormat,
@@ -87,7 +94,33 @@ struct VulkanImage final : Image {
       : width(static_cast<int>(w)), height(static_cast<int>(h)),
         format(externalFormat == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : externalFormat),
         image(externalImage), view(externalView), uploaded(true), external(true) {}
-  ~VulkanImage() override { evictImageTexturesFor(this); }
+  VulkanImage(VkDevice device, VmaAllocator allocator, VkImage ownedImage,
+              VmaAllocation ownedAllocation, VkImageView ownedView, VkFormat imageFormat,
+              int w, int h)
+      : width(w), height(h),
+        format(imageFormat == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : imageFormat),
+        image(ownedImage), allocation(ownedAllocation), view(ownedView), uploaded(true),
+        ownsGpuResource(true), owningDevice(device), owningAllocator(allocator) {
+    acquireSharedVulkanCore(VK_NULL_HANDLE);
+    ownsCoreReference = true;
+  }
+  ~VulkanImage() override {
+    evictImageTexturesFor(this);
+    if (ownsGpuResource) {
+      if (owningDevice) {
+        vkDeviceWaitIdle(owningDevice);
+      }
+      if (view && owningDevice) {
+        vkDestroyImageView(owningDevice, view, nullptr);
+      }
+      if (image && owningAllocator) {
+        vmaDestroyImage(owningAllocator, image, allocation);
+      }
+    }
+    if (ownsCoreReference) {
+      releaseSharedVulkanCore();
+    }
+  }
   Size size() const override { return {static_cast<float>(width), static_cast<float>(height)}; }
 };
 
@@ -896,76 +929,36 @@ public:
     int const pixelW = std::max(1, static_cast<int>(std::ceil(logicalSize.width * scale)));
     int const pixelH = std::max(1, static_cast<int>(std::ceil(logicalSize.height * scale)));
 
-    struct SavedFrameState {
-      int width = 1;
-      int height = 1;
-      int framebufferWidth = 1;
-      int framebufferHeight = 1;
-      VkExtent2D swapExtent{};
-      Color clearColor{};
-      DrawState state{};
-      std::vector<DrawState> stateStack;
-      std::vector<RectInstance> rects;
-      std::vector<QuadInstance> quads;
-      std::vector<ImageBatch> batches;
-      std::vector<DrawOp> ops;
-      std::vector<VulkanPathVertex> pathVerts;
-    };
-
-    SavedFrameState saved{
-        .width = width_,
-        .height = height_,
-        .framebufferWidth = framebufferWidth_,
-        .framebufferHeight = framebufferHeight_,
-        .swapExtent = swapExtent_,
-        .clearColor = clearColor_,
-        .state = state_,
-    };
-    std::swap(saved.stateStack, stateStack_);
-    std::swap(saved.rects, rects_);
-    std::swap(saved.quads, quads_);
-    std::swap(saved.batches, batches_);
-    std::swap(saved.ops, ops_);
-    std::swap(saved.pathVerts, pathVerts_);
-
-    auto restore = [&] {
-      width_ = saved.width;
-      height_ = saved.height;
-      framebufferWidth_ = saved.framebufferWidth;
-      framebufferHeight_ = saved.framebufferHeight;
-      swapExtent_ = saved.swapExtent;
-      clearColor_ = saved.clearColor;
-      state_ = saved.state;
-      std::swap(stateStack_, saved.stateStack);
-      std::swap(rects_, saved.rects);
-      std::swap(quads_, saved.quads);
-      std::swap(batches_, saved.batches);
-      std::swap(ops_, saved.ops);
-      std::swap(pathVerts_, saved.pathVerts);
-    };
-
-    width_ = logicalW;
-    height_ = logicalH;
-    framebufferWidth_ = pixelW;
-    framebufferHeight_ = pixelH;
-    swapExtent_ = VkExtent2D{static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH)};
-    rects_.clear();
-    quads_.clear();
-    batches_.clear();
-    ops_.clear();
-    pathVerts_.clear();
-    stateStack_.clear();
-    state_ = {};
-    state_.clip = Rect::sharp(0.f, 0.f, static_cast<float>(logicalW), static_cast<float>(logicalH));
-    clearColor_ = Colors::transparent;
-
+    Texture target{};
     try {
-      draw(*this, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
-      std::shared_ptr<Image> image = renderCurrentOpsToImage(pixelW, pixelH);
-      restore();
+      createRenderTargetTexture(target, pixelW, pixelH);
+      VulkanRenderTargetSpec spec{
+          .image = target.image,
+          .view = target.view,
+          .format = target.format,
+          .width = static_cast<std::uint32_t>(pixelW),
+          .height = static_cast<std::uint32_t>(pixelH),
+          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          .finalLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+      };
+      {
+        VulkanCanvas targetCanvas(spec, textSystem_);
+        targetCanvas.resize(logicalW, logicalH);
+        targetCanvas.updateDpiScale(scale, scale);
+        targetCanvas.beginFrame();
+        targetCanvas.clear(Colors::transparent);
+        draw(targetCanvas, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
+        targetCanvas.present();
+      }
+
+      auto image = std::make_shared<VulkanImage>(device_, allocator_, target.image, target.allocation,
+                                                 target.view, target.format, pixelW, pixelH);
+      target.image = VK_NULL_HANDLE;
+      target.allocation = VK_NULL_HANDLE;
+      target.view = VK_NULL_HANDLE;
       return image;
     } catch (...) {
-      restore();
+      destroyTexture(target);
       throw;
     }
   }
@@ -1202,10 +1195,8 @@ public:
     try {
       targetSpec_.width = std::max<std::uint32_t>(1, targetSpec_.width);
       targetSpec_.height = std::max<std::uint32_t>(1, targetSpec_.height);
-      width_ = static_cast<int>(targetSpec_.width);
-      height_ = static_cast<int>(targetSpec_.height);
-      framebufferWidth_ = width_;
-      framebufferHeight_ = height_;
+      framebufferWidth_ = static_cast<int>(targetSpec_.width);
+      framebufferHeight_ = static_cast<int>(targetSpec_.height);
       swapExtent_ = VkExtent2D{targetSpec_.width, targetSpec_.height};
 
       bool const externalCommandBuffer = targetSpec_.commandBuffer != VK_NULL_HANDLE;
@@ -2224,68 +2215,6 @@ private:
     upload(pathBuffer_, pathVerts_.data(), pathVerts_.size() * sizeof(VulkanPathVertex));
   }
 
-  std::shared_ptr<Image> renderCurrentOpsToImage(int pixelW, int pixelH) {
-    Texture target{};
-    Buffer readback{};
-    try {
-      createRenderTargetTexture(target, pixelW, pixelH);
-
-      uploadFrameBuffers();
-      uploadAtlasIfNeeded();
-
-      VkDeviceSize const byteSize = static_cast<VkDeviceSize>(pixelW) * pixelH * sizeof(Rgba);
-      ensureBuffer(readback, byteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
-      VkCommandBuffer commandBuffer = beginImmediate();
-      VkClearValue clear{};
-      clear.color.float32[0] = clearColor_.r;
-      clear.color.float32[1] = clearColor_.g;
-      clear.color.float32[2] = clearColor_.b;
-      clear.color.float32[3] = clearColor_.a;
-      transition(commandBuffer, target, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, target.view,
-                          VkExtent2D{static_cast<std::uint32_t>(pixelW),
-                                     static_cast<std::uint32_t>(pixelH)},
-                          clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawOps(commandBuffer);
-      vkCmdEndRendering(commandBuffer);
-      transition(commandBuffer, target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-      VkBufferImageCopy copy{};
-      copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      copy.imageSubresource.layerCount = 1;
-      copy.imageExtent = {static_cast<std::uint32_t>(pixelW), static_cast<std::uint32_t>(pixelH), 1};
-      vkCmdCopyImageToBuffer(commandBuffer, target.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                             readback.buffer, 1, &copy);
-      endImmediate(commandBuffer);
-
-      std::vector<Rgba> pixels(static_cast<std::size_t>(pixelW) * pixelH);
-      void *mapped = nullptr;
-      vkCheck(vmaInvalidateAllocation(allocator_, readback.allocation, 0, byteSize), "vmaInvalidateAllocation");
-      vkCheck(vmaMapMemory(allocator_, readback.allocation, &mapped), "vmaMapMemory");
-      auto const *bytes = static_cast<std::uint8_t const *>(mapped);
-      bool const bgra = surfaceFormat_.format == VK_FORMAT_B8G8R8A8_UNORM ||
-                        surfaceFormat_.format == VK_FORMAT_B8G8R8A8_SRGB;
-      for (int i = 0; i < pixelW * pixelH; ++i) {
-        if (bgra) {
-          pixels[static_cast<std::size_t>(i)] = Rgba{bytes[i * 4 + 2], bytes[i * 4 + 1],
-                                                     bytes[i * 4 + 0], bytes[i * 4 + 3]};
-        } else {
-          pixels[static_cast<std::size_t>(i)] = Rgba{bytes[i * 4 + 0], bytes[i * 4 + 1],
-                                                     bytes[i * 4 + 2], bytes[i * 4 + 3]};
-        }
-      }
-      vmaUnmapMemory(allocator_, readback.allocation);
-
-      destroyBuffer(readback);
-      destroyTexture(target);
-      return std::make_shared<VulkanImage>(pixelW, pixelH, std::move(pixels));
-    } catch (...) {
-      destroyBuffer(readback);
-      destroyTexture(target);
-      throw;
-    }
-  }
-
   void ensureBuffer(Buffer &buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
     if (buffer.buffer && buffer.capacity >= size)
       return;
@@ -2692,7 +2621,7 @@ private:
       return it->second.get();
     auto tex = std::make_unique<Texture>();
     try {
-      if (image.external) {
+      if (image.external || image.ownsGpuResource) {
         tex->image = image.image;
         tex->view = image.view;
         tex->format = image.format;

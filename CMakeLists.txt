@@ -539,6 +539,9 @@ if(FLUX_BUILD_TESTS)
   if(FLUX_PLATFORM_MACOS)
     list(APPEND _flux_test_sources tests/MetalCanvasTests.mm)
   endif()
+  if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
+    list(APPEND _flux_test_sources tests/VulkanRenderTargetTests.cpp)
+  endif()
   add_executable(flux_tests ${_flux_test_sources})
 
   target_include_directories(flux_tests PRIVATE
@@ -550,6 +553,9 @@ if(FLUX_BUILD_TESTS)
     flux
     doctest::doctest
   )
+  if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
+    target_link_libraries(flux_tests PRIVATE PkgConfig::VULKAN)
+  endif()
   target_compile_definitions(flux_tests PRIVATE FLUX_TESTING=1)
 
   set_target_properties(flux_tests PROPERTIES CXX_STANDARD 23)

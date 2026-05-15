@@ -622,10 +622,6 @@ public:
       dpiScaleX_ = static_cast<float>(cs);
       dpiScaleY_ = static_cast<float>(cs);
       dpiScale_ = std::min(dpiScaleX_, dpiScaleY_);
-    } else {
-      dpiScaleX_ = 1.f;
-      dpiScaleY_ = 1.f;
-      dpiScale_ = 1.f;
     }
     if (!targetMode_ && (logicalW_ <= 0 || logicalH_ <= 0)) {
       logicalW_ = static_cast<int>(std::lround(static_cast<double>(ds.width) / static_cast<double>(cs)));
@@ -703,13 +699,6 @@ public:
         requestRedraw_();
       }
       return;
-    }
-
-    std::shared_ptr<std::vector<PendingRasterPass>> pendingRasterKeepAlive;
-    if (!pendingRasterPasses_.empty()) {
-      pendingRasterKeepAlive = std::make_shared<std::vector<PendingRasterPass>>(std::move(pendingRasterPasses_));
-      pendingRasterPasses_.clear();
-      encodePendingRasterPasses(*pendingRasterKeepAlive);
     }
 
     id<MTLTexture> renderTargetTexture = drawable_.texture;
@@ -928,10 +917,6 @@ public:
 
     if (syncPresent_) {
       lastSubmittedCmdBuf_ = cmdBuf_;
-      auto keepAlive = pendingRasterKeepAlive;
-      if (keepAlive) {
-        [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { (void)keepAlive; }];
-      }
       [cmdBuf_ commit];
       [cmdBuf_ waitUntilScheduled];
       [drawable_ present];
@@ -939,9 +924,7 @@ public:
       syncPresent_ = false;
     } else {
       dispatch_semaphore_t sem = frameSem_;
-      auto keepAlive = pendingRasterKeepAlive;
       [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) {
-        (void)keepAlive;
         dispatch_semaphore_signal(sem);
       }];
       [cmdBuf_ presentDrawable:drawable_];
@@ -1566,26 +1549,6 @@ private:
     std::uint32_t roundedClipCount = 0;
   };
 
-  struct RasterCaptureMetrics {
-    int logicalW = 0;
-    int logicalH = 0;
-    float dpiScaleX = 1.f;
-    float dpiScaleY = 1.f;
-    float dpiScale = 1.f;
-    CGSize frameDrawableSize{};
-    float frameDrawableW = 0.f;
-    float frameDrawableH = 0.f;
-    NSUInteger frameDrawablePixelsW = 0;
-    NSUInteger frameDrawablePixelsH = 0;
-  };
-
-  struct PendingRasterPass {
-    MetalFrameRecorder recorded;
-    std::shared_ptr<Image> image;
-    NSUInteger pixelW = 0;
-    NSUInteger pixelH = 0;
-  };
-
   TextSystem& textSystem_;
   std::unique_ptr<GlyphAtlas> glyphAtlas_;
   MetalDeviceResources metal_;
@@ -1631,8 +1594,6 @@ private:
 
   MetalFrameRecorder frame_;
   MetalFrameRecorder* captureRecorder_{nullptr};
-  std::optional<RasterCaptureMetrics> rasterCaptureMetrics_{};
-  std::vector<PendingRasterPass> pendingRasterPasses_;
   std::vector<GpuState> stateStack_;
 
   MTLScissorRect clipScissor_{};
@@ -1734,8 +1695,12 @@ private:
     frameDrawableH_ = static_cast<float>(pixelH);
     frameDrawablePixelsW_ = pixelW;
     frameDrawablePixelsH_ = pixelH;
-    logicalW_ = static_cast<int>(pixelW);
-    logicalH_ = static_cast<int>(pixelH);
+    if (logicalW_ <= 0) {
+      logicalW_ = static_cast<int>(std::ceil(static_cast<float>(pixelW) / std::max(dpiScaleX_, 0.01f)));
+    }
+    if (logicalH_ <= 0) {
+      logicalH_ = static_cast<int>(std::ceil(static_cast<float>(pixelH) / std::max(dpiScaleY_, 0.01f)));
+    }
   }
 
   Rect viewportLogicalRect() const {
@@ -2303,48 +2268,6 @@ private:
     }
   }
 
-  void encodePendingRasterPasses(std::vector<PendingRasterPass>& passes) {
-    if (!cmdBuf_ || passes.empty()) {
-      return;
-    }
-    for (PendingRasterPass& pass : passes) {
-      if (!pass.image || pass.pixelW == 0 || pass.pixelH == 0) {
-        continue;
-      }
-      MetalImage const* image = tryMetalImage(*pass.image);
-      if (!image || !image->texture()) {
-        continue;
-      }
-
-      std::size_t const stateCount = std::max<std::size_t>(1, pass.recorded.opOrder.size());
-      id<MTLBuffer> uniformBuffer =
-          [metal_.device() newBufferWithLength:static_cast<NSUInteger>(stateCount * sizeof(MetalDrawUniforms))
-                                       options:MTLResourceStorageModeShared];
-      id<MTLBuffer> clipBuffer =
-          [metal_.device() newBufferWithLength:static_cast<NSUInteger>(stateCount * sizeof(MetalRoundedClipStack))
-                                       options:MTLResourceStorageModeShared];
-      if ((!uniformBuffer || !clipBuffer) && !pass.recorded.opOrder.empty()) {
-        continue;
-      }
-
-      MTLRenderPassDescriptor* passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-      passDescriptor.colorAttachments[0].texture = image->texture();
-      passDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-      passDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
-      passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-      id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:passDescriptor];
-      if (!enc) {
-        continue;
-      }
-      MTLViewport viewport = {0, 0, static_cast<double>(pass.pixelW), static_cast<double>(pass.pixelH), 0.0, 1.0};
-      [enc setViewport:viewport];
-      encodeRecorderOps(pass.recorded, enc, static_cast<float>(pass.pixelW), static_cast<float>(pass.pixelH),
-                        pass.pixelW, pass.pixelH, uniformBuffer, clipBuffer);
-      [enc endEncoding];
-    }
-  }
-
 public:
   float dpiScale() const noexcept override { return dpiScale_; }
 
@@ -2366,69 +2289,8 @@ public:
     updateClipScissor();
   }
 
-  bool beginRasterCacheCapture(MetalFrameRecorder* target, Size logicalSize, float dpiScale) {
-    if (!target || captureRecorder_ || logicalSize.width <= 0.f || logicalSize.height <= 0.f ||
-        dpiScale <= 0.f) {
-      return false;
-    }
-    NSUInteger const pixelW = static_cast<NSUInteger>(std::ceil(logicalSize.width * dpiScale));
-    NSUInteger const pixelH = static_cast<NSUInteger>(std::ceil(logicalSize.height * dpiScale));
-    if (pixelW == 0 || pixelH == 0) {
-      return false;
-    }
-    target->clear();
-    rasterCaptureMetrics_ = RasterCaptureMetrics{
-        .logicalW = logicalW_,
-        .logicalH = logicalH_,
-        .dpiScaleX = dpiScaleX_,
-        .dpiScaleY = dpiScaleY_,
-        .dpiScale = dpiScale_,
-        .frameDrawableSize = frameDrawableSize_,
-        .frameDrawableW = frameDrawableW_,
-        .frameDrawableH = frameDrawableH_,
-        .frameDrawablePixelsW = frameDrawablePixelsW_,
-        .frameDrawablePixelsH = frameDrawablePixelsH_,
-    };
-    captureRecorder_ = target;
-    logicalW_ = static_cast<int>(std::ceil(logicalSize.width));
-    logicalH_ = static_cast<int>(std::ceil(logicalSize.height));
-    dpiScaleX_ = dpiScale;
-    dpiScaleY_ = dpiScale;
-    dpiScale_ = dpiScale;
-    frameDrawableSize_ = CGSizeMake(static_cast<CGFloat>(pixelW), static_cast<CGFloat>(pixelH));
-    frameDrawableW_ = static_cast<float>(pixelW);
-    frameDrawableH_ = static_cast<float>(pixelH);
-    frameDrawablePixelsW_ = pixelW;
-    frameDrawablePixelsH_ = pixelH;
-    stateStack_.push_back(GpuState{});
-    updateClipScissor();
-    return true;
-  }
-
-  void endRasterCacheCapture() {
-    captureRecorder_ = nullptr;
-    if (!stateStack_.empty()) {
-      stateStack_.pop_back();
-    }
-    if (rasterCaptureMetrics_.has_value()) {
-      RasterCaptureMetrics const metrics = *rasterCaptureMetrics_;
-      logicalW_ = metrics.logicalW;
-      logicalH_ = metrics.logicalH;
-      dpiScaleX_ = metrics.dpiScaleX;
-      dpiScaleY_ = metrics.dpiScaleY;
-      dpiScale_ = metrics.dpiScale;
-      frameDrawableSize_ = metrics.frameDrawableSize;
-      frameDrawableW_ = metrics.frameDrawableW;
-      frameDrawableH_ = metrics.frameDrawableH;
-      frameDrawablePixelsW_ = metrics.frameDrawablePixelsW;
-      frameDrawablePixelsH_ = metrics.frameDrawablePixelsH;
-      rasterCaptureMetrics_.reset();
-    }
-    updateClipScissor();
-  }
-
-  std::shared_ptr<Image> rasterizeRecordedOps(MetalFrameRecorder& recorded, Size logicalSize,
-                                              float dpiScale) {
+  std::shared_ptr<Image> rasterizeWithRenderTarget(Size logicalSize, RasterizeDrawCallback const& draw,
+                                                   float dpiScale) {
     if (logicalSize.width <= 0.f || logicalSize.height <= 0.f || dpiScale <= 0.f) {
       return nullptr;
     }
@@ -2449,19 +2311,21 @@ public:
     if (!texture) {
       return nullptr;
     }
-
-    if (!prepareRecorderForStandaloneEncoding(recorded)) {
-      return nullptr;
-    }
-
-    auto image = std::make_shared<MetalImage>(texture);
-    pendingRasterPasses_.push_back(PendingRasterPass{
-        .recorded = std::move(recorded),
-        .image = image,
-        .pixelW = pixelW,
-        .pixelH = pixelH,
-    });
-    return image;
+    MetalRenderTargetSpec spec{
+        .texture = (__bridge void*)texture,
+        .width = static_cast<std::uint32_t>(pixelW),
+        .height = static_cast<std::uint32_t>(pixelH),
+    };
+    auto targetCanvas = std::make_unique<MetalCanvas>(spec, textSystem_);
+    targetCanvas->resize(static_cast<int>(std::ceil(logicalSize.width)),
+                         static_cast<int>(std::ceil(logicalSize.height)));
+    targetCanvas->updateDpiScale(dpiScale, dpiScale);
+    targetCanvas->beginFrame();
+    targetCanvas->clear(Colors::transparent);
+    draw(*targetCanvas, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
+    targetCanvas->present();
+    return std::make_shared<MetalImage>(texture, static_cast<std::uint32_t>(pixelW),
+                                        static_cast<std::uint32_t>(pixelH));
   }
 
   void* preparedRectInstanceBuffer(MetalFrameRecorder const& recorded) {
@@ -2566,43 +2430,6 @@ public:
     recorded.preparedGlyphVertexBuffer = (__bridge_retained void*)buffer;
     recorded.preparedGlyphVertexCapacity = vertexCount;
     return recorded.preparedGlyphVertexBuffer;
-  }
-
-  bool prepareRecorderForStandaloneEncoding(MetalFrameRecorder& recorded) {
-    void* const rectBuffer = recorded.rectOps.empty() ? nullptr : preparedRectInstanceBuffer(recorded);
-    if (!recorded.rectOps.empty() && !rectBuffer) {
-      return false;
-    }
-    void* const imageBuffer = recorded.imageOps.empty() ? nullptr : preparedImageInstanceBuffer(recorded);
-    if (!recorded.imageOps.empty() && !imageBuffer) {
-      return false;
-    }
-    void* const pathBuffer = recorded.pathVerts.empty() ? nullptr : preparedPathVertexBuffer(recorded);
-    if (!recorded.pathVerts.empty() && !pathBuffer) {
-      return false;
-    }
-    void* const glyphBuffer = recorded.glyphVerts.empty() ? nullptr : preparedGlyphVertexBuffer(recorded);
-    if (!recorded.glyphVerts.empty() && !glyphBuffer) {
-      return false;
-    }
-
-    for (std::size_t i = 0; i < recorded.rectOps.size(); ++i) {
-      MetalRectOp& op = recorded.rectOps[i];
-      op.externalInstanceBuffer = rectBuffer;
-      op.externalInstanceIndex = static_cast<std::uint32_t>(i);
-    }
-    for (std::size_t i = 0; i < recorded.imageOps.size(); ++i) {
-      MetalImageOp& op = recorded.imageOps[i];
-      op.externalInstanceBuffer = imageBuffer;
-      op.externalInstanceIndex = static_cast<std::uint32_t>(i);
-    }
-    for (MetalPathOp& op : recorded.pathOps) {
-      op.externalVertexBuffer = pathBuffer;
-    }
-    for (MetalGlyphOp& op : recorded.glyphOps) {
-      op.externalVertexBuffer = glyphBuffer;
-    }
-    return true;
   }
 
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
@@ -2949,13 +2776,6 @@ public:
       return;
     }
 
-    std::shared_ptr<std::vector<PendingRasterPass>> pendingRasterKeepAlive;
-    if (!pendingRasterPasses_.empty()) {
-      pendingRasterKeepAlive = std::make_shared<std::vector<PendingRasterPass>>(std::move(pendingRasterPasses_));
-      pendingRasterPasses_.clear();
-      encodePendingRasterPasses(*pendingRasterKeepAlive);
-    }
-
     bool const encodedBackdropFrame = hasBackdropBlurOps(frame_) && encodeFrameWithBackdropBlur(texture, texture, 1);
     if (!encodedBackdropFrame) {
       MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
@@ -2981,18 +2801,11 @@ public:
 
     lastSubmittedCmdBuf_ = cmdBuf_;
     if (!externalCommandBuffer) {
-      auto keepAlive = pendingRasterKeepAlive;
-      if (keepAlive) {
-        [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { (void)keepAlive; }];
-      }
       [cmdBuf_ commit];
       if (!targetSharedEvent()) {
         [cmdBuf_ waitUntilCompleted];
       }
       debug::perf::recordPresentedFrame();
-    } else if (pendingRasterKeepAlive) {
-      auto keepAlive = pendingRasterKeepAlive;
-      [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { (void)keepAlive; }];
     }
 
     frame_.clear();
@@ -3067,25 +2880,7 @@ std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize,
     return nullptr;
   }
   float const resolvedDpiScale = dpiScale > 0.f ? dpiScale : mc->dpiScale();
-
-  MetalFrameRecorder recorded;
-  if (!mc->beginRasterCacheCapture(&recorded, logicalSize, resolvedDpiScale)) {
-    return nullptr;
-  }
-
-  struct CaptureGuard {
-    MetalCanvas* canvas = nullptr;
-    ~CaptureGuard() {
-      if (canvas) {
-        canvas->endRasterCacheCapture();
-      }
-    }
-  } guard{mc};
-
-  draw(canvas, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
-  guard.canvas = nullptr;
-  mc->endRasterCacheCapture();
-  return mc->rasterizeRecordedOps(recorded, logicalSize, resolvedDpiScale);
+  return mc->rasterizeWithRenderTarget(logicalSize, draw, resolvedDpiScale);
 }
 
 bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target) {
