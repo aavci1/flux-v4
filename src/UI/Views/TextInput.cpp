@@ -4,7 +4,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Effect.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/RenderNode.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
@@ -285,18 +285,18 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   auto layoutResult = std::make_shared<detail::TextEditLayoutResult>();
   setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize, layoutResult);
 
-  auto interaction = std::make_unique<scenegraph::InteractionData>();
+  auto interaction = std::make_unique<InteractionData>();
   if (ComponentKey const* scopeKey = detail::currentInteractionScopeKey()) {
     ComponentKey targetKey = *scopeKey;
     for (LocalId const id : ctx.measureContext().currentElementKey().materialize()) {
       targetKey.push_back(id);
     }
-    interaction->stableTargetKey = std::move(targetKey);
+    interaction->stableTargetKey_ = std::move(targetKey);
   } else {
-    interaction->stableTargetKey = ctx.measureContext().currentElementKey();
+    interaction->stableTargetKey_ = ctx.measureContext().currentElementKey();
   }
   interaction->cursor = disabled ? Cursor::Inherit : Cursor::IBeam;
-  interaction->focusable = !disabled;
+  interaction->focusable_ = !disabled;
   Signal<bool> focusState = interaction->focusSignal;
   Animated<float> caretOpacity{1.f};
 

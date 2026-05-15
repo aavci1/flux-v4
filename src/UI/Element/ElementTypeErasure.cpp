@@ -1,7 +1,7 @@
 #include <Flux/UI/Element.hpp>
 
 #include <Flux/Reactive/Effect.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
@@ -429,15 +429,15 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
 
   auto* rawWrapper = wrapper.get();
   if (modifiers.hasInteraction()) {
-    auto interaction = std::make_unique<scenegraph::InteractionData>();
+    auto interaction = std::make_unique<InteractionData>();
     if (ComponentKey const* scopeKey = detail::currentInteractionScopeKey()) {
       ComponentKey targetKey = *scopeKey;
       for (LocalId const id : ctx.measureContext().currentElementKey().materialize()) {
         targetKey.push_back(id);
       }
-      interaction->stableTargetKey = std::move(targetKey);
+      interaction->stableTargetKey_ = std::move(targetKey);
     } else {
-      interaction->stableTargetKey = ctx.measureContext().currentElementKey();
+      interaction->stableTargetKey_ = ctx.measureContext().currentElementKey();
     }
     interaction->onTap = modifiers.onTap;
     interaction->onPointerEnter = modifiers.onPointerEnter;
@@ -451,7 +451,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     interaction->onKeyDown = modifiers.onKeyDown;
     interaction->onKeyUp = modifiers.onKeyUp;
     interaction->onTextInput = modifiers.onTextInput;
-    interaction->focusable = modifiers.focusable;
+    interaction->focusable_ = modifiers.focusable;
     interaction->cursor = modifiers.cursor;
     if (detail::InteractionSignalBundle const* signals = detail::currentInteractionSignals()) {
       interaction->hoverSignal = signals->hover;

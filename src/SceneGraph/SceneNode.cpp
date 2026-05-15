@@ -1,6 +1,6 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/Interaction.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
 
 #include "SceneGraph/LayoutDebugHooks.hpp"
@@ -209,15 +209,15 @@ std::span<std::unique_ptr<SceneNode>> SceneNode::children() noexcept {
     return children_;
 }
 
-InteractionData *SceneNode::interaction() noexcept {
+Interaction *SceneNode::interaction() noexcept {
     return interaction_.get();
 }
 
-InteractionData const *SceneNode::interaction() const noexcept {
+Interaction const *SceneNode::interaction() const noexcept {
     return interaction_.get();
 }
 
-void SceneNode::setInteraction(std::unique_ptr<InteractionData> interactionValue) {
+void SceneNode::setInteraction(std::unique_ptr<Interaction> interactionValue) {
     interaction_ = std::move(interactionValue);
 }
 

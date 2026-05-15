@@ -6,7 +6,7 @@
 
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
@@ -303,7 +303,7 @@ TEST_CASE("Scenegraph hit testing honors node transforms") {
     auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 120.f});
     auto rect = std::make_unique<RectNode>(Rect {20.f, 30.f, 40.f, 20.f}, FillStyle::solid(Colors::red));
     auto interaction = std::make_unique<InteractionData>();
-    interaction->stableTargetKey = ComponentKey {LocalId::fromString("scaled")};
+    interaction->stableTargetKey_ = ComponentKey {LocalId::fromString("scaled")};
     interaction->cursor = Cursor::Hand;
     rect->setInteraction(std::move(interaction));
     rect->setTransform(Mat3::scale(2.f, 2.f));
@@ -313,7 +313,7 @@ TEST_CASE("Scenegraph hit testing honors node transforms") {
 
     auto hit = hitTestInteraction(graph, Point {80.f, 40.f});
     REQUIRE(hit.has_value());
-    CHECK(hit->interaction->stableTargetKey == ComponentKey {LocalId::fromString("scaled")});
+    CHECK(hit->interaction->stableTargetKey() == ComponentKey {LocalId::fromString("scaled")});
     CHECK(hit->localPoint == Point {30.f, 5.f});
 
     CHECK_FALSE(hitTestInteraction(graph, Point {110.f, 40.f}).has_value());
@@ -326,7 +326,7 @@ TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
     container->setClipsContents(true);
     auto child = std::make_unique<RectNode>(Rect {0.f, 0.f, 100.f, 100.f}, FillStyle::solid(Colors::blue));
     auto interaction = std::make_unique<InteractionData>();
-    interaction->stableTargetKey = ComponentKey {LocalId::fromString("clipped")};
+    interaction->stableTargetKey_ = ComponentKey {LocalId::fromString("clipped")};
     child->setInteraction(std::move(interaction));
     container->appendChild(std::move(child));
     root->appendChild(std::move(container));
@@ -336,7 +336,7 @@ TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
     CHECK_FALSE(hitTestInteraction(graph, Point {22.f, 22.f}).has_value());
     auto hit = hitTestInteraction(graph, Point {70.f, 70.f});
     REQUIRE(hit.has_value());
-    CHECK(hit->interaction->stableTargetKey == ComponentKey {LocalId::fromString("clipped")});
+    CHECK(hit->interaction->stableTargetKey() == ComponentKey {LocalId::fromString("clipped")});
 }
 
 TEST_CASE("Scenegraph interaction lookup collects focusable keys") {
@@ -344,15 +344,15 @@ TEST_CASE("Scenegraph interaction lookup collects focusable keys") {
 
     auto panel = std::make_unique<RectNode>(Rect {10.f, 10.f, 80.f, 40.f}, FillStyle::none());
     auto panelInteraction = std::make_unique<InteractionData>();
-    panelInteraction->stableTargetKey =
+    panelInteraction->stableTargetKey_ =
         ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")};
-    panelInteraction->focusable = true;
+    panelInteraction->focusable_ = true;
     panel->setInteraction(std::move(panelInteraction));
     root->appendChild(std::move(panel));
 
     auto label = std::make_unique<TextNode>(Rect {20.f, 60.f, 40.f, 16.f});
     auto labelInteraction = std::make_unique<InteractionData>();
-    labelInteraction->stableTargetKey = ComponentKey {LocalId::fromString("label")};
+    labelInteraction->stableTargetKey_ = ComponentKey {LocalId::fromString("label")};
     label->setInteraction(std::move(labelInteraction));
     root->appendChild(std::move(label));
 

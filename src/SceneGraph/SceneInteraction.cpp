@@ -10,8 +10,8 @@
 
 namespace flux::scenegraph {
 
-std::pair<SceneNode const*, InteractionData const*> findInteractionByKey(SceneGraph const& graph,
-                                                                         ComponentKey const& key) {
+std::pair<SceneNode const*, Interaction const*> findInteractionByKey(SceneGraph const& graph,
+                                                                     ComponentKey const& key) {
     if (key.empty()) {
         return {nullptr, nullptr};
     }
@@ -19,25 +19,25 @@ std::pair<SceneNode const*, InteractionData const*> findInteractionByKey(SceneGr
     SceneNode const* match = nullptr;
     walkSceneGraph(graph.root(), [&](SceneNode const& node) {
         if (!match) {
-            if (InteractionData const* interaction = node.interaction();
-                interaction && interaction->stableTargetKey == key) {
+            if (Interaction const* interaction = node.interaction();
+                interaction && interaction->stableTargetKey() == key) {
                 match = &node;
             }
         }
     });
-    return match ? std::pair<SceneNode const*, InteractionData const*>{match, match->interaction()}
-                 : std::pair<SceneNode const*, InteractionData const*>{nullptr, nullptr};
+    return match ? std::pair<SceneNode const*, Interaction const*>{match, match->interaction()}
+                 : std::pair<SceneNode const*, Interaction const*>{nullptr, nullptr};
 }
 
 std::optional<InteractionHitResult> hitTestInteraction(SceneGraph const& graph, Point rootPoint) {
-    return hitTestInteraction(graph, rootPoint, [](InteractionData const&) { return true; });
+    return hitTestInteraction(graph, rootPoint, [](Interaction const&) { return true; });
 }
 
 std::optional<InteractionHitResult> hitTestInteraction(
     SceneGraph const& graph, Point rootPoint,
-    Reactive::SmallFn<bool(InteractionData const&)> const& acceptTarget) {
+    Reactive::SmallFn<bool(Interaction const&)> const& acceptTarget) {
     if (auto hit = hitTestNode(graph.root(), rootPoint, [&](SceneNode const& node) {
-            if (InteractionData const* interaction = node.interaction()) {
+            if (Interaction const* interaction = node.interaction()) {
                 return acceptTarget(*interaction);
             }
             return false;
@@ -54,9 +54,9 @@ std::optional<InteractionHitResult> hitTestInteraction(
 std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph) {
     std::vector<ComponentKey> out{};
     walkSceneGraph(graph.root(), [&](SceneNode const& node) {
-        if (InteractionData const* interaction = node.interaction();
-            interaction && interaction->focusable.evaluate() && !interaction->stableTargetKey.empty()) {
-            out.push_back(interaction->stableTargetKey);
+        if (Interaction const* interaction = node.interaction();
+            interaction && interaction->focusable() && !interaction->stableTargetKey().empty()) {
+            out.push_back(interaction->stableTargetKey());
         }
     });
     return out;

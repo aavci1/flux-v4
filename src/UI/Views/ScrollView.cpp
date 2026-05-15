@@ -3,7 +3,7 @@
 #include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Detail/MountPosition.hpp>
 #include <Flux/UI/MeasureContext.hpp>
@@ -327,7 +327,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     });
   });
 
-  auto interaction = std::make_unique<scenegraph::InteractionData>();
+  auto interaction = std::make_unique<InteractionData>();
   Reactive::SmallFn<void()> const scrollRedraw = ctx.redrawCallback();
   auto revealIndicators = [indicatorOpacity, scrollIdleProgress,
                            indicatorFadeTargetVisible,

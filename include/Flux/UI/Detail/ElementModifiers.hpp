@@ -5,6 +5,7 @@
 /// Internal retained-UI state used by `Element` measurement/build plumbing.
 
 #include <Flux/UI/Cursor.hpp>
+#include <Flux/UI/Input.hpp>
 #include <Flux/Core/Identity.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Detail/SmallVector.hpp>

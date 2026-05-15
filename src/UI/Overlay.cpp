@@ -8,7 +8,7 @@
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneInteraction.hpp>
 
@@ -209,11 +209,11 @@ bool updateAutoFlipPlacement(OverlayEntry& entry, Size windowSize, Rect contentB
   return true;
 }
 
-std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& window,
+std::unique_ptr<InteractionData> makeBackdropInteraction(Window& window,
                                                                      OverlayEntry& entry,
                                                                      bool dismissOnTap,
                                                                      bool captureScroll) {
-  auto interaction = std::make_unique<scenegraph::InteractionData>();
+  auto interaction = std::make_unique<InteractionData>();
   interaction->cursor = Cursor::Arrow;
   if (captureScroll) {
     interaction->onScroll = [](Vec2) {};

@@ -25,7 +25,7 @@ namespace scenegraph {
 
 class Renderer;
 class PreparedRenderOps;
-struct InteractionData;
+class Interaction;
 
 namespace detail {
 struct SceneNodeAccess;
@@ -88,9 +88,9 @@ class SceneNode {
     SceneNode *parent() const noexcept;
     std::span<std::unique_ptr<SceneNode> const> children() const noexcept;
     std::span<std::unique_ptr<SceneNode>> children() noexcept;
-    InteractionData *interaction() noexcept;
-    InteractionData const *interaction() const noexcept;
-    void setInteraction(std::unique_ptr<InteractionData> interaction);
+    Interaction *interaction() noexcept;
+    Interaction const *interaction() const noexcept;
+    void setInteraction(std::unique_ptr<Interaction> interaction);
 
     void appendChild(std::unique_ptr<SceneNode> child);
     void insertChild(std::size_t index, std::unique_ptr<SceneNode> child);
@@ -126,7 +126,7 @@ class SceneNode {
     bool hasLayoutConstraints_ = false;
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
-    std::unique_ptr<InteractionData> interaction_{};
+    std::unique_ptr<Interaction> interaction_{};
     RelayoutFn relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;

@@ -8,6 +8,7 @@
 /// Inline bodies live in `Flux/UI/Detail/ViewModifierInlines.hpp` and require `Element` to be complete.
 
 #include <Flux/UI/Cursor.hpp>
+#include <Flux/UI/Input.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>

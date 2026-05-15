@@ -4,7 +4,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/MeasureContext.hpp>
@@ -435,27 +435,28 @@ TEST_CASE("interaction hooks attach reactive signals to mounted interaction data
 
   REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
   auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
-  REQUIRE(rect.interaction() != nullptr);
+  auto const* interaction = flux::interactionData(rect);
+  REQUIRE(interaction != nullptr);
   CHECK(solidColor(rect) == flux::Colors::black);
 
-  rect.interaction()->hoverSignal.set(true);
+  interaction->hoverSignal.set(true);
   CHECK(solidColor(rect) == flux::Colors::red);
-  rect.interaction()->hoverSignal.set(false);
+  interaction->hoverSignal.set(false);
   CHECK(solidColor(rect) == flux::Colors::black);
 
-  rect.interaction()->pressSignal.set(true);
+  interaction->pressSignal.set(true);
   CHECK(solidColor(rect) == flux::Colors::green);
-  rect.interaction()->pressSignal.set(false);
+  interaction->pressSignal.set(false);
   CHECK(solidColor(rect) == flux::Colors::black);
 
-  rect.interaction()->focusSignal.set(true);
+  interaction->focusSignal.set(true);
   CHECK(solidColor(rect) == flux::Colors::blue);
-  rect.interaction()->focusSignal.set(false);
+  interaction->focusSignal.set(false);
   CHECK(solidColor(rect) == flux::Colors::black);
 
-  rect.interaction()->keyboardFocusSignal.set(true);
+  interaction->keyboardFocusSignal.set(true);
   CHECK(solidColor(rect) == flux::Colors::yellow);
-  rect.interaction()->keyboardFocusSignal.set(false);
+  interaction->keyboardFocusSignal.set(false);
   CHECK(solidColor(rect) == flux::Colors::black);
 }
 
@@ -840,9 +841,10 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
   };
 
   root.mount(sceneGraph);
-  REQUIRE(sceneGraph.root().interaction() != nullptr);
-  REQUIRE(sceneGraph.root().interaction()->onTap);
-  sceneGraph.root().interaction()->onTap(flux::MouseButton::Left);
+  auto const* interaction = flux::interactionData(sceneGraph.root());
+  REQUIRE(interaction != nullptr);
+  REQUIRE(interaction->onTap);
+  interaction->onTap(flux::MouseButton::Left);
   CHECK(sceneGraph.root().size() == flux::Size{64.f, 10.f});
 
   root.resize(flux::Size{320.f, 180.f}, sceneGraph);
@@ -979,9 +981,10 @@ TEST_CASE("modifier-wrapped root ScrollView keeps viewport height after resize")
   CHECK(viewport.get().height == doctest::Approx(60.f));
   CHECK(content.get().height == doctest::Approx(200.f));
 
-  REQUIRE(scrollViewport.interaction() != nullptr);
-  REQUIRE(scrollViewport.interaction()->onScroll);
-  scrollViewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
+  auto const* scrollInteraction = flux::interactionData(scrollViewport);
+  REQUIRE(scrollInteraction != nullptr);
+  REQUIRE(scrollInteraction->onScroll);
+  scrollInteraction->onScroll(flux::Vec2{0.f, -12.f});
 
   CHECK(offset.get().y == doctest::Approx(12.f));
   REQUIRE(scrollViewport.children().size() >= 1);
@@ -1030,9 +1033,10 @@ TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
   CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
 
-  REQUIRE(viewport.interaction() != nullptr);
-  REQUIRE(viewport.interaction()->onScroll);
-  viewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
+  auto const* scrollInteraction = flux::interactionData(viewport);
+  REQUIRE(scrollInteraction != nullptr);
+  REQUIRE(scrollInteraction->onScroll);
+  scrollInteraction->onScroll(flux::Vec2{0.f, -12.f});
 
   CHECK(content.position().y == doctest::Approx(-32.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
@@ -1243,9 +1247,10 @@ TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
   CHECK(overlay.children()[0]->bounds().x == doctest::Approx(73.f));
   float const initialIndicatorY = overlay.children()[0]->bounds().y;
 
-  REQUIRE(viewport.interaction() != nullptr);
-  REQUIRE(viewport.interaction()->onScroll);
-  viewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
+  auto const* scrollInteraction = flux::interactionData(viewport);
+  REQUIRE(scrollInteraction != nullptr);
+  REQUIRE(scrollInteraction->onScroll);
+  scrollInteraction->onScroll(flux::Vec2{0.f, -12.f});
 
   CHECK(viewport.children()[0]->position().y == doctest::Approx(-12.f));
   CHECK(overlay.opacity() == doctest::Approx(0.f));
@@ -1287,8 +1292,9 @@ TEST_CASE("ScrollView updates content size when mounted content grows reactively
   childHeight = 90.f;
 
   CHECK(contentSize.peek().height == doctest::Approx(90.f));
-  REQUIRE(sceneGraph.root().interaction() != nullptr);
-  sceneGraph.root().interaction()->onScroll(flux::Vec2{0.f, -50.f});
+  auto const* scrollInteraction = flux::interactionData(sceneGraph.root());
+  REQUIRE(scrollInteraction != nullptr);
+  scrollInteraction->onScroll(flux::Vec2{0.f, -50.f});
   REQUIRE(sceneGraph.root().children().size() >= 1);
   CHECK(sceneGraph.root().children()[0]->position().y == doctest::Approx(-50.f));
 }

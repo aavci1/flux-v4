@@ -5,7 +5,7 @@
 #include <Flux/UI/KeyCodes.hpp>
 #include <Flux/UI/Window.hpp>
 #include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneTraversal.hpp>
@@ -24,7 +24,7 @@ namespace {
 
 struct RuntimeTargetSnapshot {
   scenegraph::SceneNode const* node = nullptr;
-  scenegraph::InteractionData const* interaction = nullptr;
+  InteractionData const* interaction = nullptr;
   ComponentKey stableTargetKey{};
   OverlayId overlay{};
   bool inOverlay = false;
@@ -196,14 +196,14 @@ namespace {
 
 struct HitTarget {
   scenegraph::SceneNode const* node = nullptr;
-  scenegraph::InteractionData const* interaction = nullptr;
+  InteractionData const* interaction = nullptr;
   Point localPoint{};
   OverlayId overlay{};
 };
 
-using InteractionFilter = Reactive::SmallFn<bool(scenegraph::InteractionData const&)>;
+using InteractionFilter = Reactive::SmallFn<bool(scenegraph::Interaction const&)>;
 
-bool acceptAnyInteraction(scenegraph::InteractionData const&) {
+bool acceptAnyInteraction(scenegraph::Interaction const&) {
   return true;
 }
 
@@ -217,20 +217,20 @@ std::optional<HitTarget> hitOverlay(OverlayEntry const& entry, Point windowPoint
   if (auto hit = scenegraph::hitTestInteraction(entry.sceneGraph, local, acceptTarget)) {
     return HitTarget{
         .node = hit->node,
-        .interaction = hit->interaction,
+        .interaction = hit->interaction ? &interactionData(*hit->interaction) : nullptr,
         .localPoint = hit->localPoint,
         .overlay = entry.id,
     };
   }
   scenegraph::SceneNode const& root = entry.sceneGraph.root();
-  scenegraph::InteractionData const* rootInteraction = root.interaction();
+  scenegraph::Interaction const* rootInteraction = root.interaction();
   if (rootInteraction && acceptTarget(*rootInteraction)) {
     Size const rootSize = root.size();
     if (windowPoint.x >= 0.f && windowPoint.y >= 0.f &&
         windowPoint.x <= rootSize.width && windowPoint.y <= rootSize.height) {
       return HitTarget{
           .node = &root,
-          .interaction = rootInteraction,
+          .interaction = &interactionData(*rootInteraction),
           .localPoint = windowPoint,
           .overlay = entry.id,
       };
@@ -253,7 +253,7 @@ std::optional<HitTarget> hitWindow(Window& window, Point point,
     if (auto hit = scenegraph::hitTestInteraction(window.sceneGraph(), point, acceptTarget)) {
       return HitTarget{
           .node = hit->node,
-          .interaction = hit->interaction,
+          .interaction = hit->interaction ? &interactionData(*hit->interaction) : nullptr,
           .localPoint = hit->localPoint,
       };
     }
@@ -287,10 +287,11 @@ void appendFocusableTargets(scenegraph::SceneGraph const& graph, OverlayId overl
                             std::vector<HitTarget>& out) {
   for (ComponentKey const& key : scenegraph::collectFocusableKeys(graph)) {
     auto const [node, interaction] = scenegraph::findInteractionByKey(graph, key);
-    if (node && interaction && interaction->focusable.evaluate()) {
+    InteractionData const* data = interaction ? &interactionData(*interaction) : nullptr;
+    if (node && data && interaction->focusable()) {
       out.push_back(HitTarget{
           .node = node,
-          .interaction = interaction,
+          .interaction = data,
           .localPoint = {},
           .overlay = overlay,
       });
@@ -331,7 +332,7 @@ bool invalidateRenderCaches(Window& window) {
 }
 
 RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
-                               scenegraph::InteractionData const* interaction,
+                               InteractionData const* interaction,
                                OverlayId overlay) {
   RuntimeTargetSnapshot target{};
   target.node = node;
@@ -339,9 +340,9 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
   target.overlay = overlay;
   target.inOverlay = overlay.isValid();
   if (interaction) {
-    target.stableTargetKey = interaction->stableTargetKey;
+    target.stableTargetKey = interaction->stableTargetKey_;
     target.cursor = interaction->cursor.evaluate();
-    target.focusable = interaction->focusable.evaluate();
+    target.focusable = interaction->focusable_.evaluate();
     target.onPointerEnter = interaction->onPointerEnter;
     target.onPointerExit = interaction->onPointerExit;
     target.onFocus = interaction->onFocus;
@@ -379,8 +380,8 @@ bool sameTarget(RuntimeTargetSnapshot const& lhs, HitTarget const& rhs) {
 std::vector<RuntimeTargetSnapshot> hoverChainForHit(HitTarget const& hit) {
   std::vector<RuntimeTargetSnapshot> chain;
   for (scenegraph::SceneNode const* node = hit.node; node; node = node->parent()) {
-    if (scenegraph::InteractionData const* interaction = node->interaction()) {
-      chain.push_back(snapshot(node, interaction, hit.overlay));
+    if (scenegraph::Interaction const* interaction = node->interaction()) {
+      chain.push_back(snapshot(node, &interactionData(*interaction), hit.overlay));
     }
   }
   std::reverse(chain.begin(), chain.end());
@@ -461,8 +462,8 @@ void updateCursorForPoint(RuntimeInputState& input, Window& window, Point point)
     return;
   }
 
-  auto hit = hitWindow(window, point, [](scenegraph::InteractionData const& interaction) {
-    return interaction.cursor.evaluate() != Cursor::Inherit;
+  auto hit = hitWindow(window, point, [](scenegraph::Interaction const& interaction) {
+    return interactionData(interaction).cursor.evaluate() != Cursor::Inherit;
   });
   applyCursor(input, window, hit && hit->interaction ? hit->interaction->cursor.evaluate() : Cursor::Arrow);
 }
@@ -471,8 +472,8 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
   std::optional<HitTarget> hit = hitWindow(window, point);
   input.hoverAnchor = hit ? std::optional<Rect>{windowRectForHit(*hit, point)}
                           : std::nullopt;
-  if (hit && hit->interaction && !hit->interaction->stableTargetKey.empty()) {
-    input.hoverTargetKey = hit->interaction->stableTargetKey;
+  if (hit && hit->interaction && !hit->interaction->stableTargetKey_.empty()) {
+    input.hoverTargetKey = hit->interaction->stableTargetKey_;
   } else {
     input.hoverTargetKey.reset();
   }
@@ -575,7 +576,7 @@ void cycleKeyboardFocusFromKey(RuntimeInputState& input, Window& window,
   if (!fromKey.empty()) {
     for (std::size_t i = 0; i < targets.size(); ++i) {
       if (targets[i].interaction &&
-          targets[i].interaction->stableTargetKey == fromKey) {
+          targets[i].interaction->stableTargetKey_ == fromKey) {
         std::size_t const nextIndex =
             reverse ? (i == 0 ? targets.size() - 1 : i - 1)
                     : (i + 1) % targets.size();
@@ -692,7 +693,7 @@ void Runtime::handleInput(InputEvent const& event) {
     if (!hit || !hit->interaction) {
       return;
     }
-    scenegraph::InteractionData const& interaction = *hit->interaction;
+    InteractionData const& interaction = *hit->interaction;
     switch (event.kind) {
     case InputEvent::Kind::KeyDown:
       if (interaction.onKeyDown) {
@@ -725,8 +726,8 @@ void Runtime::handleInput(InputEvent const& event) {
     d->input.pressPoint = point;
     if (auto hit = hitWindow(d->window, point)) {
       d->input.lastTapAnchor = windowRectForHit(*hit, point);
-      if (hit->interaction && !hit->interaction->stableTargetKey.empty()) {
-        d->input.lastTapTargetKey = hit->interaction->stableTargetKey;
+      if (hit->interaction && !hit->interaction->stableTargetKey_.empty()) {
+        d->input.lastTapTargetKey = hit->interaction->stableTargetKey_;
       } else {
         d->input.lastTapTargetKey.reset();
       }
@@ -796,8 +797,8 @@ void Runtime::handleInput(InputEvent const& event) {
     updateCursorForPoint(d->input, d->window, point);
     break;
   case InputEvent::Kind::Scroll:
-    if (auto hit = hitWindow(d->window, point, [](scenegraph::InteractionData const& interaction) {
-          return static_cast<bool>(interaction.onScroll);
+    if (auto hit = hitWindow(d->window, point, [](scenegraph::Interaction const& interaction) {
+          return static_cast<bool>(interactionData(interaction).onScroll);
         })) {
       Vec2 delta = event.scrollDelta;
       if (!event.preciseScrollDelta) {

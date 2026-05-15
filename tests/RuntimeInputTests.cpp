@@ -8,7 +8,7 @@
 #include <Flux/UI/Detail/RootHolder.hpp>
 #include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/UI/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -401,7 +401,8 @@ void registerSaveAction(flux::Window& window) {
 }
 
 flux::scenegraph::SceneNode const* findScrollViewport(flux::scenegraph::SceneNode const& node) {
-  if (node.interaction() && node.interaction()->onScroll && node.children().size() >= 2) {
+  auto const* interaction = flux::interactionData(node);
+  if (interaction && interaction->onScroll && node.children().size() >= 2) {
     return &node;
   }
   for (auto const& child : node.children()) {
@@ -416,8 +417,9 @@ flux::scenegraph::SceneNode const* findScrollViewport(flux::scenegraph::SceneNod
 
 void collectTapRects(flux::scenegraph::SceneNode const& node,
                      std::vector<flux::scenegraph::RectNode const*>& out) {
+  auto const* interaction = flux::interactionData(node);
   if (node.kind() == flux::scenegraph::SceneNodeKind::Rect &&
-      node.interaction() && node.interaction()->onTap) {
+      interaction && interaction->onTap) {
     out.push_back(static_cast<flux::scenegraph::RectNode const*>(&node));
   }
   for (auto const& child : node.children()) {

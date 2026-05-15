@@ -1,24 +1,27 @@
 #pragma once
 
-/// \file Flux/SceneGraph/InteractionData.hpp
+/// \file Flux/UI/InteractionData.hpp
 ///
-/// Interaction payload attached directly to scenegraph nodes.
+/// Concrete UI interaction payload attached to scene-graph nodes.
 
-#include <Flux/Core/Identity.hpp>
 #include <Flux/Core/Geometry.hpp>
+#include <Flux/Core/Identity.hpp>
 #include <Flux/Reactive/Bindable.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/InteractionTypes.hpp>
+#include <Flux/SceneGraph/Interaction.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/Cursor.hpp>
+#include <Flux/UI/Input.hpp>
 
 #include <string>
 
-namespace flux::scenegraph {
+namespace flux {
 
-struct InteractionData {
-  ComponentKey stableTargetKey{};
+struct InteractionData : public scenegraph::Interaction {
+  ComponentKey stableTargetKey_{};
   Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
-  Reactive::Bindable<bool> focusable{false};
+  Reactive::Bindable<bool> focusable_{false};
   Reactive::SmallFn<void()> onPointerEnter;
   Reactive::SmallFn<void()> onPointerExit;
   Reactive::SmallFn<void()> onFocus;
@@ -36,23 +39,39 @@ struct InteractionData {
   Reactive::Signal<bool> focusSignal;
   Reactive::Signal<bool> keyboardFocusSignal;
 
-  [[nodiscard]] bool isEmpty() const noexcept {
+  [[nodiscard]] ComponentKey const& stableTargetKey() const noexcept override {
+    return stableTargetKey_;
+  }
+
+  [[nodiscard]] bool focusable() const override {
+    return focusable_.evaluate();
+  }
+
+  [[nodiscard]] bool isEmpty() const noexcept override {
     return !onPointerEnter && !onPointerExit && !onFocus && !onBlur && !onPointerDown &&
            !onPointerUp && !onPointerMove &&
            !onScroll && !onKeyDown && !onKeyUp && !onTextInput && !onTap &&
            hoverSignal.disposed() && pressSignal.disposed() &&
            focusSignal.disposed() && keyboardFocusSignal.disposed() &&
-           !focusable.isReactive() && !focusable.evaluate() &&
+           !focusable_.isReactive() && !focusable_.evaluate() &&
            !cursor.isReactive() && cursor.evaluate() == Cursor::Inherit;
   }
 };
 
-class SceneNode;
+inline InteractionData const* interactionData(scenegraph::SceneNode const& node) noexcept {
+  return static_cast<InteractionData const*>(node.interaction());
+}
 
-struct InteractionHitResult {
-  SceneNode const* node = nullptr;
-  Point localPoint{};
-  InteractionData const* interaction = nullptr;
-};
+inline InteractionData* interactionData(scenegraph::SceneNode& node) noexcept {
+  return static_cast<InteractionData*>(node.interaction());
+}
 
-} // namespace flux::scenegraph
+inline InteractionData const& interactionData(scenegraph::Interaction const& interaction) noexcept {
+  return static_cast<InteractionData const&>(interaction);
+}
+
+inline InteractionData& interactionData(scenegraph::Interaction& interaction) noexcept {
+  return static_cast<InteractionData&>(interaction);
+}
+
+} // namespace flux
