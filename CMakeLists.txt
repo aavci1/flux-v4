@@ -502,6 +502,8 @@ option(FLUX_BUILD_TESTS
   OFF)
 
 if(FLUX_BUILD_TESTS)
+  target_compile_definitions(flux PRIVATE FLUX_TESTING=1)
+
   # doctest's CMakeLists may require a minimum policy on CMake 4+.
   set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
   if(POLICY CMP0127)
@@ -595,6 +597,12 @@ if(FLUX_BUILD_TESTS)
   endif()
 
   add_test(NAME flux_reactive_tests COMMAND flux_reactive_tests)
+endif()
+
+if(FLUX_PLATFORM_LINUX_KMS)
+  add_executable(kms-vulkan-smoke tools/kms-vulkan-smoke.cpp)
+  target_link_libraries(kms-vulkan-smoke PRIVATE flux)
+  set_target_properties(kms-vulkan-smoke PROPERTIES CXX_STANDARD 23)
 endif()
 
 option(FLUX_BUILD_EXAMPLES

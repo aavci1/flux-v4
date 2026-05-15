@@ -241,7 +241,14 @@ class MacApplication final : public platform::Application {
 public:
   void initialize() override {
     [NSApplication sharedApplication];
+#if defined(FLUX_TESTING)
+    NSString* processName = [[NSProcessInfo processInfo] processName];
+    bool const headlessTestProcess = processName && [processName isEqualToString:@"flux_tests"];
+    [NSApp setActivationPolicy:headlessTestProcess ? NSApplicationActivationPolicyProhibited
+                                                   : NSApplicationActivationPolicyRegular];
+#else
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+#endif
     delegate_ = [[FluxAppDelegate alloc] init];
     delegate_.owner = this;
     [NSApp setDelegate:delegate_];

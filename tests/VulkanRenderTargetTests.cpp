@@ -3,25 +3,43 @@
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/RenderTarget.hpp>
 #include <Flux/Graphics/VulkanContext.hpp>
+#include <Flux/SceneGraph/ImageNode.hpp>
+#include <Flux/SceneGraph/PathNode.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/SceneGraph/SceneRenderer.hpp>
+#include <Flux/SceneGraph/TextNode.hpp>
 
 #if FLUX_VULKAN
 
+#include "Graphics/Linux/FreeTypeTextSystem.hpp"
+#include "Graphics/Vulkan/VulkanCanvas.hpp"
+
 #include <vulkan/vulkan.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace {
 
 using namespace flux;
 using namespace flux::scenegraph;
+
+static std::filesystem::path imageFixturePath() {
+  std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
+  path /= "../examples/image-demo/test.webp";
+  return std::filesystem::weakly_canonical(path);
+}
 
 void vkCheck(VkResult result, char const* label) {
   if (result != VK_SUCCESS) {
@@ -175,11 +193,32 @@ struct VulkanCopyContext {
     }
   }
 
-  void copyImageToBuffer(VkImage image, VkBuffer buffer, std::uint32_t width, std::uint32_t height) {
+  void copyImageToBuffer(VkImage image, VkBuffer buffer, std::uint32_t width, std::uint32_t height,
+                         VkImageLayout* currentLayout = nullptr) {
     vkCheck(vkResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
+
+    if (currentLayout && *currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+      VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+      barrier.oldLayout = *currentLayout;
+      barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+      barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      barrier.image = image;
+      barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      barrier.subresourceRange.levelCount = 1;
+      barrier.subresourceRange.layerCount = 1;
+      barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+      barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+      vkCmdPipelineBarrier(commandBuffer,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           0, 0, nullptr, 0, nullptr, 1, &barrier);
+      *currentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    }
 
     VkBufferImageCopy copy{};
     copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -197,6 +236,140 @@ struct VulkanCopyContext {
     vkCheck(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences");
   }
 };
+
+struct HeadlessVulkanTarget {
+  VulkanContext& context;
+  int logicalW = 1;
+  int logicalH = 1;
+  float dpiScale = 1.f;
+  std::uint32_t pixelW = 1;
+  std::uint32_t pixelH = 1;
+  VulkanImageTarget targetImage;
+  VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  HeadlessVulkanTarget(VulkanContext& vk, int width, int height, float scale = 2.f)
+      : context(vk), logicalW(width), logicalH(height), dpiScale(scale),
+        pixelW(static_cast<std::uint32_t>(std::ceil(static_cast<float>(width) * scale))),
+        pixelH(static_cast<std::uint32_t>(std::ceil(static_cast<float>(height) * scale))),
+        targetImage(vk.physicalDevice(), vk.device(), pixelW, pixelH) {}
+
+  void render(TextSystem& textSystem, SceneGraph const& graph, Color clearColor,
+              VkImageLayout finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+    VulkanRenderTargetSpec spec{
+        .image = targetImage.image,
+        .view = targetImage.view,
+        .format = targetImage.format,
+        .width = pixelW,
+        .height = pixelH,
+        .initialLayout = layout,
+        .finalLayout = finalLayout,
+    };
+    std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(spec, textSystem);
+    if (!canvas) {
+      throw std::runtime_error("Failed to create Vulkan render-target canvas");
+    }
+    canvas->resize(logicalW, logicalH);
+    canvas->updateDpiScale(dpiScale, dpiScale);
+    canvas->beginFrame();
+    canvas->clear(clearColor);
+    SceneRenderer renderer{*canvas};
+    renderer.render(graph);
+    canvas->present();
+    layout = finalLayout;
+  }
+
+  std::vector<std::uint8_t> readPixels() {
+    VulkanReadbackBuffer readback{context.physicalDevice(), context.device(), pixelW * pixelH * 4u};
+    VulkanCopyContext copy{context.device(), context.queue(), context.queueFamily()};
+    copy.copyImageToBuffer(targetImage.image, readback.buffer, pixelW, pixelH, &layout);
+
+    std::vector<std::uint8_t> pixels(pixelW * pixelH * 4u);
+    void* mapped = nullptr;
+    vkCheck(vkMapMemory(context.device(), readback.memory, 0, readback.size, 0, &mapped),
+            "vkMapMemory");
+    std::memcpy(pixels.data(), mapped, pixels.size());
+    vkUnmapMemory(context.device(), readback.memory);
+    return pixels;
+  }
+};
+
+static std::uint8_t capturedChannel(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
+                                    std::uint32_t x, std::uint32_t y, int channel) {
+  std::size_t const idx =
+      (static_cast<std::size_t>(y) * width + x) * 4u + static_cast<std::size_t>(channel);
+  return pixels[idx];
+}
+
+static int colorDelta(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
+                      std::uint32_t ax, std::uint32_t ay, std::uint32_t bx, std::uint32_t by) {
+  int delta = 0;
+  for (int channel = 0; channel < 3; ++channel) {
+    delta += std::abs(static_cast<int>(capturedChannel(pixels, width, ax, ay, channel)) -
+                      static_cast<int>(capturedChannel(pixels, width, bx, by, channel)));
+  }
+  return delta;
+}
+
+static std::shared_ptr<TextLayout const> makeLabel(FreeTypeTextSystem& textSystem,
+                                                   std::string const& text) {
+  Font font{};
+  font.family = "sans";
+  font.size = 13.f;
+  font.weight = 400.f;
+  return textSystem.layout(text, font, Colors::white, 120.f, {});
+}
+
+struct StressScene {
+  std::unique_ptr<SceneGraph> graph;
+  SceneNode* animatedGroup = nullptr;
+};
+
+static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_ptr<Image> const& image) {
+  auto graph = std::make_unique<SceneGraph>();
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f},
+      FillStyle::solid(Color{0.08f, 0.09f, 0.11f, 1.f})));
+
+  auto animatedGroup = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  SceneNode* animatedGroupPtr = animatedGroup.get();
+  for (int i = 0; i < 256; ++i) {
+    animatedGroup->appendChild(std::make_unique<RectNode>(
+        flux::Rect{static_cast<float>((i % 32) * 18), static_cast<float>((i / 32) * 18),
+                   14.f, 14.f},
+        FillStyle::solid(Color{static_cast<float>((17 * i) % 255) / 255.f,
+                               static_cast<float>((37 * i) % 255) / 255.f,
+                               static_cast<float>((53 * i) % 255) / 255.f, 1.f}),
+        StrokeStyle::none(), CornerRadius{3.f, 3.f, 3.f, 3.f}));
+  }
+  for (int i = 0; i < 64; ++i) {
+    animatedGroup->appendChild(std::make_unique<TextNode>(
+        flux::Rect{static_cast<float>((i % 8) * 72),
+                   170.f + static_cast<float>(i / 8) * 16.f, 64.f, 14.f},
+        makeLabel(textSystem, "Row " + std::to_string(i))));
+  }
+  Path triangle;
+  triangle.moveTo({0.f, 0.f});
+  triangle.lineTo({100.f, 140.f});
+  triangle.lineTo({-80.f, 140.f});
+  triangle.close();
+  animatedGroup->appendChild(std::make_unique<PathNode>(
+      flux::Rect{320.f, 40.f, 180.f, 140.f}, triangle,
+      FillStyle::solid(Color{0.2f, 0.6f, 0.9f, 1.f}), StrokeStyle::none(),
+      ShadowStyle::none()));
+  if (image) {
+    std::shared_ptr<Image const> constImage = image;
+    for (int i = 0; i < 9; ++i) {
+      animatedGroup->appendChild(std::make_unique<ImageNode>(
+          flux::Rect{static_cast<float>((i % 3) * 88),
+                     320.f + static_cast<float>(i / 3) * 88.f, 72.f, 72.f},
+          constImage));
+    }
+  }
+  root->appendChild(std::move(animatedGroup));
+  graph->setRoot(std::move(root));
+  return StressScene{.graph = std::move(graph), .animatedGroup = animatedGroupPtr};
+}
 
 } // namespace
 
@@ -253,6 +426,232 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   CHECK(pixels[center + 2] > 200);
   CHECK(pixels[center + 1] < 32);
   CHECK(pixels[center + 0] < 32);
+}
+
+TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), vk.device());
+  StressScene scene = makeStressScene(textSystem, image);
+  REQUIRE(scene.animatedGroup != nullptr);
+
+  for (int frame = 0; frame < 18; ++frame) {
+    scene.animatedGroup->setPosition(flux::Point{0.f, static_cast<float>(frame % 3)});
+    target.render(textSystem, *scene.graph, Color{0.08f, 0.09f, 0.11f, 1.f});
+  }
+
+  CHECK(true);
+}
+
+TEST_CASE("Vulkan RenderTarget renders glyph atlas text") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  Font font{};
+  font.family = "sans";
+  font.size = 32.f;
+  font.weight = 500.f;
+  auto layout = textSystem.layout("Cached glyphs", font, Colors::white, 320.f, {});
+
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+  root->appendChild(std::make_unique<TextNode>(flux::Rect{20.f, 20.f, 320.f, 48.f}, layout));
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::black);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+
+  std::size_t brightPixels = 0;
+  for (std::size_t i = 0; i + 3 < pixels.size(); i += 4) {
+    if (pixels[i + 0] > 120 && pixels[i + 1] > 120 && pixels[i + 2] > 120) {
+      ++brightPixels;
+    }
+  }
+  CHECK(brightPixels > 20);
+}
+
+TEST_CASE("Vulkan RenderTarget applies rounded clip masks to child content") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+  auto clip = std::make_unique<RectNode>(
+      flux::Rect{20.f, 20.f, 80.f, 20.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius::pill(flux::Rect::sharp(0.f, 0.f, 80.f, 20.f)));
+  clip->setClipsContents(true);
+  clip->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 80.f, 20.f}, FillStyle::solid(Colors::red)));
+  root->appendChild(std::move(clip));
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 42, 42, 0) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 42, 42, 1) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 42, 42, 2) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 120, 60, 2) >= 180);
+  CHECK(capturedChannel(pixels, target.pixelW, 120, 60, 1) <= 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 120, 60, 0) <= 80);
+}
+
+TEST_CASE("Vulkan RenderTarget shades linear gradient rect fills") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{20.f, 20.f, 100.f, 40.f},
+      FillStyle::linearGradient(Colors::red, Colors::blue, flux::Point{0.f, 0.f},
+                                flux::Point{1.f, 0.f})));
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::black);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 2) >
+        capturedChannel(pixels, target.pixelW, 60, 60, 0) + 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 220, 60, 0) >
+        capturedChannel(pixels, target.pixelW, 220, 60, 2) + 80);
+}
+
+TEST_CASE("Vulkan RenderTarget shades radial and conical gradient rect fills") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{20.f, 80.f, 100.f, 100.f},
+      FillStyle::radialGradient(Colors::white, Colors::black, flux::Point{0.5f, 0.5f}, 0.5f)));
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{150.f, 80.f, 100.f, 100.f},
+      FillStyle::conicalGradient({
+          GradientStop{0.00f, Colors::red},
+          GradientStop{0.33f, Colors::green},
+          GradientStop{0.66f, Colors::blue},
+          GradientStop{1.00f, Colors::red},
+      })));
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::black);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 140, 260, 0) >
+        capturedChannel(pixels, target.pixelW, 50, 260, 0) + 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 140, 260, 1) >
+        capturedChannel(pixels, target.pixelW, 50, 260, 1) + 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 140, 260, 2) >
+        capturedChannel(pixels, target.pixelW, 50, 260, 2) + 80);
+  CHECK(colorDelta(pixels, target.pixelW, 490, 260, 310, 260) > 120);
+}
+
+TEST_CASE("Vulkan RenderTarget preserves rounded rect geometry when clipped by the viewport") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+  auto clip = std::make_unique<RectNode>(
+      flux::Rect{20.f, 30.f, 140.f, 120.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{});
+  clip->setClipsContents(true);
+  clip->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, -10.f, 100.f, 80.f}, FillStyle::solid(Colors::red),
+      StrokeStyle::none(), CornerRadius{28.f, 28.f, 28.f, 28.f}));
+  root->appendChild(std::move(clip));
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 42, 68, 0) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 42, 68, 1) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 42, 68, 2) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 56, 76, 2) >= 180);
+  CHECK(capturedChannel(pixels, target.pixelW, 56, 76, 1) <= 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 56, 76, 0) <= 80);
+}
+
+TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the viewport") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget source{vk, 120, 160, 1.f};
+  auto sourceRoot = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 120.f, 160.f});
+  sourceRoot->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 120.f, 160.f},
+      FillStyle::linearGradient(Colors::red, Colors::blue, flux::Point{0.f, 0.f},
+                                flux::Point{1.f, 1.f})));
+  SceneGraph sourceGraph{std::move(sourceRoot)};
+  source.render(textSystem, sourceGraph, Colors::transparent, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+  std::shared_ptr<Image> image = Image::fromExternalVulkan(
+      source.targetImage.image, source.targetImage.view, source.targetImage.format,
+      source.pixelW, source.pixelH);
+  REQUIRE(image);
+
+  HeadlessVulkanTarget target{vk, 640, 480};
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  root->appendChild(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+  root->appendChild(std::make_unique<ImageNode>(
+      flux::Rect{20.f, 20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
+  auto clip = std::make_unique<RectNode>(
+      flux::Rect{180.f, 40.f, 120.f, 140.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{});
+  clip->setClipsContents(true);
+  clip->appendChild(std::make_unique<ImageNode>(
+      flux::Rect{0.f, -20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
+  root->appendChild(std::move(clip));
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(colorDelta(pixels, target.pixelW, 100, 120, 420, 120) <= 24);
+}
+
+TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Vulkan image") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 640, 480};
+  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 160.f, 120.f});
+  auto raster = std::make_unique<RasterCacheNode>(flux::Rect{20.f, 24.f, 80.f, 40.f});
+  RasterCacheNode* rasterNode = raster.get();
+  raster->setSubtree(std::make_unique<RectNode>(
+      flux::Rect{0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
+  root->appendChild(std::move(raster));
+  SceneGraph graph{std::move(root)};
+
+  target.render(textSystem, graph, Colors::black);
+  std::shared_ptr<Image> firstCache = rasterNode->cachedImage();
+  REQUIRE(firstCache);
+  CHECK(firstCache->size() == flux::Size{160.f, 80.f});
+
+  target.render(textSystem, graph, Colors::black);
+  CHECK(rasterNode->cachedImage() == firstCache);
 }
 
 #endif // FLUX_VULKAN

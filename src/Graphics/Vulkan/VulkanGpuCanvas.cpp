@@ -424,6 +424,18 @@ std::vector<char const *> extensionNamePointers(std::vector<std::string> const &
   return names;
 }
 
+std::string vulkanVersionString(std::uint32_t version) {
+  return std::to_string(VK_VERSION_MAJOR(version)) + "." +
+         std::to_string(VK_VERSION_MINOR(version)) + "." +
+         std::to_string(VK_VERSION_PATCH(version));
+}
+
+bool extensionAvailable(std::vector<VkExtensionProperties> const &available, char const *required) {
+  return std::any_of(available.begin(), available.end(), [&](VkExtensionProperties const &extension) {
+    return std::strcmp(extension.extensionName, required) == 0;
+  });
+}
+
 VkInstance ensureSharedVulkanInstanceImpl() {
   std::lock_guard lock(gVulkanCoreMutex);
   if (gVulkanCore.instance)
@@ -432,6 +444,18 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   app.pApplicationName = "Flux";
   app.apiVersion = VK_API_VERSION_1_3;
   std::vector<char const *> instanceExtensions = extensionNamePointers(gRequiredInstanceExtensions);
+  if (!instanceExtensions.empty()) {
+    std::uint32_t availableCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &availableCount, nullptr);
+    std::vector<VkExtensionProperties> available(availableCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &availableCount, available.data());
+    for (char const *extension : instanceExtensions) {
+      if (!extensionAvailable(available, extension)) {
+        throw std::runtime_error(std::string("Missing required Vulkan instance extension: ") +
+                                 extension);
+      }
+    }
+  }
   VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   info.pApplicationInfo = &app;
   info.enabledExtensionCount = static_cast<std::uint32_t>(instanceExtensions.size());
@@ -530,10 +554,14 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
       throw std::runtime_error("No Vulkan physical devices");
     std::vector<VkPhysicalDevice> devices(count);
     vkEnumeratePhysicalDevices(gVulkanCore.instance, &count, devices.data());
+    std::vector<std::string> rejectedDevices;
     for (VkPhysicalDevice d : devices) {
       VkPhysicalDeviceProperties props{};
       vkGetPhysicalDeviceProperties(d, &props);
+      std::string const deviceName = props.deviceName[0] ? props.deviceName : "unnamed device";
       if (props.apiVersion < VK_API_VERSION_1_3) {
+        rejectedDevices.push_back(deviceName + ": Vulkan 1.3 required, device exposes " +
+                                  vulkanVersionString(props.apiVersion));
         continue;
       }
       VkPhysicalDeviceVulkan13Features vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
@@ -541,16 +569,54 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
       features.pNext = &vk13;
       vkGetPhysicalDeviceFeatures2(d, &features);
       if (!vk13.dynamicRendering || !vk13.synchronization2) {
+        std::string missing;
+        if (!vk13.dynamicRendering) {
+          missing += missing.empty() ? "dynamicRendering" : ", dynamicRendering";
+        }
+        if (!vk13.synchronization2) {
+          missing += missing.empty() ? "synchronization2" : ", synchronization2";
+        }
+        rejectedDevices.push_back(deviceName + ": missing Vulkan 1.3 feature(s): " + missing);
         continue;
+      }
+      std::vector<std::string> deviceExtensions = gRequiredDeviceExtensions;
+      if (needsPresent) {
+        appendUniqueExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+      }
+      if (!deviceExtensions.empty()) {
+        std::uint32_t extensionCount = 0;
+        vkEnumerateDeviceExtensionProperties(d, nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(d, nullptr, &extensionCount, availableExtensions.data());
+        std::vector<std::string> missingExtensions;
+        for (std::string const &extension : deviceExtensions) {
+          if (!extensionAvailable(availableExtensions, extension.c_str())) {
+            missingExtensions.push_back(extension);
+          }
+        }
+        if (!missingExtensions.empty()) {
+          std::string missing = missingExtensions.front();
+          for (std::size_t i = 1; i < missingExtensions.size(); ++i) {
+            missing += ", " + missingExtensions[i];
+          }
+          rejectedDevices.push_back(deviceName + ": missing Vulkan device extension(s): " + missing);
+          continue;
+        }
       }
       std::uint32_t familiesCount = 0;
       vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, nullptr);
       std::vector<VkQueueFamilyProperties> families(familiesCount);
       vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, families.data());
+      bool hasGraphicsQueue = false;
+      bool hasGraphicsPresentQueue = false;
       for (std::uint32_t i = 0; i < familiesCount; ++i) {
         VkBool32 present = VK_FALSE;
         if (needsPresent) {
           vkGetPhysicalDeviceSurfaceSupportKHR(d, i, surface, &present);
+        }
+        if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+          hasGraphicsQueue = true;
+          hasGraphicsPresentQueue = hasGraphicsPresentQueue || !needsPresent || present == VK_TRUE;
         }
         if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
             (!needsPresent || present == VK_TRUE)) {
@@ -564,10 +630,6 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
           enabled13.synchronization2 = VK_TRUE;
           enabled13.dynamicRendering = VK_TRUE;
-          std::vector<std::string> deviceExtensions = gRequiredDeviceExtensions;
-          if (needsPresent) {
-            appendUniqueExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-          }
           std::vector<char const *> deviceExtensionNames = extensionNamePointers(deviceExtensions);
           VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
           info.pNext = &enabled13;
@@ -587,8 +649,24 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           return &gVulkanCore;
         }
       }
+      if (!hasGraphicsQueue) {
+        rejectedDevices.push_back(deviceName + ": no graphics queue family");
+      } else if (needsPresent && !hasGraphicsPresentQueue) {
+        rejectedDevices.push_back(deviceName + ": no graphics queue family can present to this surface");
+      }
     }
-    throw std::runtime_error(needsPresent ? "No Vulkan graphics/present queue" : "No Vulkan graphics queue");
+    std::string message = needsPresent ? "No suitable Vulkan graphics/present device"
+                                       : "No suitable Vulkan graphics device";
+    if (!rejectedDevices.empty()) {
+      message += ": ";
+      for (std::size_t i = 0; i < rejectedDevices.size(); ++i) {
+        if (i > 0) {
+          message += "; ";
+        }
+        message += rejectedDevices[i];
+      }
+    }
+    throw std::runtime_error(message);
   }
   if (needsPresent) {
     VkBool32 present = VK_FALSE;

@@ -15,12 +15,10 @@
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
 
-#import <AppKit/AppKit.h>
 #import <Metal/Metal.h>
-#import <QuartzCore/CAMetalLayer.h>
-#import <QuartzCore/QuartzCore.h>
 
 #include <filesystem>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -30,40 +28,6 @@ namespace {
 
 using namespace flux;
 using namespace flux::scenegraph;
-
-struct TestSurface {
-  NSWindow* window = nil;
-  NSView* view = nil;
-  CAMetalLayer* layer = nil;
-};
-
-static TestSurface makeSurface() {
-  [NSApplication sharedApplication];
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
-
-  NSRect const frame = NSMakeRect(-10000.f, -10000.f, 640.f, 480.f);
-  TestSurface surface;
-  surface.window = [[NSWindow alloc] initWithContentRect:frame
-                                               styleMask:NSWindowStyleMaskBorderless
-                                                 backing:NSBackingStoreBuffered
-                                                   defer:NO];
-  surface.view = [[NSView alloc] initWithFrame:NSMakeRect(0.f, 0.f, 640.f, 480.f)];
-  surface.view.wantsLayer = YES;
-  surface.layer = [CAMetalLayer layer];
-  surface.layer.device = MTLCreateSystemDefaultDevice();
-  surface.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-  surface.layer.contentsScale = 2.f;
-  surface.layer.maximumDrawableCount = 3;
-  surface.layer.allowsNextDrawableTimeout = YES;
-  surface.layer.displaySyncEnabled = NO;
-  surface.layer.frame = surface.view.bounds;
-  surface.layer.drawableSize = CGSizeMake(1280.f, 960.f);
-  surface.view.layer = surface.layer;
-  [surface.window setContentView:surface.view];
-  [surface.window orderFrontRegardless];
-  [CATransaction flush];
-  return surface;
-}
 
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
@@ -197,6 +161,95 @@ static int colorDelta(std::vector<std::uint8_t> const& pixels, std::uint32_t wid
   return delta;
 }
 
+#if defined(__APPLE__)
+struct HeadlessMetalTarget {
+  id<MTLDevice> device = nil;
+  id<MTLTexture> texture = nil;
+  std::unique_ptr<Canvas> targetCanvas;
+  int logicalW = 1;
+  int logicalH = 1;
+  float dpiScale = 1.f;
+  std::uint32_t pixelW = 1;
+  std::uint32_t pixelH = 1;
+
+  HeadlessMetalTarget(TextSystem& textSystem, int width, int height, float scale = 2.f)
+      : device(MTLCreateSystemDefaultDevice()), logicalW(width), logicalH(height), dpiScale(scale),
+        pixelW(static_cast<std::uint32_t>(std::ceil(static_cast<float>(width) * scale))),
+        pixelH(static_cast<std::uint32_t>(std::ceil(static_cast<float>(height) * scale))) {
+    if (!device) {
+      return;
+    }
+    MTLTextureDescriptor* desc =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                           width:pixelW
+                                                          height:pixelH
+                                                       mipmapped:NO];
+    desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+    desc.storageMode = MTLStorageModePrivate;
+    texture = [device newTextureWithDescriptor:desc];
+    if (!texture) {
+      return;
+    }
+    targetCanvas = createMetalRenderTargetCanvas(MetalRenderTargetSpec{
+        .texture = (__bridge void*)texture,
+        .width = pixelW,
+        .height = pixelH,
+    }, textSystem);
+    canvas().resize(logicalW, logicalH);
+    canvas().updateDpiScale(dpiScale, dpiScale);
+  }
+
+  explicit operator bool() const noexcept { return targetCanvas != nullptr; }
+
+  Canvas& canvas() { return *targetCanvas; }
+
+  void begin(Color clearColor = Colors::transparent) {
+    canvas().beginFrame();
+    canvas().clear(clearColor);
+  }
+
+  void end() { canvas().present(); }
+
+  void render(SceneGraph const& graph, Color clearColor) {
+    begin(clearColor);
+    SceneRenderer renderer{canvas()};
+    renderer.render(graph);
+    end();
+  }
+
+  std::vector<std::uint8_t> readPixels() {
+    id<MTLCommandQueue> queue = [device newCommandQueue];
+    if (!queue) {
+      return {};
+    }
+    id<MTLBuffer> readback = [device newBufferWithLength:pixelW * pixelH * 4u
+                                                 options:MTLResourceStorageModeShared];
+    if (!readback) {
+      return {};
+    }
+    id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+    [blit copyFromTexture:texture
+              sourceSlice:0
+              sourceLevel:0
+             sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(pixelW, pixelH, 1)
+                 toBuffer:readback
+        destinationOffset:0
+   destinationBytesPerRow:pixelW * 4u
+ destinationBytesPerImage:pixelW * pixelH * 4u];
+    [blit endEncoding];
+    [commandBuffer commit];
+    [commandBuffer waitUntilCompleted];
+    if (commandBuffer.status != MTLCommandBufferStatusCompleted) {
+      return {};
+    }
+    auto const* bytes = static_cast<std::uint8_t const*>([readback contents]);
+    return std::vector<std::uint8_t>(bytes, bytes + pixelW * pixelH * 4u);
+  }
+};
+#endif
+
 } // namespace
 
 TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing regressions") {
@@ -205,26 +258,22 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
 
-    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas->gpuDevice());
+    Canvas& canvas = target.canvas();
+    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas.gpuDevice());
     StressScene scene = makeStressScene(textSystem, image);
     REQUIRE(scene.animatedGroup != nullptr);
 
-    SceneRenderer renderer{*canvas};
+    SceneRenderer renderer{canvas};
     for (int frame = 0; frame < 18; ++frame) {
       scene.animatedGroup->setPosition(flux::Point{0.f, static_cast<float>(frame % 3)});
-      canvas->beginFrame();
-      canvas->clear(Color{0.08f, 0.09f, 0.11f, 1.f});
+      target.begin(Color{0.08f, 0.09f, 0.11f, 1.f});
       renderer.render(*scene.graph);
-      canvas->present();
+      target.end();
     }
 
-    waitForCanvasLastPresentComplete(canvas.get());
     CHECK(true);
   }
 #endif
@@ -308,11 +357,9 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
+    Canvas& canvas = target.canvas();
 
     Font cachedFont{};
     cachedFont.family = ".AppleSystemUIFont";
@@ -321,13 +368,11 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
     auto cachedLayout = textSystem.layout("Cached", cachedFont, Colors::white, 160.f, {});
 
     MetalFrameRecorder recorded;
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
-    REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
-    canvas->drawTextLayout(*cachedLayout, flux::Point{12.f, 12.f});
-    endRecordedOpsCaptureForCanvas(canvas.get());
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
+    target.begin(Colors::black);
+    REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
+    canvas.drawTextLayout(*cachedLayout, flux::Point{12.f, 12.f});
+    endRecordedOpsCaptureForCanvas(&canvas);
+    target.end();
 
     REQUIRE(recorded.glyphVertexCount > 0);
     REQUIRE(recorded.glyphAtlasGeneration > 0);
@@ -337,17 +382,13 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
     auto largeLayout =
         textSystem.layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", largeFont, Colors::white, 12000.f, {});
 
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
-    canvas->drawTextLayout(*largeLayout, flux::Point{0.f, 260.f});
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
+    target.begin(Colors::black);
+    canvas.drawTextLayout(*largeLayout, flux::Point{0.f, 260.f});
+    target.end();
 
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
-    CHECK_FALSE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded, fullSlice(recorded)));
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
+    target.begin(Colors::black);
+    CHECK_FALSE(replayRecordedLocalOpsForCanvas(&canvas, recorded, fullSlice(recorded)));
+    target.end();
   }
 #endif
 }
@@ -358,11 +399,8 @@ TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
@@ -384,19 +422,12 @@ TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
     root->appendChild(std::move(clip));
 
     SceneGraph graph{std::move(root)};
-    SceneRenderer renderer{*canvas};
+    target.render(graph, Colors::white);
 
-    requestNextFrameCaptureForCanvas(canvas.get());
-    canvas->beginFrame();
-    canvas->clear(Colors::white);
-    renderer.render(graph);
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
-
-    std::vector<std::uint8_t> pixels;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+    std::vector<std::uint8_t> pixels = target.readPixels();
+    std::uint32_t width = target.pixelW;
+    std::uint32_t height = target.pixelH;
+    REQUIRE(!pixels.empty());
     REQUIRE(width >= 200);
     REQUIRE(height >= 120);
 
@@ -421,11 +452,8 @@ TEST_CASE("MetalCanvas shades linear gradient rect fills") {
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
@@ -438,19 +466,11 @@ TEST_CASE("MetalCanvas shades linear gradient rect fills") {
     ));
 
     SceneGraph graph{std::move(root)};
-    SceneRenderer renderer{*canvas};
+    target.render(graph, Colors::black);
 
-    requestNextFrameCaptureForCanvas(canvas.get());
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
-    renderer.render(graph);
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
-
-    std::vector<std::uint8_t> pixels;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+    std::vector<std::uint8_t> pixels = target.readPixels();
+    std::uint32_t width = target.pixelW;
+    REQUIRE(!pixels.empty());
 
     std::uint32_t const leftX = 60;
     std::uint32_t const rightX = 220;
@@ -467,11 +487,8 @@ TEST_CASE("MetalCanvas shades radial and conical gradient rect fills") {
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
@@ -493,19 +510,11 @@ TEST_CASE("MetalCanvas shades radial and conical gradient rect fills") {
     ));
 
     SceneGraph graph{std::move(root)};
-    SceneRenderer renderer{*canvas};
+    target.render(graph, Colors::black);
 
-    requestNextFrameCaptureForCanvas(canvas.get());
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
-    renderer.render(graph);
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
-
-    std::vector<std::uint8_t> pixels;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+    std::vector<std::uint8_t> pixels = target.readPixels();
+    std::uint32_t width = target.pixelW;
+    REQUIRE(!pixels.empty());
 
     std::uint32_t const radialCenterX = 140;
     std::uint32_t const radialCenterY = 260;
@@ -531,11 +540,8 @@ TEST_CASE("MetalCanvas preserves rounded rect geometry when clipped by the viewp
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
@@ -559,19 +565,11 @@ TEST_CASE("MetalCanvas preserves rounded rect geometry when clipped by the viewp
     root->appendChild(std::move(clip));
 
     SceneGraph graph{std::move(root)};
-    SceneRenderer renderer{*canvas};
+    target.render(graph, Colors::white);
 
-    requestNextFrameCaptureForCanvas(canvas.get());
-    canvas->beginFrame();
-    canvas->clear(Colors::white);
-    renderer.render(graph);
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
-
-    std::vector<std::uint8_t> pixels;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+    std::vector<std::uint8_t> pixels = target.readPixels();
+    std::uint32_t width = target.pixelW;
+    REQUIRE(!pixels.empty());
 
     std::uint32_t const curvedX = 42;
     std::uint32_t const curvedY = 68;
@@ -594,13 +592,10 @@ TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
 
-    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas->gpuDevice());
+    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), target.canvas().gpuDevice());
     REQUIRE(image);
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
@@ -629,19 +624,11 @@ TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
     root->appendChild(std::move(clip));
 
     SceneGraph graph{std::move(root)};
-    SceneRenderer renderer{*canvas};
+    target.render(graph, Colors::white);
 
-    requestNextFrameCaptureForCanvas(canvas.get());
-    canvas->beginFrame();
-    canvas->clear(Colors::white);
-    renderer.render(graph);
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
-
-    std::vector<std::uint8_t> pixels;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+    std::vector<std::uint8_t> pixels = target.readPixels();
+    std::uint32_t width = target.pixelW;
+    REQUIRE(!pixels.empty());
 
     std::uint32_t const leftX = 100;
     std::uint32_t const leftY = 120;
@@ -658,11 +645,9 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Metal image"
 #else
   @autoreleasepool {
     CoreTextSystem textSystem;
-    TestSurface surface = makeSurface();
-    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
-    REQUIRE(canvas);
-    canvas->resize(640, 480);
-    canvas->updateDpiScale(2.f, 2.f);
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
+    Canvas& canvas = target.canvas();
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 160.f, 120.f});
     auto raster = std::make_unique<RasterCacheNode>(flux::Rect{20.f, 24.f, 80.f, 40.f});
@@ -674,23 +659,19 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Metal image"
     root->appendChild(std::move(raster));
 
     SceneGraph graph{std::move(root)};
-    SceneRenderer renderer{*canvas};
+    SceneRenderer renderer{canvas};
 
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
+    target.begin(Colors::black);
     renderer.render(graph);
     std::shared_ptr<Image> firstCache = rasterNode->cachedImage();
     REQUIRE(firstCache);
     CHECK(firstCache->size() == flux::Size{160.f, 80.f});
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
+    target.end();
 
-    canvas->beginFrame();
-    canvas->clear(Colors::black);
+    target.begin(Colors::black);
     renderer.render(graph);
     CHECK(rasterNode->cachedImage() == firstCache);
-    canvas->present();
-    waitForCanvasLastPresentComplete(canvas.get());
+    target.end();
   }
 #endif
 }
