@@ -89,6 +89,12 @@ void postTextInput(FluxMetalView* view, std::string text);
   return self;
 }
 
+// Flux owns cursor state. Prevent NSView's cursor-rect machinery from
+// registering any rects on this view, so AppKit won't set cursors behind us.
+- (void)resetCursorRects {
+  // Intentionally empty.
+}
+
 - (CAMetalLayer*)fluxMetalLayer {
   CALayer* layer = self.layer;
   if ([layer isKindOfClass:[CAMetalLayer class]]) {
@@ -649,6 +655,9 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
   [d->window_ setReleasedWhenClosed:NO];
+  // Flux owns cursor state. Stops _NSTrackingAreaAKManager from running its
+  // cursor logic on this window and clobbering our setCursor decisions.
+  [d->window_ disableCursorRects];
   if (config.minSize.width > 0.f || config.minSize.height > 0.f) {
     [d->window_ setContentMinSize:NSMakeSize(static_cast<CGFloat>(config.minSize.width),
                                              static_cast<CGFloat>(config.minSize.height))];
@@ -1022,48 +1031,29 @@ void MacMetalWindow::setModernDisplayLinkPaused(bool paused) {
 }
 
 void MacMetalWindow::setCursor(Cursor kind) {
-  if (kind == d->currentCursor_) {
-    return;
-  }
+  if (kind == d->currentCursor_) return;
   d->currentCursor_ = kind;
-  NSCursor* c = nil;
-  switch (kind) {
-  case Cursor::Inherit:
-    c = [NSCursor arrowCursor];
-    break;
-  case Cursor::Arrow:
-    c = [NSCursor arrowCursor];
-    break;
-  case Cursor::IBeam:
-    c = [NSCursor IBeamCursor];
-    break;
-  case Cursor::Hand:
-    c = [NSCursor pointingHandCursor];
-    break;
-  case Cursor::ResizeEW:
-    c = [NSCursor resizeLeftRightCursor];
-    break;
-  case Cursor::ResizeNS:
-    c = [NSCursor resizeUpDownCursor];
-    break;
-  case Cursor::ResizeNESW:
-    // Private API; public alternatives are resizeLeftRight/resizeUpDown only.
-    c = [NSCursor _windowResizeNorthEastSouthWestCursor];
-    break;
-  case Cursor::ResizeNWSE:
-    c = [NSCursor _windowResizeNorthWestSouthEastCursor];
-    break;
-  case Cursor::ResizeAll:
-    c = [NSCursor openHandCursor];
-    break;
-  case Cursor::Crosshair:
-    c = [NSCursor crosshairCursor];
-    break;
-  case Cursor::NotAllowed:
-    c = [NSCursor operationNotAllowedCursor];
-    break;
+
+  // Lazily cached NSCursor objects per Cursor kind.
+  static NSCursor* cache[11] = { nil };
+  NSCursor* c = cache[(int)kind];
+  if (!c) {
+    switch (kind) {
+    case Cursor::Inherit:    c = [NSCursor arrowCursor]; break;
+    case Cursor::Arrow:      c = [NSCursor arrowCursor]; break;
+    case Cursor::IBeam:      c = [NSCursor IBeamCursor]; break;
+    case Cursor::Hand:       c = [NSCursor pointingHandCursor]; break;
+    case Cursor::ResizeEW:   c = [NSCursor resizeLeftRightCursor]; break;
+    case Cursor::ResizeNS:   c = [NSCursor resizeUpDownCursor]; break;
+    case Cursor::ResizeNESW: c = [NSCursor _windowResizeNorthEastSouthWestCursor]; break;
+    case Cursor::ResizeNWSE: c = [NSCursor _windowResizeNorthWestSouthEastCursor]; break;
+    case Cursor::ResizeAll:  c = [NSCursor openHandCursor]; break;
+    case Cursor::Crosshair:  c = [NSCursor crosshairCursor]; break;
+    case Cursor::NotAllowed: c = [NSCursor operationNotAllowedCursor]; break;
+    }
+    cache[(int)kind] = c;  // these are shared singletons; safe to retain implicitly
   }
-  if (c) {
+  if (c && [NSCursor currentCursor] != c) {
     [c set];
   }
 }
