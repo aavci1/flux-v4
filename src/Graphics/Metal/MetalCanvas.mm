@@ -669,15 +669,16 @@ public:
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Rect,
                                    static_cast<std::uint64_t>(uploadedRectInstances) *
                                        sizeof(MetalRectInstance));
+    std::uint32_t const uploadedImageInstances = metal_.uploadImageOps(frame_.imageOps);
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Image,
-                                   frame_.imageOps.size() * sizeof(MetalImageInstance));
+                                   static_cast<std::uint64_t>(uploadedImageInstances) *
+                                       sizeof(MetalImageInstance));
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Path,
                                    frame_.pathVerts.size() * sizeof(PathVertex));
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Glyph,
                                    static_cast<std::uint64_t>(frame_.glyphVertexCount) *
                                        sizeof(MetalGlyphVertex));
 
-    metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_);
     metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
@@ -854,7 +855,7 @@ public:
             op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
                                       : metal_.imageInstanceArenaBuffer();
         std::uint32_t const imageInstanceIndex =
-            op.externalInstanceBuffer ? op.externalInstanceIndex : ref.index;
+            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
         const NSUInteger off = static_cast<NSUInteger>(imageInstanceIndex) * sizeof(MetalImageInstance);
         [enc setVertexBuffer:imageInstanceBuf offset:off atIndex:1];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
@@ -2231,7 +2232,7 @@ private:
             op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
                                       : metal_.imageInstanceArenaBuffer();
         std::uint32_t const imageInstanceIndex =
-            op.externalInstanceBuffer ? op.externalInstanceIndex : ref.index;
+            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
         const NSUInteger off = static_cast<NSUInteger>(imageInstanceIndex) * sizeof(MetalImageInstance);
         [enc setVertexBuffer:imageInstanceBuf offset:off atIndex:1];
         MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
@@ -2439,6 +2440,9 @@ public:
     MetalFrameRecorder& frame = frame_;
     RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(frame);
     void* const externalRectBuffer = slice.rectCount > 0 ? preparedRectInstanceBuffer(recorded) : nullptr;
+    void* const externalImageBuffer = slice.imageCount > 0 ? preparedImageInstanceBuffer(recorded) : nullptr;
+    void* const externalPathBuffer = slice.pathVertexCount > 0 ? preparedPathVertexBuffer(recorded) : nullptr;
+    void* const externalGlyphBuffer = slice.glyphVertexCount > 0 ? preparedGlyphVertexBuffer(recorded) : nullptr;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
@@ -2447,14 +2451,14 @@ public:
     std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
     std::uint32_t const frameBackdropBlurOpBase = static_cast<std::uint32_t>(frame.backdropBlurOps.size());
 
-    if (slice.pathVertexCount > 0) {
+    if (slice.pathVertexCount > 0 && !externalPathBuffer) {
       frame.pathVerts.insert(frame.pathVerts.end(),
                               recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(slice.pathVertexStart),
                               recorded.pathVerts.begin() +
                                   static_cast<std::ptrdiff_t>(slice.pathVertexStart + slice.pathVertexCount));
     }
     if (slice.glyphVertexCount > 0) {
-      if (!preparedGlyphVertexBuffer(recorded)) {
+      if (!externalGlyphBuffer) {
         appendBorrowedGlyphSource(frame,
                                   recorded.glyphVerts.data() + static_cast<std::size_t>(slice.glyphVertexStart),
                                   slice.glyphVertexCount);
@@ -2479,6 +2483,10 @@ public:
                                  static_cast<std::ptrdiff_t>(slice.imageStart + slice.imageCount));
       for (std::uint32_t i = 0; i < slice.imageCount; ++i) {
         MetalImageOp& op = frame.imageOps[frameImageBase + static_cast<std::size_t>(i)];
+        op.externalInstanceBuffer = externalImageBuffer;
+        if (externalImageBuffer) {
+          op.externalInstanceIndex = slice.imageStart + i;
+        }
         if (op.texture) {
           op.texture = retainTexturePointer(op.texture);
         }
@@ -2491,7 +2499,10 @@ public:
                                 static_cast<std::ptrdiff_t>(slice.pathOpStart + slice.pathOpCount));
       for (std::uint32_t i = 0; i < slice.pathOpCount; ++i) {
         MetalPathOp& op = frame.pathOps[framePathOpBase + static_cast<std::size_t>(i)];
-        op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        op.externalVertexBuffer = externalPathBuffer;
+        if (!externalPathBuffer) {
+          op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        }
       }
     }
     if (slice.glyphOpCount > 0) {
@@ -2501,7 +2512,7 @@ public:
                                  static_cast<std::ptrdiff_t>(slice.glyphOpStart + slice.glyphOpCount));
       for (std::uint32_t i = 0; i < slice.glyphOpCount; ++i) {
         MetalGlyphOp& op = frame.glyphOps[frameGlyphOpBase + static_cast<std::size_t>(i)];
-        op.externalVertexBuffer = recorded.preparedGlyphVertexBuffer;
+        op.externalVertexBuffer = externalGlyphBuffer;
         if (!op.externalVertexBuffer) {
           op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
         }
@@ -2564,6 +2575,10 @@ public:
         (slice.glyphVertexCount > 0 && opacityScale >= 0.9999f) ? preparedGlyphVertexBuffer(recorded) : nullptr;
     void* const externalRectBuffer =
         (slice.rectCount > 0 && opacityScale >= 0.9999f) ? preparedRectInstanceBuffer(recorded) : nullptr;
+    void* const externalImageBuffer =
+        (slice.imageCount > 0 && opacityScale >= 0.9999f) ? preparedImageInstanceBuffer(recorded) : nullptr;
+    void* const externalPathBuffer =
+        (slice.pathVertexCount > 0 && opacityScale >= 0.9999f) ? preparedPathVertexBuffer(recorded) : nullptr;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
@@ -2572,7 +2587,7 @@ public:
     std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
     std::uint32_t const frameBackdropBlurOpBase = static_cast<std::uint32_t>(frame.backdropBlurOps.size());
 
-    if (slice.pathVertexCount > 0) {
+    if (slice.pathVertexCount > 0 && !externalPathBuffer) {
       frame.pathVerts.reserve(frame.pathVerts.size() + slice.pathVertexCount);
     }
     if (slice.glyphVertexCount > 0 && opacityScale < 0.9999f) {
@@ -2597,7 +2612,7 @@ public:
       frame.opOrder.reserve(frame.opOrder.size() + slice.orderCount);
     }
 
-    if (slice.pathVertexCount > 0) {
+    if (slice.pathVertexCount > 0 && !externalPathBuffer) {
       std::size_t const start = static_cast<std::size_t>(slice.pathVertexStart);
       std::size_t const count = static_cast<std::size_t>(slice.pathVertexCount);
       frame.pathVerts.insert(frame.pathVerts.end(), recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start),
@@ -2655,7 +2670,12 @@ public:
       for (std::size_t i = 0; i < count; ++i) {
         MetalImageOp& op = frame.imageOps[static_cast<std::size_t>(frameImageBase) + i];
         op.translation = translation;
-        op.inst.sdf.strokeWidthOpacity.y *= opacityScale;
+        op.externalInstanceBuffer = externalImageBuffer;
+        if (externalImageBuffer) {
+          op.externalInstanceIndex = static_cast<std::uint32_t>(start + i);
+        } else {
+          op.inst.sdf.strokeWidthOpacity.y *= opacityScale;
+        }
         if (op.texture) {
           op.texture = retainTexturePointer(op.texture);
         }
@@ -2670,7 +2690,10 @@ public:
                            recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalPathOp& op = frame.pathOps[static_cast<std::size_t>(framePathOpBase) + i];
-        op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        op.externalVertexBuffer = externalPathBuffer;
+        if (!externalPathBuffer) {
+          op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        }
         op.translation = translation;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
@@ -2754,15 +2777,16 @@ public:
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Rect,
                                    static_cast<std::uint64_t>(uploadedRectInstances) *
                                        sizeof(MetalRectInstance));
+    std::uint32_t const uploadedImageInstances = metal_.uploadImageOps(frame_.imageOps);
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Image,
-                                   frame_.imageOps.size() * sizeof(MetalImageInstance));
+                                   static_cast<std::uint64_t>(uploadedImageInstances) *
+                                       sizeof(MetalImageInstance));
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Path,
                                    frame_.pathVerts.size() * sizeof(PathVertex));
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Glyph,
                                    static_cast<std::uint64_t>(frame_.glyphVertexCount) *
                                        sizeof(MetalGlyphVertex));
 
-    metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_);
     metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),

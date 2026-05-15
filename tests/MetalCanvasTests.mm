@@ -393,6 +393,78 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
 #endif
 }
 
+TEST_CASE("MetalCanvas replays image and path prepared buffers with shader translation") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    HeadlessMetalTarget target{textSystem, 64, 64, 1.f};
+    REQUIRE(target);
+    Canvas& canvas = target.canvas();
+
+    MTLTextureDescriptor* desc =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                           width:8
+                                                          height:8
+                                                       mipmapped:NO];
+    desc.usage = MTLTextureUsageShaderRead;
+    desc.storageMode = MTLStorageModeShared;
+    id<MTLTexture> texture = [target.device newTextureWithDescriptor:desc];
+    REQUIRE(texture != nil);
+    std::vector<std::uint8_t> bluePixels(8u * 8u * 4u, 0);
+    for (std::size_t i = 0; i < bluePixels.size(); i += 4u) {
+      bluePixels[i + 0] = 255;
+      bluePixels[i + 3] = 255;
+    }
+    [texture replaceRegion:MTLRegionMake2D(0, 0, 8, 8)
+               mipmapLevel:0
+                 withBytes:bluePixels.data()
+               bytesPerRow:8u * 4u];
+    std::shared_ptr<Image> image = Image::fromExternalMetal((__bridge void*)texture, 8, 8);
+    REQUIRE(image);
+
+    Path path;
+    path.moveTo({4.f, 4.f});
+    path.lineTo({20.f, 4.f});
+    path.lineTo({20.f, 20.f});
+    path.lineTo({4.f, 20.f});
+    path.close();
+
+    MetalFrameRecorder recorded;
+    target.begin(Colors::black);
+    REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
+    canvas.drawPath(path, FillStyle::solid(Colors::red), StrokeStyle::none(), ShadowStyle::none());
+    canvas.drawImage(*image, flux::Rect{0.f, 0.f, 8.f, 8.f}, flux::Rect{28.f, 4.f, 8.f, 8.f});
+    endRecordedOpsCaptureForCanvas(&canvas);
+    target.end();
+
+    CHECK(!recorded.pathVerts.empty());
+    CHECK(recorded.imageOps.size() == 1);
+
+    target.begin(Colors::black);
+    canvas.save();
+    canvas.translate(flux::Point{16.f, 8.f});
+    REQUIRE(replayRecordedLocalOpsForCanvas(&canvas, recorded, fullSlice(recorded)));
+    canvas.restore();
+    CHECK(recorded.preparedPathVertexBuffer != nullptr);
+    CHECK(recorded.preparedImageInstanceBuffer != nullptr);
+    target.end();
+
+    std::vector<std::uint8_t> pixels = target.readPixels();
+    REQUIRE(!pixels.empty());
+    std::uint32_t const width = target.pixelW;
+
+    CHECK(capturedChannel(pixels, width, 28, 20, 2) > 200);
+    CHECK(capturedChannel(pixels, width, 12, 12, 2) < 32);
+
+    CHECK(capturedChannel(pixels, width, 48, 16, 0) > 200);
+    CHECK(capturedChannel(pixels, width, 48, 16, 1) < 32);
+    CHECK(capturedChannel(pixels, width, 48, 16, 2) < 32);
+  }
+#endif
+}
+
 TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
 #if !defined(__APPLE__)
   SUCCEED();

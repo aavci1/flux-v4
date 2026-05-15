@@ -104,6 +104,7 @@ struct MetalImageOp {
   /// Non-owning MTLBuffer pointer for prepared static image instances. Null means use the per-frame image arena.
   void* externalInstanceBuffer = nullptr;
   std::uint32_t externalInstanceIndex = 0;
+  std::uint32_t arenaInstanceIndex = 0;
   BlendMode blendMode = BlendMode::Normal;
   vector_float2 translation{};
   MetalRoundedClipStack roundedClip{};

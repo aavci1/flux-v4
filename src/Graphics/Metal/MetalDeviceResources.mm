@@ -600,15 +600,28 @@ void MetalDeviceResources::uploadGlyphVertices(MetalFrameRecorder const& recorde
   assert(cursor == recorder.glyphVertexCount);
 }
 
-void MetalDeviceResources::uploadImageOps(const std::vector<MetalImageOp>& ops) {
-  ensureImageInstanceArenaCapacity(static_cast<std::uint32_t>(ops.size()));
-  if (ops.empty()) {
-    return;
+std::uint32_t MetalDeviceResources::uploadImageOps(std::vector<MetalImageOp>& ops) {
+  std::uint32_t uploadCount = 0;
+  for (MetalImageOp const& op : ops) {
+    if (!op.externalInstanceBuffer) {
+      ++uploadCount;
+    }
+  }
+  ensureImageInstanceArenaCapacity(uploadCount);
+  if (uploadCount == 0) {
+    return 0;
   }
   auto* dst = static_cast<MetalImageInstance*>([imageInstanceArenas_[currentFrameIndex_] contents]);
+  std::uint32_t cursor = 0;
   for (std::size_t i = 0; i < ops.size(); ++i) {
-    dst[i] = ops[i].inst;
+    if (ops[i].externalInstanceBuffer) {
+      continue;
+    }
+    ops[i].arenaInstanceIndex = cursor;
+    dst[cursor] = ops[i].inst;
+    ++cursor;
   }
+  return uploadCount;
 }
 
 void MetalDeviceResources::reserveDrawStateBuffers(std::uint32_t uniformCount, std::uint32_t roundedClipCount) {
