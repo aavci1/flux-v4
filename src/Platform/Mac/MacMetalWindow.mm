@@ -149,12 +149,6 @@ void postTextInput(FluxMetalView* view, std::string text);
   return YES;
 }
 
-- (void)cursorUpdate:(NSEvent*)event {
-  // Suppress AppKit's automatic reset to the arrow cursor.
-  // Runtime::updateCursorForPoint handles cursor selection after every move.
-  (void)event;
-}
-
 - (void)updateTrackingAreas {
   [super updateTrackingAreas];
   for (NSTrackingArea* area in self.trackingAreas) {
@@ -162,7 +156,7 @@ void postTextInput(FluxMetalView* view, std::string text);
   }
   NSTrackingAreaOptions opts =
       NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingActiveInKeyWindow |
-      NSTrackingInVisibleRect | NSTrackingCursorUpdate | NSTrackingEnabledDuringMouseDrag;
+      NSTrackingInVisibleRect | NSTrackingEnabledDuringMouseDrag;
   NSTrackingArea* ta =
       [[NSTrackingArea alloc] initWithRect:self.bounds options:opts owner:self userInfo:nil];
   [self addTrackingArea:ta];
@@ -351,6 +345,7 @@ struct MacMetalWindow::Impl {
   std::atomic<bool> frameRequested_{false};
   std::atomic<bool> frameEventQueued_{false};
   std::atomic<bool> legacyDisplayLinkRunning_{false};
+  Cursor currentCursor_{Cursor::Inherit};
 };
 
 namespace detail {
@@ -1027,6 +1022,10 @@ void MacMetalWindow::setModernDisplayLinkPaused(bool paused) {
 }
 
 void MacMetalWindow::setCursor(Cursor kind) {
+  if (kind == d->currentCursor_) {
+    return;
+  }
+  d->currentCursor_ = kind;
   NSCursor* c = nil;
   switch (kind) {
   case Cursor::Inherit:
