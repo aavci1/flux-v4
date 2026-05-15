@@ -16,6 +16,7 @@
 
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -28,6 +29,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -372,6 +374,101 @@ static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_p
 }
 
 } // namespace
+
+TEST_CASE("VulkanFrameRecorder supports empty lifecycle and move semantics") {
+  VulkanFrameRecorder recorded;
+  recorded.clear();
+  CHECK(recorded.ops.empty());
+  CHECK(recorded.rects.empty());
+  CHECK(recorded.quads.empty());
+  CHECK(recorded.pathVerts.empty());
+  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+
+  recorded.ops.push_back(DrawOp{});
+  recorded.rects.push_back(RectInstance{});
+  VulkanFrameRecorder moved{std::move(recorded)};
+  CHECK(moved.ops.size() == 1);
+  CHECK(moved.rects.size() == 1);
+  CHECK(recorded.ops.empty());
+  CHECK(recorded.rects.empty());
+
+  VulkanFrameRecorder assigned;
+  assigned = std::move(moved);
+  CHECK(assigned.ops.size() == 1);
+  CHECK(assigned.rects.size() == 1);
+  CHECK(moved.ops.empty());
+  CHECK(moved.rects.empty());
+}
+
+TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarget") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  constexpr std::uint32_t width = 64;
+  constexpr std::uint32_t height = 64;
+  FreeTypeTextSystem textSystem;
+  VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
+  VulkanRenderTargetSpec spec{
+      .image = targetImage.image,
+      .view = targetImage.view,
+      .format = targetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  };
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(spec, textSystem);
+  REQUIRE(canvas);
+  canvas->resize(static_cast<int>(width), static_cast<int>(height));
+  canvas->beginFrame();
+  canvas->clear(Colors::black);
+
+  VulkanFrameRecorder recorded;
+  REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
+  canvas->drawRect(flux::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
+                   FillStyle::solid(Colors::red), StrokeStyle::none(), ShadowStyle::none());
+  endRecordedOpsCaptureForCanvas(canvas.get());
+  CHECK(recorded.ops.size() == 1);
+  CHECK(recorded.rects.size() == 1);
+
+  REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+  CHECK(recorded.preparedRectBuffer != VK_NULL_HANDLE);
+  VkBuffer const firstPreparedRectBuffer = recorded.preparedRectBuffer;
+  canvas->present();
+
+  VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  VulkanCopyContext copy{vk.device(), vk.queue(), vk.queueFamily()};
+  copy.copyImageToBuffer(targetImage.image, readback.buffer, width, height);
+  std::vector<std::uint8_t> pixels(width * height * 4u);
+  void* mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), readback.memory, 0, readback.size, 0, &mapped), "vkMapMemory");
+  std::memcpy(pixels.data(), mapped, pixels.size());
+  vkUnmapMemory(vk.device(), readback.memory);
+
+  std::size_t const center = (32u * static_cast<std::size_t>(width) + 32u) * 4u;
+  CHECK(pixels[center + 2] > 200);
+  CHECK(pixels[center + 1] < 32);
+  CHECK(pixels[center + 0] < 32);
+
+  VulkanImageTarget secondTargetImage{vk.physicalDevice(), vk.device(), width, height};
+  VulkanRenderTargetSpec secondSpec{
+      .image = secondTargetImage.image,
+      .view = secondTargetImage.view,
+      .format = secondTargetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  };
+  std::unique_ptr<Canvas> secondCanvas = createVulkanRenderTargetCanvas(secondSpec, textSystem);
+  REQUIRE(secondCanvas);
+  secondCanvas->resize(static_cast<int>(width), static_cast<int>(height));
+  secondCanvas->beginFrame();
+  secondCanvas->clear(Colors::black);
+  REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
+  CHECK(recorded.preparedRectBuffer == firstPreparedRectBuffer);
+  secondCanvas->present();
+}
 
 TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   auto& vk = VulkanContext::instance();

@@ -9,10 +9,14 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 
-#if defined(FLUX_PLATFORM_MACOS)
+#if FLUX_METAL
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
+#endif
+#if FLUX_VULKAN
+#include "Graphics/Vulkan/VulkanCanvas.hpp"
+#include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 #endif
 #include "SceneGraph/SceneBounds.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
@@ -91,7 +95,7 @@ float rasterCacheDpiScaleForCanvas(Canvas* canvas) noexcept {
     return canvas ? canvas->dpiScale() : 1.f;
 }
 
-#if defined(FLUX_PLATFORM_MACOS)
+#if FLUX_METAL
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -114,7 +118,7 @@ MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
 }
 #endif
 
-#if defined(FLUX_PLATFORM_MACOS)
+#if FLUX_METAL
 bool roundedClipHasEntries(MetalRoundedClipStack const &clip) noexcept {
     return clip.header.x > 0.f;
 }
@@ -129,6 +133,22 @@ bool recordedOpsContainClipState(MetalFrameRecorder const &recorded) noexcept {
            std::any_of(recorded.imageOps.begin(), recorded.imageOps.end(), opHasRecordedClip<MetalImageOp>) ||
            std::any_of(recorded.pathOps.begin(), recorded.pathOps.end(), opHasRecordedClip<MetalPathOp>) ||
            std::any_of(recorded.glyphOps.begin(), recorded.glyphOps.end(), opHasRecordedClip<MetalGlyphOp>);
+}
+#endif
+
+#if FLUX_VULKAN
+bool sameClipRect(Rect a, Rect b) noexcept {
+    constexpr float eps = 1e-4f;
+    return std::abs(a.x - b.x) <= eps &&
+           std::abs(a.y - b.y) <= eps &&
+           std::abs(a.width - b.width) <= eps &&
+           std::abs(a.height - b.height) <= eps;
+}
+
+bool recordedOpsContainClipState(VulkanFrameRecorder const &recorded) noexcept {
+    return std::any_of(recorded.ops.begin(), recorded.ops.end(), [&recorded](DrawOp const &op) {
+        return !sameClipRect(op.clip, recorded.rootClip);
+    });
 }
 #endif
 
@@ -163,10 +183,10 @@ class CanvasRenderer final : public Renderer {
     Canvas &canvas_;
 };
 
-#if defined(FLUX_PLATFORM_MACOS)
-class CanvasPreparedRenderOps final : public PreparedRenderOps {
+#if FLUX_METAL
+class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
   public:
-    explicit CanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
+    explicit MetalCanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
 
     bool replay(Renderer &renderer) const override {
         return replayRecordedLocalOpsForCanvas(renderer.canvas(), recorded_, slice_);
@@ -178,6 +198,20 @@ class CanvasPreparedRenderOps final : public PreparedRenderOps {
 };
 #endif
 
+#if FLUX_VULKAN
+class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
+  public:
+    explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded) : recorded_(std::move(recorded)) {}
+
+    bool replay(Renderer &renderer) const override {
+        return replayRecordedLocalOpsForCanvas(renderer.canvas(), recorded_);
+    }
+
+  private:
+    VulkanFrameRecorder recorded_;
+};
+#endif
+
 class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
   public:
     bool replay(Renderer &) const override {
@@ -186,23 +220,34 @@ class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
 };
 
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
-#if defined(FLUX_PLATFORM_MACOS)
+#if FLUX_METAL
     MetalFrameRecorder recorded;
-    if (!beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
-        return nullptr;
+    if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
+        node.render(*this);
+        endRecordedOpsCaptureForCanvas(&canvas_);
+        if (recordedOpsContainClipState(recorded)) {
+            // Local replay retags cached ops with the caller's current clip. Until it can merge
+            // recorded and caller clips, keep internally clipped leaves on the live render path.
+            return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+        }
+        return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
     }
-    node.render(*this);
-    endRecordedOpsCaptureForCanvas(&canvas_);
-    if (recordedOpsContainClipState(recorded)) {
-        // Local replay retags cached ops with the caller's current clip. Until it can merge
-        // recorded and caller clips, keep internally clipped leaves on the live render path.
-        return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+#endif
+#if FLUX_VULKAN
+    VulkanFrameRecorder recorded;
+    if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
+        node.render(*this);
+        endRecordedOpsCaptureForCanvas(&canvas_);
+        if (recordedOpsContainClipState(recorded)) {
+            // Local replay retags cached ops with the caller's current clip. Until it can merge
+            // recorded and caller clips, keep internally clipped leaves on the live render path.
+            return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+        }
+        return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
     }
-    return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
-#else
+#endif
     (void)node;
     return nullptr;
-#endif
 }
 
 } // namespace
@@ -342,25 +387,38 @@ struct SceneRenderer::Impl {
         if (!canvas) {
             return nullptr;
         }
-#if !defined(FLUX_PLATFORM_MACOS)
+#if FLUX_METAL
+        MetalFrameRecorder recorded;
+        if (beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+            for (std::unique_ptr<SceneNode> const &child : node.children()) {
+                renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
+            }
+            endRecordedOpsCaptureForCanvas(canvas);
+            if (recordedOpsContainClipState(recorded)) {
+                // Group captures include clips from descendants. Replaying them as one local
+                // display list would drop those nested clips, so let the normal traversal render it.
+                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+            }
+            return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
+        }
+#endif
+#if FLUX_VULKAN
+        VulkanFrameRecorder recorded;
+        if (beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+            for (std::unique_ptr<SceneNode> const &child : node.children()) {
+                renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
+            }
+            endRecordedOpsCaptureForCanvas(canvas);
+            if (recordedOpsContainClipState(recorded)) {
+                // Group captures include clips from descendants. Replaying them as one local
+                // display list would drop those nested clips, so let the normal traversal render it.
+                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+            }
+            return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
+        }
+#endif
         (void)node;
         return nullptr;
-#else
-        MetalFrameRecorder recorded;
-        if (!beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
-            return nullptr;
-        }
-        for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
-        }
-        endRecordedOpsCaptureForCanvas(canvas);
-        if (recordedOpsContainClipState(recorded)) {
-            // Group captures include clips from descendants. Replaying them as one local
-            // display list would drop those nested clips, so let the normal traversal render it.
-            return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-        }
-        return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
-#endif
     }
 
     void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation,

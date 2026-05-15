@@ -338,6 +338,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
     src/Graphics/Vulkan/VulkanContext.cpp
+    src/Graphics/Vulkan/VulkanFrameRecorder.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
     src/Graphics/Vulkan/VulkanRenderTarget.cpp
     src/Platform/Linux/Common/XkbState.cpp
@@ -391,6 +392,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
     src/Graphics/Vulkan/VulkanContext.cpp
+    src/Graphics/Vulkan/VulkanFrameRecorder.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
     src/Graphics/Vulkan/VulkanRenderTarget.cpp
     src/Platform/Linux/Common/XkbState.cpp

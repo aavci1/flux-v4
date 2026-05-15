@@ -6,7 +6,9 @@
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include "Graphics/PathFlattener.hpp"
+#include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
+#include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
@@ -130,75 +132,10 @@ struct Buffer {
   VkDeviceSize capacity = 0;
 };
 
-struct Texture {
-  VkImage image = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
-  VkImageView view = VK_NULL_HANDLE;
-  VkFormat format = VK_FORMAT_UNDEFINED;
-  VkDescriptorSet descriptor = VK_NULL_HANDLE;
-  VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-  int width = 0;
-  int height = 0;
-  bool ownsImage = true;
-  bool ownsView = true;
-};
-
-struct RectInstance {
-  float rect[4]{};
-  float axisX[4]{};
-  float axisY[4]{};
-  float radii[4]{};
-  float fill0[4]{};
-  float fill1[4]{};
-  float fill2[4]{};
-  float fill3[4]{};
-  float stops[4]{};
-  float gradient[4]{};
-  float stroke[4]{};
-  float params[4]{};
-};
-
-struct QuadInstance {
-  float rect[4]{};
-  float axisX[4]{};
-  float axisY[4]{};
-  float uv[4]{};
-  float color[4]{};
-  float radii[4]{};
-};
-
 struct ImageBatch {
   Texture *texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
-};
-
-struct DrawOp {
-  enum class Kind : std::uint8_t { Rect,
-                                   Path,
-                                   Image,
-                                   BackdropBlur };
-  Kind kind = Kind::Rect;
-  Texture *texture = nullptr;
-  std::uint32_t first = 0;
-  std::uint32_t count = 0;
-  Rect clip{};
-  float blurRadius = 0.f;
-};
-
-struct VulkanPathVertex {
-  float x = 0.f;
-  float y = 0.f;
-  float color[4]{};
-  float viewport[2]{};
-  float local[2]{};
-  float fill0[4]{};
-  float fill1[4]{};
-  float fill2[4]{};
-  float fill3[4]{};
-  float stops[4]{};
-  float gradient[4]{};
-  float params[4]{};
 };
 
 struct PathCacheKey {
@@ -383,6 +320,7 @@ struct SharedVulkanCore {
     int atlasY = 1;
     int atlasRowH = 0;
     bool atlasDirty = false;
+    std::uint64_t atlasGeneration = 1;
     std::uint64_t atlasUseCounter = 0;
     std::unordered_map<GlyphKey, GlyphSlot, GlyphKeyHash> glyphs;
   } resources;
@@ -985,7 +923,57 @@ public:
 
   float dpiScale() const noexcept override { return std::max(dpiScaleX_, dpiScaleY_); }
 
+  void beginRecordedOpsCapture(VulkanFrameRecorder *target) {
+    if (!target || captureTarget_) {
+      return;
+    }
+    target->clear();
+    target->rootClip = Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_));
+    captureSavedState_ = state_;
+    captureSavedStack_ = stateStack_;
+    hasCaptureSavedState_ = true;
+    captureTarget_ = target;
+    stateStack_.clear();
+    state_ = {};
+    state_.clip = target->rootClip;
+  }
+
+  void endRecordedOpsCapture() {
+    captureTarget_ = nullptr;
+    if (hasCaptureSavedState_) {
+      state_ = captureSavedState_;
+      stateStack_ = std::move(captureSavedStack_);
+      captureSavedState_ = {};
+      captureSavedStack_.clear();
+      hasCaptureSavedState_ = false;
+    }
+  }
+
+  bool replayRecordedOps(VulkanFrameRecorder const &recorded) {
+    if (!recordedGlyphAtlasCurrent(recorded)) {
+      return false;
+    }
+    prepareRecorderBuffers(recorded);
+    appendRecordedOps(recorded, false);
+    return true;
+  }
+
+  bool replayRecordedLocalOps(VulkanFrameRecorder const &recorded) {
+    if (!recordedGlyphAtlasCurrent(recorded) || !state_.transform.isTranslationOnly()) {
+      return false;
+    }
+    if (recordedOpsContainClipState(recorded)) {
+      return false;
+    }
+    prepareRecorderBuffers(recorded);
+    appendRecordedOps(recorded, true);
+    return true;
+  }
+
   void beginFrame() override {
+    captureTarget_ = nullptr;
+    hasCaptureSavedState_ = false;
+    captureSavedStack_.clear();
     rects_.clear();
     quads_.clear();
     batches_.clear();
@@ -1396,9 +1384,10 @@ public:
       inst.params[2] = stroke.width;
     }
     inst.params[3] = opacity;
-    std::uint32_t first = static_cast<std::uint32_t>(rects_.size());
-    rects_.push_back(inst);
-    ops_.push_back(makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
+    RecordingTarget target = recordingTarget();
+    std::uint32_t first = static_cast<std::uint32_t>(target.rects.size());
+    target.rects.push_back(inst);
+    target.ops.push_back(makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
   }
 
@@ -1484,7 +1473,8 @@ public:
       std::fprintf(stderr, "Flux Vulkan: glyph atlas descriptor setup failed: %s\n", e.what());
       return;
     }
-    std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
+    RecordingTarget target = recordingTarget();
+    std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
     for (TextLayout::PlacedRun const &placed : layout.runs) {
       for (std::size_t i = 0; i < placed.run.glyphIds.size(); ++i) {
         GlyphSlot const *slot = nullptr;
@@ -1520,14 +1510,18 @@ public:
         q.uv[2] = slot->u1;
         q.uv[3] = slot->v1;
         putColor(q.color, placed.run.color, state_.opacity);
-        quads_.push_back(q);
+        target.quads.push_back(q);
       }
     }
-    std::uint32_t count = static_cast<std::uint32_t>(quads_.size()) - first;
+    std::uint32_t count = static_cast<std::uint32_t>(target.quads.size()) - first;
     if (count > 0) {
       Texture *atlas = &resources().atlas;
-      batches_.push_back(ImageBatch{atlas, first, count});
-      ops_.push_back(makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
+      if (captureTarget_) {
+        captureTarget_->glyphAtlasGeneration = resources().atlasGeneration;
+      } else {
+        batches_.push_back(ImageBatch{atlas, first, count});
+      }
+      target.ops.push_back(makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
       debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
     }
   }
@@ -1575,10 +1569,13 @@ public:
     q.radii[1] = cr.topRight;
     q.radii[2] = cr.bottomRight;
     q.radii[3] = cr.bottomLeft;
-    std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
-    quads_.push_back(q);
-    batches_.push_back(ImageBatch{texture, first, 1});
-    ops_.push_back(makeDrawOp(DrawOp::Kind::Image, texture, first, 1));
+    RecordingTarget target = recordingTarget();
+    std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
+    target.quads.push_back(q);
+    if (!captureTarget_) {
+      batches_.push_back(ImageBatch{texture, first, 1});
+    }
+    target.ops.push_back(makeDrawOp(DrawOp::Kind::Image, texture, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }
 
@@ -1631,11 +1628,12 @@ public:
     q.radii[1] = cr.topRight;
     q.radii[2] = cr.bottomRight;
     q.radii[3] = cr.bottomLeft;
-    std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
-    quads_.push_back(q);
+    RecordingTarget target = recordingTarget();
+    std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
+    target.quads.push_back(q);
     DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, 1);
     op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
-    ops_.push_back(op);
+    target.ops.push_back(op);
   }
 
   void *gpuDevice() const override { return device_; }
@@ -1660,6 +1658,21 @@ private:
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
   };
+
+  struct RecordingTarget {
+    std::vector<DrawOp> &ops;
+    std::vector<QuadInstance> &quads;
+    std::vector<RectInstance> &rects;
+    std::vector<VulkanPathVertex> &pathVerts;
+  };
+
+  RecordingTarget recordingTarget() {
+    if (captureTarget_) {
+      return RecordingTarget{captureTarget_->ops, captureTarget_->quads, captureTarget_->rects,
+                             captureTarget_->pathVerts};
+    }
+    return RecordingTarget{ops_, quads_, rects_, pathVerts_};
+  }
 
   void registerCanvas() {
     std::lock_guard lock(gCanvasRegistryMutex);
@@ -1696,6 +1709,177 @@ private:
     op.count = count;
     op.clip = state_.clip;
     return op;
+  }
+
+  static bool sameRect(Rect a, Rect b) {
+    constexpr float eps = 1e-4f;
+    return std::abs(a.x - b.x) <= eps &&
+           std::abs(a.y - b.y) <= eps &&
+           std::abs(a.width - b.width) <= eps &&
+           std::abs(a.height - b.height) <= eps;
+  }
+
+  bool recordedOpsContainClipState(VulkanFrameRecorder const &recorded) const {
+    return std::any_of(recorded.ops.begin(), recorded.ops.end(), [&recorded](DrawOp const &op) {
+      return !sameRect(op.clip, recorded.rootClip);
+    });
+  }
+
+  bool recordedGlyphAtlasCurrent(VulkanFrameRecorder const &recorded) const {
+    return recorded.glyphAtlasGeneration == 0 ||
+           recorded.glyphAtlasGeneration == resources().atlasGeneration;
+  }
+
+  void uploadRecorderBuffer(VmaAllocation allocation, void const *data, VkDeviceSize size) {
+    if (!data || size == 0) {
+      return;
+    }
+    void *mapped = nullptr;
+    vkCheck(vmaMapMemory(allocator_, allocation, &mapped), "vmaMapMemory");
+    std::memcpy(mapped, data, static_cast<std::size_t>(size));
+    vkCheck(vmaFlushAllocation(allocator_, allocation, 0, size), "vmaFlushAllocation");
+    vmaUnmapMemory(allocator_, allocation);
+  }
+
+  void ensureRecorderBuffer(VulkanFrameRecorder const &recorded, VkBuffer &buffer,
+                            VmaAllocation &allocation, VkDeviceSize &capacity,
+                            void const *data, VkDeviceSize size, VkBufferUsageFlags usage) {
+    if (!data || size == 0) {
+      return;
+    }
+    if (recorded.allocator && recorded.allocator != allocator_) {
+      return;
+    }
+    if (!recorded.allocator) {
+      recorded.allocator = allocator_;
+    }
+    if (buffer && capacity >= size) {
+      return;
+    }
+    if (buffer) {
+      vmaDestroyBuffer(recorded.allocator, buffer, allocation);
+      buffer = VK_NULL_HANDLE;
+      allocation = VK_NULL_HANDLE;
+      capacity = 0;
+    }
+    capacity = std::max<VkDeviceSize>(size, 1024);
+    VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    info.size = capacity;
+    info.usage = usage;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VmaAllocationCreateInfo allocationInfo{};
+    allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+    vkCheck(vmaCreateBuffer(allocator_, &info, &allocationInfo, &buffer, &allocation, nullptr),
+            "vmaCreateBuffer");
+    uploadRecorderBuffer(allocation, data, size);
+  }
+
+  void prepareRecorderBuffers(VulkanFrameRecorder const &recorded) {
+    ensureRecorderBuffer(recorded, recorded.preparedRectBuffer, recorded.preparedRectAllocation,
+                         recorded.preparedRectCapacity, recorded.rects.data(),
+                         static_cast<VkDeviceSize>(recorded.rects.size() * sizeof(RectInstance)),
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    ensureRecorderBuffer(recorded, recorded.preparedQuadBuffer, recorded.preparedQuadAllocation,
+                         recorded.preparedQuadCapacity, recorded.quads.data(),
+                         static_cast<VkDeviceSize>(recorded.quads.size() * sizeof(QuadInstance)),
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    ensureRecorderBuffer(recorded, recorded.preparedPathVertexBuffer,
+                         recorded.preparedPathVertexAllocation,
+                         recorded.preparedPathVertexCapacity, recorded.pathVerts.data(),
+                         static_cast<VkDeviceSize>(recorded.pathVerts.size() * sizeof(VulkanPathVertex)),
+                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+  }
+
+  static void translateRectInstance(RectInstance &inst, float dx, float dy, float opacityScale) {
+    inst.axisX[0] += dx;
+    inst.axisX[1] += dy;
+    inst.stroke[3] *= opacityScale;
+    inst.params[3] *= opacityScale;
+  }
+
+  static void translateQuadInstance(QuadInstance &inst, float dx, float dy, float opacityScale) {
+    inst.axisX[0] += dx;
+    inst.axisX[1] += dy;
+    inst.color[3] *= opacityScale;
+  }
+
+  static void translatePathVertex(VulkanPathVertex &vertex, float dx, float dy, float opacityScale) {
+    vertex.x += dx;
+    vertex.y += dy;
+    vertex.color[3] *= opacityScale;
+    vertex.params[3] *= opacityScale;
+  }
+
+  void appendRecordedOps(VulkanFrameRecorder const &recorded, bool localReplay) {
+    float const dx = localReplay ? state_.transform.m[6] : 0.f;
+    float const dy = localReplay ? state_.transform.m[7] : 0.f;
+    float const opacityScale = localReplay ? state_.opacity : 1.f;
+    std::uint32_t const rectBase = static_cast<std::uint32_t>(rects_.size());
+    std::uint32_t const quadBase = static_cast<std::uint32_t>(quads_.size());
+    std::uint32_t const pathBase = static_cast<std::uint32_t>(pathVerts_.size());
+
+    rects_.reserve(rects_.size() + recorded.rects.size());
+    for (RectInstance inst : recorded.rects) {
+      if (localReplay) {
+        translateRectInstance(inst, dx, dy, opacityScale);
+      }
+      rects_.push_back(inst);
+    }
+
+    quads_.reserve(quads_.size() + recorded.quads.size());
+    for (QuadInstance inst : recorded.quads) {
+      if (localReplay) {
+        translateQuadInstance(inst, dx, dy, opacityScale);
+      }
+      quads_.push_back(inst);
+    }
+
+    pathVerts_.reserve(pathVerts_.size() + recorded.pathVerts.size());
+    for (VulkanPathVertex vertex : recorded.pathVerts) {
+      if (localReplay) {
+        translatePathVertex(vertex, dx, dy, opacityScale);
+      }
+      pathVerts_.push_back(vertex);
+    }
+
+    ops_.reserve(ops_.size() + recorded.ops.size());
+    float const uvDx = localReplay ? dx / std::max(1.f, static_cast<float>(width_)) : 0.f;
+    float const uvDy = localReplay ? dy / std::max(1.f, static_cast<float>(height_)) : 0.f;
+    for (DrawOp op : recorded.ops) {
+      std::uint32_t const originalFirst = op.first;
+      switch (op.kind) {
+      case DrawOp::Kind::Rect:
+        op.first += rectBase;
+        break;
+      case DrawOp::Kind::Path:
+        op.first += pathBase;
+        break;
+      case DrawOp::Kind::Image:
+        op.first += quadBase;
+        break;
+      case DrawOp::Kind::BackdropBlur:
+        op.first += quadBase;
+        if (localReplay) {
+          for (std::uint32_t i = 0; i < op.count; ++i) {
+            std::size_t const index = static_cast<std::size_t>(quadBase + originalFirst + i);
+            if (index >= quads_.size()) {
+              break;
+            }
+            QuadInstance &quad = quads_[index];
+            quad.uv[0] += uvDx;
+            quad.uv[1] += uvDy;
+            quad.uv[2] += uvDx;
+            quad.uv[3] += uvDy;
+          }
+        }
+        break;
+      }
+      if (localReplay) {
+        op.clip = state_.clip;
+      }
+      ops_.push_back(op);
+    }
   }
 
   bool clipLineToCurrentClip(Point &a, Point &b) const {
@@ -2176,6 +2360,7 @@ private:
   void appendPath(Path const &path, FillStyle const &fill, StrokeStyle const &stroke) {
     if (path.isEmpty())
       return;
+    RecordingTarget target = recordingTarget();
     PathCacheKey const cacheKey{
         .pathHash = path.contentHash(),
         .styleHash = hashFill(fill) ^ (hashStroke(stroke) + 0x9e3779b97f4a7c15ULL) ^
@@ -2185,18 +2370,18 @@ private:
     };
     if (auto it = pathCache_.find(cacheKey); it != pathCache_.end()) {
       pathCacheLru_.splice(pathCacheLru_.end(), pathCacheLru_, it->second.lruIt);
-      std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
-      pathVerts_.insert(pathVerts_.end(), it->second.vertices.begin(), it->second.vertices.end());
+      std::uint32_t const firstVertex = static_cast<std::uint32_t>(target.pathVerts.size());
+      target.pathVerts.insert(target.pathVerts.end(), it->second.vertices.begin(), it->second.vertices.end());
       if (!it->second.vertices.empty()) {
-        ops_.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex,
-                                  static_cast<std::uint32_t>(it->second.vertices.size())));
+        target.ops.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex,
+                                        static_cast<std::uint32_t>(it->second.vertices.size())));
       }
       return;
     }
     auto subpaths = PathFlattener::flattenSubpaths(path);
     if (subpaths.empty())
       return;
-    std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
+    std::uint32_t const firstVertex = static_cast<std::uint32_t>(target.pathVerts.size());
     for (auto &sp : subpaths) {
       for (Point &p : sp)
         p = state_.transform.apply(p);
@@ -2205,11 +2390,11 @@ private:
     auto append = [&](TessellatedPath &&tess, FillStyle const *gradientSource = nullptr) {
       if (gradientSource) {
         for (PathVertex const &vertex : tess.vertices) {
-          pathVerts_.push_back(makeVulkanPathVertex(vertex, gradientSource, bounds, state_.opacity));
+          target.pathVerts.push_back(makeVulkanPathVertex(vertex, gradientSource, bounds, state_.opacity));
         }
       } else {
         for (PathVertex const &vertex : tess.vertices) {
-          pathVerts_.push_back(makeVulkanPathVertex(vertex, nullptr, bounds, 1.f));
+          target.pathVerts.push_back(makeVulkanPathVertex(vertex, nullptr, bounds, 1.f));
         }
       }
     };
@@ -2245,9 +2430,9 @@ private:
         }
       }
     }
-    std::uint32_t const vertexCount = static_cast<std::uint32_t>(pathVerts_.size()) - firstVertex;
+    std::uint32_t const vertexCount = static_cast<std::uint32_t>(target.pathVerts.size()) - firstVertex;
     if (vertexCount > 0) {
-      std::vector<VulkanPathVertex> cached(pathVerts_.begin() + firstVertex, pathVerts_.end());
+      std::vector<VulkanPathVertex> cached(target.pathVerts.begin() + firstVertex, target.pathVerts.end());
       pathCacheLru_.push_back(cacheKey);
       auto lruIt = std::prev(pathCacheLru_.end());
       auto [it, inserted] = pathCache_.emplace(cacheKey, CachedPath{std::move(cached), lruIt});
@@ -2257,7 +2442,7 @@ private:
         pathCacheLru_.erase(lruIt);
       }
       trimPathCache();
-      ops_.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
+      target.ops.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
     }
   }
 
@@ -2611,6 +2796,7 @@ private:
     res.atlasY = 1;
     res.atlasRowH = 0;
     res.glyphs.clear();
+    ++res.atlasGeneration;
     for (auto &[key, slot] : slots) {
       if (!atlasHasSpace(res, slot.w, slot.h)) {
         continue;
@@ -2993,6 +3179,10 @@ private:
   Color clearColor_ = Colors::transparent;
   DrawState state_{};
   std::vector<DrawState> stateStack_;
+  VulkanFrameRecorder *captureTarget_ = nullptr;
+  DrawState captureSavedState_{};
+  std::vector<DrawState> captureSavedStack_;
+  bool hasCaptureSavedState_ = false;
   std::vector<RectInstance> rects_;
   std::vector<QuadInstance> quads_;
   std::vector<ImageBatch> batches_;
@@ -3080,6 +3270,46 @@ std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int ha
 std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,
                                                        TextSystem& textSystem) {
   return std::make_unique<VulkanCanvas>(spec, textSystem);
+}
+
+bool beginRecordedOpsCaptureForCanvas(Canvas *canvas, VulkanFrameRecorder *target) {
+  if (!canvas || !target) {
+    return false;
+  }
+  if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
+    vulkan->beginRecordedOpsCapture(target);
+    return true;
+  }
+  return false;
+}
+
+void endRecordedOpsCaptureForCanvas(Canvas *canvas) {
+  if (!canvas) {
+    return;
+  }
+  if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
+    vulkan->endRecordedOpsCapture();
+  }
+}
+
+bool replayRecordedOpsForCanvas(Canvas *canvas, VulkanFrameRecorder const &recorded) {
+  if (!canvas) {
+    return false;
+  }
+  if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
+    return vulkan->replayRecordedOps(recorded);
+  }
+  return false;
+}
+
+bool replayRecordedLocalOpsForCanvas(Canvas *canvas, VulkanFrameRecorder const &recorded) {
+  if (!canvas) {
+    return false;
+  }
+  if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
+    return vulkan->replayRecordedLocalOps(recorded);
+  }
+  return false;
 }
 
 std::shared_ptr<Image> Image::fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
