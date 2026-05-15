@@ -10,6 +10,7 @@ namespace flux {
 class MetalImage final : public Image {
 public:
   explicit MetalImage(id<MTLTexture> texture);
+  MetalImage(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height);
 
   Size size() const override;
 
@@ -17,6 +18,8 @@ public:
 
 private:
   id<MTLTexture> texture_{nil};
+  std::uint32_t widthOverride_ = 0;
+  std::uint32_t heightOverride_ = 0;
 };
 
 /// Returns null if `image` is not a `MetalImage`.

@@ -1,0 +1,92 @@
+#pragma once
+
+/// \file Flux/Graphics/RenderTarget.hpp
+///
+/// Public render destination abstraction for window-backed, offscreen, and externally-owned GPU targets.
+
+#include <Flux/Graphics/Canvas.hpp>
+
+#include <cstdint>
+#include <memory>
+
+#if FLUX_VULKAN
+#include <vulkan/vulkan.h>
+#endif
+
+#if FLUX_METAL && defined(__OBJC__)
+@class MTLTexture;
+@class MTLCommandBuffer;
+@class MTLSharedEvent;
+#endif
+
+namespace flux {
+
+namespace scenegraph {
+class SceneGraph;
+}
+
+#if FLUX_VULKAN
+struct VulkanRenderTargetSpec {
+  VkImage image = VK_NULL_HANDLE;
+  VkImageView view = VK_NULL_HANDLE;
+  VkFormat format = VK_FORMAT_UNDEFINED;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+
+  VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkImageLayout finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  VkSemaphore waitSemaphore = VK_NULL_HANDLE;
+  VkSemaphore signalSemaphore = VK_NULL_HANDLE;
+
+  /// Optional command buffer. When null, Flux records, submits, and synchronizes internally.
+  /// When non-null, Flux records commands into it and the caller owns submission/synchronization.
+  VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+};
+#endif
+
+#if FLUX_METAL
+struct MetalRenderTargetSpec {
+  void* texture = nullptr;       ///< id<MTLTexture>; required.
+  int format = 0;                ///< MTLPixelFormat; 0 means match the texture.
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+
+  void* commandBuffer = nullptr; ///< id<MTLCommandBuffer>; optional.
+  void* sharedEvent = nullptr;   ///< id<MTLSharedEvent>; optional.
+  std::uint64_t signalValue = 0;
+};
+#endif
+
+namespace platform {
+class RenderTarget;
+}
+
+class RenderTarget {
+public:
+#if FLUX_VULKAN
+  explicit RenderTarget(VulkanRenderTargetSpec const& spec);
+#endif
+#if FLUX_METAL
+  explicit RenderTarget(MetalRenderTargetSpec const& spec);
+#endif
+
+  ~RenderTarget();
+
+  RenderTarget(RenderTarget const&) = delete;
+  RenderTarget& operator=(RenderTarget const&) = delete;
+  RenderTarget(RenderTarget&&) noexcept;
+  RenderTarget& operator=(RenderTarget&&) noexcept;
+
+  [[nodiscard]] Canvas& canvas();
+
+  void beginFrame();
+  void endFrame();
+
+  void renderScene(scenegraph::SceneGraph const& scene);
+
+private:
+  std::unique_ptr<platform::RenderTarget> impl_;
+};
+
+} // namespace flux

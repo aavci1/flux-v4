@@ -9,6 +9,7 @@
 namespace flux {
 
 class Image;
+struct MetalRenderTargetSpec;
 class TextSystem;
 class Window;
 struct MetalFrameRecorder;
@@ -18,6 +19,10 @@ struct MetalRecorderSlice;
 std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
                                           TextSystem& textSystem,
                                           std::function<void()> requestRedraw = {});
+
+/// Creates a Metal canvas that renders into a caller-owned texture instead of a CAMetalLayer.
+std::unique_ptr<Canvas> createMetalRenderTargetCanvas(MetalRenderTargetSpec const& spec,
+                                                      TextSystem& textSystem);
 
 /// When `sync` is true, the next `present()` uses commit → waitUntilScheduled → drawable present (resize-safe).
 /// No-op if `canvas` is not a Metal-backed canvas.

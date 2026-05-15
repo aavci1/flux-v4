@@ -5,6 +5,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/RenderTarget.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 
@@ -551,6 +552,25 @@ public:
     pushState();
   }
 
+  MetalCanvas(MetalRenderTargetSpec const& spec, TextSystem& textSystem)
+      : textSystem_(textSystem)
+      , metal_(targetDevice(spec), targetPixelFormat(spec))
+      , targetSpec_(spec)
+      , targetMode_(true) {
+    if (!targetTexture()) {
+      throw std::runtime_error("Metal RenderTarget requires a valid MTLTexture");
+    }
+    glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
+    glyphAtlas_->setBeforeGrowCallback([this]() {
+      MetalFrameRecorder const& recorder = activeRecorder();
+      return recorder.glyphVerts.empty() && recorder.glyphVertexSources.empty() &&
+             recorder.glyphVertexCount == 0;
+    });
+    frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
+    frameSampleCount_ = 1;
+    pushState();
+  }
+
   ~MetalCanvas() override { frame_.clear(); }
 
   Backend backend() const noexcept override { return Backend::Metal; }
@@ -580,21 +600,34 @@ public:
       stateStack_.back() = GpuState{};
       updateClipScissor();
     }
-    dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
+    if (!targetMode_) {
+      dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
+    }
     metal_.advanceFrame();
-    refreshFrameDrawableMetrics();
+    if (targetMode_) {
+      refreshTargetFrameMetrics();
+    } else {
+      refreshFrameDrawableMetrics();
+    }
     drawable_ = nil;
     cmdBuf_ = nil;
     inFrame_ = true;
     const CGSize ds = frameDrawableSize_;
-    CGFloat cs = metal_.layer().contentsScale;
-    if (cs < 0.01) {
-      cs = 1.0;
+    CGFloat cs = 1.0;
+    if (!targetMode_) {
+      cs = metal_.layer().contentsScale;
+      if (cs < 0.01) {
+        cs = 1.0;
+      }
+      dpiScaleX_ = static_cast<float>(cs);
+      dpiScaleY_ = static_cast<float>(cs);
+      dpiScale_ = std::min(dpiScaleX_, dpiScaleY_);
+    } else {
+      dpiScaleX_ = 1.f;
+      dpiScaleY_ = 1.f;
+      dpiScale_ = 1.f;
     }
-    dpiScaleX_ = static_cast<float>(cs);
-    dpiScaleY_ = static_cast<float>(cs);
-    dpiScale_ = std::min(dpiScaleX_, dpiScaleY_);
-    if (logicalW_ <= 0 || logicalH_ <= 0) {
+    if (!targetMode_ && (logicalW_ <= 0 || logicalH_ <= 0)) {
       logicalW_ = static_cast<int>(std::lround(static_cast<double>(ds.width) / static_cast<double>(cs)));
       logicalH_ = static_cast<int>(std::lround(static_cast<double>(ds.height) / static_cast<double>(cs)));
     }
@@ -608,6 +641,11 @@ public:
   void present() override {
     if (!inFrame_) {
       syncPresent_ = false;
+      return;
+    }
+
+    if (targetMode_) {
+      presentRenderTarget();
       return;
     }
 
@@ -1553,6 +1591,8 @@ private:
   MetalDeviceResources metal_;
   unsigned int windowHandle_{0};
   std::function<void()> requestRedraw_;
+  MetalRenderTargetSpec targetSpec_{};
+  bool targetMode_{false};
 
   dispatch_semaphore_t frameSem_{nullptr};
   id<MTLCommandBuffer> cmdBuf_{nil};
@@ -1604,6 +1644,35 @@ private:
   MetalFrameRecorder& activeRecorder() { return captureRecorder_ ? *captureRecorder_ : frame_; }
   MetalFrameRecorder const& activeRecorder() const { return captureRecorder_ ? *captureRecorder_ : frame_; }
 
+  static id<MTLTexture> textureFromSpec(MetalRenderTargetSpec const& spec) {
+    return (__bridge id<MTLTexture>)spec.texture;
+  }
+
+  static id<MTLDevice> targetDevice(MetalRenderTargetSpec const& spec) {
+    id<MTLTexture> texture = textureFromSpec(spec);
+    return texture && texture.device ? texture.device : MTLCreateSystemDefaultDevice();
+  }
+
+  static MTLPixelFormat targetPixelFormat(MetalRenderTargetSpec const& spec) {
+    if (spec.format != 0) {
+      return static_cast<MTLPixelFormat>(spec.format);
+    }
+    id<MTLTexture> texture = textureFromSpec(spec);
+    return texture ? texture.pixelFormat : MTLPixelFormatBGRA8Unorm;
+  }
+
+  id<MTLTexture> targetTexture() const {
+    return (__bridge id<MTLTexture>)targetSpec_.texture;
+  }
+
+  id<MTLCommandBuffer> targetCommandBuffer() const {
+    return (__bridge id<MTLCommandBuffer>)targetSpec_.commandBuffer;
+  }
+
+  id<MTLSharedEvent> targetSharedEvent() const {
+    return (__bridge id<MTLSharedEvent>)targetSpec_.sharedEvent;
+  }
+
   id<MTLTexture> ensureLiveFrameMsaaTexture(id<MTLTexture> resolveTexture) {
     if (frameSampleCount_ <= 1 || !resolveTexture) {
       return nil;
@@ -1652,6 +1721,21 @@ private:
     frameDrawableH_ = static_cast<float>(ds.height);
     frameDrawablePixelsW_ = static_cast<NSUInteger>(ds.width);
     frameDrawablePixelsH_ = static_cast<NSUInteger>(ds.height);
+  }
+
+  void refreshTargetFrameMetrics() {
+    id<MTLTexture> texture = targetTexture();
+    NSUInteger const pixelW = targetSpec_.width > 0 ? static_cast<NSUInteger>(targetSpec_.width)
+                                                    : (texture ? texture.width : 0);
+    NSUInteger const pixelH = targetSpec_.height > 0 ? static_cast<NSUInteger>(targetSpec_.height)
+                                                     : (texture ? texture.height : 0);
+    frameDrawableSize_ = CGSizeMake(static_cast<CGFloat>(pixelW), static_cast<CGFloat>(pixelH));
+    frameDrawableW_ = static_cast<float>(pixelW);
+    frameDrawableH_ = static_cast<float>(pixelH);
+    frameDrawablePixelsW_ = pixelW;
+    frameDrawablePixelsH_ = pixelH;
+    logicalW_ = static_cast<int>(pixelW);
+    logicalH_ = static_cast<int>(pixelH);
   }
 
   Rect viewportLogicalRect() const {
@@ -1841,7 +1925,7 @@ private:
       return nil;
     }
     MTLTextureDescriptor* desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:metal_.layer().pixelFormat
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:metal_.pixelFormat()
                                                            width:width
                                                           height:height
                                                        mipmapped:NO];
@@ -2827,6 +2911,96 @@ public:
     return true;
   }
 
+  void presentRenderTarget() {
+    id<MTLTexture> texture = targetTexture();
+    if (!texture || frameDrawablePixelsW_ == 0 || frameDrawablePixelsH_ == 0) {
+      frame_.clear();
+      cmdBuf_ = nil;
+      inFrame_ = false;
+      return;
+    }
+
+    debug::perf::recordFrameOps(frame_.rectOps.size(), frame_.imageOps.size(), frame_.pathOps.size(),
+                                frame_.glyphOps.size(), frame_.opOrder.size(), frame_.pathVerts.size(),
+                                frame_.glyphVertexCount);
+    std::uint32_t const uploadedRectInstances = metal_.uploadRectOps(frame_.rectOps);
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Rect,
+                                   static_cast<std::uint64_t>(uploadedRectInstances) *
+                                       sizeof(MetalRectInstance));
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Image,
+                                   frame_.imageOps.size() * sizeof(MetalImageInstance));
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Path,
+                                   frame_.pathVerts.size() * sizeof(PathVertex));
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Glyph,
+                                   static_cast<std::uint64_t>(frame_.glyphVertexCount) *
+                                       sizeof(MetalGlyphVertex));
+
+    metal_.uploadImageOps(frame_.imageOps);
+    metal_.uploadPathVertices(frame_.pathVerts);
+    metal_.uploadGlyphVertices(frame_);
+    metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
+                                   static_cast<std::uint32_t>(frame_.opOrder.size()));
+
+    id<MTLCommandBuffer> externalCommandBuffer = targetCommandBuffer();
+    cmdBuf_ = externalCommandBuffer ? externalCommandBuffer : [metal_.queue() commandBuffer];
+    if (!cmdBuf_) {
+      frame_.clear();
+      inFrame_ = false;
+      return;
+    }
+
+    std::shared_ptr<std::vector<PendingRasterPass>> pendingRasterKeepAlive;
+    if (!pendingRasterPasses_.empty()) {
+      pendingRasterKeepAlive = std::make_shared<std::vector<PendingRasterPass>>(std::move(pendingRasterPasses_));
+      pendingRasterPasses_.clear();
+      encodePendingRasterPasses(*pendingRasterKeepAlive);
+    }
+
+    bool const encodedBackdropFrame = hasBackdropBlurOps(frame_) && encodeFrameWithBackdropBlur(texture, texture, 1);
+    if (!encodedBackdropFrame) {
+      MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+      pass.colorAttachments[0].texture = texture;
+      pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+      pass.colorAttachments[0].clearColor =
+          MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
+      pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+      id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
+      if (enc) {
+        MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
+        [enc setViewport:vp];
+        encodeRecorderOps(frame_, enc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
+                          frameDrawablePixelsH_);
+        [enc endEncoding];
+      }
+    }
+
+    if (id<MTLSharedEvent> event = targetSharedEvent()) {
+      [cmdBuf_ encodeSignalEvent:event value:targetSpec_.signalValue];
+    }
+
+    lastSubmittedCmdBuf_ = cmdBuf_;
+    if (!externalCommandBuffer) {
+      auto keepAlive = pendingRasterKeepAlive;
+      if (keepAlive) {
+        [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { (void)keepAlive; }];
+      }
+      [cmdBuf_ commit];
+      if (!targetSharedEvent()) {
+        [cmdBuf_ waitUntilCompleted];
+      }
+      debug::perf::recordPresentedFrame();
+    } else if (pendingRasterKeepAlive) {
+      auto keepAlive = pendingRasterKeepAlive;
+      [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { (void)keepAlive; }];
+    }
+
+    frame_.clear();
+    glyphAtlas_->afterPresent();
+    cmdBuf_ = nil;
+    inFrame_ = false;
+  }
+
   void waitForLastPresentComplete() {
     if (!lastSubmittedCmdBuf_) {
       return;
@@ -2858,6 +3032,11 @@ std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, un
                                           std::function<void()> requestRedraw) {
   return std::make_unique<MetalCanvas>(window, (__bridge CAMetalLayer*)caMetalLayer, handle,
                                        textSystem, std::move(requestRedraw));
+}
+
+std::unique_ptr<Canvas> createMetalRenderTargetCanvas(MetalRenderTargetSpec const& spec,
+                                                      TextSystem& textSystem) {
+  return std::make_unique<MetalCanvas>(spec, textSystem);
 }
 
 void setSyncPresentForCanvas(Canvas* canvas, bool sync) {

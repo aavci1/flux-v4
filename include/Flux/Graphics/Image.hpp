@@ -7,8 +7,13 @@
 
 #include <Flux/Core/Geometry.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <string_view>
+
+#if FLUX_VULKAN
+#include <vulkan/vulkan.h>
+#endif
 
 namespace flux {
 
@@ -21,6 +26,19 @@ public:
   Image& operator=(Image const&) = delete;
 
   virtual Size size() const = 0;
+
+#if FLUX_VULKAN
+  /// Create an image reference backed by caller-owned Vulkan resources.
+  /// The VkImage and VkImageView must outlive all rendering that references the returned Image.
+  static std::shared_ptr<Image> fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
+                                                   std::uint32_t width, std::uint32_t height);
+#endif
+
+#if FLUX_METAL
+  /// Create an image reference backed by a caller-owned id<MTLTexture>.
+  /// The texture must outlive all rendering that references the returned Image.
+  static std::shared_ptr<Image> fromExternalMetal(void* texture, std::uint32_t width, std::uint32_t height);
+#endif
 
 protected:
   Image() = default;

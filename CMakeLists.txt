@@ -134,6 +134,7 @@ set(FLUX_GRAPHICS_SOURCES
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
+  src/Graphics/RenderTarget.cpp
   src/Graphics/TextCacheDebugOverlay.cpp
   src/Graphics/TextSystem.cpp
   src/Graphics/xxhash_impl.c
@@ -150,6 +151,7 @@ set(FLUX_SCENEGRAPH_SOURCES
   src/SceneGraph/ImageNode.cpp
   src/SceneGraph/PathNode.cpp
   src/SceneGraph/RenderNode.cpp
+  src/SceneGraph/RenderTargetScene.cpp
   src/SceneGraph/SceneGraph.cpp
   src/SceneGraph/SceneInteraction.cpp
   src/SceneGraph/SceneRenderer.cpp
@@ -239,6 +241,7 @@ if(FLUX_PLATFORM_MACOS)
     src/Graphics/Metal/MetalFrameRecorder.mm
     src/Graphics/Metal/GlyphAtlas.mm
     src/Graphics/Metal/MetalImage.mm
+    src/Graphics/Metal/MetalRenderTarget.mm
     src/Graphics/Metal/MetalPathRasterizer.cpp
     src/Graphics/Metal/MetalShaderLibrary.mm
     src/Graphics/Metal/MetalDeviceResources.mm
@@ -334,7 +337,9 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   target_sources(flux PRIVATE
     src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
+    src/Graphics/Vulkan/VulkanContext.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
+    src/Graphics/Vulkan/VulkanRenderTarget.cpp
     src/Platform/Linux/Common/XkbState.cpp
     src/Platform/Linux/WaylandApplication.cpp
     src/Platform/Linux/WaylandWindow.cpp
@@ -385,7 +390,9 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   target_sources(flux PRIVATE
     src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
+    src/Graphics/Vulkan/VulkanContext.cpp
     src/Graphics/Vulkan/VulkanGpuCanvas.cpp
+    src/Graphics/Vulkan/VulkanRenderTarget.cpp
     src/Platform/Linux/Common/XkbState.cpp
     src/Platform/Linux/KmsApplication.cpp
     src/Platform/Linux/KmsWindow.cpp
@@ -446,7 +453,9 @@ endif()
 target_link_libraries(flux PRIVATE libtess2)
 
 if(FLUX_PLATFORM_MACOS)
-  target_compile_definitions(flux PRIVATE FLUX_PLATFORM_MACOS=1)
+  target_compile_definitions(flux
+    PUBLIC FLUX_METAL=1 FLUX_VULKAN=0
+    PRIVATE FLUX_PLATFORM_MACOS=1)
   target_link_libraries(flux PRIVATE
     "-framework Cocoa"
     "-framework QuartzCore"
@@ -457,7 +466,9 @@ if(FLUX_PLATFORM_MACOS)
     "-framework CoreVideo"
   )
 elseif(FLUX_PLATFORM_LINUX_WAYLAND)
-  target_compile_definitions(flux PRIVATE FLUX_PLATFORM_LINUX_WAYLAND=1)
+  target_compile_definitions(flux
+    PUBLIC FLUX_METAL=0 FLUX_VULKAN=1
+    PRIVATE FLUX_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(flux PRIVATE ${FLUX_WAYLAND_PROTOCOL_DIR})
   target_link_libraries(flux PRIVATE
     PkgConfig::WAYLAND_CLIENT
@@ -470,7 +481,9 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 elseif(FLUX_PLATFORM_LINUX_KMS)
-  target_compile_definitions(flux PRIVATE FLUX_PLATFORM_LINUX_KMS=1)
+  target_compile_definitions(flux
+    PUBLIC FLUX_METAL=0 FLUX_VULKAN=1
+    PRIVATE FLUX_PLATFORM_LINUX_KMS=1)
   target_link_libraries(flux PRIVATE
     PkgConfig::LIBDRM
     PkgConfig::LIBINPUT

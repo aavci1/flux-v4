@@ -2,9 +2,11 @@
 
 #include <Flux/Debug/PerfCounters.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/RenderTarget.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include "Graphics/PathFlattener.hpp"
+#include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
@@ -71,13 +73,20 @@ struct VulkanImage final : Image {
   int width = 0;
   int height = 0;
   std::vector<Rgba> pixels;
+  VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
   mutable VkImage image = VK_NULL_HANDLE;
   mutable VmaAllocation allocation = VK_NULL_HANDLE;
   mutable VkImageView view = VK_NULL_HANDLE;
   mutable VkDescriptorSet descriptor = VK_NULL_HANDLE;
   mutable bool uploaded = false;
+  bool external = false;
 
   VulkanImage(int w, int h, std::vector<Rgba> p) : width(w), height(h), pixels(std::move(p)) {}
+  VulkanImage(VkImage externalImage, VkImageView externalView, VkFormat externalFormat,
+              std::uint32_t w, std::uint32_t h)
+      : width(static_cast<int>(w)), height(static_cast<int>(h)),
+        format(externalFormat == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : externalFormat),
+        image(externalImage), view(externalView), uploaded(true), external(true) {}
   ~VulkanImage() override { evictImageTexturesFor(this); }
   Size size() const override { return {static_cast<float>(width), static_cast<float>(height)}; }
 };
@@ -92,10 +101,13 @@ struct Texture {
   VkImage image = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
+  VkFormat format = VK_FORMAT_UNDEFINED;
   VkDescriptorSet descriptor = VK_NULL_HANDLE;
   VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
   int width = 0;
   int height = 0;
+  bool ownsImage = true;
+  bool ownsView = true;
 };
 
 struct RectInstance {
@@ -346,27 +358,51 @@ struct SharedVulkanCore {
 
 std::mutex gVulkanCoreMutex;
 SharedVulkanCore gVulkanCore;
-std::vector<char const*> gRequiredInstanceExtensions;
+std::vector<std::string> gRequiredInstanceExtensions;
+std::vector<std::string> gRequiredDeviceExtensions;
 std::filesystem::path gPipelineCacheDir;
 void destroySharedVulkanResources(SharedVulkanCore &core);
 
 std::mutex gCanvasRegistryMutex;
 std::vector<::flux::VulkanCanvas *> gCanvases;
 
+bool containsExtension(std::vector<std::string> const &extensions, char const *name) {
+  if (!name || !*name) {
+    return true;
+  }
+  return std::any_of(extensions.begin(), extensions.end(), [name](std::string const &extension) {
+    return extension == name;
+  });
+}
+
+void appendUniqueExtension(std::vector<std::string> &extensions, char const *name) {
+  if (!name || !*name || containsExtension(extensions, name)) {
+    return;
+  }
+  extensions.emplace_back(name);
+}
+
+std::vector<char const *> extensionNamePointers(std::vector<std::string> const &extensions) {
+  std::vector<char const *> names;
+  names.reserve(extensions.size());
+  for (std::string const &extension : extensions) {
+    names.push_back(extension.c_str());
+  }
+  return names;
+}
+
 VkInstance ensureSharedVulkanInstanceImpl() {
   std::lock_guard lock(gVulkanCoreMutex);
   if (gVulkanCore.instance)
     return gVulkanCore.instance;
-  if (gRequiredInstanceExtensions.empty()) {
-    throw std::runtime_error("Platform did not provide Vulkan instance extensions");
-  }
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
   app.pApplicationName = "Flux";
   app.apiVersion = VK_API_VERSION_1_3;
+  std::vector<char const *> instanceExtensions = extensionNamePointers(gRequiredInstanceExtensions);
   VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   info.pApplicationInfo = &app;
-  info.enabledExtensionCount = static_cast<std::uint32_t>(gRequiredInstanceExtensions.size());
-  info.ppEnabledExtensionNames = gRequiredInstanceExtensions.data();
+  info.enabledExtensionCount = static_cast<std::uint32_t>(instanceExtensions.size());
+  info.ppEnabledExtensionNames = instanceExtensions.empty() ? nullptr : instanceExtensions.data();
   vkCheck(vkCreateInstance(&info, nullptr, &gVulkanCore.instance), "vkCreateInstance");
   return gVulkanCore.instance;
 }
@@ -453,6 +489,7 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
   if (!gVulkanCore.instance) {
     throw std::runtime_error("Vulkan instance was not initialized");
   }
+  bool const needsPresent = surface != VK_NULL_HANDLE;
   if (!gVulkanCore.device) {
     std::uint32_t count = 0;
     vkEnumeratePhysicalDevices(gVulkanCore.instance, &count, nullptr);
@@ -479,8 +516,11 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
       vkGetPhysicalDeviceQueueFamilyProperties(d, &familiesCount, families.data());
       for (std::uint32_t i = 0; i < familiesCount; ++i) {
         VkBool32 present = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(d, i, surface, &present);
-        if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && present) {
+        if (needsPresent) {
+          vkGetPhysicalDeviceSurfaceSupportKHR(d, i, surface, &present);
+        }
+        if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+            (!needsPresent || present == VK_TRUE)) {
           gVulkanCore.physical = d;
           gVulkanCore.queueFamily = i;
           float priority = 1.f;
@@ -491,13 +531,17 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
           enabled13.synchronization2 = VK_TRUE;
           enabled13.dynamicRendering = VK_TRUE;
-          char const *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+          std::vector<std::string> deviceExtensions = gRequiredDeviceExtensions;
+          if (needsPresent) {
+            appendUniqueExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+          }
+          std::vector<char const *> deviceExtensionNames = extensionNamePointers(deviceExtensions);
           VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
           info.pNext = &enabled13;
           info.queueCreateInfoCount = 1;
           info.pQueueCreateInfos = &q;
-          info.enabledExtensionCount = 1;
-          info.ppEnabledExtensionNames = exts;
+          info.enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensionNames.size());
+          info.ppEnabledExtensionNames = deviceExtensionNames.empty() ? nullptr : deviceExtensionNames.data();
           vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
           VmaAllocatorCreateInfo allocatorInfo{};
           allocatorInfo.physicalDevice = gVulkanCore.physical;
@@ -511,12 +555,14 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
         }
       }
     }
-    throw std::runtime_error("No Vulkan graphics/present queue");
+    throw std::runtime_error(needsPresent ? "No Vulkan graphics/present queue" : "No Vulkan graphics queue");
   }
-  VkBool32 present = VK_FALSE;
-  vkGetPhysicalDeviceSurfaceSupportKHR(gVulkanCore.physical, gVulkanCore.queueFamily, surface, &present);
-  if (!present) {
-    throw std::runtime_error("Shared Vulkan queue cannot present to this surface");
+  if (needsPresent) {
+    VkBool32 present = VK_FALSE;
+    vkGetPhysicalDeviceSurfaceSupportKHR(gVulkanCore.physical, gVulkanCore.queueFamily, surface, &present);
+    if (!present) {
+      throw std::runtime_error("Shared Vulkan queue cannot present to this surface");
+    }
   }
   ++gVulkanCore.refs;
   return &gVulkanCore;
@@ -545,9 +591,9 @@ void releaseSharedVulkanCore() {
 }
 
 void destroySharedTexture(VkDevice device, VmaAllocator allocator, Texture &tex) {
-  if (tex.view)
+  if (tex.view && tex.ownsView)
     vkDestroyImageView(device, tex.view, nullptr);
-  if (tex.image)
+  if (tex.image && tex.ownsImage)
     vmaDestroyImage(allocator, tex.image, tex.allocation);
   tex = {};
 }
@@ -739,6 +785,34 @@ public:
     registerCanvas();
   }
 
+  VulkanCanvas(VulkanRenderTargetSpec const &spec, TextSystem &textSystem)
+      : textSystem_(textSystem), targetSpec_(spec), targetMode_(true) {
+    instance_ = ensureSharedVulkanInstanceImpl();
+    if (!targetSpec_.image || !targetSpec_.view || targetSpec_.width == 0 || targetSpec_.height == 0) {
+      throw std::runtime_error("Vulkan RenderTarget requires image, view, width, and height");
+    }
+    SharedVulkanCore *shared = acquireSharedVulkanCore(VK_NULL_HANDLE);
+    ownsSharedVulkanCore_ = true;
+    shared_ = shared;
+    physical_ = shared->physical;
+    device_ = shared->device;
+    allocator_ = shared->allocator;
+    queue_ = shared->queue;
+    queueFamily_ = shared->queueFamily;
+    surfaceFormat_.format = targetSpec_.format == VK_FORMAT_UNDEFINED
+                                 ? VK_FORMAT_B8G8R8A8_UNORM
+                                 : targetSpec_.format;
+    surfaceFormat_.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    width_ = static_cast<int>(targetSpec_.width);
+    height_ = static_cast<int>(targetSpec_.height);
+    framebufferWidth_ = width_;
+    framebufferHeight_ = height_;
+    swapExtent_ = VkExtent2D{targetSpec_.width, targetSpec_.height};
+    createCommandObjects();
+    ensureSharedResources();
+    registerCanvas();
+  }
+
   ~VulkanCanvas() override {
     if (device_) {
       vkDeviceWaitIdle(device_);
@@ -900,6 +974,10 @@ public:
     if (width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0)
       return;
     debug::perf::ScopedTimer timer(debug::perf::TimedMetric::CanvasPresent);
+    if (targetMode_) {
+      presentRenderTarget();
+      return;
+    }
     try {
       if (swapchainDirty_ || !swapchain_) {
         recreateSwapchain();
@@ -1053,6 +1131,138 @@ public:
     }
     currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
     debug::perf::recordPresentedFrame();
+  }
+
+  void recordRenderTargetCommands(VkCommandBuffer commandBuffer, VkImage targetImage,
+                                  VkImageView targetView, VkImageLayout initialLayout,
+                                  VkImageLayout finalLayout) {
+    uploadAtlasIfNeeded();
+    bool const backdropFrame = hasBackdropBlurOps();
+    std::uint32_t sceneCopyQuad = 0;
+    std::uint32_t horizontalBlurQuad = 0;
+    std::uint32_t verticalBlurQuad = 0;
+    if (backdropFrame) {
+      ensureBackdropSceneTarget();
+      float const blurRadius = maxBackdropBlurRadius() /
+                               std::sqrt(static_cast<float>(kBackdropBlurIterations));
+      sceneCopyQuad = appendSceneCopyQuad();
+      horizontalBlurQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f);
+      verticalBlurQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f);
+    }
+    uploadFrameBuffers();
+
+    VkClearValue clear{};
+    clear.color.float32[0] = clearColor_.r;
+    clear.color.float32[1] = clearColor_.g;
+    clear.color.float32[2] = clearColor_.b;
+    clear.color.float32[3] = clearColor_.a;
+    if (backdropFrame && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
+      std::size_t const firstBlur = firstBackdropBlurOp();
+      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, backdropSceneTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+      drawOps(commandBuffer, 0, firstBlur);
+      vkCmdEndRendering(commandBuffer);
+      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropSceneTexture_);
+
+      Texture *blurSource = &backdropSceneTexture_;
+      for (int i = 0; i < kBackdropBlurIterations; ++i) {
+        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+        beginColorRendering(commandBuffer, backdropScratchTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+        drawBackdropBlurPass(commandBuffer, blurSource, horizontalBlurQuad);
+        vkCmdEndRendering(commandBuffer);
+        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+        ensureTextureDescriptor(backdropScratchTexture_);
+
+        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+        beginColorRendering(commandBuffer, backdropBlurTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+        drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
+        vkCmdEndRendering(commandBuffer);
+        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+        ensureTextureDescriptor(backdropBlurTexture_);
+        blurSource = &backdropBlurTexture_;
+      }
+
+      VkClearValue finalClear{};
+      transition(commandBuffer, targetImage, initialLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, targetView, swapExtent_, finalClear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+      drawBackdropRange(commandBuffer, &backdropSceneTexture_, sceneCopyQuad, 1);
+      drawOps(commandBuffer, firstBlur, ops_.size(), &backdropBlurTexture_);
+      vkCmdEndRendering(commandBuffer);
+    } else {
+      transition(commandBuffer, targetImage, initialLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, targetView, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+      drawOps(commandBuffer);
+      vkCmdEndRendering(commandBuffer);
+    }
+    transition(commandBuffer, targetImage, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, finalLayout);
+  }
+
+  void presentRenderTarget() {
+    try {
+      targetSpec_.width = std::max<std::uint32_t>(1, targetSpec_.width);
+      targetSpec_.height = std::max<std::uint32_t>(1, targetSpec_.height);
+      width_ = static_cast<int>(targetSpec_.width);
+      height_ = static_cast<int>(targetSpec_.height);
+      framebufferWidth_ = width_;
+      framebufferHeight_ = height_;
+      swapExtent_ = VkExtent2D{targetSpec_.width, targetSpec_.height};
+
+      bool const externalCommandBuffer = targetSpec_.commandBuffer != VK_NULL_HANDLE;
+      VkCommandBuffer commandBuffer = targetSpec_.commandBuffer;
+      VkFence frameFence = VK_NULL_HANDLE;
+      if (!externalCommandBuffer) {
+        frameFence = frameFences_[currentFrame_];
+        commandBuffer = commandBuffers_[currentFrame_];
+        vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+        destroyDeferredTextures(false);
+        vkResetCommandBuffer(commandBuffer, 0);
+        VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
+      }
+
+      recordRenderTargetCommands(commandBuffer, targetSpec_.image, targetSpec_.view,
+                                 targetSpec_.initialLayout, targetSpec_.finalLayout);
+
+      if (externalCommandBuffer) {
+        return;
+      }
+
+      vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
+
+      VkSemaphoreSubmitInfo waitSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      waitSemaphore.semaphore = targetSpec_.waitSemaphore;
+      waitSemaphore.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+      VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+      commandBufferInfo.commandBuffer = commandBuffer;
+      VkSemaphoreSubmitInfo signalSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      signalSemaphore.semaphore = targetSpec_.signalSemaphore;
+      signalSemaphore.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+      VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+      submit.waitSemaphoreInfoCount = targetSpec_.waitSemaphore ? 1u : 0u;
+      submit.pWaitSemaphoreInfos = targetSpec_.waitSemaphore ? &waitSemaphore : nullptr;
+      submit.commandBufferInfoCount = 1;
+      submit.pCommandBufferInfos = &commandBufferInfo;
+      submit.signalSemaphoreInfoCount = targetSpec_.signalSemaphore ? 1u : 0u;
+      submit.pSignalSemaphoreInfos = targetSpec_.signalSemaphore ? &signalSemaphore : nullptr;
+      resetFrameFenceIndex_ = currentFrame_;
+      vkCheck(vkResetFences(device_, 1, &frameFence), "vkResetFences");
+      VkResult const submitted = vkQueueSubmit2(queue_, 1, &submit, frameFence);
+      if (submitted != VK_SUCCESS) {
+        recoverResetFrameFence();
+        vkCheck(submitted, "vkQueueSubmit2");
+      }
+      resetFrameFenceIndex_ = kNoResetFrameFence;
+      if (!targetSpec_.signalSemaphore) {
+        vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+      }
+      currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
+      debug::perf::recordPresentedFrame();
+    } catch (std::exception const &e) {
+      recoverResetFrameFence();
+      std::fprintf(stderr, "Flux Vulkan: render target present failed: %s\n", e.what());
+    }
   }
 
   void save() override { stateStack_.push_back(state_); }
@@ -2482,7 +2692,18 @@ private:
       return it->second.get();
     auto tex = std::make_unique<Texture>();
     try {
-      createTexture(*tex, image.width, image.height, image.pixels.data(), true);
+      if (image.external) {
+        tex->image = image.image;
+        tex->view = image.view;
+        tex->format = image.format;
+        tex->layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+        tex->width = image.width;
+        tex->height = image.height;
+        tex->ownsImage = false;
+        tex->ownsView = false;
+      } else {
+        createTexture(*tex, image.width, image.height, image.pixels.data(), true);
+      }
       ensureTextureDescriptor(*tex);
     } catch (...) {
       destroyTexture(*tex);
@@ -2512,6 +2733,7 @@ private:
   void createTexture(Texture &tex, int width, int height, Rgba const *pixels, bool uploadNow) {
     tex.width = width;
     tex.height = height;
+    tex.format = VK_FORMAT_R8G8B8A8_UNORM;
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image.imageType = VK_IMAGE_TYPE_2D;
     image.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -2542,9 +2764,10 @@ private:
   void createRenderTargetTexture(Texture &tex, int width, int height) {
     tex.width = width;
     tex.height = height;
+    tex.format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image.imageType = VK_IMAGE_TYPE_2D;
-    image.format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
+    image.format = tex.format;
     image.extent = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
     image.mipLevels = 1;
     image.arrayLayers = 1;
@@ -2607,9 +2830,9 @@ private:
   }
 
   void destroyTexture(Texture &tex) {
-    if (tex.view)
+    if (tex.view && tex.ownsView)
       vkDestroyImageView(device_, tex.view, nullptr);
-    if (tex.image)
+    if (tex.image && tex.ownsImage)
       vmaDestroyImage(allocator_, tex.image, tex.allocation);
     tex = {};
   }
@@ -2753,6 +2976,7 @@ private:
 
   unsigned int handle_ = 0;
   TextSystem &textSystem_;
+  VulkanRenderTargetSpec targetSpec_{};
   int width_ = 1;
   int height_ = 1;
   int framebufferWidth_ = 1;
@@ -2809,6 +3033,7 @@ private:
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
   bool ownsSharedVulkanCore_ = false;
+  bool targetMode_ = false;
 };
 
 namespace {
@@ -2828,8 +3053,12 @@ void evictImageTexturesFor(VulkanImage const *image) {
 void configureVulkanCanvasRuntime(std::span<char const* const> requiredInstanceExtensions,
                                   std::filesystem::path cacheDir) {
   std::lock_guard lock(gVulkanCoreMutex);
-  gRequiredInstanceExtensions.assign(requiredInstanceExtensions.begin(),
-                                     requiredInstanceExtensions.end());
+  if (gVulkanCore.instance) {
+    throw std::runtime_error("Cannot configure Vulkan instance extensions after instance creation");
+  }
+  for (char const *extension : requiredInstanceExtensions) {
+    appendUniqueExtension(gRequiredInstanceExtensions, extension);
+  }
   gPipelineCacheDir = std::move(cacheDir);
 }
 
@@ -2839,6 +3068,19 @@ VkInstance ensureSharedVulkanInstance() {
 
 std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem &textSystem) {
   return std::make_unique<VulkanCanvas>(surface, handle, textSystem);
+}
+
+std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,
+                                                       TextSystem& textSystem) {
+  return std::make_unique<VulkanCanvas>(spec, textSystem);
+}
+
+std::shared_ptr<Image> Image::fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
+                                                 std::uint32_t width, std::uint32_t height) {
+  if (!image || !view || width == 0 || height == 0) {
+    return nullptr;
+  }
+  return std::make_shared<VulkanImage>(image, view, format, width, height);
 }
 
 std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
@@ -2890,5 +3132,72 @@ std::shared_ptr<Image> rasterizeToImage(Canvas &canvas, Size logicalSize, Raster
     return nullptr;
   return vulkan->rasterize(logicalSize, draw, dpiScale);
 }
+
+namespace detail {
+
+VkInstance vulkanContextInstance() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  return gVulkanCore.instance;
+}
+
+VkPhysicalDevice vulkanContextPhysicalDevice() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  return gVulkanCore.physical;
+}
+
+VkDevice vulkanContextDevice() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  return gVulkanCore.device;
+}
+
+std::uint32_t vulkanContextQueueFamily() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  return gVulkanCore.queueFamily;
+}
+
+VkQueue vulkanContextQueue() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  return gVulkanCore.queue;
+}
+
+VmaAllocator vulkanContextAllocator() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  return gVulkanCore.allocator;
+}
+
+VkFormat vulkanContextPreferredColorFormat() noexcept {
+  std::lock_guard lock(gVulkanCoreMutex);
+  if (gVulkanCore.resources.renderFormat != VK_FORMAT_UNDEFINED) {
+    return gVulkanCore.resources.renderFormat;
+  }
+  return VK_FORMAT_B8G8R8A8_UNORM;
+}
+
+void vulkanContextAddRequiredInstanceExtension(char const *name) {
+  std::lock_guard lock(gVulkanCoreMutex);
+  if (gVulkanCore.instance) {
+    throw std::runtime_error("Cannot add Vulkan instance extension after instance creation");
+  }
+  appendUniqueExtension(gRequiredInstanceExtensions, name);
+}
+
+void vulkanContextAddRequiredDeviceExtension(char const *name) {
+  std::lock_guard lock(gVulkanCoreMutex);
+  if (gVulkanCore.device) {
+    throw std::runtime_error("Cannot add Vulkan device extension after device creation");
+  }
+  appendUniqueExtension(gRequiredDeviceExtensions, name);
+}
+
+void vulkanContextEnsureInitialized() {
+  ensureSharedVulkanInstanceImpl();
+  static bool holdsReference = false;
+  if (!holdsReference) {
+    acquireSharedVulkanCore(VK_NULL_HANDLE);
+    holdsReference = true;
+  }
+}
+
+} // namespace detail
 
 } // namespace flux

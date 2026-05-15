@@ -17,8 +17,11 @@
 #include <Flux/UI/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/RenderTarget.hpp>
 #include <Flux/Graphics/SvgPath.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Graphics/VulkanContext.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>

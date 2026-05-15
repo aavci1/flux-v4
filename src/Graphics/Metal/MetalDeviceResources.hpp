@@ -28,6 +28,7 @@ public:
   static constexpr std::size_t kFramesInFlight = 3;
 
   explicit MetalDeviceResources(CAMetalLayer* layer);
+  MetalDeviceResources(id<MTLDevice> device, MTLPixelFormat pixelFormat);
   ~MetalDeviceResources();
 
   MetalDeviceResources(const MetalDeviceResources&) = delete;
@@ -36,6 +37,7 @@ public:
   MetalDeviceResources& operator=(MetalDeviceResources&&) = delete;
 
   CAMetalLayer* layer() const { return layer_; }
+  MTLPixelFormat pixelFormat() const { return pixelFormat_; }
   id<MTLDevice> device() const { return device_; }
   id<MTLCommandQueue> queue() const { return queue_; }
   id<MTLRenderPipelineState> rectPSO(BlendMode mode, std::uint32_t sampleCount = 1);
@@ -67,6 +69,7 @@ public:
 
 private:
   CAMetalLayer* layer_{nil};
+  MTLPixelFormat pixelFormat_{MTLPixelFormatBGRA8Unorm};
   id<MTLDevice> device_{nil};
   id<MTLCommandQueue> queue_{nil};
   id<MTLLibrary> lib_{nil};

@@ -287,7 +287,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::rectPSO(BlendMode mode, std::ui
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", layer_.pixelFormat, mode, sampleCount);
+      makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", pixelFormat_, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: rect pipeline creation failed");
   }
@@ -302,7 +302,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::linePSO(BlendMode mode, std::ui
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", layer_.pixelFormat, mode, sampleCount);
+      makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", pixelFormat_, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: line pipeline creation failed");
   }
@@ -316,7 +316,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::pathPSO(BlendMode mode, std::ui
   if (auto it = pathPSOCache_.find(k); it != pathPSOCache_.end()) {
     return it->second;
   }
-  id<MTLRenderPipelineState> pso = makePathPipeline(device_, lib_, layer_.pixelFormat, mode, sampleCount);
+  id<MTLRenderPipelineState> pso = makePathPipeline(device_, lib_, pixelFormat_, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: path pipeline creation failed");
   }
@@ -331,7 +331,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::glyphPSO(BlendMode mode, std::u
   if (auto it = glyphPSOCache_.find(k); it != glyphPSOCache_.end()) {
     return it->second;
   }
-  id<MTLRenderPipelineState> pso = makeGlyphPipeline(device_, lib_, layer_.pixelFormat, mode, sampleCount);
+  id<MTLRenderPipelineState> pso = makeGlyphPipeline(device_, lib_, pixelFormat_, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: glyph pipeline creation failed");
   }
@@ -346,7 +346,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::imagePSO(BlendMode mode, std::u
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"image_sdf_vert", @"image_sdf_frag", layer_.pixelFormat, mode, sampleCount);
+      makePipeline(device_, lib_, @"image_sdf_vert", @"image_sdf_frag", pixelFormat_, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: image pipeline creation failed");
   }
@@ -361,7 +361,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::backdropPSO(std::uint32_t sampl
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"backdrop_vert", @"backdrop_frag", layer_.pixelFormat, BlendMode::SrcOver,
+      makePipeline(device_, lib_, @"backdrop_vert", @"backdrop_frag", pixelFormat_, BlendMode::SrcOver,
                    sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: backdrop pipeline creation failed");
@@ -375,7 +375,7 @@ id<MTLRenderPipelineState> MetalDeviceResources::backdropBlurPSO() {
     return backdropBlurPSO_;
   }
   backdropBlurPSO_ =
-      makePipeline(device_, lib_, @"backdrop_vert", @"backdrop_gaussian_frag", layer_.pixelFormat,
+      makePipeline(device_, lib_, @"backdrop_vert", @"backdrop_gaussian_frag", pixelFormat_,
                    BlendMode::SrcOver, 1);
   if (!backdropBlurPSO_) {
     throw std::runtime_error("MetalDeviceResources: backdrop blur pipeline creation failed");
@@ -387,6 +387,37 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
   device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
   layer_.device = device_;
   layer_.pixelFormat = MTLPixelFormatBGRA8Unorm;
+  pixelFormat_ = layer_.pixelFormat;
+  queue_ = [device_ newCommandQueue];
+
+  lib_ = flux::detail::fluxLoadShaderLibrary(device_);
+
+  static const vector_float2 kQuadStrip[kQuadStripCount] = {
+      {-1.f, -1.f},
+      {1.f, -1.f},
+      {-1.f, 1.f},
+      {1.f, 1.f},
+  };
+  quadBuffer_ = [device_ newBufferWithBytes:kQuadStrip length:sizeof(kQuadStrip) options:MTLResourceStorageModeShared];
+
+  MTLSamplerDescriptor* sd = [MTLSamplerDescriptor new];
+  sd.minFilter = MTLSamplerMinMagFilterLinear;
+  sd.magFilter = MTLSamplerMinMagFilterLinear;
+  sd.sAddressMode = MTLSamplerAddressModeClampToEdge;
+  sd.tAddressMode = MTLSamplerAddressModeClampToEdge;
+  linearSampler_ = [device_ newSamplerStateWithDescriptor:sd];
+
+  MTLSamplerDescriptor* rd = [MTLSamplerDescriptor new];
+  rd.minFilter = MTLSamplerMinMagFilterLinear;
+  rd.magFilter = MTLSamplerMinMagFilterLinear;
+  rd.sAddressMode = MTLSamplerAddressModeRepeat;
+  rd.tAddressMode = MTLSamplerAddressModeRepeat;
+  repeatSampler_ = [device_ newSamplerStateWithDescriptor:rd];
+}
+
+MetalDeviceResources::MetalDeviceResources(id<MTLDevice> device, MTLPixelFormat pixelFormat)
+    : pixelFormat_(pixelFormat == MTLPixelFormatInvalid ? MTLPixelFormatBGRA8Unorm : pixelFormat),
+      device_(device ? device : MTLCreateSystemDefaultDevice()) {
   queue_ = [device_ newCommandQueue];
 
   lib_ = flux::detail::fluxLoadShaderLibrary(device_);

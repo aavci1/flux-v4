@@ -5,6 +5,7 @@
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/RenderTarget.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
@@ -225,6 +226,78 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
 
     waitForCanvasLastPresentComplete(canvas.get());
     CHECK(true);
+  }
+#endif
+}
+
+TEST_CASE("Metal RenderTarget renders canvas ops into an offscreen texture") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    REQUIRE(device);
+
+    constexpr NSUInteger width = 64;
+    constexpr NSUInteger height = 64;
+    MTLTextureDescriptor* desc =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                           width:width
+                                                          height:height
+                                                       mipmapped:NO];
+    desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+    desc.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> texture = [device newTextureWithDescriptor:desc];
+    REQUIRE(texture);
+    std::shared_ptr<Image> externalImage =
+        Image::fromExternalMetal((__bridge void*)texture, static_cast<std::uint32_t>(width),
+                                 static_cast<std::uint32_t>(height));
+    REQUIRE(externalImage);
+    CHECK(externalImage->size().width == static_cast<float>(width));
+    CHECK(externalImage->size().height == static_cast<float>(height));
+
+    flux::RenderTarget target{flux::MetalRenderTargetSpec{
+        .texture = (__bridge void*)texture,
+        .width = static_cast<std::uint32_t>(width),
+        .height = static_cast<std::uint32_t>(height),
+    }};
+
+    target.beginFrame();
+    target.canvas().clear(flux::Colors::black);
+    auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 64.f, 64.f});
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{16.f, 16.f, 32.f, 32.f},
+        flux::FillStyle::solid(flux::Color{1.f, 0.f, 0.f, 1.f})));
+    SceneGraph graph{std::move(root)};
+    target.renderScene(graph);
+    target.endFrame();
+
+    id<MTLCommandQueue> queue = [device newCommandQueue];
+    REQUIRE(queue);
+    id<MTLBuffer> readback = [device newBufferWithLength:width * height * 4
+                                                 options:MTLResourceStorageModeShared];
+    REQUIRE(readback);
+    id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+    [blit copyFromTexture:texture
+              sourceSlice:0
+              sourceLevel:0
+             sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(width, height, 1)
+                 toBuffer:readback
+        destinationOffset:0
+   destinationBytesPerRow:width * 4
+ destinationBytesPerImage:width * height * 4];
+    [blit endEncoding];
+    [commandBuffer commit];
+    [commandBuffer waitUntilCompleted];
+    REQUIRE(commandBuffer.status == MTLCommandBufferStatusCompleted);
+
+    auto const* bytes = static_cast<std::uint8_t const*>([readback contents]);
+    std::size_t const center = (32u * static_cast<std::size_t>(width) + 32u) * 4u;
+    CHECK(bytes[center + 2] > 200);
+    CHECK(bytes[center + 1] < 32);
+    CHECK(bytes[center + 0] < 32);
   }
 #endif
 }
