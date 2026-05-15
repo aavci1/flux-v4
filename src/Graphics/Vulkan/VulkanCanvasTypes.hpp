@@ -59,6 +59,10 @@ struct DrawOp {
   std::uint32_t count = 0;
   Rect clip{};
   float blurRadius = 0.f;
+  VkDescriptorSet externalStorageDescriptor = VK_NULL_HANDLE;
+  VkBuffer externalVertexBuffer = VK_NULL_HANDLE;
+  float externalTranslationX = 0.f;
+  float externalTranslationY = 0.f;
 };
 
 struct VulkanPathVertex {

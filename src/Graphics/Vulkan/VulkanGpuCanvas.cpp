@@ -138,6 +138,11 @@ struct ImageBatch {
   std::uint32_t count = 0;
 };
 
+struct VulkanDrawPushConstants {
+  float viewport[2]{};
+  float translation[2]{};
+};
+
 struct PathCacheKey {
   std::uint64_t pathHash = 0;
   std::uint64_t styleHash = 0;
@@ -953,7 +958,9 @@ public:
     if (!recordedGlyphAtlasCurrent(recorded)) {
       return false;
     }
-    prepareRecorderBuffers(recorded);
+    if (!prepareRecorderBuffers(recorded)) {
+      return false;
+    }
     appendRecordedOps(recorded, false);
     return true;
   }
@@ -965,7 +972,9 @@ public:
     if (recordedOpsContainClipState(recorded)) {
       return false;
     }
-    prepareRecorderBuffers(recorded);
+    if (!prepareRecorderBuffers(recorded)) {
+      return false;
+    }
     appendRecordedOps(recorded, true);
     return true;
   }
@@ -1741,20 +1750,34 @@ private:
     vmaUnmapMemory(allocator_, allocation);
   }
 
-  void ensureRecorderBuffer(VulkanFrameRecorder const &recorded, VkBuffer &buffer,
-                            VmaAllocation &allocation, VkDeviceSize &capacity,
-                            void const *data, VkDeviceSize size, VkBufferUsageFlags usage) {
-    if (!data || size == 0) {
-      return;
-    }
-    if (recorded.allocator && recorded.allocator != allocator_) {
-      return;
+  bool prepareRecorderOwnership(VulkanFrameRecorder const &recorded) {
+    if ((recorded.allocator && recorded.allocator != allocator_) ||
+        (recorded.device && recorded.device != device_) ||
+        (recorded.descriptorPool && recorded.descriptorPool != resources().descriptorPool)) {
+      return false;
     }
     if (!recorded.allocator) {
       recorded.allocator = allocator_;
     }
+    if (!recorded.device) {
+      recorded.device = device_;
+    }
+    if (!recorded.descriptorPool) {
+      recorded.descriptorPool = resources().descriptorPool;
+    }
+    return true;
+  }
+
+  bool ensureRecorderBuffer(VulkanFrameRecorder const &recorded, VkBuffer &buffer,
+                            VmaAllocation &allocation, VkDeviceSize &capacity,
+                            void const *data, VkDeviceSize size, VkBufferUsageFlags usage) {
+    if (!data || size == 0) {
+      return true;
+    }
+    if (!prepareRecorderOwnership(recorded))
+      return false;
     if (buffer && capacity >= size) {
-      return;
+      return true;
     }
     if (buffer) {
       vmaDestroyBuffer(recorded.allocator, buffer, allocation);
@@ -1773,22 +1796,70 @@ private:
     vkCheck(vmaCreateBuffer(allocator_, &info, &allocationInfo, &buffer, &allocation, nullptr),
             "vmaCreateBuffer");
     uploadRecorderBuffer(allocation, data, size);
+    return true;
   }
 
-  void prepareRecorderBuffers(VulkanFrameRecorder const &recorded) {
-    ensureRecorderBuffer(recorded, recorded.preparedRectBuffer, recorded.preparedRectAllocation,
-                         recorded.preparedRectCapacity, recorded.rects.data(),
-                         static_cast<VkDeviceSize>(recorded.rects.size() * sizeof(RectInstance)),
-                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    ensureRecorderBuffer(recorded, recorded.preparedQuadBuffer, recorded.preparedQuadAllocation,
-                         recorded.preparedQuadCapacity, recorded.quads.data(),
-                         static_cast<VkDeviceSize>(recorded.quads.size() * sizeof(QuadInstance)),
-                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    ensureRecorderBuffer(recorded, recorded.preparedPathVertexBuffer,
-                         recorded.preparedPathVertexAllocation,
-                         recorded.preparedPathVertexCapacity, recorded.pathVerts.data(),
-                         static_cast<VkDeviceSize>(recorded.pathVerts.size() * sizeof(VulkanPathVertex)),
-                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+  bool ensureRecorderStorageDescriptor(VulkanFrameRecorder const &recorded, VkDescriptorSet &set,
+                                       VkDescriptorSetLayout layout, VkBuffer buffer,
+                                       VkDeviceSize capacity) {
+    if (!buffer || capacity == 0) {
+      return true;
+    }
+    if (!prepareRecorderOwnership(recorded))
+      return false;
+    if (!set) {
+      VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+      alloc.descriptorPool = recorded.descriptorPool;
+      alloc.descriptorSetCount = 1;
+      alloc.pSetLayouts = &layout;
+      vkCheck(vkAllocateDescriptorSets(device_, &alloc, &set), "vkAllocateDescriptorSets");
+    }
+    VkDescriptorBufferInfo bi{buffer, 0, capacity};
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pBufferInfo = &bi;
+    vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+    return true;
+  }
+
+  bool prepareRecorderBuffers(VulkanFrameRecorder const &recorded) {
+    if (!prepareRecorderOwnership(recorded))
+      return false;
+    if (!ensureRecorderBuffer(recorded, recorded.preparedRectBuffer, recorded.preparedRectAllocation,
+                              recorded.preparedRectCapacity, recorded.rects.data(),
+                              static_cast<VkDeviceSize>(recorded.rects.size() * sizeof(RectInstance)),
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
+      return false;
+    }
+    if (!ensureRecorderBuffer(recorded, recorded.preparedQuadBuffer, recorded.preparedQuadAllocation,
+                              recorded.preparedQuadCapacity, recorded.quads.data(),
+                              static_cast<VkDeviceSize>(recorded.quads.size() * sizeof(QuadInstance)),
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
+      return false;
+    }
+    if (!ensureRecorderBuffer(recorded, recorded.preparedPathVertexBuffer,
+                              recorded.preparedPathVertexAllocation,
+                              recorded.preparedPathVertexCapacity, recorded.pathVerts.data(),
+                              static_cast<VkDeviceSize>(recorded.pathVerts.size() * sizeof(VulkanPathVertex)),
+                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) {
+      return false;
+    }
+    if (!ensureRecorderStorageDescriptor(recorded, recorded.preparedRectDescriptor,
+                                         resources().rectDescriptorLayout,
+                                         recorded.preparedRectBuffer,
+                                         recorded.preparedRectCapacity)) {
+      return false;
+    }
+    if (!ensureRecorderStorageDescriptor(recorded, recorded.preparedQuadDescriptor,
+                                         resources().quadDescriptorLayout,
+                                         recorded.preparedQuadBuffer,
+                                         recorded.preparedQuadCapacity)) {
+      return false;
+    }
+    return true;
   }
 
   static void translateRectInstance(RectInstance &inst, float dx, float dy, float opacityScale) {
@@ -1815,6 +1886,46 @@ private:
     float const dx = localReplay ? state_.transform.m[6] : 0.f;
     float const dy = localReplay ? state_.transform.m[7] : 0.f;
     float const opacityScale = localReplay ? state_.opacity : 1.f;
+    constexpr float eps = 1e-4f;
+    bool const hasTranslatedBackdropBlur =
+        localReplay && (std::abs(dx) > eps || std::abs(dy) > eps) &&
+        std::any_of(recorded.ops.begin(), recorded.ops.end(), [](DrawOp const &op) {
+          return op.kind == DrawOp::Kind::BackdropBlur;
+        });
+    bool const canUsePreparedGeometry =
+        (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
+        !hasTranslatedBackdropBlur &&
+        (recorded.rects.empty() ||
+         (recorded.preparedRectBuffer && recorded.preparedRectDescriptor)) &&
+        (recorded.quads.empty() ||
+         (recorded.preparedQuadBuffer && recorded.preparedQuadDescriptor)) &&
+        (recorded.pathVerts.empty() || recorded.preparedPathVertexBuffer);
+
+    if (canUsePreparedGeometry) {
+      ops_.reserve(ops_.size() + recorded.ops.size());
+      for (DrawOp op : recorded.ops) {
+        switch (op.kind) {
+        case DrawOp::Kind::Rect:
+          op.externalStorageDescriptor = recorded.preparedRectDescriptor;
+          break;
+        case DrawOp::Kind::Path:
+          op.externalVertexBuffer = recorded.preparedPathVertexBuffer;
+          break;
+        case DrawOp::Kind::Image:
+        case DrawOp::Kind::BackdropBlur:
+          op.externalStorageDescriptor = recorded.preparedQuadDescriptor;
+          break;
+        }
+        if (localReplay) {
+          op.clip = state_.clip;
+          op.externalTranslationX = dx;
+          op.externalTranslationY = dy;
+        }
+        ops_.push_back(op);
+      }
+      return;
+    }
+
     std::uint32_t const rectBase = static_cast<std::uint32_t>(rects_.size());
     std::uint32_t const quadBase = static_cast<std::uint32_t>(quads_.size());
     std::uint32_t const pathBase = static_cast<std::uint32_t>(pathVerts_.size());
@@ -2042,15 +2153,14 @@ private:
 
   void createDescriptors() {
     auto &res = resources();
-    VkDescriptorPoolSize sizes[3]{
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8},
+    VkDescriptorPoolSize sizes[2]{
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 512},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 512},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8},
     };
     VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    pool.maxSets = 512;
-    pool.poolSizeCount = 3;
+    pool.maxSets = 1024;
+    pool.poolSizeCount = 2;
     pool.pPoolSizes = sizes;
     vkCheck(vkCreateDescriptorPool(device_, &pool, nullptr, &res.descriptorPool), "vkCreateDescriptorPool");
     res.rectDescriptorLayout = createStorageLayout();
@@ -2132,7 +2242,7 @@ private:
     res.rectPipelineLayout = createPipelineLayout({res.rectDescriptorLayout}, true);
     res.imagePipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.backdropPipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
-    res.pathPipelineLayout = createPipelineLayout({}, false);
+    res.pathPipelineLayout = createPipelineLayout({}, true);
     res.rectPipeline = createPipeline(res.rectPipelineLayout, flux_rect_vert_spv, flux_rect_vert_spv_len,
                                       flux_rect_frag_spv, flux_rect_frag_spv_len, {});
     res.imagePipeline = createPipeline(res.imagePipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
@@ -2168,7 +2278,7 @@ private:
     VkPushConstantRange push{};
     push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     push.offset = 0;
-    push.size = sizeof(float) * 2;
+    push.size = sizeof(VulkanDrawPushConstants);
     VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     info.setLayoutCount = static_cast<std::uint32_t>(setLayouts.size());
     info.pSetLayouts = setLayouts.data();
@@ -2602,51 +2712,84 @@ private:
     return radius;
   }
 
-  void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
+  VulkanDrawPushConstants drawPushConstants(float translationX = 0.f,
+                                            float translationY = 0.f) const {
+    VulkanDrawPushConstants push{};
+    push.viewport[0] = static_cast<float>(width_);
+    push.viewport[1] = static_cast<float>(height_);
+    push.translation[0] = translationX;
+    push.translation[1] = translationY;
+    return push;
+  }
+
+  void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count,
+                     VkDescriptorSet descriptor = VK_NULL_HANDLE,
+                     float translationX = 0.f, float translationY = 0.f) {
     if (count == 0)
       return;
-    float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
+    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
+    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : rectDescriptorSet_;
+    if (!storageDescriptor)
+      return;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipelineLayout, 0, 1,
-                            &rectDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, res.rectPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
+                            &storageDescriptor, 0, nullptr);
+    vkCmdPushConstants(commandBuffer, res.rectPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawPathRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
+  void drawPathRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count,
+                     VkBuffer vertexBuffer = VK_NULL_HANDLE,
+                     float translationX = 0.f, float translationY = 0.f) {
     if (count == 0)
       return;
     VkDeviceSize offset = 0;
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resources().pathPipeline);
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pathBuffer_.buffer, &offset);
+    VkBuffer const buffer = vertexBuffer ? vertexBuffer : pathBuffer_.buffer;
+    if (!buffer)
+      return;
+    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
+    auto const &res = resources();
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.pathPipeline);
+    vkCmdPushConstants(commandBuffer, res.pathPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &buffer, &offset);
     vkCmdDraw(commandBuffer, count, 1, first, 0);
   }
 
-  void drawImageRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count) {
+  void drawImageRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count,
+                      VkDescriptorSet descriptor = VK_NULL_HANDLE,
+                      float translationX = 0.f, float translationY = 0.f) {
     if (!texture || !texture->descriptor || count == 0)
       return;
-    float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
+    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
+    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
+    if (!storageDescriptor)
+      return;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 0, 1,
-                            &quadDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, res.imagePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
+                            &storageDescriptor, 0, nullptr);
+    vkCmdPushConstants(commandBuffer, res.imagePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 1, 1,
                             &texture->descriptor, 0, nullptr);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawBackdropRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count) {
+  void drawBackdropRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count,
+                         VkDescriptorSet descriptor = VK_NULL_HANDLE,
+                         float translationX = 0.f, float translationY = 0.f) {
     if (!texture || !texture->descriptor || count == 0)
       return;
-    float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
+    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
+    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
+    if (!storageDescriptor)
+      return;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
-                            &quadDescriptorSet_, 0, nullptr);
+                            &storageDescriptor, 0, nullptr);
     vkCmdPushConstants(commandBuffer, res.backdropPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(viewport), viewport);
+                       sizeof(push), &push);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
                             &texture->descriptor, 0, nullptr);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
@@ -2656,13 +2799,13 @@ private:
     if (!texture || !texture->descriptor)
       return;
     setViewportScissor(commandBuffer, Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_)));
-    float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
+    VulkanDrawPushConstants const push = drawPushConstants();
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
                             &quadDescriptorSet_, 0, nullptr);
     vkCmdPushConstants(commandBuffer, res.backdropPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(viewport), viewport);
+                       sizeof(push), &push);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
                             &texture->descriptor, 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, first);
@@ -2693,16 +2836,20 @@ private:
       setViewportScissor(commandBuffer, op.clip);
       switch (op.kind) {
       case DrawOp::Kind::Rect:
-        drawRectRange(commandBuffer, op.first, op.count);
+        drawRectRange(commandBuffer, op.first, op.count, op.externalStorageDescriptor,
+                      op.externalTranslationX, op.externalTranslationY);
         break;
       case DrawOp::Kind::Path:
-        drawPathRange(commandBuffer, op.first, op.count);
+        drawPathRange(commandBuffer, op.first, op.count, op.externalVertexBuffer,
+                      op.externalTranslationX, op.externalTranslationY);
         break;
       case DrawOp::Kind::Image:
-        drawImageRange(commandBuffer, op.texture, op.first, op.count);
+        drawImageRange(commandBuffer, op.texture, op.first, op.count, op.externalStorageDescriptor,
+                       op.externalTranslationX, op.externalTranslationY);
         break;
       case DrawOp::Kind::BackdropBlur:
-        drawBackdropRange(commandBuffer, backdropSource, op.first, op.count);
+        drawBackdropRange(commandBuffer, backdropSource, op.first, op.count, op.externalStorageDescriptor,
+                          op.externalTranslationX, op.externalTranslationY);
         break;
       }
     }

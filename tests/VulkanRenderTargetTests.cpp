@@ -383,6 +383,7 @@ TEST_CASE("VulkanFrameRecorder supports empty lifecycle and move semantics") {
   CHECK(recorded.quads.empty());
   CHECK(recorded.pathVerts.empty());
   CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
 
   recorded.ops.push_back(DrawOp{});
   recorded.rects.push_back(RectInstance{});
@@ -433,7 +434,9 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
 
   REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
   CHECK(recorded.preparedRectBuffer != VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectDescriptor != VK_NULL_HANDLE);
   VkBuffer const firstPreparedRectBuffer = recorded.preparedRectBuffer;
+  VkDescriptorSet const firstPreparedRectDescriptor = recorded.preparedRectDescriptor;
   canvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -465,9 +468,32 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->resize(static_cast<int>(width), static_cast<int>(height));
   secondCanvas->beginFrame();
   secondCanvas->clear(Colors::black);
+  secondCanvas->save();
+  secondCanvas->translate(flux::Point{16.f, 0.f});
   REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
+  secondCanvas->restore();
   CHECK(recorded.preparedRectBuffer == firstPreparedRectBuffer);
+  CHECK(recorded.preparedRectDescriptor == firstPreparedRectDescriptor);
   secondCanvas->present();
+
+  VulkanReadbackBuffer secondReadback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  copy.copyImageToBuffer(secondTargetImage.image, secondReadback.buffer, width, height);
+  std::vector<std::uint8_t> translatedPixels(width * height * 4u);
+  mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), secondReadback.memory, 0, secondReadback.size, 0, &mapped),
+          "vkMapMemory");
+  std::memcpy(translatedPixels.data(), mapped, translatedPixels.size());
+  vkUnmapMemory(vk.device(), secondReadback.memory);
+
+  std::size_t const shiftedCenter = (32u * static_cast<std::size_t>(width) + 48u) * 4u;
+  CHECK(translatedPixels[shiftedCenter + 2] > 200);
+  CHECK(translatedPixels[shiftedCenter + 1] < 32);
+  CHECK(translatedPixels[shiftedCenter + 0] < 32);
+
+  std::size_t const oldLeftEdge = (32u * static_cast<std::size_t>(width) + 20u) * 4u;
+  CHECK(translatedPixels[oldLeftEdge + 2] < 32);
+  CHECK(translatedPixels[oldLeftEdge + 1] < 32);
+  CHECK(translatedPixels[oldLeftEdge + 0] < 32);
 }
 
 TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
