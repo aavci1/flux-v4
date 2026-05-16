@@ -343,7 +343,7 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 
 ## 5. Phase 2: Wayland server, one client
 
-**Status:** first-client path in progress. The compositor now opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, and draws committed SHM surface pixels; dmabuf GPU import/compositing is still pending.
+**Status:** first-client path in progress. The compositor now opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, and draws committed SHM surface pixels. `flux-compositor-dmabuf-demo` verifies that a GBM-backed dma-buf buffer reaches the compositor and appears on screen; direct Vulkan sampling and explicit synchronization still need hardening.
 
 ### 5.1 Goal
 
@@ -435,6 +435,7 @@ This single-threaded model holds through phase 3. Phase 4 may surface a need for
 - ✓ `flux-compositor-shm-demo` provides a purpose-built SHM client smoke test. Start `flux-compositor`, note the logged Wayland display name, then run `WAYLAND_DISPLAY=<name> ./build-kms-compositor/flux-compositor-shm-demo` from another shell/TTY.
 - ✓ `xdg-decoration` is exposed and server-side decoration mode is accepted/configured for clients that request it.
 - ✓ `wl_surface.frame` callbacks are completed after compositor presentation rather than immediately at request time.
+- ✓ `flux-compositor-dmabuf-demo` creates a GBM buffer, fills it with a pattern, sends it to the compositor as a dma-buf, and appears on screen. This smoke currently uses the readable linear-buffer path for the visible result while direct Vulkan sampling is hardened.
 - ✗ Resizing the client's window does not crash the compositor (resize handling can be minimal).
 - ◐ Closing the client removes the surface from the draw list and prunes cached client images; close-button protocol/input path pending.
 - ✗ DMABUF-based buffer submission works (verified by checking the test app uses DMABUF, not SHM, via Wayland protocol logging).
@@ -748,7 +749,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
-| Phase 2: Wayland server, one client | SHM smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, and `flux-compositor-shm-demo` are in-tree; GPU import and Flux app smoke pending. |
+| Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, and dma-buf demo drawing are verified on hardware; direct Vulkan sampling and Flux app smoke pending. |
 | Phase 3: Input + window management | Not started | - | - | - |
 | Phase 4: Protocol ecosystem | Not started | - | - | - |
 | Phase 5: Animation + polish | Not started | - | - | - |
@@ -766,6 +767,8 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-16 | local working tree | Added `flux-compositor-shm-demo`, a tiny Wayland SHM client for first-client smoke testing. | Linux-only compositor test utility; no Metal API involved. |
 | 2026-05-16 | local working tree | Added checked-in xdg-decoration bindings and a server-side-decoration negotiation scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Moved Wayland frame callbacks to the compositor present loop. | Linux compositor-only event-loop behavior; no Metal API involved. |
+| 2026-05-16 | local working tree | Added a first `Image::fromDmabuf(...)` Vulkan path and compositor-side dmabuf surface import wiring. | Vulkan/Linux-only path; Metal parity still deferred to IOSurface import when needed. |
+| 2026-05-16 | local working tree | Added `flux-compositor-dmabuf-demo`, a tiny GBM-backed Wayland client for the first dma-buf hardware smoke test. | Linux-only compositor test utility; no Metal API involved. |
 
 ### 12.2 Open questions
 

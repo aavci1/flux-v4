@@ -18,6 +18,7 @@
 #include "Graphics/Vulkan/generated/rect_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/rect_vert_spv.hpp"
 
+#include <drm_fourcc.h>
 #include <vulkan/vulkan.h>
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic push
@@ -55,6 +56,8 @@
 #include <utility>
 #include <vector>
 
+#include <unistd.h>
+
 namespace flux {
 
 class VulkanCanvas;
@@ -81,11 +84,13 @@ struct VulkanImage final : Image {
   VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
   mutable VkImage image = VK_NULL_HANDLE;
   mutable VmaAllocation allocation = VK_NULL_HANDLE;
+  VkDeviceMemory importedMemory = VK_NULL_HANDLE;
   mutable VkImageView view = VK_NULL_HANDLE;
   mutable VkDescriptorSet descriptor = VK_NULL_HANDLE;
   mutable bool uploaded = false;
   bool external = false;
   bool ownsGpuResource = false;
+  bool ownsImportedMemory = false;
   bool ownsCoreReference = false;
   VkDevice owningDevice = VK_NULL_HANDLE;
   VmaAllocator owningAllocator = VK_NULL_HANDLE;
@@ -106,6 +111,15 @@ struct VulkanImage final : Image {
     acquireSharedVulkanCore(VK_NULL_HANDLE);
     ownsCoreReference = true;
   }
+  VulkanImage(VkDevice device, VkImage importedImage, VkDeviceMemory importedImageMemory,
+              VkImageView importedView, VkFormat imageFormat, int w, int h)
+      : width(w), height(h),
+        format(imageFormat == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : imageFormat),
+        image(importedImage), importedMemory(importedImageMemory), view(importedView), uploaded(true),
+        ownsGpuResource(true), ownsImportedMemory(true), owningDevice(device) {
+    acquireSharedVulkanCore(VK_NULL_HANDLE);
+    ownsCoreReference = true;
+  }
   ~VulkanImage() override {
     evictImageTexturesFor(this);
     if (ownsGpuResource) {
@@ -117,6 +131,11 @@ struct VulkanImage final : Image {
       }
       if (image && owningAllocator) {
         vmaDestroyImage(owningAllocator, image, allocation);
+      } else if (image && owningDevice) {
+        vkDestroyImage(owningDevice, image, nullptr);
+      }
+      if (ownsImportedMemory && importedMemory && owningDevice) {
+        vkFreeMemory(owningDevice, importedMemory, nullptr);
       }
     }
     if (ownsCoreReference) {
@@ -290,6 +309,32 @@ Rect unionRects(Rect a, Rect b) {
 void vkCheck(VkResult result, char const *what) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(std::string(what) + " failed");
+  }
+}
+
+std::uint32_t findMemoryType(VkPhysicalDevice physical, std::uint32_t typeBits,
+                             VkMemoryPropertyFlags requiredProperties) {
+  VkPhysicalDeviceMemoryProperties props{};
+  vkGetPhysicalDeviceMemoryProperties(physical, &props);
+  for (std::uint32_t i = 0; i < props.memoryTypeCount; ++i) {
+    if ((typeBits & (1u << i)) &&
+        (props.memoryTypes[i].propertyFlags & requiredProperties) == requiredProperties) {
+      return i;
+    }
+  }
+  throw std::runtime_error("No suitable Vulkan memory type");
+}
+
+VkFormat vkFormatForDrmFormat(std::uint32_t drmFormat) {
+  switch (drmFormat) {
+    case DRM_FORMAT_ARGB8888:
+    case DRM_FORMAT_XRGB8888:
+      return VK_FORMAT_B8G8R8A8_UNORM;
+    case DRM_FORMAT_ABGR8888:
+    case DRM_FORMAT_XBGR8888:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+    default:
+      return VK_FORMAT_UNDEFINED;
   }
 }
 
@@ -3036,11 +3081,14 @@ private:
         tex->image = image.image;
         tex->view = image.view;
         tex->format = image.format;
-        tex->layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+        tex->layout = image.ownsImportedMemory ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
         tex->width = image.width;
         tex->height = image.height;
         tex->ownsImage = false;
         tex->ownsView = false;
+        if (image.ownsImportedMemory) {
+          transitionImmediate(*tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+        }
       } else {
         createTexture(*tex, image.width, image.height, image.pixels.data(), true);
       }
@@ -3465,6 +3513,120 @@ std::shared_ptr<Image> Image::fromExternalVulkan(VkImage image, VkImageView view
     return nullptr;
   }
   return std::make_shared<VulkanImage>(image, view, format, width, height);
+}
+
+std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
+  if (spec.width == 0 || spec.height == 0 || spec.planes.size() != 1) {
+    for (DmabufPlane const& plane : spec.planes) {
+      if (plane.fd >= 0) close(plane.fd);
+    }
+    return nullptr;
+  }
+  DmabufPlane const plane = spec.planes.front();
+  int fd = plane.fd;
+  if (fd < 0 || plane.stride == 0) {
+    if (fd >= 0) close(fd);
+    return nullptr;
+  }
+
+  VkFormat const format = vkFormatForDrmFormat(spec.drmFormat);
+  if (format == VK_FORMAT_UNDEFINED) {
+    close(fd);
+    return nullptr;
+  }
+
+  VkDevice device = VK_NULL_HANDLE;
+  VkImage image = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  VkImageView view = VK_NULL_HANDLE;
+  bool acquiredCoreReference = false;
+  try {
+    SharedVulkanCore* core = acquireSharedVulkanCore(VK_NULL_HANDLE);
+    acquiredCoreReference = true;
+    device = core->device;
+
+    VkExternalMemoryImageCreateInfo externalInfo{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};
+    externalInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
+    VkSubresourceLayout planeLayout{};
+    planeLayout.offset = plane.offset;
+    planeLayout.size = static_cast<VkDeviceSize>(plane.stride) * spec.height;
+    planeLayout.rowPitch = plane.stride;
+    planeLayout.arrayPitch = planeLayout.size;
+    planeLayout.depthPitch = planeLayout.size;
+
+    VkImageDrmFormatModifierExplicitCreateInfoEXT modifierInfo{
+        VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT};
+    modifierInfo.pNext = &externalInfo;
+    modifierInfo.drmFormatModifier = plane.modifier;
+    modifierInfo.drmFormatModifierPlaneCount = 1;
+    modifierInfo.pPlaneLayouts = &planeLayout;
+
+    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    imageInfo.pNext = &modifierInfo;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = format;
+    imageInfo.extent = {spec.width, spec.height, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkCheck(vkCreateImage(device, &imageInfo, nullptr, &image), "vkCreateImage dmabuf");
+
+    auto getMemoryFdProperties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+        vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
+    if (!getMemoryFdProperties) {
+      throw std::runtime_error("vkGetMemoryFdPropertiesKHR is unavailable");
+    }
+    VkMemoryFdPropertiesKHR fdProps{VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR};
+    vkCheck(getMemoryFdProperties(device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &fdProps),
+            "vkGetMemoryFdPropertiesKHR");
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device, image, &requirements);
+    std::uint32_t const memoryTypeBits = requirements.memoryTypeBits & fdProps.memoryTypeBits;
+
+    VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
+    dedicated.image = image;
+    VkImportMemoryFdInfoKHR importInfo{VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR};
+    importInfo.pNext = &dedicated;
+    importInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    importInfo.fd = fd;
+
+    VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocateInfo.pNext = &importInfo;
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex = findMemoryType(core->physical, memoryTypeBits, 0);
+    vkCheck(vkAllocateMemory(device, &allocateInfo, nullptr, &memory), "vkAllocateMemory dmabuf");
+    fd = -1; // Ownership transferred to Vulkan on successful import.
+
+    vkCheck(vkBindImageMemory(device, image, memory, 0), "vkBindImageMemory dmabuf");
+
+    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = 1;
+    vkCheck(vkCreateImageView(device, &viewInfo, nullptr, &view), "vkCreateImageView dmabuf");
+
+    auto result = std::make_shared<VulkanImage>(device, image, memory, view, format,
+                                                static_cast<int>(spec.width), static_cast<int>(spec.height));
+    releaseSharedVulkanCore();
+    acquiredCoreReference = false;
+    return result;
+  } catch (...) {
+    if (fd >= 0) close(fd);
+    if (view) vkDestroyImageView(device, view, nullptr);
+    if (memory) vkFreeMemory(device, memory, nullptr);
+    if (image) vkDestroyImage(device, image, nullptr);
+    if (acquiredCoreReference) releaseSharedVulkanCore();
+    throw;
+  }
 }
 
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t height,

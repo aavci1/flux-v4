@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cerrno>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -62,6 +63,7 @@ struct WaylandServer::Surface {
   std::vector<std::uint8_t> rgbaPixels;
   std::int32_t width = 0;
   std::int32_t height = 0;
+  DmabufBuffer* dmabufBuffer = nullptr;
   std::vector<wl_resource*> frameCallbacks;
 };
 
@@ -235,6 +237,12 @@ WaylandServer::ShmBuffer* shmBufferFor(WaylandServer* server, wl_resource* resou
   return found == server->shmBuffers_.end() ? nullptr : found->get();
 }
 
+WaylandServer::DmabufBuffer* dmabufBufferFor(WaylandServer* server, wl_resource* resource) {
+  auto found = std::find_if(server->dmabufBuffers_.begin(), server->dmabufBuffers_.end(),
+                            [resource](auto const& buffer) { return buffer->resource == resource; });
+  return found == server->dmabufBuffers_.end() ? nullptr : found->get();
+}
+
 bool copyShmBufferToRgba(WaylandServer::ShmBuffer const& buffer, std::vector<std::uint8_t>& out) {
   if (!buffer.pool || !buffer.pool->data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) {
     return false;
@@ -280,7 +288,23 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->rgbaPixels = std::move(pixels);
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
+        surface->dmabufBuffer = nullptr;
         ++surface->serial;
+      }
+    } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
+      if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
+        surface->rgbaPixels.clear();
+        surface->width = dmabufBuffer->width;
+        surface->height = dmabufBuffer->height;
+        surface->dmabufBuffer = dmabufBuffer;
+        ++surface->serial;
+        std::fprintf(stderr,
+                     "flux-compositor: received %dx%d DMABUF buffer format=0x%08x stride=%u modifier=0x%016llx\n",
+                     dmabufBuffer->width,
+                     dmabufBuffer->height,
+                     dmabufBuffer->format,
+                     dmabufBuffer->planes.front().stride,
+                     static_cast<unsigned long long>(dmabufBuffer->planes.front().modifier));
       }
     }
     wl_buffer_send_release(surface->currentBuffer);
@@ -288,6 +312,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->rgbaPixels.clear();
     surface->width = 0;
     surface->height = 0;
+    surface->dmabufBuffer = nullptr;
     ++surface->serial;
   }
 }
@@ -765,9 +790,10 @@ void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::ui
 
 void sendDmabufFormat(wl_resource* resource, std::uint32_t format) {
   if (wl_resource_get_version(resource) >= ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION) {
-    std::uint64_t modifier = DRM_FORMAT_MOD_INVALID;
-    zwp_linux_dmabuf_v1_send_modifier(resource, format, static_cast<std::uint32_t>(modifier >> 32u),
-                                      static_cast<std::uint32_t>(modifier & 0xffffffffu));
+    for (std::uint64_t modifier : {DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR}) {
+      zwp_linux_dmabuf_v1_send_modifier(resource, format, static_cast<std::uint32_t>(modifier >> 32u),
+                                        static_cast<std::uint32_t>(modifier & 0xffffffffu));
+    }
     return;
   }
   zwp_linux_dmabuf_v1_send_format(resource, format);
@@ -836,8 +862,9 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
-    if (surface->rgbaPixels.empty() || surface->width <= 0 || surface->height <= 0) continue;
-    snapshots.push_back({
+    if (surface->width <= 0 || surface->height <= 0) continue;
+    if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) continue;
+    CommittedSurfaceSnapshot snapshot{
         .id = surface->id,
         .x = surface->windowX,
         .y = surface->windowY,
@@ -845,9 +872,92 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
         .height = surface->height,
         .serial = surface->serial,
         .rgbaPixels = surface->rgbaPixels,
-    });
+    };
+    if (surface->dmabufBuffer) {
+      snapshot.dmabufFormat = surface->dmabufBuffer->format;
+      snapshot.dmabufPlanes.reserve(surface->dmabufBuffer->planes.size());
+      for (DmabufPlane const& plane : surface->dmabufBuffer->planes) {
+        snapshot.dmabufPlanes.push_back({
+            .offset = plane.offset,
+            .stride = plane.stride,
+            .modifier = plane.modifier,
+        });
+      }
+    }
+    snapshots.push_back(std::move(snapshot));
   }
   return snapshots;
+}
+
+std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) const {
+  auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
+                              [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
+  if (surface == surfaces_.end() || !(*surface)->dmabufBuffer) return {};
+
+  std::vector<int> fds;
+  fds.reserve((*surface)->dmabufBuffer->planes.size());
+  for (DmabufPlane const& plane : (*surface)->dmabufBuffer->planes) {
+    int copied = dup(plane.fd);
+    if (copied < 0) {
+      for (int fd : fds) close(fd);
+      return {};
+    }
+    fds.push_back(copied);
+  }
+  return fds;
+}
+
+bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const {
+  auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
+                              [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
+  if (surface == surfaces_.end() || !(*surface)->dmabufBuffer) return false;
+
+  DmabufBuffer const& buffer = *(*surface)->dmabufBuffer;
+  if (buffer.width <= 0 || buffer.height <= 0 || buffer.planes.size() != 1) return false;
+  if (!isSupportedDmabufFormat(buffer.format)) return false;
+
+  DmabufPlane const& plane = buffer.planes.front();
+  if (plane.fd < 0 || plane.stride < static_cast<std::uint32_t>(buffer.width) * 4u) return false;
+  if (plane.modifier != DRM_FORMAT_MOD_LINEAR && plane.modifier != DRM_FORMAT_MOD_INVALID) return false;
+
+  std::size_t const rowBytes = static_cast<std::size_t>(buffer.width) * 4u;
+  std::size_t const dataSize = static_cast<std::size_t>(plane.offset) +
+                               static_cast<std::size_t>(plane.stride) *
+                                   static_cast<std::size_t>(buffer.height);
+  void* mapping = mmap(nullptr, dataSize, PROT_READ, MAP_SHARED, plane.fd, 0);
+  if (mapping == MAP_FAILED) {
+    std::fprintf(stderr, "flux-compositor: dmabuf CPU fallback mmap failed: %s\n", std::strerror(errno));
+    return false;
+  }
+
+  out.resize(static_cast<std::size_t>(buffer.width) * static_cast<std::size_t>(buffer.height) * 4u);
+  auto const* base = static_cast<std::uint8_t const*>(mapping) + plane.offset;
+  for (std::int32_t y = 0; y < buffer.height; ++y) {
+    auto const* src = base + static_cast<std::size_t>(y) * plane.stride;
+    auto* dst = out.data() + static_cast<std::size_t>(y) * rowBytes;
+    for (std::int32_t x = 0; x < buffer.width; ++x) {
+      std::uint8_t const b0 = src[static_cast<std::size_t>(x) * 4u + 0u];
+      std::uint8_t const b1 = src[static_cast<std::size_t>(x) * 4u + 1u];
+      std::uint8_t const b2 = src[static_cast<std::size_t>(x) * 4u + 2u];
+      std::uint8_t const b3 = src[static_cast<std::size_t>(x) * 4u + 3u];
+      if (buffer.format == DRM_FORMAT_ARGB8888 || buffer.format == DRM_FORMAT_XRGB8888) {
+        dst[static_cast<std::size_t>(x) * 4u + 0u] = b2;
+        dst[static_cast<std::size_t>(x) * 4u + 1u] = b1;
+        dst[static_cast<std::size_t>(x) * 4u + 2u] = b0;
+        dst[static_cast<std::size_t>(x) * 4u + 3u] =
+            buffer.format == DRM_FORMAT_XRGB8888 ? 255u : b3;
+      } else {
+        dst[static_cast<std::size_t>(x) * 4u + 0u] = b0;
+        dst[static_cast<std::size_t>(x) * 4u + 1u] = b1;
+        dst[static_cast<std::size_t>(x) * 4u + 2u] = b2;
+        dst[static_cast<std::size_t>(x) * 4u + 3u] =
+            buffer.format == DRM_FORMAT_XBGR8888 ? 255u : b3;
+      }
+    }
+  }
+
+  munmap(mapping, dataSize);
+  return true;
 }
 
 void WaylandServer::dispatch() {
@@ -934,6 +1044,15 @@ void WaylandServer::destroyDmabufParams(DmabufParams* params) {
 }
 
 void WaylandServer::destroyDmabufBuffer(DmabufBuffer* buffer) {
+  for (auto const& surface : surfaces_) {
+    if (surface->dmabufBuffer == buffer) {
+      surface->dmabufBuffer = nullptr;
+      surface->width = 0;
+      surface->height = 0;
+      surface->rgbaPixels.clear();
+      ++surface->serial;
+    }
+  }
   for (auto& plane : buffer->planes) {
     if (plane.fd >= 0) close(plane.fd);
     plane.fd = -1;

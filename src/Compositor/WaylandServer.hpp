@@ -22,6 +22,12 @@ struct WaylandOutputInfo {
 };
 
 struct CommittedSurfaceSnapshot {
+  struct DmabufPlane {
+    std::uint32_t offset = 0;
+    std::uint32_t stride = 0;
+    std::uint64_t modifier = 0;
+  };
+
   std::uint64_t id = 0;
   std::int32_t x = 0;
   std::int32_t y = 0;
@@ -29,6 +35,8 @@ struct CommittedSurfaceSnapshot {
   std::int32_t height = 0;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
+  std::uint32_t dmabufFormat = 0;
+  std::vector<DmabufPlane> dmabufPlanes;
 };
 
 class WaylandServer {
@@ -43,6 +51,8 @@ public:
   [[nodiscard]] int eventFd() const noexcept;
   [[nodiscard]] std::size_t toplevelCount() const noexcept;
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
+  [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
+  [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 
   void dispatch();
   void flushClients();

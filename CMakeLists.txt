@@ -350,6 +350,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
 elseif(FLUX_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
+  pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
   pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
   pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
@@ -543,6 +544,24 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wpedantic
   )
   target_link_libraries(flux-compositor-shm-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-dmabuf-demo
+    src/Compositor/DmabufDemoClient.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+    src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
+  )
+  target_include_directories(flux-compositor-dmabuf-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-dmabuf-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-dmabuf-demo PRIVATE
+    PkgConfig::WAYLAND_CLIENT
+    PkgConfig::GBM
+    PkgConfig::LIBDRM)
 endif()
 
 option(FLUX_BUILD_TESTS

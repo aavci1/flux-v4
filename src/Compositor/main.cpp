@@ -2,6 +2,7 @@
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/VulkanContext.hpp>
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
 #include "Compositor/WaylandServer.hpp"
@@ -17,6 +18,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <unistd.h>
+#include <vulkan/vulkan.h>
+
 namespace {
 
 std::atomic<bool> gRunning{true};
@@ -28,6 +32,7 @@ void onSignal(int) {
 struct CachedClientImage {
   std::uint64_t serial = 0;
   std::shared_ptr<flux::Image> image;
+  bool logged = false;
 };
 
 std::uint32_t monotonicMilliseconds() {
@@ -60,6 +65,10 @@ int main(int, char**) {
     });
 
     flux::configureVulkanCanvasRuntime(device->requiredVulkanInstanceExtensions(), device->cacheDir());
+    auto& vulkan = flux::VulkanContext::instance();
+    vulkan.addRequiredDeviceExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+    vulkan.addRequiredDeviceExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+    vulkan.addRequiredDeviceExtension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     VkInstance instance = flux::ensureSharedVulkanInstance();
     VkSurfaceKHR surface = output.createVulkanSurface(instance);
 
@@ -100,10 +109,54 @@ int main(int, char**) {
         auto& cached = clientImages[clientSurface.id];
         if (!cached.image || cached.serial != clientSurface.serial) {
           cached.serial = clientSurface.serial;
-          cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(clientSurface.width),
-                                                     static_cast<std::uint32_t>(clientSurface.height),
-                                                     clientSurface.rgbaPixels,
-                                                     canvas->gpuDevice());
+          cached.image.reset();
+          cached.logged = false;
+          if (!clientSurface.rgbaPixels.empty()) {
+            cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(clientSurface.width),
+                                                       static_cast<std::uint32_t>(clientSurface.height),
+                                                       clientSurface.rgbaPixels,
+                                                       canvas->gpuDevice());
+          } else if (!clientSurface.dmabufPlanes.empty()) {
+            std::vector<std::uint8_t> fallbackPixels;
+            std::vector<int> fds = wayland.duplicateDmabufFds(clientSurface.id);
+            if (fds.size() == clientSurface.dmabufPlanes.size()) {
+              std::vector<flux::Image::DmabufPlane> planes;
+              planes.reserve(clientSurface.dmabufPlanes.size());
+              for (std::size_t i = 0; i < clientSurface.dmabufPlanes.size(); ++i) {
+                planes.push_back({
+                    .fd = fds[i],
+                    .offset = clientSurface.dmabufPlanes[i].offset,
+                    .stride = clientSurface.dmabufPlanes[i].stride,
+                    .modifier = clientSurface.dmabufPlanes[i].modifier,
+                });
+              }
+              try {
+                cached.image = flux::Image::fromDmabuf({
+                    .width = static_cast<std::uint32_t>(clientSurface.width),
+                    .height = static_cast<std::uint32_t>(clientSurface.height),
+                    .drmFormat = clientSurface.dmabufFormat,
+                    .planes = planes,
+                });
+                if (cached.image && !cached.logged) {
+                  std::fprintf(stderr, "flux-compositor: imported DMABUF as Vulkan image\n");
+                }
+              } catch (std::exception const& e) {
+                std::fprintf(stderr, "flux-compositor: dmabuf import failed: %s\n", e.what());
+              }
+            } else {
+              for (int fd : fds) close(fd);
+            }
+            if (wayland.copyDmabufToRgba(clientSurface.id, fallbackPixels)) {
+              cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(clientSurface.width),
+                                                         static_cast<std::uint32_t>(clientSurface.height),
+                                                         fallbackPixels,
+                                                         canvas->gpuDevice());
+              if (cached.image && !cached.logged) {
+                std::fprintf(stderr, "flux-compositor: displaying readable DMABUF contents\n");
+                cached.logged = true;
+              }
+            }
+          }
         }
         if (!cached.image) continue;
 
