@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -19,6 +20,26 @@
 namespace flux::platform {
 
 class KmsOutput;
+
+struct KmsInputEvent {
+  enum class Kind {
+    PointerMotion,
+    PointerPosition,
+    PointerButton,
+    PointerAxis,
+    Key,
+  };
+
+  Kind kind = Kind::PointerMotion;
+  double dx = 0.0;
+  double dy = 0.0;
+  double x = 0.0;
+  double y = 0.0;
+  std::uint32_t button = 0;
+  bool pressed = false;
+  std::uint32_t key = 0;
+  std::uint32_t timeMs = 0;
+};
 
 class KmsDevice {
 public:
@@ -39,6 +60,8 @@ public:
   [[nodiscard]] std::filesystem::path cacheDir() const;
   [[nodiscard]] bool isVtForeground() const noexcept;
   [[nodiscard]] bool shouldTerminate() const noexcept;
+
+  void setInputHandler(std::function<void(KmsInputEvent const&)> handler);
 
   /// Services signal, VT-switch, input, wake, and hotplug events owned by the KMS device.
   bool pollEvents(int timeoutMs = 0);

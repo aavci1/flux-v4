@@ -135,6 +135,10 @@ bool KmsDevice::shouldTerminate() const noexcept {
   return impl_ && impl_->app_ ? impl_->app_->terminateRequested_.load(std::memory_order_relaxed) : true;
 }
 
+void KmsDevice::setInputHandler(std::function<void(KmsInputEvent const&)> handler) {
+  if (impl_ && impl_->app_) impl_->app_->rawInputHandler_ = std::move(handler);
+}
+
 bool KmsDevice::pollEvents(int timeoutMs) {
   return impl_ && impl_->app_ ? impl_->app_->pollInputAndWake(timeoutMs) : false;
 }

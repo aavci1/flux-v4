@@ -13,6 +13,8 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <unordered_map>
@@ -42,6 +44,11 @@ std::uint32_t monotonicMilliseconds() {
   return static_cast<std::uint32_t>(now.count());
 }
 
+bool debugCompositorInput() {
+  char const* value = std::getenv("FLUX_DEBUG_COMPOSITOR_INPUT");
+  return value && *value && std::strcmp(value, "0") != 0;
+}
+
 } // namespace
 
 int main(int, char**) {
@@ -62,6 +69,37 @@ int main(int, char**) {
         .width = static_cast<std::int32_t>(output.width()),
         .height = static_cast<std::int32_t>(output.height()),
         .refreshMilliHz = static_cast<std::int32_t>(output.refreshRateMilliHz()),
+    });
+    device->setInputHandler([&wayland](flux::platform::KmsInputEvent const& event) {
+      if (debugCompositorInput()) {
+        std::fprintf(stderr,
+                     "flux-compositor: input kind=%u dx=%.2f dy=%.2f x=%.1f y=%.1f button=%u pressed=%d key=%u\n",
+                     static_cast<unsigned int>(event.kind),
+                     event.dx,
+                     event.dy,
+                     event.x,
+                     event.y,
+                     event.button,
+                     event.pressed,
+                     event.key);
+      }
+      switch (event.kind) {
+      case flux::platform::KmsInputEvent::Kind::PointerMotion:
+        wayland.handlePointerMotion(event.dx, event.dy, event.timeMs);
+        break;
+      case flux::platform::KmsInputEvent::Kind::PointerPosition:
+        wayland.handlePointerPosition(event.x, event.y, event.timeMs);
+        break;
+      case flux::platform::KmsInputEvent::Kind::PointerButton:
+        wayland.handlePointerButton(event.button, event.pressed, event.timeMs);
+        break;
+      case flux::platform::KmsInputEvent::Kind::PointerAxis:
+        wayland.handlePointerAxis(event.dx, event.dy, event.timeMs);
+        break;
+      case flux::platform::KmsInputEvent::Kind::Key:
+        wayland.handleKeyboardKey(event.key, event.pressed, event.timeMs);
+        break;
+      }
     });
 
     flux::configureVulkanCanvasRuntime(device->requiredVulkanInstanceExtensions(), device->cacheDir());
@@ -170,6 +208,20 @@ int main(int, char**) {
                                             static_cast<float>(clientSurface.width),
                                             static_cast<float>(clientSurface.height)));
       }
+      float const cursorX = wayland.pointerX();
+      float const cursorY = wayland.pointerY();
+      flux::Path cursor;
+      cursor.moveTo({cursorX, cursorY});
+      cursor.lineTo({cursorX + 2.f, cursorY + 22.f});
+      cursor.lineTo({cursorX + 8.f, cursorY + 16.f});
+      cursor.lineTo({cursorX + 14.f, cursorY + 30.f});
+      cursor.lineTo({cursorX + 19.f, cursorY + 28.f});
+      cursor.lineTo({cursorX + 13.f, cursorY + 14.f});
+      cursor.lineTo({cursorX + 21.f, cursorY + 14.f});
+      cursor.close();
+      canvas->drawPath(cursor,
+                       flux::FillStyle::solid(flux::Colors::white),
+                       flux::StrokeStyle::solid(flux::Colors::black, 1.f));
       for (auto it = clientImages.begin(); it != clientImages.end();) {
         if (liveSurfaceIds.contains(it->first)) {
           ++it;

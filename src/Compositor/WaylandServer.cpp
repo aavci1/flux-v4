@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -45,6 +46,9 @@ extern struct zwp_linux_buffer_params_v1_interface const linuxBufferParamsImpl;
 extern struct zxdg_toplevel_decoration_v1_interface const xdgToplevelDecorationImpl;
 extern struct xdg_surface_interface const xdgSurfaceImpl;
 extern struct xdg_toplevel_interface const xdgToplevelImpl;
+extern struct wl_pointer_interface const pointerImpl;
+extern struct wl_keyboard_interface const keyboardImpl;
+extern struct wl_seat_interface const seatImpl;
 
 } // namespace
 
@@ -181,6 +185,22 @@ void toplevelDecorationDestroyResource(wl_resource* resource) {
   if (auto* decoration = dataFrom<WaylandServer::ToplevelDecoration>(resource)) {
     decoration->server->destroyToplevelDecoration(decoration);
   }
+}
+
+void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
+  resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
+}
+
+void seatDestroyResource(wl_resource* resource) {
+  if (auto* server = serverFrom(resource)) removeResource(server->seatResources_, resource);
+}
+
+void pointerDestroyResource(wl_resource* resource) {
+  if (auto* server = serverFrom(resource)) removeResource(server->pointerResources_, resource);
+}
+
+void keyboardDestroyResource(wl_resource* resource) {
+  if (auto* server = serverFrom(resource)) removeResource(server->keyboardResources_, resource);
 }
 
 void bufferDestroy(wl_client*, wl_resource* resource) {
@@ -336,6 +356,42 @@ struct wl_surface_interface const surfaceImpl{
     .offset = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
     .get_release = surfaceFrame,
 };
+
+int createKeymapFd(std::uint32_t& size) {
+  size = 0;
+  xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+  if (!context) return -1;
+  xkb_rule_names names{};
+  xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (!keymap) {
+    xkb_context_unref(context);
+    return -1;
+  }
+  char* keymapString = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
+  xkb_keymap_unref(keymap);
+  xkb_context_unref(context);
+  if (!keymapString) return -1;
+
+  std::size_t const length = std::strlen(keymapString) + 1u;
+  int fd = memfd_create("flux-compositor-keymap", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  if (fd >= 0 && ftruncate(fd, static_cast<off_t>(length)) == 0) {
+    std::size_t written = 0;
+    while (written < length) {
+      ssize_t n = write(fd, keymapString + written, length - written);
+      if (n <= 0) break;
+      written += static_cast<std::size_t>(n);
+    }
+    if (written == length) {
+      lseek(fd, 0, SEEK_SET);
+      size = static_cast<std::uint32_t>(length);
+      free(keymapString);
+      return fd;
+    }
+  }
+  if (fd >= 0) close(fd);
+  free(keymapString);
+  return -1;
+}
 
 void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, int fd, std::int32_t size) {
   auto* server = serverFrom(resource);
@@ -770,16 +826,76 @@ void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint3
   if (version >= 2) wl_output_send_done(resource);
 }
 
-void bindSeat(wl_client* client, void*, std::uint32_t version, std::uint32_t id) {
+void pointerSetCursor(wl_client*, wl_resource*, std::uint32_t, wl_resource*, std::int32_t, std::int32_t) {}
+
+void pointerRelease(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct wl_pointer_interface const pointerImpl{
+    .set_cursor = pointerSetCursor,
+    .release = pointerRelease,
+};
+
+void keyboardRelease(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct wl_keyboard_interface const keyboardImpl{
+    .release = keyboardRelease,
+};
+
+void seatGetPointer(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  wl_resource* pointer = wl_resource_create(client, &wl_pointer_interface,
+                                            std::min(wl_resource_get_version(resource), 7), id);
+  if (!pointer) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  server->pointerResources_.push_back(pointer);
+  wl_resource_set_implementation(pointer, &pointerImpl, server, pointerDestroyResource);
+}
+
+void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  wl_resource* keyboard = wl_resource_create(client, &wl_keyboard_interface,
+                                             std::min(wl_resource_get_version(resource), 7), id);
+  if (!keyboard) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  server->keyboardResources_.push_back(keyboard);
+  wl_resource_set_implementation(keyboard, &keyboardImpl, server, keyboardDestroyResource);
+
+  std::uint32_t keymapSize = 0;
+  int keymapFd = createKeymapFd(keymapSize);
+  if (keymapFd >= 0) {
+    wl_keyboard_send_keymap(keyboard, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, keymapFd, keymapSize);
+    close(keymapFd);
+  }
+  if (wl_resource_get_version(keyboard) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION) {
+    wl_keyboard_send_repeat_info(keyboard, 25, 600);
+  }
+}
+
+void seatRelease(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct wl_seat_interface const seatImpl{
+    .get_pointer = seatGetPointer,
+    .get_keyboard = seatGetKeyboard,
+    .get_touch = [](wl_client*, wl_resource*, std::uint32_t) {},
+    .release = seatRelease,
+};
+
+void bindSeat(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 7u), id);
-  static struct wl_seat_interface const seatImpl{
-      [](wl_client*, wl_resource*, std::uint32_t) {},
-      [](wl_client*, wl_resource*, std::uint32_t) {},
-      [](wl_client*, wl_resource*, std::uint32_t) {},
-      outputRelease,
-  };
-  wl_resource_set_implementation(resource, &seatImpl, nullptr, nullptr);
-  wl_seat_send_capabilities(resource, 0);
+  auto* server = static_cast<WaylandServer*>(data);
+  server->seatResources_.push_back(resource);
+  wl_resource_set_implementation(resource, &seatImpl, server, seatDestroyResource);
+  wl_seat_send_capabilities(resource, WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
   if (version >= 2) wl_seat_send_name(resource, "seat0");
 }
 
@@ -907,6 +1023,134 @@ std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) cons
   return fds;
 }
 
+WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y) {
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    WaylandServer::Surface* surface = it->get();
+    if (!surface || surface->width <= 0 || surface->height <= 0) continue;
+    float const left = static_cast<float>(surface->windowX);
+    float const top = static_cast<float>(surface->windowY);
+    float const right = left + static_cast<float>(surface->width);
+    float const bottom = top + static_cast<float>(surface->height);
+    if (x >= left && x < right && y >= top && y < bottom) return surface;
+  }
+  return nullptr;
+}
+
+void raiseSurface(WaylandServer* server, WaylandServer::Surface* surface) {
+  auto found = std::find_if(server->surfaces_.begin(), server->surfaces_.end(),
+                            [surface](auto const& candidate) { return candidate.get() == surface; });
+  if (found == server->surfaces_.end() || std::next(found) == server->surfaces_.end()) return;
+  auto item = std::move(*found);
+  server->surfaces_.erase(found);
+  server->surfaces_.push_back(std::move(item));
+}
+
+void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::uint32_t timeMs) {
+  if (server->pointerFocus_ == next) {
+    if (!next) return;
+    wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
+    wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
+    for (wl_resource* pointer : server->pointerResources_) {
+      wl_pointer_send_motion(pointer, timeMs, x, y);
+      if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
+    }
+    return;
+  }
+
+  std::uint32_t serial = server->nextInputSerial_++;
+  if (server->pointerFocus_) {
+    for (wl_resource* pointer : server->pointerResources_) {
+      wl_pointer_send_leave(pointer, serial, server->pointerFocus_->resource);
+      if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
+    }
+  }
+  server->pointerFocus_ = next;
+  if (next) {
+    wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
+    wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
+    for (wl_resource* pointer : server->pointerResources_) {
+      wl_pointer_send_enter(pointer, serial, next->resource, x, y);
+      if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
+    }
+  }
+}
+
+void setKeyboardFocus(WaylandServer* server, WaylandServer::Surface* next) {
+  if (server->keyboardFocus_ == next) return;
+  std::uint32_t serial = server->nextInputSerial_++;
+  if (server->keyboardFocus_) {
+    for (wl_resource* keyboard : server->keyboardResources_) {
+      wl_keyboard_send_leave(keyboard, serial, server->keyboardFocus_->resource);
+    }
+  }
+  server->keyboardFocus_ = next;
+  if (next) {
+    wl_array keys;
+    wl_array_init(&keys);
+    for (wl_resource* keyboard : server->keyboardResources_) {
+      wl_keyboard_send_enter(keyboard, serial, next->resource, &keys);
+      wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, 0, 0, 0, 0);
+    }
+    wl_array_release(&keys);
+  }
+}
+
+void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
+  pointerX_ = std::clamp(pointerX_ + static_cast<float>(dx), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
+  pointerY_ = std::clamp(pointerY_ + static_cast<float>(dy), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+}
+
+void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
+  pointerX_ = std::clamp(static_cast<float>(x), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
+  pointerY_ = std::clamp(static_cast<float>(y), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+}
+
+void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
+  Surface* target = surfaceAt(this, pointerX_, pointerY_);
+  if (pressed && target) {
+    raiseSurface(this, target);
+    setKeyboardFocus(this, target);
+    sendPointerFocus(this, target, timeMs);
+  }
+  if (!pointerFocus_) return;
+  std::uint32_t serial = nextInputSerial_++;
+  for (wl_resource* pointer : pointerResources_) {
+    wl_pointer_send_button(pointer,
+                           serial,
+                           timeMs,
+                           button,
+                           pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
+    if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
+  }
+}
+
+void WaylandServer::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
+  if (!pointerFocus_) return;
+  for (wl_resource* pointer : pointerResources_) {
+    if (dx != 0.0) {
+      wl_pointer_send_axis(pointer, timeMs, WL_POINTER_AXIS_HORIZONTAL_SCROLL, wl_fixed_from_double(dx));
+    }
+    if (dy != 0.0) {
+      wl_pointer_send_axis(pointer, timeMs, WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(dy));
+    }
+    if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
+  }
+}
+
+void WaylandServer::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
+  if (!keyboardFocus_) return;
+  std::uint32_t serial = nextInputSerial_++;
+  for (wl_resource* keyboard : keyboardResources_) {
+    wl_keyboard_send_key(keyboard,
+                         serial,
+                         timeMs,
+                         key,
+                         pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
+  }
+}
+
 bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const {
   auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
                               [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
@@ -995,6 +1239,8 @@ wl_resource* WaylandServer::createSurface(wl_client* client, std::uint32_t versi
 }
 
 void WaylandServer::destroySurface(Surface* surface) {
+  if (pointerFocus_ == surface) pointerFocus_ = nullptr;
+  if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
   for (wl_resource* callback : surface->frameCallbacks) {
     wl_resource_destroy(callback);
   }

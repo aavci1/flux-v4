@@ -126,6 +126,10 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   }
 }
 
+void KmsApplication::emitRawInput(platform::KmsInputEvent const& event) {
+  if (rawInputHandler_) rawInputHandler_(event);
+}
+
 void KmsApplication::dispatchPendingInput() {
   handlePendingVtSignal();
   pollActiveVt();
@@ -150,13 +154,41 @@ void KmsApplication::dispatchPendingInput() {
       break;
     case LIBINPUT_EVENT_POINTER_MOTION: {
       auto* pointer = libinput_event_get_pointer_event(event);
-      pointerPos_.x += static_cast<float>(libinput_event_pointer_get_dx(pointer));
-      pointerPos_.y += static_cast<float>(libinput_event_pointer_get_dy(pointer));
+      double const dx = libinput_event_pointer_get_dx(pointer);
+      double const dy = libinput_event_pointer_get_dy(pointer);
+      if (debugKmsInput()) {
+        std::fprintf(stderr, "[flux:kms:input] raw pointer motion dx=%.2f dy=%.2f\n", dx, dy);
+        std::fflush(stderr);
+      }
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerMotion,
+                    .dx = dx,
+                    .dy = dy,
+                    .timeMs = libinput_event_pointer_get_time(pointer)});
+      pointerPos_.x += static_cast<float>(dx);
+      pointerPos_.y += static_cast<float>(dy);
       routePointer(pointerPos_, InputEvent::Kind::PointerMove);
       break;
     }
     case LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE: {
       auto* pointer = libinput_event_get_pointer_event(event);
+      Size rawSize(1.f, 1.f);
+      if (!connectors_.empty()) {
+        drmModeModeInfo const& mode = connectors_.front().mode;
+        rawSize = Size(static_cast<float>(std::max(1, static_cast<int>(mode.hdisplay))),
+                       static_cast<float>(std::max(1, static_cast<int>(mode.vdisplay))));
+      }
+      double const x = libinput_event_pointer_get_absolute_x_transformed(
+          pointer, static_cast<std::uint32_t>(rawSize.width));
+      double const y = libinput_event_pointer_get_absolute_y_transformed(
+          pointer, static_cast<std::uint32_t>(rawSize.height));
+      if (debugKmsInput()) {
+        std::fprintf(stderr, "[flux:kms:input] raw pointer absolute x=%.1f y=%.1f\n", x, y);
+        std::fflush(stderr);
+      }
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerPosition,
+                    .x = x,
+                    .y = y,
+                    .timeMs = libinput_event_pointer_get_time(pointer)});
       KmsWindow* window = focusedWindow();
       if (!window) break;
       Size size = window->currentSize();
@@ -174,6 +206,10 @@ void KmsApplication::dispatchPendingInput() {
       auto* pointer = libinput_event_get_pointer_event(event);
       std::uint32_t button = libinput_event_pointer_get_button(pointer);
       bool pressed = libinput_event_pointer_get_button_state(pointer) == LIBINPUT_BUTTON_STATE_PRESSED;
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerButton,
+                    .button = button,
+                    .pressed = pressed,
+                    .timeMs = libinput_event_pointer_get_time(pointer)});
       std::uint8_t bit = buttonMaskBit(button);
       if (pressed) pressedButtons_ |= bit;
       else pressedButtons_ &= static_cast<std::uint8_t>(~bit);
@@ -192,6 +228,10 @@ void KmsApplication::dispatchPendingInput() {
         delta.y = static_cast<float>(libinput_event_pointer_get_axis_value(pointer,
                                                                            LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL));
       }
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerAxis,
+                    .dx = delta.x,
+                    .dy = delta.y,
+                    .timeMs = libinput_event_pointer_get_time(pointer)});
       routePointer(pointerPos_, InputEvent::Kind::Scroll, MouseButton::None, delta, true);
       break;
     }
@@ -208,12 +248,20 @@ void KmsApplication::dispatchPendingInput() {
         delta.y = static_cast<float>(libinput_event_pointer_get_scroll_value(pointer,
                                                                              LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL));
       }
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerAxis,
+                    .dx = delta.x,
+                    .dy = delta.y,
+                    .timeMs = libinput_event_pointer_get_time(pointer)});
       routePointer(pointerPos_, InputEvent::Kind::Scroll, MouseButton::None, delta, true);
       break;
     }
     case LIBINPUT_EVENT_KEYBOARD_KEY: {
       auto* keyboard = libinput_event_get_keyboard_event(event);
       bool pressed = libinput_event_keyboard_get_key_state(keyboard) == LIBINPUT_KEY_STATE_PRESSED;
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::Key,
+                    .pressed = pressed,
+                    .key = libinput_event_keyboard_get_key(keyboard),
+                    .timeMs = libinput_event_keyboard_get_time(keyboard)});
       routeKey(libinput_event_keyboard_get_key(keyboard), pressed);
       break;
     }
@@ -221,6 +269,27 @@ void KmsApplication::dispatchPendingInput() {
     case LIBINPUT_EVENT_TOUCH_MOTION:
     case LIBINPUT_EVENT_TOUCH_UP: {
       auto* touch = libinput_event_get_touch_event(event);
+      Size rawSize(1.f, 1.f);
+      if (!connectors_.empty()) {
+        drmModeModeInfo const& mode = connectors_.front().mode;
+        rawSize = Size(static_cast<float>(std::max(1, static_cast<int>(mode.hdisplay))),
+                       static_cast<float>(std::max(1, static_cast<int>(mode.vdisplay))));
+      }
+      double const rawX = libinput_event_touch_get_x_transformed(
+          touch, static_cast<std::uint32_t>(rawSize.width));
+      double const rawY = libinput_event_touch_get_y_transformed(
+          touch, static_cast<std::uint32_t>(rawSize.height));
+      emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerPosition,
+                    .x = rawX,
+                    .y = rawY,
+                    .timeMs = libinput_event_touch_get_time(touch)});
+      if (libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_DOWN ||
+          libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_UP) {
+        emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerButton,
+                      .button = BTN_LEFT,
+                      .pressed = libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_DOWN,
+                      .timeMs = libinput_event_touch_get_time(touch)});
+      }
       KmsWindow* window = focusedWindow();
       if (!window) break;
       Size size = window->currentSize();

@@ -3,6 +3,7 @@
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
 
+#include <Flux/Platform/Linux/KmsOutput.hpp>
 #include <Flux/UI/Events.hpp>
 
 #include <linux/vt.h>
@@ -76,6 +77,7 @@ public:
   void routePointer(Point position, InputEvent::Kind kind, MouseButton button = MouseButton::None,
                     Vec2 scrollDelta = {}, bool preciseScrollDelta = true);
   void routeKey(std::uint32_t evdevKey, bool pressed);
+  void emitRawInput(platform::KmsInputEvent const& event);
 
 private:
   friend class platform::KmsDevice;
@@ -125,6 +127,7 @@ private:
   std::vector<KmsWindow*> windows_;
   KmsWindow* pointerFocus_ = nullptr;
   platform::MenuActionDispatcher dispatcher_;
+  std::function<void(platform::KmsInputEvent const&)> rawInputHandler_;
   std::function<void()> terminateHandler_;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_ = "flux";

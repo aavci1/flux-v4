@@ -465,7 +465,7 @@ Total new code this phase: ~1850 LOC.
 
 ## 6. Phase 3: Input and window management
 
-**Status:** not yet implemented.
+**Status:** first input slice smoke passed. The compositor now exposes real pointer and keyboard seat capabilities, forwards basic pointer/key events to the focused Wayland surface, draws a software cursor, and raises windows on click. Drag/resize/chrome/popups are still pending.
 
 ### 6.1 Goal
 
@@ -474,7 +474,8 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 ### 6.2 Scope
 
 - libinput integration: pointer, keyboard, touch (touch may be stubbed if no test hardware).
-- `wl_pointer`, `wl_keyboard`, `wl_touch` implementations with focus tracking and event dispatch.
+- `wl_pointer`, `wl_keyboard`, `wl_touch` implementations with focus tracking and event dispatch. Pointer and keyboard are started; touch is still stubbed.
+- Current manual test setup needs read access to `/dev/input/event*`, for example `sudo setfacl -m u:$(id -un):rw /dev/input/event*`. This is a development checkpoint; proper seat/session input-device brokering is still pending.
 - libxkbcommon for keyboard layout handling (default: US layout; configuration deferred).
 - Cursor rendering: the compositor draws the cursor at the pointer position. Hardware cursor planes are a phase-5 optimization.
 - Multiple xdg_toplevel windows in z-order.
@@ -529,9 +530,9 @@ Window management state is held in the compositor, not in Wayland. Wayland tells
 - ✗ Two Flux apps run simultaneously, each in their own window.
 - ✗ Windows can be moved by dragging their title bars.
 - ✗ Windows can be resized by dragging their corners.
-- ✗ Clicking a window brings it to the top and gives it focus.
-- ✗ Keyboard input is routed to the focused window.
-- ✗ Cursor renders correctly and follows the pointer.
+- ✓ Clicking a window brings it to the top and gives it focus.
+- ◐ Keyboard input is routed to the focused window. Basic key events are sent; modifier correctness still needs hardening.
+- ✓ Cursor renders correctly and follows the pointer.
 - ✗ Cursor changes when entering a region of the client that requested a different cursor.
 - ✗ Snap-to-half works on dragging a window to the left or right edge.
 - ✗ Super+Q closes the focused window.
@@ -750,7 +751,7 @@ This section is updated as work progresses. Entries record completion of each ph
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, and dma-buf demo drawing are verified on hardware; direct Vulkan sampling and Flux app smoke pending. |
-| Phase 3: Input + window management | Not started | - | - | - |
+| Phase 3: Input + window management | First input slice smoke passed | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard` resources, basic focus, click-to-raise, key forwarding, and a software cursor are verified on hardware after granting `/dev/input/event*` read access; drag/resize/chrome pending. |
 | Phase 4: Protocol ecosystem | Not started | - | - | - |
 | Phase 5: Animation + polish | Not started | - | - | - |
 

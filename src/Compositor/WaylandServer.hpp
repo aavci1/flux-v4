@@ -57,6 +57,13 @@ public:
   void dispatch();
   void flushClients();
   void sendFrameCallbacks(std::uint32_t timeMs);
+  void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
+  void handlePointerPosition(double x, double y, std::uint32_t timeMs);
+  void handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs);
+  void handlePointerAxis(double dx, double dy, std::uint32_t timeMs);
+  void handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs);
+  [[nodiscard]] float pointerX() const noexcept { return pointerX_; }
+  [[nodiscard]] float pointerY() const noexcept { return pointerY_; }
 
   // Protocol callbacks are plain C function pointers, so this implementation
   // state is public to the translation unit callbacks. It remains unexposed to
@@ -98,8 +105,16 @@ public:
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
+  std::vector<wl_resource*> seatResources_;
+  std::vector<wl_resource*> pointerResources_;
+  std::vector<wl_resource*> keyboardResources_;
+  Surface* pointerFocus_ = nullptr;
+  Surface* keyboardFocus_ = nullptr;
+  float pointerX_ = 32.f;
+  float pointerY_ = 32.f;
   std::uint64_t nextSurfaceId_ = 1;
   std::uint32_t nextConfigureSerial_ = 1;
+  std::uint32_t nextInputSerial_ = 1;
 };
 
 } // namespace flux::compositor
