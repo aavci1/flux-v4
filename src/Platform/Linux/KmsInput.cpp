@@ -95,13 +95,13 @@ void KmsApplication::routePointer(Point position, InputEvent::Kind kind, MouseBu
                  static_cast<unsigned int>(pressedButtons_));
     std::fflush(stderr);
   }
-  Application::instance().eventQueue().post(InputEvent{.kind = kind,
-                                                       .handle = window->handle(),
-                                                       .position = localPosition,
-                                                       .scrollDelta = scrollDelta,
-                                                       .preciseScrollDelta = preciseScrollDelta,
-                                                       .button = button,
-                                                       .pressedButtons = pressedButtons_});
+  ::flux::Application::instance().eventQueue().post(InputEvent{.kind = kind,
+                                                               .handle = window->handle(),
+                                                               .position = localPosition,
+                                                               .scrollDelta = scrollDelta,
+                                                               .preciseScrollDelta = preciseScrollDelta,
+                                                               .button = button,
+                                                               .pressedButtons = pressedButtons_});
 }
 
 void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
@@ -111,17 +111,17 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   KeyCode const key = xkb.keyCodeForEvdevKey(evdevKey);
   Modifiers const modifiers = xkb.modifiers();
   xkb.updateKey(evdevKey, pressed);
-  Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
-                                                                        : InputEvent::Kind::KeyUp,
-                                                       .handle = window->handle(),
-                                                       .key = key,
-                                                       .modifiers = modifiers});
+  ::flux::Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
+                                                                                : InputEvent::Kind::KeyUp,
+                                                               .handle = window->handle(),
+                                                               .key = key,
+                                                               .modifiers = modifiers});
   if (pressed) {
     std::string text = xkb.utf8ForEvdevKey(evdevKey);
     if (!text.empty()) {
-      Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
-                                                           .handle = window->handle(),
-                                                           .text = std::move(text)});
+      ::flux::Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
+                                                                   .handle = window->handle(),
+                                                                   .text = std::move(text)});
     }
   }
 }
