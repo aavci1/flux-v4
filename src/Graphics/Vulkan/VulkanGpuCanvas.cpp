@@ -3467,6 +3467,18 @@ std::shared_ptr<Image> Image::fromExternalVulkan(VkImage image, VkImageView view
   return std::make_shared<VulkanImage>(image, view, format, width, height);
 }
 
+std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t height,
+                                             std::span<std::uint8_t const> rgbaPixels, void*) {
+  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * sizeof(Rgba);
+  if (width == 0 || height == 0 || rgbaPixels.size() != expectedSize) {
+    return nullptr;
+  }
+
+  std::vector<Rgba> pixels(static_cast<std::size_t>(width) * height);
+  std::memcpy(pixels.data(), rgbaPixels.data(), expectedSize);
+  return std::make_shared<VulkanImage>(static_cast<int>(width), static_cast<int>(height), std::move(pixels));
+}
+
 std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
   using WebPGetInfoFn = int (*)(std::uint8_t const *, std::size_t, int *, int *);
   using WebPDecodeRGBAFn = std::uint8_t *(*)(std::uint8_t const *, std::size_t, int *, int *);

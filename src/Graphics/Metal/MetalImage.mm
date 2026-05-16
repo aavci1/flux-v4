@@ -34,6 +34,35 @@ std::shared_ptr<Image> Image::fromExternalMetal(void* texture, std::uint32_t wid
   return std::make_shared<MetalImage>(metalTexture, width, height);
 }
 
+std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t height,
+                                             std::span<std::uint8_t const> rgbaPixels, void* gpuDevice) {
+  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
+  if (width == 0 || height == 0 || rgbaPixels.size() != expectedSize) {
+    return nullptr;
+  }
+
+  id<MTLDevice> device =
+      gpuDevice ? (__bridge id<MTLDevice>)gpuDevice : MTLCreateSystemDefaultDevice();
+  if (!device) {
+    return nullptr;
+  }
+
+  MTLTextureDescriptor* desc =
+      [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                         width:width
+                                                        height:height
+                                                     mipmapped:NO];
+  desc.usage = MTLTextureUsageShaderRead;
+  id<MTLTexture> tex = [device newTextureWithDescriptor:desc];
+  if (!tex) {
+    return nullptr;
+  }
+
+  MTLRegion region = MTLRegionMake2D(0, 0, width, height);
+  [tex replaceRegion:region mipmapLevel:0 withBytes:rgbaPixels.data() bytesPerRow:width * 4u];
+  return std::make_shared<MetalImage>(tex);
+}
+
 std::shared_ptr<Image> loadImageFromFile(std::string_view path, void* gpuDevice) {
   id<MTLDevice> device =
       gpuDevice ? (__bridge id<MTLDevice>)gpuDevice : MTLCreateSystemDefaultDevice();

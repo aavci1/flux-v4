@@ -352,6 +352,8 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
   pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
+  pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+  pkg_check_modules(WAYLAND_SERVER REQUIRED IMPORTED_TARGET wayland-server)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
@@ -400,6 +402,9 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/KmsWindow.cpp
     src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsInput.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+    src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
+    src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
   )
 endif()
 
@@ -487,10 +492,12 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   target_compile_definitions(flux
     PUBLIC FLUX_METAL=0 FLUX_VULKAN=1
     PRIVATE FLUX_PLATFORM_LINUX_KMS=1)
+  target_include_directories(flux PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols)
   target_link_libraries(flux PRIVATE
     PkgConfig::LIBDRM
     PkgConfig::LIBINPUT
     PkgConfig::LIBUDEV
+    PkgConfig::WAYLAND_SERVER
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     PkgConfig::FREETYPE
@@ -510,16 +517,32 @@ if(FLUX_BUILD_COMPOSITOR)
   endif()
   add_executable(flux-compositor
     src/Compositor/main.cpp
+    src/Compositor/WaylandServer.cpp
   )
   target_include_directories(flux-compositor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
   )
   target_compile_options(flux-compositor PRIVATE
     -Wall
     -Wextra
     -Wpedantic
   )
-  target_link_libraries(flux-compositor PRIVATE flux)
+  target_link_libraries(flux-compositor PRIVATE flux PkgConfig::WAYLAND_SERVER PkgConfig::LIBDRM)
+
+  add_executable(flux-compositor-shm-demo
+    src/Compositor/ShmDemoClient.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-shm-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-shm-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-shm-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 endif()
 
 option(FLUX_BUILD_TESTS

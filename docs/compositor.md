@@ -1,6 +1,6 @@
 # Flux Compositor
 
-**Status:** phase 1 basic TTY smoke passed in `flux-v4`; extended validation pending.
+**Status:** phase 2 first-client path in progress in `flux-v4`; phase 1 basic TTY smoke passed.
 **Repository:** `flux-compositor` is currently built from this repository as `flux-compositor` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
@@ -343,7 +343,7 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 
 ## 5. Phase 2: Wayland server, one client
 
-**Status:** not yet implemented.
+**Status:** first-client path in progress. The compositor now opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, and draws committed SHM surface pixels; dmabuf GPU import/compositing is still pending.
 
 ### 5.1 Goal
 
@@ -429,11 +429,14 @@ This single-threaded model holds through phase 3. Phase 4 may surface a need for
 
 ### 5.6 Acceptance criteria
 
-- ✗ `flux-compositor` accepts Wayland client connections.
-- ✗ A Flux test app, configured to use Wayland (set `WAYLAND_DISPLAY=wayland-0`), connects and creates a window.
-- ✗ The window's content appears on screen.
+- ✓ `flux-compositor` accepts Wayland client connections through the scaffolded server.
+- ◐ A Flux test app, configured to use Wayland (set `WAYLAND_DISPLAY=wayland-0`), should be able to connect and create a toplevel through the implemented xdg-shell path; Flux app smoke pending.
+- ✓ SHM-backed window content is copied into Flux images and drawn on screen, verified with `flux-compositor-shm-demo`; dmabuf-backed client content pending.
+- ✓ `flux-compositor-shm-demo` provides a purpose-built SHM client smoke test. Start `flux-compositor`, note the logged Wayland display name, then run `WAYLAND_DISPLAY=<name> ./build-kms-compositor/flux-compositor-shm-demo` from another shell/TTY.
+- ✓ `xdg-decoration` is exposed and server-side decoration mode is accepted/configured for clients that request it.
+- ✓ `wl_surface.frame` callbacks are completed after compositor presentation rather than immediately at request time.
 - ✗ Resizing the client's window does not crash the compositor (resize handling can be minimal).
-- ✗ Closing the client cleanly removes the window from the compositor's scene.
+- ◐ Closing the client removes the surface from the draw list and prunes cached client images; close-button protocol/input path pending.
 - ✗ DMABUF-based buffer submission works (verified by checking the test app uses DMABUF, not SHM, via Wayland protocol logging).
 - ✗ Compositor still exits cleanly on Ctrl+C.
 
@@ -745,7 +748,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
-| Phase 2: Wayland server, one client | Not started | - | - | - |
+| Phase 2: Wayland server, one client | SHM smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, and `flux-compositor-shm-demo` are in-tree; GPU import and Flux app smoke pending. |
 | Phase 3: Input + window management | Not started | - | - | - |
 | Phase 4: Protocol ecosystem | Not started | - | - | - |
 | Phase 5: Animation + polish | Not started | - | - | - |
@@ -757,12 +760,18 @@ Updated each time a Flux change lands in service of compositor work:
 | Date | Flux commit | Description | Mac parity status |
 |------|-------------|-------------|-------------------|
 | 2026-05-16 | local working tree | Added Linux KMS `KmsDevice` / `KmsOutput` API for compositor-owned display selection and Vulkan display-surface creation. | No Metal API required; Linux-only KMS surface. |
+| 2026-05-16 | local working tree | Added initial compositor-side Wayland server scaffold and checked-in xdg-shell server bindings. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-16 | local working tree | Added checked-in linux-dmabuf server bindings and a compositor-side buffer-parameter lifetime scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-16 | local working tree | Added `Image::fromRgbaPixels(...)` and used it to draw SHM-backed Wayland surface snapshots. | Implemented for Vulkan and Metal. |
+| 2026-05-16 | local working tree | Added `flux-compositor-shm-demo`, a tiny Wayland SHM client for first-client smoke testing. | Linux-only compositor test utility; no Metal API involved. |
+| 2026-05-16 | local working tree | Added checked-in xdg-decoration bindings and a server-side-decoration negotiation scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-16 | local working tree | Moved Wayland frame callbacks to the compositor present loop. | Linux compositor-only event-loop behavior; no Metal API involved. |
 
 ### 12.2 Open questions
 
 Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Decide based on evidence in phase 2.
-- Phase 3: Is `Image::fromSharedMemory` worth adding to Flux, or is "copy SHM into Flux-managed image" sufficient? Decide based on cursor-buffer characteristics.
+- Phase 3: Is the current "copy SHM into Flux-managed image" path sufficient for cursor buffers, or should Flux gain a lower-copy shared-memory image factory? Decide based on cursor-buffer characteristics.
 - Phase 4: When is `wp_presentation_time` precision needed enough to surface present-time from `RenderTarget::endFrame`? Decide when implementing the protocol.
 - Phase 5: Does multi-output land in v1 or post-v1?

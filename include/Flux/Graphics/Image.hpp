@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 
 #if FLUX_VULKAN
@@ -26,6 +27,13 @@ public:
   Image& operator=(Image const&) = delete;
 
   virtual Size size() const = 0;
+
+  /// Create an image from tightly packed 8-bit RGBA pixels.
+  /// `rgbaPixels` must contain exactly width * height * 4 bytes.
+  /// Metal uses `gpuDevice` as an optional id<MTLDevice>; other backends ignore it.
+  static std::shared_ptr<Image> fromRgbaPixels(std::uint32_t width, std::uint32_t height,
+                                               std::span<std::uint8_t const> rgbaPixels,
+                                               void* gpuDevice = nullptr);
 
 #if FLUX_VULKAN
   /// Create an image reference backed by caller-owned Vulkan resources.
