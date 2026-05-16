@@ -5,6 +5,7 @@
 #include "xdg-shell-server-protocol.h"
 
 #include <drm_fourcc.h>
+#include <linux/input-event-codes.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -23,6 +24,8 @@
 
 namespace flux::compositor {
 namespace {
+
+constexpr std::int32_t kTitleBarHeight = 28;
 
 WaylandServer* serverFrom(wl_resource* resource) {
   return static_cast<WaylandServer*>(wl_resource_get_user_data(resource));
@@ -63,6 +66,8 @@ struct WaylandServer::Surface {
   std::int32_t scale = 1;
   std::int32_t windowX = 96;
   std::int32_t windowY = 96;
+  bool toplevel = false;
+  bool cursor = false;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
   std::int32_t width = 0;
@@ -732,6 +737,9 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   auto toplevel = std::make_unique<WaylandServer::XdgToplevel>();
   toplevel->server = xdgSurface->server;
   toplevel->xdgSurface = xdgSurface;
+  xdgSurface->surface->toplevel = true;
+  xdgSurface->surface->cursor = false;
+  if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
   xdgSurface->surface->windowX = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
   xdgSurface->surface->windowY = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
   wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface,
@@ -826,7 +834,21 @@ void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint3
   if (version >= 2) wl_output_send_done(resource);
 }
 
-void pointerSetCursor(wl_client*, wl_resource*, std::uint32_t, wl_resource*, std::int32_t, std::int32_t) {}
+void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resource* surfaceResource,
+                      std::int32_t hotspotX, std::int32_t hotspotY) {
+  auto* server = serverFrom(resource);
+  if (!surfaceResource) {
+    server->cursorSurface_ = nullptr;
+    return;
+  }
+
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (!surface || surface->toplevel) return;
+  surface->cursor = true;
+  server->cursorSurface_ = surface;
+  server->cursorHotspotX_ = hotspotX;
+  server->cursorHotspotY_ = hotspotY;
+}
 
 void pointerRelease(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -978,6 +1000,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
+    if (!surface->toplevel) continue;
     if (surface->width <= 0 || surface->height <= 0) continue;
     if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) continue;
     CommittedSurfaceSnapshot snapshot{
@@ -986,8 +1009,12 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
         .y = surface->windowY,
         .width = surface->width,
         .height = surface->height,
+        .titleBarHeight = kTitleBarHeight,
+        .focused = keyboardFocus_ == surface.get(),
         .serial = surface->serial,
         .rgbaPixels = surface->rgbaPixels,
+        .dmabufFormat = 0,
+        .dmabufPlanes = {},
     };
     if (surface->dmabufBuffer) {
       snapshot.dmabufFormat = surface->dmabufBuffer->format;
@@ -1003,6 +1030,36 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
     snapshots.push_back(std::move(snapshot));
   }
   return snapshots;
+}
+
+std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
+  Surface* surface = cursorSurface_;
+  if (!surface || surface->width <= 0 || surface->height <= 0) return std::nullopt;
+  if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) return std::nullopt;
+
+  CommittedSurfaceSnapshot snapshot{
+      .id = surface->id,
+      .x = static_cast<std::int32_t>(pointerX_) - cursorHotspotX_,
+      .y = static_cast<std::int32_t>(pointerY_) - cursorHotspotY_,
+      .width = surface->width,
+      .height = surface->height,
+      .serial = surface->serial,
+      .rgbaPixels = surface->rgbaPixels,
+      .dmabufFormat = 0,
+      .dmabufPlanes = {},
+  };
+  if (surface->dmabufBuffer) {
+    snapshot.dmabufFormat = surface->dmabufBuffer->format;
+    snapshot.dmabufPlanes.reserve(surface->dmabufBuffer->planes.size());
+    for (DmabufPlane const& plane : surface->dmabufBuffer->planes) {
+      snapshot.dmabufPlanes.push_back({
+          .offset = plane.offset,
+          .stride = plane.stride,
+          .modifier = plane.modifier,
+      });
+    }
+  }
+  return snapshot;
 }
 
 std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) const {
@@ -1026,11 +1083,24 @@ std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) cons
 WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y) {
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Surface* surface = it->get();
-    if (!surface || surface->width <= 0 || surface->height <= 0) continue;
+    if (!surface || !surface->toplevel || surface->width <= 0 || surface->height <= 0) continue;
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(surface->width);
     float const bottom = top + static_cast<float>(surface->height);
+    if (x >= left && x < right && y >= top && y < bottom) return surface;
+  }
+  return nullptr;
+}
+
+WaylandServer::Surface* titlebarAt(WaylandServer* server, float x, float y) {
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    WaylandServer::Surface* surface = it->get();
+    if (!surface || !surface->toplevel || surface->width <= 0 || surface->height <= 0) continue;
+    float const left = static_cast<float>(surface->windowX);
+    float const top = static_cast<float>(surface->windowY - kTitleBarHeight);
+    float const right = left + static_cast<float>(surface->width);
+    float const bottom = static_cast<float>(surface->windowY);
     if (x >= left && x < right && y >= top && y < bottom) return surface;
   }
   return nullptr;
@@ -1095,19 +1165,54 @@ void setKeyboardFocus(WaylandServer* server, WaylandServer::Surface* next) {
   }
 }
 
+void updateDrag(WaylandServer* server) {
+  if (!server->dragSurface_) return;
+  WaylandServer::Surface* surface = server->dragSurface_;
+  int const maxX = std::max(0, server->output_.width - surface->width);
+  int const maxY = std::max(kTitleBarHeight, server->output_.height - surface->height);
+  surface->windowX = std::clamp(static_cast<int>(server->pointerX_ - server->dragOffsetX_), 0, maxX);
+  surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), kTitleBarHeight, maxY);
+}
+
 void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
   pointerX_ = std::clamp(pointerX_ + static_cast<float>(dx), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
   pointerY_ = std::clamp(pointerY_ + static_cast<float>(dy), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  if (dragSurface_) {
+    updateDrag(this);
+    return;
+  }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
 }
 
 void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
   pointerX_ = std::clamp(static_cast<float>(x), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
   pointerY_ = std::clamp(static_cast<float>(y), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  if (dragSurface_) {
+    updateDrag(this);
+    return;
+  }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
 }
 
 void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
+  if (button == BTN_LEFT) {
+    if (pressed) {
+      Surface* chromeTarget = titlebarAt(this, pointerX_, pointerY_);
+      if (chromeTarget) {
+        raiseSurface(this, chromeTarget);
+        setKeyboardFocus(this, chromeTarget);
+        sendPointerFocus(this, nullptr, timeMs);
+        dragSurface_ = chromeTarget;
+        dragOffsetX_ = pointerX_ - static_cast<float>(chromeTarget->windowX);
+        dragOffsetY_ = pointerY_ - static_cast<float>(chromeTarget->windowY);
+        return;
+      }
+    } else if (dragSurface_) {
+      dragSurface_ = nullptr;
+      return;
+    }
+  }
+
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (pressed && target) {
     raiseSurface(this, target);
@@ -1241,6 +1346,8 @@ wl_resource* WaylandServer::createSurface(wl_client* client, std::uint32_t versi
 void WaylandServer::destroySurface(Surface* surface) {
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
   if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
+  if (dragSurface_ == surface) dragSurface_ = nullptr;
+  if (cursorSurface_ == surface) cursorSurface_ = nullptr;
   for (wl_resource* callback : surface->frameCallbacks) {
     wl_resource_destroy(callback);
   }

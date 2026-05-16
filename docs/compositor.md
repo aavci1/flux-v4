@@ -751,7 +751,7 @@ This section is updated as work progresses. Entries record completion of each ph
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, and dma-buf demo drawing are verified on hardware; direct Vulkan sampling and Flux app smoke pending. |
-| Phase 3: Input + window management | First input slice smoke passed | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard` resources, basic focus, click-to-raise, key forwarding, and a software cursor are verified on hardware after granting `/dev/input/event*` read access; drag/resize/chrome pending. |
+| Phase 3: Input + window management | Chrome/cursor checkpoint ready | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard` resources, basic focus, click-to-raise, key forwarding, and a software cursor are verified on hardware after granting `/dev/input/event*` read access; a first server-side title bar, move-drag path, and client cursor-surface handling are implemented and awaiting hardware smoke. Resize pending. |
 | Phase 4: Protocol ecosystem | Not started | - | - | - |
 | Phase 5: Animation + polish | Not started | - | - | - |
 
@@ -770,6 +770,8 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-16 | local working tree | Moved Wayland frame callbacks to the compositor present loop. | Linux compositor-only event-loop behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added a first `Image::fromDmabuf(...)` Vulkan path and compositor-side dmabuf surface import wiring. | Vulkan/Linux-only path; Metal parity still deferred to IOSurface import when needed. |
 | 2026-05-16 | local working tree | Added `flux-compositor-dmabuf-demo`, a tiny GBM-backed Wayland client for the first dma-buf hardware smoke test. | Linux-only compositor test utility; no Metal API involved. |
+| 2026-05-16 | local working tree | Added compositor-owned server-side title bars and left-button move-drag handling. | Linux compositor-only window-management behavior; no Metal API involved. |
+| 2026-05-16 | local working tree | Added `wl_pointer.set_cursor` handling so client cursor surfaces draw as the pointer image instead of as separate windows. | Linux compositor-only pointer behavior; no Metal API involved. |
 
 ### 12.2 Open questions
 

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,8 @@ struct CommittedSurfaceSnapshot {
   std::int32_t y = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
+  std::int32_t titleBarHeight = 0;
+  bool focused = false;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
   std::uint32_t dmabufFormat = 0;
@@ -51,6 +54,7 @@ public:
   [[nodiscard]] int eventFd() const noexcept;
   [[nodiscard]] std::size_t toplevelCount() const noexcept;
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
+  [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 
@@ -110,6 +114,12 @@ public:
   std::vector<wl_resource*> keyboardResources_;
   Surface* pointerFocus_ = nullptr;
   Surface* keyboardFocus_ = nullptr;
+  Surface* dragSurface_ = nullptr;
+  Surface* cursorSurface_ = nullptr;
+  std::int32_t cursorHotspotX_ = 0;
+  std::int32_t cursorHotspotY_ = 0;
+  float dragOffsetX_ = 0.f;
+  float dragOffsetY_ = 0.f;
   float pointerX_ = 32.f;
   float pointerY_ = 32.f;
   std::uint64_t nextSurfaceId_ = 1;
