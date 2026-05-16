@@ -398,6 +398,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/Common/XkbState.cpp
     src/Platform/Linux/KmsApplication.cpp
     src/Platform/Linux/KmsWindow.cpp
+    src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsInput.cpp
   )
 endif()
@@ -497,6 +498,28 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     PkgConfig::HARFBUZZ
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
+endif()
+
+option(FLUX_BUILD_COMPOSITOR
+  "Build the phase-1 flux-compositor executable. Requires FLUX_PLATFORM=LINUX_KMS."
+  OFF)
+
+if(FLUX_BUILD_COMPOSITOR)
+  if(NOT FLUX_PLATFORM_LINUX_KMS)
+    message(FATAL_ERROR "FLUX_BUILD_COMPOSITOR requires FLUX_PLATFORM=LINUX_KMS.")
+  endif()
+  add_executable(flux-compositor
+    src/Compositor/main.cpp
+  )
+  target_include_directories(flux-compositor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_options(flux-compositor PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor PRIVATE flux)
 endif()
 
 option(FLUX_BUILD_TESTS

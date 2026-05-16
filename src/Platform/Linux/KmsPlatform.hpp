@@ -26,6 +26,9 @@ namespace flux {
 
 class KmsWindow;
 struct WindowConfig;
+namespace platform {
+class KmsDevice;
+}
 
 struct KmsConnector {
   std::uint32_t connectorId = 0;
@@ -75,6 +78,8 @@ public:
   void routeKey(std::uint32_t evdevKey, bool pressed);
 
 private:
+  friend class platform::KmsDevice;
+
   friend class KmsInput;
 
   bool openFirstDisplayCard();

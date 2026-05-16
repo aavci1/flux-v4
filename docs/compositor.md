@@ -1,7 +1,7 @@
 # Flux Compositor
 
-**Status:** specification. Implementation pending phase 1.
-**Repository:** `flux-compositor` (separate from `flux-v4`).
+**Status:** phase 1 basic TTY smoke passed in `flux-v4`; extended validation pending.
+**Repository:** `flux-compositor` is currently built from this repository as `flux-compositor` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Multi-monitor. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
@@ -179,7 +179,7 @@ Mirror Flux's: C++23, RAII, no exceptions across module boundaries (use Result-s
 
 ## 4. Phase 1: First pixels
 
-**Status:** not yet implemented.
+**Status:** basic TTY smoke passed. Kernel-log, CPU-idle, and kill-path validation still pending.
 
 ### 4.1 Goal
 
@@ -319,8 +319,8 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 ### 4.6 Acceptance criteria
 
 - ✗ `flux-compositor` binary builds clean on CachyOS.
-- ✗ Running it from TTY1 turns the screen blue.
-- ✗ Ctrl+C exits cleanly; TTY returns.
+- ✓ Running it from TTY1 turns the screen blue.
+- ✓ Ctrl+C exits cleanly; TTY returns.
 - ✗ CPU usage is low when content is static.
 - ✗ No kernel errors in `journalctl -k` during a typical run.
 - ✗ `kill -9` from TTY2 doesn't require a reboot — DRM master is released, TTY returns.
@@ -744,7 +744,7 @@ This section is updated as work progresses. Entries record completion of each ph
 
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| Phase 1: First pixels | Not started | - | - | - |
+| Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | Not started | - | - | - |
 | Phase 3: Input + window management | Not started | - | - | - |
 | Phase 4: Protocol ecosystem | Not started | - | - | - |
@@ -756,7 +756,7 @@ Updated each time a Flux change lands in service of compositor work:
 
 | Date | Flux commit | Description | Mac parity status |
 |------|-------------|-------------|-------------------|
-| (none yet) | | | |
+| 2026-05-16 | local working tree | Added Linux KMS `KmsDevice` / `KmsOutput` API for compositor-owned display selection and Vulkan display-surface creation. | No Metal API required; Linux-only KMS surface. |
 
 ### 12.2 Open questions
 
