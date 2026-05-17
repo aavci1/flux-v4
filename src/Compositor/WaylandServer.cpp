@@ -2639,6 +2639,13 @@ void bindDataDeviceManager(wl_client* client, void* data, std::uint32_t version,
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
   initializeKeyboardModifierIndices(this);
+  shortcutBindings_ = {
+      {.action = ShortcutAction::CloseFocused, .key = KEY_Q, .meta = true},
+      {.action = ShortcutAction::CycleFocus, .key = KEY_TAB, .meta = true},
+      {.action = ShortcutAction::SnapLeft, .key = KEY_LEFT, .meta = true},
+      {.action = ShortcutAction::SnapRight, .key = KEY_RIGHT, .meta = true},
+      {.action = ShortcutAction::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
+  };
 
   display_ = wl_display_create();
   if (!display_) throw std::runtime_error("wl_display_create failed");
@@ -3194,21 +3201,28 @@ bool updateShortcutModifier(WaylandServer* server, std::uint32_t key, bool press
 
 bool handleCompositorShortcut(WaylandServer* server, std::uint32_t key, bool pressed, std::uint32_t timeMs) {
   if (!pressed) return false;
-  if (server->metaDown_) {
-    if (key == KEY_Q) return closeFocusedToplevel(server);
-    if (key == KEY_TAB) return cycleFocus(server, timeMs);
-    if (key == KEY_LEFT) {
+  for (auto const& binding : server->shortcutBindings_) {
+    if (binding.key != key) continue;
+    if (binding.meta != server->metaDown_ || binding.ctrl != server->ctrlDown_ ||
+        binding.alt != server->altDown_ || binding.shift != server->shiftDown_) {
+      continue;
+    }
+
+    switch (binding.action) {
+    case WaylandServer::ShortcutAction::CloseFocused:
+      return closeFocusedToplevel(server);
+    case WaylandServer::ShortcutAction::CycleFocus:
+      return cycleFocus(server, timeMs);
+    case WaylandServer::ShortcutAction::SnapLeft:
       snapFocusedToplevel(server, true);
       return true;
-    }
-    if (key == KEY_RIGHT) {
+    case WaylandServer::ShortcutAction::SnapRight:
       snapFocusedToplevel(server, false);
       return true;
+    case WaylandServer::ShortcutAction::Terminate:
+      std::raise(SIGTERM);
+      return true;
     }
-  }
-  if (server->ctrlDown_ && server->altDown_ && key == KEY_BACKSPACE) {
-    std::raise(SIGTERM);
-    return true;
   }
   return false;
 }
@@ -3533,6 +3547,10 @@ void WaylandServer::dispatch() {
 
 void WaylandServer::flushClients() {
   if (display_) wl_display_flush_clients(display_);
+}
+
+void WaylandServer::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
+  shortcutBindings_ = std::move(bindings);
 }
 
 void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {

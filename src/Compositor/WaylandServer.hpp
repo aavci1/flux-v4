@@ -71,6 +71,23 @@ struct SnapPreviewSnapshot {
 
 class WaylandServer {
 public:
+  enum class ShortcutAction : std::uint8_t {
+    CloseFocused,
+    CycleFocus,
+    SnapLeft,
+    SnapRight,
+    Terminate,
+  };
+
+  struct ShortcutBinding {
+    ShortcutAction action = ShortcutAction::CloseFocused;
+    std::uint32_t key = 0;
+    bool meta = false;
+    bool ctrl = false;
+    bool alt = false;
+    bool shift = false;
+  };
+
   explicit WaylandServer(WaylandOutputInfo output);
   ~WaylandServer();
 
@@ -88,6 +105,7 @@ public:
 
   void dispatch();
   void flushClients();
+  void setShortcutBindings(std::vector<ShortcutBinding> bindings);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   void sendFrameCallbacks(std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
@@ -229,6 +247,7 @@ public:
   bool ctrlDown_ = false;
   bool altDown_ = false;
   bool shiftDown_ = false;
+  std::vector<ShortcutBinding> shortcutBindings_;
   std::uint32_t shiftModifierIndex_ = ~0u;
   std::uint32_t ctrlModifierIndex_ = ~0u;
   std::uint32_t altModifierIndex_ = ~0u;

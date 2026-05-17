@@ -28,6 +28,7 @@
 #include <unordered_set>
 
 #include <unistd.h>
+#include <linux/input-event-codes.h>
 #include <vulkan/vulkan.h>
 
 namespace {
@@ -60,6 +61,7 @@ struct ClosingSurfaceVisual {
 struct CompositorConfig {
   flux::Color backgroundColor{0.20f, 0.50f, 0.95f, 1.0f};
   bool animationsEnabled = true;
+  std::vector<flux::compositor::WaylandServer::ShortcutBinding> shortcutBindings;
 };
 
 float clamp01(float value) {
@@ -137,6 +139,107 @@ std::optional<bool> parseBool(std::string_view value) {
   return std::nullopt;
 }
 
+std::string lowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return value;
+}
+
+std::vector<flux::compositor::WaylandServer::ShortcutBinding> defaultShortcutBindings() {
+  using Action = flux::compositor::WaylandServer::ShortcutAction;
+  return {
+      {.action = Action::CloseFocused, .key = KEY_Q, .meta = true},
+      {.action = Action::CycleFocus, .key = KEY_TAB, .meta = true},
+      {.action = Action::SnapLeft, .key = KEY_LEFT, .meta = true},
+      {.action = Action::SnapRight, .key = KEY_RIGHT, .meta = true},
+      {.action = Action::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
+  };
+}
+
+std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
+  static std::unordered_map<std::string, std::uint32_t> const keyCodes{
+      {"backspace", KEY_BACKSPACE},
+      {"delete", KEY_DELETE},
+      {"down", KEY_DOWN},
+      {"enter", KEY_ENTER},
+      {"escape", KEY_ESC},
+      {"esc", KEY_ESC},
+      {"left", KEY_LEFT},
+      {"q", KEY_Q},
+      {"right", KEY_RIGHT},
+      {"space", KEY_SPACE},
+      {"tab", KEY_TAB},
+      {"up", KEY_UP},
+  };
+  if (token.size() == 1 && token[0] >= 'a' && token[0] <= 'z') {
+    return static_cast<std::uint32_t>(KEY_A + (token[0] - 'a'));
+  }
+  auto found = keyCodes.find(token);
+  if (found == keyCodes.end()) return std::nullopt;
+  return found->second;
+}
+
+std::optional<flux::compositor::WaylandServer::ShortcutBinding> parseShortcut(
+    flux::compositor::WaylandServer::ShortcutAction action,
+    std::string_view value) {
+  auto text = lowerAscii(unquote(value));
+  flux::compositor::WaylandServer::ShortcutBinding binding{.action = action};
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    std::size_t const end = text.find('+', start);
+    std::string token = trim(std::string_view(text).substr(start, end == std::string::npos ? end : end - start));
+    if (token.empty()) return std::nullopt;
+    if (token == "super" || token == "meta" || token == "logo" || token == "mod4") {
+      binding.meta = true;
+    } else if (token == "ctrl" || token == "control") {
+      binding.ctrl = true;
+    } else if (token == "alt") {
+      binding.alt = true;
+    } else if (token == "shift") {
+      binding.shift = true;
+    } else if (auto key = keyCodeForName(token)) {
+      if (binding.key != 0) return std::nullopt;
+      binding.key = *key;
+    } else {
+      return std::nullopt;
+    }
+    if (end == std::string::npos) break;
+    start = end + 1u;
+  }
+  if (binding.key == 0) return std::nullopt;
+  return binding;
+}
+
+std::optional<flux::compositor::WaylandServer::ShortcutAction> shortcutActionForKey(std::string const& key) {
+  using Action = flux::compositor::WaylandServer::ShortcutAction;
+  static std::unordered_map<std::string, Action> const actions{
+      {"close", Action::CloseFocused},
+      {"close_focused", Action::CloseFocused},
+      {"cycle", Action::CycleFocus},
+      {"cycle_focus", Action::CycleFocus},
+      {"quit", Action::Terminate},
+      {"snap_left", Action::SnapLeft},
+      {"snap_right", Action::SnapRight},
+      {"terminate", Action::Terminate},
+  };
+  auto found = actions.find(key);
+  if (found == actions.end()) return std::nullopt;
+  return found->second;
+}
+
+void replaceShortcutBinding(std::vector<flux::compositor::WaylandServer::ShortcutBinding>& bindings,
+                            flux::compositor::WaylandServer::ShortcutBinding binding) {
+  auto found = std::find_if(bindings.begin(), bindings.end(), [&](auto const& existing) {
+    return existing.action == binding.action;
+  });
+  if (found == bindings.end()) {
+    bindings.push_back(binding);
+  } else {
+    *found = binding;
+  }
+}
+
 std::optional<std::string> configPath() {
   if (char const* explicitPath = std::getenv("FLUX_COMPOSITOR_CONFIG"); explicitPath && *explicitPath) {
     return std::string(explicitPath);
@@ -152,22 +255,41 @@ std::optional<std::string> configPath() {
 
 CompositorConfig loadConfig() {
   CompositorConfig config;
+  config.shortcutBindings = defaultShortcutBindings();
   auto path = configPath();
   if (!path) return config;
   std::ifstream file(*path);
   if (!file) return config;
 
   std::string line;
+  std::string section;
   unsigned int lineNumber = 0;
   while (std::getline(file, line)) {
     ++lineNumber;
     std::string clean = trim(stripTomlComment(line));
-    if (clean.empty() || clean.front() == '[') continue;
+    if (clean.empty()) continue;
+    if (clean.front() == '[') {
+      if (clean.size() >= 2 && clean.back() == ']') {
+        section = lowerAscii(trim(std::string_view(clean).substr(1, clean.size() - 2u)));
+      }
+      continue;
+    }
     std::size_t const equals = clean.find('=');
     if (equals == std::string::npos) continue;
-    std::string key = trim(std::string_view(clean).substr(0, equals));
+    std::string key = lowerAscii(trim(std::string_view(clean).substr(0, equals)));
     std::string value = trim(std::string_view(clean).substr(equals + 1u));
-    if (key == "background" || key == "background_color") {
+    if (section == "keybindings") {
+      if (auto action = shortcutActionForKey(key)) {
+        if (auto binding = parseShortcut(*action, value)) {
+          replaceShortcutBinding(config.shortcutBindings, *binding);
+        } else {
+          std::fprintf(stderr,
+                       "flux-compositor: ignoring invalid keybinding in %s:%u\n",
+                       path->c_str(),
+                       lineNumber);
+        }
+      }
+    } else if (key == "background" || key == "background_color") {
       if (auto color = parseHexColor(value)) {
         config.backgroundColor = *color;
       } else {
@@ -459,6 +581,7 @@ int main(int, char**) {
                  output.name().c_str());
 
     CompositorConfig const config = loadConfig();
+    wayland.setShortcutBindings(config.shortcutBindings);
     flux::Color const clearColor = config.backgroundColor;
     std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
