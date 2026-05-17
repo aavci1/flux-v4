@@ -564,7 +564,7 @@ Total new code this phase: ~3300 LOC.
 
 ## 7. Phase 4: Protocols for ecosystem compatibility
 
-**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, an initial `wp_presentation_time` path, `zwp_relative_pointer_v1`, initial `zwp_pointer_constraints_v1` support, and `zwp_primary_selection_v1` are implemented.
+**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, an initial `wp_presentation_time` path, `zwp_relative_pointer_v1`, initial `zwp_pointer_constraints_v1` support, `zwp_primary_selection_v1`, and initial `wl_data_device_manager` clipboard selection are implemented.
 
 ### 7.1 Goal
 
@@ -580,7 +580,7 @@ Protocols to implement, in rough priority order:
 - **`wp_presentation_time`**: gives clients precise vblank-timing information for frame pacing. Used by video players and games for smooth playback. Initial implementation exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Hardware-derived timestamps, refresh counters, and sync-output association remain hardening work.
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `flux-compositor-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `flux-compositor-pointer-constraints-demo`.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn fallback cursor shapes.
-- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard via `wl_data_device_manager` remains pending.
+- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`. Drag-and-drop remains pending.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented as protocol/state tracking; actual idle blanking is not implemented yet.
 - **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Deferred after the first smoke client hard-froze the test laptop; revisit with a safer harness and better crash logging.
 - **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales.
@@ -605,12 +605,13 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A GTK4 app (e.g., `gnome-text-editor`) works correctly with the implemented protocols (decoration, cursor, clipboard, focus).
 - ✗ A Qt6 app works correctly.
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
-- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, and `zwp_primary_selection_v1` are exposed; the rest of phase 4 remains pending.
+- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, and `wl_data_device_manager` are exposed; the rest of phase 4 remains pending.
 - ✓ A purpose-built test layer-shell client renders at the top layer.
 - ◐ A purpose-built presentation-time client receives `clock_id` and presented feedback after its committed frame is presented; hardware-precise timestamps and refresh counters remain pending.
 - ✓ A purpose-built relative-pointer client receives relative motion deltas while its window has pointer focus.
 - ✓ A purpose-built pointer-constraints client receives pointer-lock activation and relative motion while the virtual pointer stays locked.
 - ✓ A purpose-built primary-selection client can set a UTF-8 text primary selection and receive it back through the compositor.
+- ✓ A purpose-built clipboard client can set a UTF-8 text clipboard selection and receive it back through the compositor.
 
 ### 7.6 LOC estimate
 

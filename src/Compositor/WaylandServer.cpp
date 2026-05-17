@@ -81,6 +81,9 @@ extern struct zwp_confined_pointer_v1_interface const confinedPointerImpl;
 extern struct zwp_primary_selection_source_v1_interface const primarySelectionSourceImpl;
 extern struct zwp_primary_selection_device_v1_interface const primarySelectionDeviceImpl;
 extern struct zwp_primary_selection_offer_v1_interface const primarySelectionOfferImpl;
+extern struct wl_data_source_interface const dataSourceImpl;
+extern struct wl_data_device_interface const dataDeviceImpl;
+extern struct wl_data_offer_interface const dataOfferImpl;
 extern struct zwp_relative_pointer_v1_interface const relativePointerImpl;
 
 } // namespace
@@ -210,6 +213,24 @@ struct WaylandServer::PrimarySelectionOffer {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   PrimarySelectionSource* source = nullptr;
+};
+
+struct WaylandServer::DataSource {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  std::vector<std::string> mimeTypes;
+};
+
+struct WaylandServer::DataDevice {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  wl_resource* seat = nullptr;
+};
+
+struct WaylandServer::DataOffer {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  DataSource* source = nullptr;
 };
 
 struct WaylandServer::XdgSurface {
@@ -388,6 +409,24 @@ void primarySelectionDeviceDestroyResource(wl_resource* resource) {
 void primarySelectionOfferDestroyResource(wl_resource* resource) {
   if (auto* offer = dataFrom<WaylandServer::PrimarySelectionOffer>(resource)) {
     offer->server->destroyPrimarySelectionOffer(offer);
+  }
+}
+
+void dataSourceDestroyResource(wl_resource* resource) {
+  if (auto* source = dataFrom<WaylandServer::DataSource>(resource)) {
+    source->server->destroyDataSource(source);
+  }
+}
+
+void dataDeviceDestroyResource(wl_resource* resource) {
+  if (auto* device = dataFrom<WaylandServer::DataDevice>(resource)) {
+    device->server->destroyDataDevice(device);
+  }
+}
+
+void dataOfferDestroyResource(wl_resource* resource) {
+  if (auto* offer = dataFrom<WaylandServer::DataOffer>(resource)) {
+    offer->server->destroyDataOffer(offer);
   }
 }
 
@@ -2220,6 +2259,163 @@ void bindPrimarySelectionManager(wl_client* client, void* data, std::uint32_t ve
   wl_resource_set_implementation(resource, &primarySelectionManagerImpl, data, nullptr);
 }
 
+void dataDeviceManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void dataSourceOffer(wl_client*, wl_resource* resource, char const* mimeType) {
+  auto* source = dataFrom<WaylandServer::DataSource>(resource);
+  if (!source || !mimeType) return;
+  if (std::find(source->mimeTypes.begin(), source->mimeTypes.end(), mimeType) == source->mimeTypes.end()) {
+    source->mimeTypes.emplace_back(mimeType);
+  }
+}
+
+void dataSourceDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void dataSourceSetActions(wl_client*, wl_resource*, std::uint32_t) {}
+
+struct wl_data_source_interface const dataSourceImpl{
+    .offer = dataSourceOffer,
+    .destroy = dataSourceDestroy,
+    .set_actions = dataSourceSetActions,
+};
+
+void dataOfferAccept(wl_client*, wl_resource*, std::uint32_t, char const*) {}
+
+void dataOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
+  auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
+  if (!offer || !offer->source || !offer->source->resource || !mimeType) {
+    close(fd);
+    return;
+  }
+  wl_data_source_send_send(offer->source->resource, mimeType, fd);
+  close(fd);
+}
+
+void dataOfferDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void dataOfferFinish(wl_client*, wl_resource*) {}
+void dataOfferSetActions(wl_client*, wl_resource*, std::uint32_t, std::uint32_t) {}
+
+struct wl_data_offer_interface const dataOfferImpl{
+    .accept = dataOfferAccept,
+    .receive = dataOfferReceive,
+    .destroy = dataOfferDestroy,
+    .finish = dataOfferFinish,
+    .set_actions = dataOfferSetActions,
+};
+
+void sendSelectionToDataDevice(WaylandServer::DataDevice* device) {
+  if (!device || !device->resource) return;
+  auto* server = device->server;
+  wl_client* deviceClient = wl_resource_get_client(device->resource);
+  if (!server->keyboardFocus_ || wl_resource_get_client(server->keyboardFocus_->resource) != deviceClient ||
+      !server->selectionSource_ || server->selectionSource_->mimeTypes.empty()) {
+    wl_data_device_send_selection(device->resource, nullptr);
+    return;
+  }
+
+  auto offer = std::make_unique<WaylandServer::DataOffer>();
+  offer->server = server;
+  offer->source = server->selectionSource_;
+  wl_resource* offerResource = wl_resource_create(deviceClient, &wl_data_offer_interface, 3, 0);
+  if (!offerResource) {
+    wl_client_post_no_memory(deviceClient);
+    return;
+  }
+  offer->resource = offerResource;
+  auto* raw = offer.get();
+  server->dataOffers_.push_back(std::move(offer));
+  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, dataOfferDestroyResource);
+  wl_data_device_send_data_offer(device->resource, offerResource);
+  for (auto const& mimeType : raw->source->mimeTypes) {
+    wl_data_offer_send_offer(offerResource, mimeType.c_str());
+  }
+  wl_data_device_send_selection(device->resource, offerResource);
+}
+
+void sendSelectionForFocus(WaylandServer* server) {
+  for (auto const& device : server->dataDevices_) {
+    sendSelectionToDataDevice(device.get());
+  }
+}
+
+void dataDeviceStartDrag(wl_client*, wl_resource*, wl_resource*, wl_resource*, wl_resource*, std::uint32_t) {}
+
+void dataDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
+  auto* device = dataFrom<WaylandServer::DataDevice>(resource);
+  if (!device) return;
+  auto* server = device->server;
+  auto* source = dataFrom<WaylandServer::DataSource>(sourceResource);
+  if (server->selectionSource_ && server->selectionSource_ != source && server->selectionSource_->resource) {
+    wl_data_source_send_cancelled(server->selectionSource_->resource);
+  }
+  server->selectionSource_ = source;
+  sendSelectionForFocus(server);
+}
+
+void dataDeviceRelease(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct wl_data_device_interface const dataDeviceImpl{
+    .start_drag = dataDeviceStartDrag,
+    .set_selection = dataDeviceSetSelection,
+    .release = dataDeviceRelease,
+};
+
+void dataDeviceManagerCreateDataSource(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  auto source = std::make_unique<WaylandServer::DataSource>();
+  source->server = server;
+  wl_resource* sourceResource = wl_resource_create(client, &wl_data_source_interface, 3, id);
+  if (!sourceResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  source->resource = sourceResource;
+  auto* raw = source.get();
+  server->dataSources_.push_back(std::move(source));
+  wl_resource_set_implementation(sourceResource, &dataSourceImpl, raw, dataSourceDestroyResource);
+}
+
+void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, std::uint32_t id, wl_resource* seat) {
+  auto* server = serverFrom(resource);
+  auto device = std::make_unique<WaylandServer::DataDevice>();
+  device->server = server;
+  device->seat = seat;
+  wl_resource* deviceResource = wl_resource_create(client, &wl_data_device_interface, 3, id);
+  if (!deviceResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  device->resource = deviceResource;
+  auto* raw = device.get();
+  server->dataDevices_.push_back(std::move(device));
+  wl_resource_set_implementation(deviceResource, &dataDeviceImpl, raw, dataDeviceDestroyResource);
+  sendSelectionToDataDevice(raw);
+}
+
+struct wl_data_device_manager_interface const dataDeviceManagerImpl{
+    .create_data_source = dataDeviceManagerCreateDataSource,
+    .get_data_device = dataDeviceManagerGetDataDevice,
+    .release = dataDeviceManagerDestroy,
+};
+
+void bindDataDeviceManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &wl_data_device_manager_interface, std::min(version, 3u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(resource, &dataDeviceManagerImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -2251,10 +2447,12 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
       wl_global_create(display_, &zwp_pointer_constraints_v1_interface, 1, this, bindPointerConstraints);
   primarySelectionManagerGlobal_ =
       wl_global_create(display_, &zwp_primary_selection_device_manager_v1_interface, 1, this, bindPrimarySelectionManager);
+  dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
       !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ ||
-      !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_) {
+      !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ ||
+      !dataDeviceManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2544,6 +2742,7 @@ void setKeyboardFocus(WaylandServer* server, WaylandServer::Surface* next) {
     }
     wl_array_release(&keys);
   }
+  sendSelectionForFocus(server);
   sendPrimarySelectionForFocus(server);
 }
 
@@ -3045,6 +3244,10 @@ void WaylandServer::destroySurface(Surface* surface) {
     primarySelectionSource_ = nullptr;
     sendPrimarySelectionForFocus(this);
   }
+  if (selectionSource_ && wl_resource_get_client(selectionSource_->resource) == wl_resource_get_client(surface->resource)) {
+    selectionSource_ = nullptr;
+    sendSelectionForFocus(this);
+  }
   if (dragSurface_ == surface) dragSurface_ = nullptr;
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
@@ -3276,6 +3479,34 @@ void WaylandServer::destroyPrimarySelectionOffer(PrimarySelectionOffer* offer) {
                      primarySelectionOffers_.end(),
                      [&](auto const& candidate) { return candidate.get() == offer; }),
       primarySelectionOffers_.end());
+}
+
+void WaylandServer::destroyDataDevice(DataDevice* device) {
+  dataDevices_.erase(std::remove_if(dataDevices_.begin(),
+                                    dataDevices_.end(),
+                                    [&](auto const& candidate) { return candidate.get() == device; }),
+                     dataDevices_.end());
+}
+
+void WaylandServer::destroyDataSource(DataSource* source) {
+  if (selectionSource_ == source) {
+    selectionSource_ = nullptr;
+    sendSelectionForFocus(this);
+  }
+  for (auto& offer : dataOffers_) {
+    if (offer->source == source) offer->source = nullptr;
+  }
+  dataSources_.erase(std::remove_if(dataSources_.begin(),
+                                    dataSources_.end(),
+                                    [&](auto const& candidate) { return candidate.get() == source; }),
+                     dataSources_.end());
+}
+
+void WaylandServer::destroyDataOffer(DataOffer* offer) {
+  dataOffers_.erase(std::remove_if(dataOffers_.begin(),
+                                   dataOffers_.end(),
+                                   [&](auto const& candidate) { return candidate.get() == offer; }),
+                    dataOffers_.end());
 }
 
 } // namespace flux::compositor

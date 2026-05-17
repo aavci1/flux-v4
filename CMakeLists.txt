@@ -697,6 +697,20 @@ if(FLUX_BUILD_COMPOSITOR)
   )
   target_link_libraries(flux-compositor-primary-selection-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 
+  add_executable(flux-compositor-clipboard-demo
+    src/Compositor/ClipboardDemoClient.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-clipboard-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-clipboard-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-clipboard-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
 endif()
 
 option(FLUX_BUILD_TESTS

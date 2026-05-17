@@ -111,6 +111,9 @@ public:
   struct PrimarySelectionDevice;
   struct PrimarySelectionSource;
   struct PrimarySelectionOffer;
+  struct DataDevice;
+  struct DataSource;
+  struct DataOffer;
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
@@ -131,6 +134,9 @@ public:
   void destroyPrimarySelectionDevice(PrimarySelectionDevice* device);
   void destroyPrimarySelectionSource(PrimarySelectionSource* source);
   void destroyPrimarySelectionOffer(PrimarySelectionOffer* offer);
+  void destroyDataDevice(DataDevice* device);
+  void destroyDataSource(DataSource* source);
+  void destroyDataOffer(DataOffer* offer);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -149,6 +155,7 @@ public:
   wl_global* relativePointerManagerGlobal_ = nullptr;
   wl_global* pointerConstraintsGlobal_ = nullptr;
   wl_global* primarySelectionManagerGlobal_ = nullptr;
+  wl_global* dataDeviceManagerGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
   WaylandOutputInfo output_;
@@ -171,6 +178,10 @@ public:
   std::vector<std::unique_ptr<PrimarySelectionSource>> primarySelectionSources_;
   std::vector<std::unique_ptr<PrimarySelectionOffer>> primarySelectionOffers_;
   PrimarySelectionSource* primarySelectionSource_ = nullptr;
+  std::vector<std::unique_ptr<DataDevice>> dataDevices_;
+  std::vector<std::unique_ptr<DataSource>> dataSources_;
+  std::vector<std::unique_ptr<DataOffer>> dataOffers_;
+  DataSource* selectionSource_ = nullptr;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
