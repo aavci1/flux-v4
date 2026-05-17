@@ -48,9 +48,11 @@ void updateCachedImage(flux::compositor::WaylandServer& wayland,
   cached.serial = surface.serial;
   cached.image.reset();
   cached.logged = false;
+  std::int32_t const bufferWidth = surface.bufferWidth > 0 ? surface.bufferWidth : surface.width;
+  std::int32_t const bufferHeight = surface.bufferHeight > 0 ? surface.bufferHeight : surface.height;
   if (!surface.rgbaPixels.empty()) {
-    cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(surface.width),
-                                               static_cast<std::uint32_t>(surface.height),
+    cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
+                                               static_cast<std::uint32_t>(bufferHeight),
                                                surface.rgbaPixels,
                                                canvas.gpuDevice());
   } else if (!surface.dmabufPlanes.empty()) {
@@ -69,8 +71,8 @@ void updateCachedImage(flux::compositor::WaylandServer& wayland,
       }
       try {
         cached.image = flux::Image::fromDmabuf({
-            .width = static_cast<std::uint32_t>(surface.width),
-            .height = static_cast<std::uint32_t>(surface.height),
+            .width = static_cast<std::uint32_t>(bufferWidth),
+            .height = static_cast<std::uint32_t>(bufferHeight),
             .drmFormat = surface.dmabufFormat,
             .planes = planes,
         });
@@ -84,8 +86,8 @@ void updateCachedImage(flux::compositor::WaylandServer& wayland,
       for (int fd : fds) close(fd);
     }
     if (wayland.copyDmabufToRgba(surface.id, fallbackPixels)) {
-      cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(surface.width),
-                                                 static_cast<std::uint32_t>(surface.height),
+      cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
+                                                 static_cast<std::uint32_t>(bufferHeight),
                                                  fallbackPixels,
                                                  canvas.gpuDevice());
       if (cached.image && !cached.logged) {
@@ -233,12 +235,35 @@ int main(int, char**) {
                            flux::FillStyle::none(),
                            flux::StrokeStyle::solid(borderColor, 1.f),
                            flux::ShadowStyle::none());
+          flux::Color const gripColor =
+              clientSurface.focused ? flux::Color{0.78f, 0.82f, 0.88f, 1.f}
+                                    : flux::Color{0.55f, 0.58f, 0.64f, 1.f};
+          float constexpr grip = 10.f;
+          float constexpr gripStroke = 2.f;
+          auto drawGrip = [&](float x, float y) {
+            canvas->drawRect(flux::Rect::sharp(x, y, grip, gripStroke),
+                             flux::CornerRadius{0.f},
+                             flux::FillStyle::solid(gripColor),
+                             flux::StrokeStyle::none(),
+                             flux::ShadowStyle::none());
+            canvas->drawRect(flux::Rect::sharp(x, y, gripStroke, grip),
+                             flux::CornerRadius{0.f},
+                             flux::FillStyle::solid(gripColor),
+                             flux::StrokeStyle::none(),
+                             flux::ShadowStyle::none());
+          };
+          drawGrip(windowX + 3.f, windowY + 3.f);
+          drawGrip(windowX + windowWidth - grip - 3.f, windowY + 3.f);
+          drawGrip(windowX + 3.f, windowY + windowHeight - grip - 3.f);
+          drawGrip(windowX + windowWidth - grip - 3.f, windowY + windowHeight - grip - 3.f);
         }
+        float const imageWidth = static_cast<float>(cached.image->size().width);
+        float const imageHeight = static_cast<float>(cached.image->size().height);
         canvas->drawImage(*cached.image,
                           flux::Rect::sharp(0.f,
                                             0.f,
-                                            windowWidth,
-                                            windowHeight),
+                                            imageWidth,
+                                            imageHeight),
                           flux::Rect::sharp(windowX,
                                             windowY,
                                             windowWidth,
@@ -247,11 +272,13 @@ int main(int, char**) {
       if (auto cursorSurface = wayland.cursorSurface()) {
         updateCachedImage(wayland, *canvas, *cursorSurface, cursorImage);
         if (cursorImage.image) {
+          float const cursorImageWidth = static_cast<float>(cursorImage.image->size().width);
+          float const cursorImageHeight = static_cast<float>(cursorImage.image->size().height);
           canvas->drawImage(*cursorImage.image,
                             flux::Rect::sharp(0.f,
                                               0.f,
-                                              static_cast<float>(cursorSurface->width),
-                                              static_cast<float>(cursorSurface->height)),
+                                              cursorImageWidth,
+                                              cursorImageHeight),
                             flux::Rect::sharp(static_cast<float>(cursorSurface->x),
                                               static_cast<float>(cursorSurface->y),
                                               static_cast<float>(cursorSurface->width),

@@ -263,6 +263,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   endif()
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
   pkg_check_modules(WAYLAND_CURSOR REQUIRED IMPORTED_TARGET wayland-cursor)
+  pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
@@ -482,6 +483,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   target_link_libraries(flux PRIVATE
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::WAYLAND_CURSOR
+    PkgConfig::LIBDRM
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     PkgConfig::FREETYPE
