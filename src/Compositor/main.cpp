@@ -61,6 +61,8 @@ struct ClosingSurfaceVisual {
 struct CompositorConfig {
   flux::Color backgroundColor{0.20f, 0.50f, 0.95f, 1.0f};
   std::optional<flux::Color> backgroundGradientEnd;
+  std::optional<std::string> wallpaperPath;
+  flux::ImageFillMode wallpaperMode = flux::ImageFillMode::Cover;
   bool animationsEnabled = true;
   std::vector<flux::compositor::WaylandServer::ShortcutBinding> shortcutBindings;
 };
@@ -159,6 +161,16 @@ std::string lowerAscii(std::string value) {
     return static_cast<char>(std::tolower(c));
   });
   return value;
+}
+
+std::optional<flux::ImageFillMode> parseImageFillMode(std::string_view value) {
+  std::string text = lowerAscii(unquote(value));
+  if (text == "stretch" || text == "fill") return flux::ImageFillMode::Stretch;
+  if (text == "fit" || text == "contain") return flux::ImageFillMode::Fit;
+  if (text == "cover") return flux::ImageFillMode::Cover;
+  if (text == "center" || text == "none") return flux::ImageFillMode::Center;
+  if (text == "tile" || text == "repeat") return flux::ImageFillMode::Tile;
+  return std::nullopt;
 }
 
 std::vector<flux::compositor::WaylandServer::ShortcutBinding> defaultShortcutBindings() {
@@ -321,6 +333,20 @@ CompositorConfig loadConfig() {
       } else {
         std::fprintf(stderr,
                      "flux-compositor: ignoring invalid background gradient in %s:%u\n",
+                     path->c_str(),
+                     lineNumber);
+      }
+    } else if (key == "wallpaper" || key == "wallpaper_path") {
+      std::string wallpaper = unquote(value);
+      if (!wallpaper.empty()) {
+        config.wallpaperPath = wallpaper;
+      }
+    } else if (key == "wallpaper_mode" || key == "wallpaper_fit") {
+      if (auto mode = parseImageFillMode(value)) {
+        config.wallpaperMode = *mode;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid wallpaper mode in %s:%u\n",
                      path->c_str(),
                      lineNumber);
       }
@@ -613,6 +639,13 @@ int main(int, char**) {
         config.backgroundGradientEnd
             ? flux::FillStyle::linearGradient(config.backgroundColor, *config.backgroundGradientEnd, {0.f, 0.f}, {1.f, 1.f})
             : flux::FillStyle::solid(config.backgroundColor);
+    std::shared_ptr<flux::Image> wallpaperImage;
+    if (config.wallpaperPath) {
+      wallpaperImage = flux::loadImageFromFile(*config.wallpaperPath, canvas->gpuDevice());
+      if (!wallpaperImage) {
+        std::fprintf(stderr, "flux-compositor: failed to load wallpaper %s\n", config.wallpaperPath->c_str());
+      }
+    }
     std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
     std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
@@ -641,6 +674,14 @@ int main(int, char**) {
                          backgroundFill,
                          flux::StrokeStyle::none(),
                          flux::ShadowStyle::none());
+      }
+      if (wallpaperImage) {
+        canvas->drawImage(*wallpaperImage,
+                          flux::Rect::sharp(0.f,
+                                            0.f,
+                                            static_cast<float>(output.width()),
+                                            static_cast<float>(output.height())),
+                          config.wallpaperMode);
       }
       auto committedSurfaces = wayland.committedSurfaces();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
