@@ -62,6 +62,13 @@ struct CommittedSurfaceSnapshot {
   std::vector<DmabufPlane> dmabufPlanes;
 };
 
+struct SnapPreviewSnapshot {
+  std::int32_t x = 0;
+  std::int32_t y = 0;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+};
+
 class WaylandServer {
 public:
   explicit WaylandServer(WaylandOutputInfo output);
@@ -75,6 +82,7 @@ public:
   [[nodiscard]] std::size_t toplevelCount() const noexcept;
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
+  [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 

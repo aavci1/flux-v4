@@ -41,6 +41,7 @@ namespace {
 
 constexpr std::int32_t kTitleBarHeight = 28;
 constexpr std::int32_t kResizeGripSize = 14;
+constexpr std::int32_t kSnapEdgeThreshold = 32;
 constexpr std::int32_t kMinWindowWidth = 160;
 constexpr std::int32_t kMinWindowHeight = 120;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
@@ -243,6 +244,7 @@ struct WaylandServer::DataOffer {
 };
 
 WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y);
+std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* server);
 
 struct WaylandServer::XdgSurface {
   WaylandServer* server = nullptr;
@@ -2769,6 +2771,10 @@ std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) cons
   return fds;
 }
 
+std::optional<SnapPreviewSnapshot> WaylandServer::snapPreview() const {
+  return snapPreviewForDrag(this);
+}
+
 WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y) {
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Surface* surface = it->get();
@@ -2989,8 +2995,28 @@ bool cycleFocus(WaylandServer* server, std::uint32_t timeMs) {
   return true;
 }
 
-void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
-  WaylandServer::Surface* surface = server->keyboardFocus_;
+std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* server) {
+  WaylandServer::Surface const* surface = server->dragSurface_;
+  if (!surface) return std::nullopt;
+  std::int32_t const surfaceWidth = displayWidth(surface);
+  if (surfaceWidth <= 0) return std::nullopt;
+  bool const leftHalf = surface->windowX <= kSnapEdgeThreshold;
+  bool const rightHalf = surface->windowX + surfaceWidth >= server->output_.width - kSnapEdgeThreshold;
+  if (!leftHalf && !rightHalf) {
+    return std::nullopt;
+  }
+
+  std::int32_t const width = std::max(kMinWindowWidth, server->output_.width / 2);
+  std::int32_t const height = std::max(kMinWindowHeight, server->output_.height);
+  return SnapPreviewSnapshot{
+      .x = leftHalf ? 0 : std::max(0, server->output_.width - width),
+      .y = 0,
+      .width = width,
+      .height = height,
+  };
+}
+
+void snapToplevel(WaylandServer* server, WaylandServer::Surface* surface, bool leftHalf) {
   if (!surface || !surface->toplevel) return;
   if (!surface->snapped) {
     surface->restoreX = surface->windowX;
@@ -3006,6 +3032,10 @@ void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
   surface->frameHeight = height;
   surface->snapped = true;
   sendToplevelConfigure(server, toplevelForSurface(server, surface), width, height);
+}
+
+void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
+  snapToplevel(server, server->keyboardFocus_, leftHalf);
 }
 
 void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surface) {
@@ -3279,6 +3309,9 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
       resizeEdges_ = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
       return;
     } else if (dragSurface_) {
+      if (auto preview = snapPreviewForDrag(this)) {
+        snapToplevel(this, dragSurface_, preview->x == 0);
+      }
       dragSurface_ = nullptr;
       return;
     }
