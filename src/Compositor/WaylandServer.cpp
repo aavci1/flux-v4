@@ -4,6 +4,7 @@
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
+#include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "relative-pointer-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
@@ -74,6 +75,8 @@ extern struct wp_viewport_interface const viewportImpl;
 extern struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl;
 extern struct zwlr_layer_surface_v1_interface const layerSurfaceImpl;
 extern struct wp_presentation_interface const presentationImpl;
+extern struct zwp_locked_pointer_v1_interface const lockedPointerImpl;
+extern struct zwp_confined_pointer_v1_interface const confinedPointerImpl;
 extern struct zwp_relative_pointer_v1_interface const relativePointerImpl;
 
 } // namespace
@@ -170,6 +173,21 @@ struct WaylandServer::RelativePointer {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* pointer = nullptr;
+};
+
+struct WaylandServer::PointerConstraint {
+  enum class Kind { Lock, Confine };
+
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
+  wl_resource* pointer = nullptr;
+  Kind kind = Kind::Lock;
+  std::uint32_t lifetime = ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT;
+  bool active = false;
+  bool defunct = false;
+  float cursorHintX = 0.f;
+  float cursorHintY = 0.f;
 };
 
 struct WaylandServer::XdgSurface {
@@ -327,6 +345,12 @@ void relativePointerDestroyResource(wl_resource* resource) {
   }
 }
 
+void pointerConstraintDestroyResource(wl_resource* resource) {
+  if (auto* constraint = dataFrom<WaylandServer::PointerConstraint>(resource)) {
+    constraint->server->destroyPointerConstraint(constraint);
+  }
+}
+
 void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
@@ -343,6 +367,9 @@ void pointerDestroyResource(wl_resource* resource) {
     removeResource(server->pointerResources_, resource);
     for (auto& relativePointer : server->relativePointers_) {
       if (relativePointer->pointer == resource) relativePointer->pointer = nullptr;
+    }
+    for (auto& constraint : server->pointerConstraints_) {
+      if (constraint->pointer == resource) constraint->pointer = nullptr;
     }
   }
 }
@@ -1828,6 +1855,182 @@ void bindRelativePointerManager(wl_client* client, void* data, std::uint32_t ver
   wl_resource_set_implementation(resource, &relativePointerManagerImpl, data, nullptr);
 }
 
+void updatePointerConstraintActivation(WaylandServer* server, WaylandServer::PointerConstraint* constraint) {
+  if (!constraint || constraint->defunct || !constraint->resource || !constraint->surface || !constraint->pointer) return;
+  bool const shouldActivate = server->pointerFocus_ == constraint->surface;
+  if (shouldActivate == constraint->active) return;
+
+  constraint->active = shouldActivate;
+  if (constraint->kind == WaylandServer::PointerConstraint::Kind::Lock) {
+    if (constraint->active) {
+      zwp_locked_pointer_v1_send_locked(constraint->resource);
+    } else {
+      zwp_locked_pointer_v1_send_unlocked(constraint->resource);
+    }
+  } else {
+    if (constraint->active) {
+      zwp_confined_pointer_v1_send_confined(constraint->resource);
+    } else {
+      zwp_confined_pointer_v1_send_unconfined(constraint->resource);
+    }
+  }
+  if (!constraint->active && constraint->lifetime == ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT) {
+    constraint->defunct = true;
+  }
+}
+
+void updatePointerConstraintsForFocus(WaylandServer* server) {
+  for (auto const& constraint : server->pointerConstraints_) {
+    updatePointerConstraintActivation(server, constraint.get());
+  }
+}
+
+WaylandServer::PointerConstraint* activePointerConstraint(WaylandServer* server) {
+  for (auto const& constraint : server->pointerConstraints_) {
+    if (constraint->active && !constraint->defunct && constraint->surface == server->pointerFocus_) {
+      return constraint.get();
+    }
+  }
+  return nullptr;
+}
+
+bool surfaceAlreadyConstrained(WaylandServer* server, WaylandServer::Surface* surface, wl_resource* pointer) {
+  if (!surface || !pointer) return false;
+  wl_client* pointerClient = wl_resource_get_client(pointer);
+  for (auto const& constraint : server->pointerConstraints_) {
+    if (constraint->surface == surface && constraint->pointer &&
+        wl_resource_get_client(constraint->pointer) == pointerClient && !constraint->defunct) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void pointerConstraintsDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void lockedPointerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void lockedPointerSetCursorPositionHint(wl_client*, wl_resource* resource, wl_fixed_t surfaceX, wl_fixed_t surfaceY) {
+  auto* constraint = dataFrom<WaylandServer::PointerConstraint>(resource);
+  if (!constraint) return;
+  constraint->cursorHintX = static_cast<float>(wl_fixed_to_double(surfaceX));
+  constraint->cursorHintY = static_cast<float>(wl_fixed_to_double(surfaceY));
+}
+
+void lockedPointerSetRegion(wl_client*, wl_resource*, wl_resource*) {}
+
+struct zwp_locked_pointer_v1_interface const lockedPointerImpl{
+    .destroy = lockedPointerDestroy,
+    .set_cursor_position_hint = lockedPointerSetCursorPositionHint,
+    .set_region = lockedPointerSetRegion,
+};
+
+void confinedPointerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void confinedPointerSetRegion(wl_client*, wl_resource*, wl_resource*) {}
+
+struct zwp_confined_pointer_v1_interface const confinedPointerImpl{
+    .destroy = confinedPointerDestroy,
+    .set_region = confinedPointerSetRegion,
+};
+
+void createPointerConstraint(wl_client* client,
+                             wl_resource* resource,
+                             std::uint32_t id,
+                             wl_resource* surfaceResource,
+                             wl_resource* pointerResource,
+                             std::uint32_t lifetime,
+                             WaylandServer::PointerConstraint::Kind kind) {
+  auto* server = serverFrom(resource);
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (surfaceAlreadyConstrained(server, surface, pointerResource)) {
+    wl_resource_post_error(resource,
+                           ZWP_POINTER_CONSTRAINTS_V1_ERROR_ALREADY_CONSTRAINED,
+                           "surface already has a pointer constraint for this seat");
+    return;
+  }
+
+  wl_interface const* interface = kind == WaylandServer::PointerConstraint::Kind::Lock
+                                      ? &zwp_locked_pointer_v1_interface
+                                      : &zwp_confined_pointer_v1_interface;
+  wl_resource* constraintResource = wl_resource_create(client, interface, 1, id);
+  if (!constraintResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+
+  auto constraint = std::make_unique<WaylandServer::PointerConstraint>();
+  constraint->server = server;
+  constraint->resource = constraintResource;
+  constraint->surface = surface;
+  constraint->pointer = pointerResource;
+  constraint->kind = kind;
+  constraint->lifetime = lifetime;
+  auto* raw = constraint.get();
+  server->pointerConstraints_.push_back(std::move(constraint));
+  wl_resource_set_implementation(constraintResource,
+                                 kind == WaylandServer::PointerConstraint::Kind::Lock
+                                     ? static_cast<void const*>(&lockedPointerImpl)
+                                     : static_cast<void const*>(&confinedPointerImpl),
+                                 raw,
+                                 pointerConstraintDestroyResource);
+  updatePointerConstraintActivation(server, raw);
+}
+
+void pointerConstraintsLockPointer(wl_client* client,
+                                   wl_resource* resource,
+                                   std::uint32_t id,
+                                   wl_resource* surface,
+                                   wl_resource* pointer,
+                                   wl_resource*,
+                                   std::uint32_t lifetime) {
+  createPointerConstraint(client,
+                          resource,
+                          id,
+                          surface,
+                          pointer,
+                          lifetime,
+                          WaylandServer::PointerConstraint::Kind::Lock);
+}
+
+void pointerConstraintsConfinePointer(wl_client* client,
+                                      wl_resource* resource,
+                                      std::uint32_t id,
+                                      wl_resource* surface,
+                                      wl_resource* pointer,
+                                      wl_resource*,
+                                      std::uint32_t lifetime) {
+  createPointerConstraint(client,
+                          resource,
+                          id,
+                          surface,
+                          pointer,
+                          lifetime,
+                          WaylandServer::PointerConstraint::Kind::Confine);
+}
+
+struct zwp_pointer_constraints_v1_interface const pointerConstraintsImpl{
+    .destroy = pointerConstraintsDestroy,
+    .lock_pointer = pointerConstraintsLockPointer,
+    .confine_pointer = pointerConstraintsConfinePointer,
+};
+
+void bindPointerConstraints(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_pointer_constraints_v1_interface, std::min(version, 1u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(resource, &pointerConstraintsImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1855,10 +2058,12 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
   relativePointerManagerGlobal_ =
       wl_global_create(display_, &zwp_relative_pointer_manager_v1_interface, 1, this, bindRelativePointerManager);
+  pointerConstraintsGlobal_ =
+      wl_global_create(display_, &zwp_pointer_constraints_v1_interface, 1, this, bindPointerConstraints);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
       !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ ||
-      !relativePointerManagerGlobal_) {
+      !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2103,6 +2308,7 @@ void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::
       if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
     }
   }
+  updatePointerConstraintsForFocus(server);
 }
 
 void sendRelativePointerMotion(WaylandServer* server, double dx, double dy, std::uint32_t timeMs) {
@@ -2368,8 +2574,22 @@ void updateResize(WaylandServer* server) {
 }
 
 void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
+  if (auto* constraint = activePointerConstraint(this);
+      constraint && constraint->kind == PointerConstraint::Kind::Lock) {
+    sendRelativePointerMotion(this, dx, dy, timeMs);
+    return;
+  }
   pointerX_ = std::clamp(pointerX_ + static_cast<float>(dx), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
   pointerY_ = std::clamp(pointerY_ + static_cast<float>(dy), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  if (auto* constraint = activePointerConstraint(this);
+      constraint && constraint->kind == PointerConstraint::Kind::Confine && constraint->surface) {
+    pointerX_ = std::clamp(pointerX_,
+                           static_cast<float>(constraint->surface->windowX),
+                           static_cast<float>(constraint->surface->windowX + std::max(0, displayWidth(constraint->surface) - 1)));
+    pointerY_ = std::clamp(pointerY_,
+                           static_cast<float>(constraint->surface->windowY),
+                           static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
+  }
   if (resizeSurface_) {
     updateResize(this);
     return;
@@ -2383,8 +2603,21 @@ void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t time
 }
 
 void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
+  if (auto* constraint = activePointerConstraint(this);
+      constraint && constraint->kind == PointerConstraint::Kind::Lock) {
+    return;
+  }
   pointerX_ = std::clamp(static_cast<float>(x), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
   pointerY_ = std::clamp(static_cast<float>(y), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  if (auto* constraint = activePointerConstraint(this);
+      constraint && constraint->kind == PointerConstraint::Kind::Confine && constraint->surface) {
+    pointerX_ = std::clamp(pointerX_,
+                           static_cast<float>(constraint->surface->windowX),
+                           static_cast<float>(constraint->surface->windowX + std::max(0, displayWidth(constraint->surface) - 1)));
+    pointerY_ = std::clamp(pointerY_,
+                           static_cast<float>(constraint->surface->windowY),
+                           static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
+  }
   if (resizeSurface_) {
     updateResize(this);
     return;
@@ -2626,6 +2859,14 @@ void WaylandServer::destroySurface(Surface* surface) {
   }
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
   if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
+  for (auto it = pointerConstraints_.begin(); it != pointerConstraints_.end();) {
+    if ((*it)->surface == surface) {
+      wl_resource_destroy((*it)->resource);
+      it = pointerConstraints_.begin();
+    } else {
+      ++it;
+    }
+  }
   std::vector<PresentationFeedback*> pendingFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
   for (auto* feedback : pendingFeedbacks) {
@@ -2792,6 +3033,21 @@ void WaylandServer::destroyRelativePointer(RelativePointer* relativePointer) {
                      relativePointers_.end(),
                      [&](auto const& candidate) { return candidate.get() == relativePointer; }),
       relativePointers_.end());
+}
+
+void WaylandServer::destroyPointerConstraint(PointerConstraint* constraint) {
+  if (constraint && constraint->active && constraint->resource) {
+    if (constraint->kind == PointerConstraint::Kind::Lock) {
+      zwp_locked_pointer_v1_send_unlocked(constraint->resource);
+    } else {
+      zwp_confined_pointer_v1_send_unconfined(constraint->resource);
+    }
+  }
+  pointerConstraints_.erase(
+      std::remove_if(pointerConstraints_.begin(),
+                     pointerConstraints_.end(),
+                     [&](auto const& candidate) { return candidate.get() == constraint; }),
+      pointerConstraints_.end());
 }
 
 } // namespace flux::compositor

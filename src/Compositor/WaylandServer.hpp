@@ -107,6 +107,7 @@ public:
   struct LayerSurface;
   struct PresentationFeedback;
   struct RelativePointer;
+  struct PointerConstraint;
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
@@ -123,6 +124,7 @@ public:
   void destroyLayerSurface(LayerSurface* layerSurface);
   void destroyPresentationFeedback(PresentationFeedback* feedback);
   void destroyRelativePointer(RelativePointer* relativePointer);
+  void destroyPointerConstraint(PointerConstraint* constraint);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -139,6 +141,7 @@ public:
   wl_global* layerShellGlobal_ = nullptr;
   wl_global* presentationGlobal_ = nullptr;
   wl_global* relativePointerManagerGlobal_ = nullptr;
+  wl_global* pointerConstraintsGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
   WaylandOutputInfo output_;
@@ -156,6 +159,7 @@ public:
   std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;
   std::vector<std::unique_ptr<PresentationFeedback>> presentationFeedbacks_;
   std::vector<std::unique_ptr<RelativePointer>> relativePointers_;
+  std::vector<std::unique_ptr<PointerConstraint>> pointerConstraints_;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
