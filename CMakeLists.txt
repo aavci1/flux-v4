@@ -405,6 +405,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsInput.cpp
     src/Compositor/Protocols/cursor-shape-v1-protocol.c
+    src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
     src/Compositor/Protocols/tablet-v2-protocol.c
     src/Compositor/Protocols/xdg-shell-protocol.c
     src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
@@ -599,6 +600,21 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wpedantic
   )
   target_link_libraries(flux-compositor-cursor-shape-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-idle-inhibit-demo
+    src/Compositor/IdleInhibitDemoClient.cpp
+    src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-idle-inhibit-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-idle-inhibit-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-idle-inhibit-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 endif()
 
 option(FLUX_BUILD_TESTS

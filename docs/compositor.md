@@ -564,7 +564,7 @@ Total new code this phase: ~3300 LOC.
 
 ## 7. Phase 4: Protocols for ecosystem compatibility
 
-**Status:** first compatibility protocols in progress. `xdg_output_v1` is implemented for the single-output compositor geometry, `wp_viewporter` is implemented for surface source cropping and destination scaling, and `wp_cursor_shape_v1` is implemented for pointer cursor-shape requests.
+**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are implemented.
 
 ### 7.1 Goal
 
@@ -581,7 +581,7 @@ Protocols to implement, in rough priority order:
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn fallback cursor shapes.
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard and middle-click-paste support.
-- **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking.
+- **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented as protocol/state tracking; actual idle blanking is not implemented yet.
 - **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.).
 - **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales.
 
@@ -605,7 +605,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A GTK4 app (e.g., `gnome-text-editor`) works correctly with the implemented protocols (decoration, cursor, clipboard, focus).
 - ✗ A Qt6 app works correctly.
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
-- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, and `wp_cursor_shape_v1` are exposed; the rest of phase 4 remains pending.
+- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are exposed; the rest of phase 4 remains pending.
 - ✗ A test layer-shell client (e.g., `eww` or a small custom test) renders at the correct layer.
 
 ### 7.6 LOC estimate
@@ -752,7 +752,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
-| Phase 4: Protocol ecosystem | xdg-output + viewporter + cursor-shape checkpoint active | 2026-05-17 | - | `zxdg_output_manager_v1` reports the single output's logical geometry. `wp_viewporter` supports source cropping and destination scaling. `wp_cursor_shape_v1` supports pointer shape requests. |
+| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are exposed with smoke demos where useful. |
 | Phase 5: Animation + polish | Not started | - | - | - |
 
 ### 12.1 Framework changes log
@@ -776,6 +776,7 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-17 | local working tree | Added `xdg-output-unstable-v1` protocol bindings and exposed `zxdg_output_manager_v1` for single-output logical geometry. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added stable `wp_viewporter` protocol bindings, compositor-side viewport state, and a viewport smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, compositor-drawn fallback shapes, and a cursor-shape smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings, compositor-side inhibitor tracking, and an idle-inhibit smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 
 ### 12.2 Open questions
 

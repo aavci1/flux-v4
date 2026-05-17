@@ -1,6 +1,7 @@
 #include "Compositor/WaylandServer.hpp"
 
 #include "cursor-shape-v1-server-protocol.h"
+#include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
@@ -124,6 +125,12 @@ struct WaylandServer::CursorShapeDevice {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* pointer = nullptr;
+};
+
+struct WaylandServer::IdleInhibitor {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
 };
 
 struct WaylandServer::XdgSurface {
@@ -251,6 +258,12 @@ void viewportDestroyResource(wl_resource* resource) {
 void cursorShapeDeviceDestroyResource(wl_resource* resource) {
   if (auto* device = dataFrom<WaylandServer::CursorShapeDevice>(resource)) {
     device->server->destroyCursorShapeDevice(device);
+  }
+}
+
+void idleInhibitorDestroyResource(wl_resource* resource) {
+  if (auto* inhibitor = dataFrom<WaylandServer::IdleInhibitor>(resource)) {
+    inhibitor->server->destroyIdleInhibitor(inhibitor);
   }
 }
 
@@ -1427,6 +1440,57 @@ void bindCursorShapeManager(wl_client* client, void* data, std::uint32_t version
   wl_resource_set_implementation(resource, &cursorShapeManagerImpl, data, nullptr);
 }
 
+void idleInhibitManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void idleInhibitorDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct zwp_idle_inhibitor_v1_interface const idleInhibitorImpl{
+    .destroy = idleInhibitorDestroy,
+};
+
+void idleInhibitManagerCreateInhibitor(wl_client* client,
+                                       wl_resource* resource,
+                                       std::uint32_t id,
+                                       wl_resource* surfaceResource) {
+  auto* server = serverFrom(resource);
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (!surface) {
+    wl_resource_post_error(resource, 0, "invalid idle inhibitor surface");
+    return;
+  }
+
+  auto inhibitor = std::make_unique<WaylandServer::IdleInhibitor>();
+  inhibitor->server = server;
+  inhibitor->surface = surface;
+  wl_resource* inhibitorResource = wl_resource_create(client, &zwp_idle_inhibitor_v1_interface, 1, id);
+  if (!inhibitorResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  inhibitor->resource = inhibitorResource;
+  auto* raw = inhibitor.get();
+  server->idleInhibitors_.push_back(std::move(inhibitor));
+  wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, idleInhibitorDestroyResource);
+  std::fprintf(stderr,
+               "flux-compositor: idle inhibitors active=%zu\n",
+               server->idleInhibitors_.size());
+}
+
+struct zwp_idle_inhibit_manager_v1_interface const idleInhibitManagerImpl{
+    .destroy = idleInhibitManagerDestroy,
+    .create_inhibitor = idleInhibitManagerCreateInhibitor,
+};
+
+void bindIdleInhibitManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &zwp_idle_inhibit_manager_v1_interface,
+                                             std::min(version, 1u), id);
+  wl_resource_set_implementation(resource, &idleInhibitManagerImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1448,9 +1512,11 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   viewporterGlobal_ = wl_global_create(display_, &wp_viewporter_interface, 1, this, bindViewporter);
   cursorShapeManagerGlobal_ =
       wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 2, this, bindCursorShapeManager);
+  idleInhibitManagerGlobal_ =
+      wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
-      !cursorShapeManagerGlobal_) {
+      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2164,6 +2230,14 @@ void WaylandServer::destroySurface(Surface* surface) {
     }
   }
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
+  for (auto it = idleInhibitors_.begin(); it != idleInhibitors_.end();) {
+    if ((*it)->surface == surface) {
+      wl_resource_destroy((*it)->resource);
+      it = idleInhibitors_.begin();
+    } else {
+      ++it;
+    }
+  }
   for (wl_resource* callback : surface->frameCallbacks) {
     wl_resource_destroy(callback);
   }
@@ -2262,6 +2336,14 @@ void WaylandServer::destroyCursorShapeDevice(CursorShapeDevice* device) {
       std::remove_if(cursorShapeDevices_.begin(), cursorShapeDevices_.end(),
                      [&](auto const& candidate) { return candidate.get() == device; }),
       cursorShapeDevices_.end());
+}
+
+void WaylandServer::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
+  idleInhibitors_.erase(
+      std::remove_if(idleInhibitors_.begin(), idleInhibitors_.end(),
+                     [&](auto const& candidate) { return candidate.get() == inhibitor; }),
+      idleInhibitors_.end());
+  std::fprintf(stderr, "flux-compositor: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
 } // namespace flux::compositor

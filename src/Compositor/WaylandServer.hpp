@@ -103,6 +103,7 @@ public:
   struct ToplevelDecoration;
   struct Viewport;
   struct CursorShapeDevice;
+  struct IdleInhibitor;
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
@@ -115,6 +116,7 @@ public:
   void destroyToplevelDecoration(ToplevelDecoration* decoration);
   void destroyViewport(Viewport* viewport);
   void destroyCursorShapeDevice(CursorShapeDevice* device);
+  void destroyIdleInhibitor(IdleInhibitor* inhibitor);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -127,6 +129,7 @@ public:
   wl_global* xdgOutputManagerGlobal_ = nullptr;
   wl_global* viewporterGlobal_ = nullptr;
   wl_global* cursorShapeManagerGlobal_ = nullptr;
+  wl_global* idleInhibitManagerGlobal_ = nullptr;
   std::string socketName_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
@@ -139,6 +142,7 @@ public:
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<Viewport>> viewports_;
   std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
+  std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
