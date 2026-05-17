@@ -1,3 +1,4 @@
+#include "DemoClientSupport.hpp"
 #include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -186,12 +187,14 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = wl_display_connect(nullptr);
+    client.display = flux::compositor::demo::connectDisplay("flux-compositor-viewport-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
     wl_registry_add_listener(client.registry, &kRegistryListener, &client);
-    wl_display_roundtrip(client.display);
+    if (!flux::compositor::demo::roundtripWithTimeout(client.display, 3000)) {
+      throw std::runtime_error("registry roundtrip timed out");
+    }
     if (!client.compositor || !client.shm || !client.wmBase || !client.viewporter) {
       throw std::runtime_error("compositor is missing wl_compositor, wl_shm, xdg_wm_base, or wp_viewporter");
     }
@@ -205,10 +208,8 @@ int main() {
     xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-viewport-demo");
     wl_surface_commit(client.surface);
 
-    while (!client.configured) {
-      if (wl_display_dispatch(client.display) < 0) {
-        throw std::runtime_error("initial configure failed: " + displayError(client));
-      }
+    if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
+      throw std::runtime_error("initial configure timed out: " + displayError(client));
     }
 
     createBuffer(client);
@@ -231,7 +232,7 @@ int main() {
                  kDestinationHeight);
 
     while (gRunning.load(std::memory_order_relaxed)) {
-      if (wl_display_dispatch(client.display) < 0) break;
+      if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
     }
 
     destroyClient(client);

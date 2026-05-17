@@ -582,7 +582,7 @@ Protocols to implement, in rough priority order:
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn fallback cursor shapes.
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard and middle-click-paste support.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented as protocol/state tracking; actual idle blanking is not implemented yet.
-- **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.).
+- **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Deferred after the first smoke client hard-froze the test laptop; revisit with a safer harness and better crash logging.
 - **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales.
 
 ### 7.3 Out of scope for phase 4
@@ -752,7 +752,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
-| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are exposed with smoke demos where useful. |
+| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are exposed with smoke demos where useful. Activation is deferred after its smoke client hard-froze the test laptop. |
 | Phase 5: Animation + polish | Not started | - | - | - |
 
 ### 12.1 Framework changes log
@@ -777,6 +777,7 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-17 | local working tree | Added stable `wp_viewporter` protocol bindings, compositor-side viewport state, and a viewport smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, compositor-drawn fallback shapes, and a cursor-shape smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings, compositor-side inhibitor tracking, and an idle-inhibit smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-17 | local working tree | Added a shared compositor demo-client support header so smoke clients connect to the compositor-published display socket and time out instead of silently guessing `wayland-0` or blocking indefinitely. | Linux-only compositor test utility support; no Metal API involved. |
 
 ### 12.2 Open questions
 

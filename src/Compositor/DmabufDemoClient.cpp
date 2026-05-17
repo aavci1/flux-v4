@@ -1,3 +1,4 @@
+#include "DemoClientSupport.hpp"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -210,12 +211,14 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = wl_display_connect(nullptr);
+    client.display = flux::compositor::demo::connectDisplay("flux-compositor-dmabuf-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
     wl_registry_add_listener(client.registry, &kRegistryListener, &client);
-    wl_display_roundtrip(client.display);
+    if (!flux::compositor::demo::roundtripWithTimeout(client.display, 3000)) {
+      throw std::runtime_error("registry roundtrip timed out");
+    }
     if (!client.compositor || !client.dmabuf || !client.wmBase) {
       throw std::runtime_error("compositor is missing wl_compositor, zwp_linux_dmabuf_v1, or xdg_wm_base");
     }
@@ -229,10 +232,8 @@ int main() {
     xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-dmabuf-demo");
     wl_surface_commit(client.surface);
 
-    while (!client.configured) {
-      if (wl_display_dispatch(client.display) < 0) {
-        throw std::runtime_error("initial configure failed: " + displayError(client));
-      }
+    if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
+      throw std::runtime_error("initial configure timed out: " + displayError(client));
     }
 
     createDmabufBuffer(client);
@@ -244,7 +245,7 @@ int main() {
     std::fprintf(stderr, "flux-compositor-dmabuf-demo: committed %ux%u DMABUF buffer\n", kWidth, kHeight);
 
     while (gRunning.load(std::memory_order_relaxed)) {
-      if (wl_display_dispatch(client.display) < 0) break;
+      if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
     }
 
     destroyClient(client);

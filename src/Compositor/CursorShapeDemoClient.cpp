@@ -1,3 +1,4 @@
+#include "DemoClientSupport.hpp"
 #include "cursor-shape-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -234,13 +235,15 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = wl_display_connect(nullptr);
+    client.display = flux::compositor::demo::connectDisplay("flux-compositor-cursor-shape-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
     wl_registry_add_listener(client.registry, &kRegistryListener, &client);
-    wl_display_roundtrip(client.display);
-    wl_display_roundtrip(client.display);
+    if (!flux::compositor::demo::roundtripWithTimeout(client.display, 3000) ||
+        !flux::compositor::demo::roundtripWithTimeout(client.display, 3000)) {
+      throw std::runtime_error("registry roundtrip timed out");
+    }
     if (!client.compositor || !client.shm || !client.wmBase || !client.seat ||
         !client.pointer || !client.cursorShapeManager || !client.cursorShapeDevice) {
       throw std::runtime_error("compositor is missing cursor-shape demo globals");
@@ -255,10 +258,8 @@ int main() {
     xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-cursor-shape-demo");
     wl_surface_commit(client.surface);
 
-    while (!client.configured) {
-      if (wl_display_dispatch(client.display) < 0) {
-        throw std::runtime_error("initial configure failed: " + displayError(client));
-      }
+    if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
+      throw std::runtime_error("initial configure timed out: " + displayError(client));
     }
 
     createBuffer(client);
@@ -269,7 +270,7 @@ int main() {
     std::fprintf(stderr, "flux-compositor-cursor-shape-demo: move pointer over the window for crosshair cursor\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
-      if (wl_display_dispatch(client.display) < 0) break;
+      if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
     }
 
     destroyClient(client);

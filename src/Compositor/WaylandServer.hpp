@@ -131,6 +131,7 @@ public:
   wl_global* cursorShapeManagerGlobal_ = nullptr;
   wl_global* idleInhibitManagerGlobal_ = nullptr;
   std::string socketName_;
+  std::string displayNameFile_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
   std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;

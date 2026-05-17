@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cerrno>
+#include <fstream>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -1524,10 +1525,16 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   if (!socket) throw std::runtime_error("wl_display_add_socket_auto failed");
   socketName_ = socket;
   setenv("WAYLAND_DISPLAY", socketName_.c_str(), 1);
+  if (char const* runtimeDir = std::getenv("XDG_RUNTIME_DIR"); runtimeDir && *runtimeDir) {
+    displayNameFile_ = std::string(runtimeDir) + "/flux-compositor-display";
+    std::ofstream file(displayNameFile_, std::ios::trunc);
+    file << socketName_ << '\n';
+  }
   std::fprintf(stderr, "flux-compositor: Wayland display %s\n", socketName_.c_str());
 }
 
 WaylandServer::~WaylandServer() {
+  if (!displayNameFile_.empty()) unlink(displayNameFile_.c_str());
   if (!display_) return;
   wl_display_destroy_clients(display_);
   wl_display_destroy(display_);
