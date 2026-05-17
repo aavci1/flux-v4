@@ -4,6 +4,7 @@
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
+#include "relative-pointer-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
@@ -73,6 +74,7 @@ extern struct wp_viewport_interface const viewportImpl;
 extern struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl;
 extern struct zwlr_layer_surface_v1_interface const layerSurfaceImpl;
 extern struct wp_presentation_interface const presentationImpl;
+extern struct zwp_relative_pointer_v1_interface const relativePointerImpl;
 
 } // namespace
 
@@ -162,6 +164,12 @@ struct WaylandServer::PresentationFeedback {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
+};
+
+struct WaylandServer::RelativePointer {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  wl_resource* pointer = nullptr;
 };
 
 struct WaylandServer::XdgSurface {
@@ -313,6 +321,12 @@ void presentationFeedbackDestroyResource(wl_resource* resource) {
   }
 }
 
+void relativePointerDestroyResource(wl_resource* resource) {
+  if (auto* pointer = dataFrom<WaylandServer::RelativePointer>(resource)) {
+    pointer->server->destroyRelativePointer(pointer);
+  }
+}
+
 void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
@@ -325,7 +339,12 @@ void seatDestroyResource(wl_resource* resource) {
 }
 
 void pointerDestroyResource(wl_resource* resource) {
-  if (auto* server = serverFrom(resource)) removeResource(server->pointerResources_, resource);
+  if (auto* server = serverFrom(resource)) {
+    removeResource(server->pointerResources_, resource);
+    for (auto& relativePointer : server->relativePointers_) {
+      if (relativePointer->pointer == resource) relativePointer->pointer = nullptr;
+    }
+  }
 }
 
 void keyboardDestroyResource(wl_resource* resource) {
@@ -1763,6 +1782,52 @@ void bindPresentation(wl_client* client, void* data, std::uint32_t version, std:
   wp_presentation_send_clock_id(resource, CLOCK_MONOTONIC);
 }
 
+void relativePointerManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void relativePointerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct zwp_relative_pointer_v1_interface const relativePointerImpl{
+    .destroy = relativePointerDestroy,
+};
+
+void relativePointerManagerGetRelativePointer(wl_client* client,
+                                              wl_resource* resource,
+                                              std::uint32_t id,
+                                              wl_resource* pointerResource) {
+  auto* server = serverFrom(resource);
+  auto relativePointer = std::make_unique<WaylandServer::RelativePointer>();
+  relativePointer->server = server;
+  relativePointer->pointer = pointerResource;
+  wl_resource* relativePointerResource = wl_resource_create(client, &zwp_relative_pointer_v1_interface, 1, id);
+  if (!relativePointerResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  relativePointer->resource = relativePointerResource;
+  auto* raw = relativePointer.get();
+  server->relativePointers_.push_back(std::move(relativePointer));
+  wl_resource_set_implementation(relativePointerResource, &relativePointerImpl, raw, relativePointerDestroyResource);
+}
+
+struct zwp_relative_pointer_manager_v1_interface const relativePointerManagerImpl{
+    .destroy = relativePointerManagerDestroy,
+    .get_relative_pointer = relativePointerManagerGetRelativePointer,
+};
+
+void bindRelativePointerManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_relative_pointer_manager_v1_interface, std::min(version, 1u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(resource, &relativePointerManagerImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1788,9 +1853,12 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
       wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
   layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 1, this, bindLayerShell);
   presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
+  relativePointerManagerGlobal_ =
+      wl_global_create(display_, &zwp_relative_pointer_manager_v1_interface, 1, this, bindRelativePointerManager);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
-      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_) {
+      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ ||
+      !relativePointerManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2034,6 +2102,27 @@ void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::
       wl_pointer_send_enter(pointer, serial, next->resource, x, y);
       if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
     }
+  }
+}
+
+void sendRelativePointerMotion(WaylandServer* server, double dx, double dy, std::uint32_t timeMs) {
+  if (!server->pointerFocus_ || (dx == 0.0 && dy == 0.0)) return;
+  wl_client* focusedClient = wl_resource_get_client(server->pointerFocus_->resource);
+  std::uint64_t const timeUsec = static_cast<std::uint64_t>(timeMs) * 1000ull;
+  std::uint32_t const timeHi = static_cast<std::uint32_t>(timeUsec >> 32u);
+  std::uint32_t const timeLo = static_cast<std::uint32_t>(timeUsec & 0xffffffffu);
+  wl_fixed_t const fixedDx = wl_fixed_from_double(dx);
+  wl_fixed_t const fixedDy = wl_fixed_from_double(dy);
+  for (auto const& relativePointer : server->relativePointers_) {
+    if (!relativePointer->resource || !relativePointer->pointer) continue;
+    if (wl_resource_get_client(relativePointer->pointer) != focusedClient) continue;
+    zwp_relative_pointer_v1_send_relative_motion(relativePointer->resource,
+                                                 timeHi,
+                                                 timeLo,
+                                                 fixedDx,
+                                                 fixedDy,
+                                                 fixedDx,
+                                                 fixedDy);
   }
 }
 
@@ -2290,6 +2379,7 @@ void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t time
     return;
   }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  sendRelativePointerMotion(this, dx, dy, timeMs);
 }
 
 void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
@@ -2694,6 +2784,14 @@ void WaylandServer::destroyPresentationFeedback(PresentationFeedback* feedback) 
                      presentationFeedbacks_.end(),
                      [&](auto const& candidate) { return candidate.get() == feedback; }),
       presentationFeedbacks_.end());
+}
+
+void WaylandServer::destroyRelativePointer(RelativePointer* relativePointer) {
+  relativePointers_.erase(
+      std::remove_if(relativePointers_.begin(),
+                     relativePointers_.end(),
+                     [&](auto const& candidate) { return candidate.get() == relativePointer; }),
+      relativePointers_.end());
 }
 
 } // namespace flux::compositor
