@@ -13,6 +13,19 @@ struct wl_resource;
 
 namespace flux::compositor {
 
+enum class CursorShape : std::uint8_t {
+  Arrow,
+  IBeam,
+  Hand,
+  Crosshair,
+  ResizeEW,
+  ResizeNS,
+  ResizeNESW,
+  ResizeNWSE,
+  ResizeAll,
+  NotAllowed,
+};
+
 struct WaylandOutputInfo {
   std::string name;
   std::int32_t width = 0;
@@ -75,6 +88,7 @@ public:
   void handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs);
   [[nodiscard]] float pointerX() const noexcept { return pointerX_; }
   [[nodiscard]] float pointerY() const noexcept { return pointerY_; }
+  [[nodiscard]] CursorShape cursorShape() const noexcept { return cursorShape_; }
 
   // Protocol callbacks are plain C function pointers, so this implementation
   // state is public to the translation unit callbacks. It remains unexposed to
@@ -88,6 +102,7 @@ public:
   struct DmabufBuffer;
   struct ToplevelDecoration;
   struct Viewport;
+  struct CursorShapeDevice;
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
@@ -99,6 +114,7 @@ public:
   void destroyDmabufBuffer(DmabufBuffer* buffer);
   void destroyToplevelDecoration(ToplevelDecoration* decoration);
   void destroyViewport(Viewport* viewport);
+  void destroyCursorShapeDevice(CursorShapeDevice* device);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -110,6 +126,7 @@ public:
   wl_global* xdgDecorationManagerGlobal_ = nullptr;
   wl_global* xdgOutputManagerGlobal_ = nullptr;
   wl_global* viewporterGlobal_ = nullptr;
+  wl_global* cursorShapeManagerGlobal_ = nullptr;
   std::string socketName_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
@@ -121,6 +138,7 @@ public:
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<Viewport>> viewports_;
+  std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
@@ -130,8 +148,10 @@ public:
   Surface* resizeSurface_ = nullptr;
   Surface* closePressSurface_ = nullptr;
   Surface* cursorSurface_ = nullptr;
+  CursorShape cursorShape_ = CursorShape::Arrow;
   std::int32_t cursorHotspotX_ = 0;
   std::int32_t cursorHotspotY_ = 0;
+  std::uint32_t pointerEnterSerial_ = 0;
   float dragOffsetX_ = 0.f;
   float dragOffsetY_ = 0.f;
   float resizeStartX_ = 0.f;

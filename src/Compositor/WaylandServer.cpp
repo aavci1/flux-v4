@@ -1,5 +1,6 @@
 #include "Compositor/WaylandServer.hpp"
 
+#include "cursor-shape-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
@@ -64,6 +65,7 @@ extern struct wl_pointer_interface const pointerImpl;
 extern struct wl_keyboard_interface const keyboardImpl;
 extern struct wl_seat_interface const seatImpl;
 extern struct wp_viewport_interface const viewportImpl;
+extern struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl;
 
 } // namespace
 
@@ -116,6 +118,12 @@ struct WaylandServer::Viewport {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
+};
+
+struct WaylandServer::CursorShapeDevice {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  wl_resource* pointer = nullptr;
 };
 
 struct WaylandServer::XdgSurface {
@@ -237,6 +245,12 @@ void toplevelDecorationDestroyResource(wl_resource* resource) {
 void viewportDestroyResource(wl_resource* resource) {
   if (auto* viewport = dataFrom<WaylandServer::Viewport>(resource)) {
     viewport->server->destroyViewport(viewport);
+  }
+}
+
+void cursorShapeDeviceDestroyResource(wl_resource* resource) {
+  if (auto* device = dataFrom<WaylandServer::CursorShapeDevice>(resource)) {
+    device->server->destroyCursorShapeDevice(device);
   }
 }
 
@@ -1034,6 +1048,7 @@ void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resou
   auto* server = serverFrom(resource);
   if (!surfaceResource) {
     server->cursorSurface_ = nullptr;
+    server->cursorShape_ = CursorShape::Arrow;
     return;
   }
 
@@ -1310,6 +1325,108 @@ void bindViewporter(wl_client* client, void* data, std::uint32_t version, std::u
   wl_resource_set_implementation(resource, &viewporterImpl, data, nullptr);
 }
 
+void cursorShapeManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+CursorShape compositorCursorShape(std::uint32_t shape) {
+  switch (shape) {
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_VERTICAL_TEXT:
+    return CursorShape::IBeam;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRAB:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING:
+    return CursorShape::Hand;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CELL:
+    return CursorShape::Crosshair;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_E_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_W_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_EW_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_COL_RESIZE:
+    return CursorShape::ResizeEW;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_S_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NS_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_ROW_RESIZE:
+    return CursorShape::ResizeNS;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NE_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SW_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NESW_RESIZE:
+    return CursorShape::ResizeNESW;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NW_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SE_RESIZE:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NWSE_RESIZE:
+    return CursorShape::ResizeNWSE;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_ALL_SCROLL:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_MOVE:
+    return CursorShape::ResizeAll;
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NO_DROP:
+  case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NOT_ALLOWED:
+    return CursorShape::NotAllowed;
+  default:
+    return CursorShape::Arrow;
+  }
+}
+
+void cursorShapeDeviceDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t serial, std::uint32_t shape) {
+  auto* device = dataFrom<WaylandServer::CursorShapeDevice>(resource);
+  if (!device || !device->server) return;
+  std::uint32_t const version = static_cast<std::uint32_t>(wl_resource_get_version(resource));
+  if (!wp_cursor_shape_device_v1_shape_is_valid(shape, version)) {
+    wl_resource_post_error(resource, WP_CURSOR_SHAPE_DEVICE_V1_ERROR_INVALID_SHAPE,
+                           "invalid cursor shape %u", shape);
+    return;
+  }
+  auto* server = device->server;
+  if (serial != server->pointerEnterSerial_) return;
+  if (!server->pointerFocus_ || !device->pointer) return;
+  if (wl_resource_get_client(device->pointer) != wl_resource_get_client(server->pointerFocus_->resource)) return;
+
+  server->cursorSurface_ = nullptr;
+  server->cursorShape_ = compositorCursorShape(shape);
+}
+
+struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl{
+    .destroy = cursorShapeDeviceDestroy,
+    .set_shape = cursorShapeDeviceSetShape,
+};
+
+void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std::uint32_t id,
+                                  wl_resource* pointer) {
+  auto* server = serverFrom(resource);
+  auto device = std::make_unique<WaylandServer::CursorShapeDevice>();
+  device->server = server;
+  device->pointer = pointer;
+  wl_resource* deviceResource =
+      wl_resource_create(client, &wp_cursor_shape_device_v1_interface, wl_resource_get_version(resource), id);
+  if (!deviceResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  device->resource = deviceResource;
+  auto* raw = device.get();
+  server->cursorShapeDevices_.push_back(std::move(device));
+  wl_resource_set_implementation(deviceResource, &cursorShapeDeviceImpl, raw, cursorShapeDeviceDestroyResource);
+}
+
+struct wp_cursor_shape_manager_v1_interface const cursorShapeManagerImpl{
+    .destroy = cursorShapeManagerDestroy,
+    .get_pointer = cursorShapeManagerGetPointer,
+    .get_tablet_tool_v2 = [](wl_client*, wl_resource*, std::uint32_t, wl_resource*) {},
+};
+
+void bindCursorShapeManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &wp_cursor_shape_manager_v1_interface, std::min(version, 2u), id);
+  wl_resource_set_implementation(resource, &cursorShapeManagerImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1329,8 +1446,11 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   xdgOutputManagerGlobal_ =
       wl_global_create(display_, &zxdg_output_manager_v1_interface, 3, this, bindXdgOutputManager);
   viewporterGlobal_ = wl_global_create(display_, &wp_viewporter_interface, 1, this, bindViewporter);
+  cursorShapeManagerGlobal_ =
+      wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 2, this, bindCursorShapeManager);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
-      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_) {
+      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
+      !cursorShapeManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -1558,9 +1678,12 @@ void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::
     }
   }
   server->pointerFocus_ = next;
+  server->cursorSurface_ = nullptr;
+  server->cursorShape_ = CursorShape::Arrow;
   if (next) {
     wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
     wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
+    server->pointerEnterSerial_ = serial;
     for (wl_resource* pointer : server->pointerResources_) {
       wl_pointer_send_enter(pointer, serial, next->resource, x, y);
       if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
@@ -2035,6 +2158,11 @@ void WaylandServer::destroySurface(Surface* surface) {
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
+  for (auto& device : cursorShapeDevices_) {
+    if (device->pointer && wl_resource_get_client(device->pointer) == wl_resource_get_client(surface->resource)) {
+      device->pointer = nullptr;
+    }
+  }
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
   for (wl_resource* callback : surface->frameCallbacks) {
     wl_resource_destroy(callback);
@@ -2127,6 +2255,13 @@ void WaylandServer::destroyViewport(Viewport* viewport) {
   viewports_.erase(std::remove_if(viewports_.begin(), viewports_.end(),
                                   [&](auto const& candidate) { return candidate.get() == viewport; }),
                    viewports_.end());
+}
+
+void WaylandServer::destroyCursorShapeDevice(CursorShapeDevice* device) {
+  cursorShapeDevices_.erase(
+      std::remove_if(cursorShapeDevices_.begin(), cursorShapeDevices_.end(),
+                     [&](auto const& candidate) { return candidate.get() == device; }),
+      cursorShapeDevices_.end());
 }
 
 } // namespace flux::compositor
