@@ -4,6 +4,7 @@
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
+#include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-output-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -68,6 +69,7 @@ extern struct wl_keyboard_interface const keyboardImpl;
 extern struct wl_seat_interface const seatImpl;
 extern struct wp_viewport_interface const viewportImpl;
 extern struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl;
+extern struct zwlr_layer_surface_v1_interface const layerSurfaceImpl;
 
 } // namespace
 
@@ -113,6 +115,7 @@ struct WaylandServer::Surface {
   std::int32_t restoreHeight = 0;
   DmabufBuffer* dmabufBuffer = nullptr;
   Viewport* viewport = nullptr;
+  LayerSurface* layerSurface = nullptr;
   std::vector<wl_resource*> frameCallbacks;
 };
 
@@ -132,6 +135,22 @@ struct WaylandServer::IdleInhibitor {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
+};
+
+struct WaylandServer::LayerSurface {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
+  std::uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+  std::string nameSpace;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  std::uint32_t anchor = 0;
+  std::int32_t marginTop = 0;
+  std::int32_t marginRight = 0;
+  std::int32_t marginBottom = 0;
+  std::int32_t marginLeft = 0;
+  bool configured = false;
 };
 
 struct WaylandServer::XdgSurface {
@@ -161,6 +180,9 @@ struct WaylandServer::ShmBuffer {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   ShmPool* pool = nullptr;
+  int fd = -1;
+  std::int32_t size = 0;
+  void* data = nullptr;
   std::int32_t offset = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
@@ -268,9 +290,18 @@ void idleInhibitorDestroyResource(wl_resource* resource) {
   }
 }
 
+void layerSurfaceDestroyResource(wl_resource* resource) {
+  if (auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource)) {
+    layerSurface->server->destroyLayerSurface(layerSurface);
+  }
+}
+
 void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
+
+void applyLayerGeometry(WaylandServer::LayerSurface* layerSurface);
+void sendLayerConfigure(WaylandServer::LayerSurface* layerSurface);
 
 void seatDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) removeResource(server->seatResources_, resource);
@@ -345,7 +376,7 @@ WaylandServer::DmabufBuffer* dmabufBufferFor(WaylandServer* server, wl_resource*
 }
 
 bool copyShmBufferToRgba(WaylandServer::ShmBuffer const& buffer, std::vector<std::uint8_t>& out) {
-  if (!buffer.pool || !buffer.pool->data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) {
+  if (!buffer.data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) {
     return false;
   }
   if (buffer.format != WL_SHM_FORMAT_ARGB8888 && buffer.format != WL_SHM_FORMAT_XRGB8888) {
@@ -358,12 +389,12 @@ bool copyShmBufferToRgba(WaylandServer::ShmBuffer const& buffer, std::vector<std
   }
   std::size_t const lastRow = static_cast<std::size_t>(buffer.height - 1) * static_cast<std::size_t>(buffer.stride);
   std::size_t const end = static_cast<std::size_t>(buffer.offset) + lastRow + rowBytes;
-  if (end > static_cast<std::size_t>(buffer.pool->size)) {
+  if (end > static_cast<std::size_t>(buffer.size)) {
     return false;
   }
 
   out.resize(static_cast<std::size_t>(buffer.width) * static_cast<std::size_t>(buffer.height) * 4u);
-  auto const* base = static_cast<std::uint8_t const*>(buffer.pool->data) + buffer.offset;
+  auto const* base = static_cast<std::uint8_t const*>(buffer.data) + buffer.offset;
   for (std::int32_t y = 0; y < buffer.height; ++y) {
     auto const* src = base + static_cast<std::size_t>(y) * static_cast<std::size_t>(buffer.stride);
     auto* dst = out.data() + static_cast<std::size_t>(y) * rowBytes;
@@ -444,6 +475,12 @@ bool applyViewportState(WaylandServer::Surface* surface) {
 
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = dataFrom<WaylandServer::Surface>(resource);
+  if (surface->layerSurface && !surface->layerSurface->configured && !surface->pendingBuffer) {
+    surface->layerSurface->configured = true;
+    sendLayerConfigure(surface->layerSurface);
+    surface->server->flushClients();
+    return;
+  }
   surface->currentBuffer = surface->pendingBuffer;
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
@@ -453,6 +490,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
         if (!applyViewportState(surface)) return;
+        applyLayerGeometry(surface->layerSurface);
         surface->dmabufBuffer = nullptr;
         ++surface->serial;
       }
@@ -462,6 +500,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
         if (!applyViewportState(surface)) return;
+        applyLayerGeometry(surface->layerSurface);
         surface->dmabufBuffer = dmabufBuffer;
         ++surface->serial;
         std::fprintf(stderr,
@@ -588,6 +627,12 @@ void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t
   auto buffer = std::make_unique<WaylandServer::ShmBuffer>();
   buffer->server = pool->server;
   buffer->pool = pool;
+  buffer->fd = pool->fd >= 0 ? dup(pool->fd) : -1;
+  buffer->size = pool->size;
+  if (buffer->fd >= 0 && buffer->size > 0) {
+    buffer->data = mmap(nullptr, static_cast<std::size_t>(buffer->size), PROT_READ, MAP_SHARED, buffer->fd, 0);
+    if (buffer->data == MAP_FAILED) buffer->data = nullptr;
+  }
   buffer->offset = offset;
   buffer->width = width;
   buffer->height = height;
@@ -813,6 +858,56 @@ std::int32_t displayHeight(WaylandServer::Surface const* surface) {
   return surface && surface->frameHeight > 0 ? surface->frameHeight : surface ? surface->height : 0;
 }
 
+bool hasAnchor(std::uint32_t anchor, std::uint32_t edge) {
+  return (anchor & edge) != 0;
+}
+
+void applyLayerGeometry(WaylandServer::LayerSurface* layerSurface) {
+  if (!layerSurface || !layerSurface->surface) return;
+  auto* surface = layerSurface->surface;
+  std::int32_t const width = displayWidth(surface);
+  std::int32_t const height = displayHeight(surface);
+  if (width <= 0 || height <= 0) return;
+
+  if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT)) {
+    surface->windowX = layerSurface->marginLeft;
+  } else if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) {
+    surface->windowX = layerSurface->server->output_.width - width - layerSurface->marginRight;
+  } else {
+    surface->windowX = (layerSurface->server->output_.width - width) / 2;
+  }
+
+  if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP)) {
+    surface->windowY = layerSurface->marginTop;
+  } else if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
+    surface->windowY = layerSurface->server->output_.height - height - layerSurface->marginBottom;
+  } else {
+    surface->windowY = (layerSurface->server->output_.height - height) / 2;
+  }
+}
+
+void sendLayerConfigure(WaylandServer::LayerSurface* layerSurface) {
+  if (!layerSurface || !layerSurface->resource) return;
+  std::uint32_t width = layerSurface->width;
+  std::uint32_t height = layerSurface->height;
+  if (width == 0 &&
+      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) &&
+      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) {
+    width = static_cast<std::uint32_t>(
+        std::max(1, layerSurface->server->output_.width - layerSurface->marginLeft - layerSurface->marginRight));
+  }
+  if (height == 0 &&
+      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) &&
+      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
+    height = static_cast<std::uint32_t>(
+        std::max(1, layerSurface->server->output_.height - layerSurface->marginTop - layerSurface->marginBottom));
+  }
+  zwlr_layer_surface_v1_send_configure(layerSurface->resource,
+                                       layerSurface->server->nextConfigureSerial_++,
+                                       width,
+                                       height);
+}
+
 void sendDecorationConfigure(WaylandServer::ToplevelDecoration* decoration) {
   zxdg_toplevel_decoration_v1_send_configure(decoration->resource, decoration->mode);
   if (decoration->toplevel && decoration->toplevel->xdgSurface && decoration->toplevel->xdgSurface->resource) {
@@ -936,6 +1031,10 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* xdgSurface = dataFrom<WaylandServer::XdgSurface>(resource);
+  if (xdgSurface->surface->layerSurface) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has a layer-shell role");
+    return;
+  }
   auto toplevel = std::make_unique<WaylandServer::XdgToplevel>();
   toplevel->server = xdgSurface->server;
   toplevel->xdgSurface = xdgSurface;
@@ -1492,6 +1591,109 @@ void bindIdleInhibitManager(wl_client* client, void* data, std::uint32_t version
   wl_resource_set_implementation(resource, &idleInhibitManagerImpl, data, nullptr);
 }
 
+void layerShellDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void layerSurfaceSetSize(wl_client*, wl_resource* resource, std::uint32_t width, std::uint32_t height) {
+  auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource);
+  if (!layerSurface) return;
+  layerSurface->width = width;
+  layerSurface->height = height;
+}
+
+void layerSurfaceSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
+  auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource);
+  if (!layerSurface) return;
+  std::uint32_t const valid = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+                             ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
+  if ((anchor & ~valid) != 0) {
+    wl_resource_post_error(resource, ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_ANCHOR, "invalid layer-shell anchor");
+    return;
+  }
+  layerSurface->anchor = anchor;
+}
+
+void layerSurfaceSetExclusiveZone(wl_client*, wl_resource*, std::int32_t) {}
+
+void layerSurfaceSetMargin(wl_client*, wl_resource* resource, std::int32_t top, std::int32_t right,
+                           std::int32_t bottom, std::int32_t left) {
+  auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource);
+  if (!layerSurface) return;
+  layerSurface->marginTop = top;
+  layerSurface->marginRight = right;
+  layerSurface->marginBottom = bottom;
+  layerSurface->marginLeft = left;
+}
+
+void layerSurfaceSetKeyboardInteractivity(wl_client*, wl_resource*, std::uint32_t) {}
+
+void layerSurfaceGetPopup(wl_client*, wl_resource* resource, wl_resource*) {
+  wl_resource_post_error(resource, ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SURFACE_STATE,
+                         "layer-shell popups are not implemented yet");
+}
+
+void layerSurfaceAckConfigure(wl_client*, wl_resource*, std::uint32_t) {}
+
+void layerSurfaceDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct zwlr_layer_surface_v1_interface const layerSurfaceImpl{
+    .set_size = layerSurfaceSetSize,
+    .set_anchor = layerSurfaceSetAnchor,
+    .set_exclusive_zone = layerSurfaceSetExclusiveZone,
+    .set_margin = layerSurfaceSetMargin,
+    .set_keyboard_interactivity = layerSurfaceSetKeyboardInteractivity,
+    .get_popup = layerSurfaceGetPopup,
+    .ack_configure = layerSurfaceAckConfigure,
+    .destroy = layerSurfaceDestroy,
+};
+
+void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::uint32_t id,
+                               wl_resource* surfaceResource, wl_resource*, std::uint32_t layer,
+                               char const* nameSpace) {
+  auto* server = serverFrom(resource);
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (!surface || surface->toplevel || surface->layerSurface || surface->cursor) {
+    wl_resource_post_error(resource, ZWLR_LAYER_SHELL_V1_ERROR_ROLE, "wl_surface already has a role");
+    return;
+  }
+  if (layer > ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY) {
+    wl_resource_post_error(resource, ZWLR_LAYER_SHELL_V1_ERROR_INVALID_LAYER, "invalid layer-shell layer");
+    return;
+  }
+
+  auto layerSurface = std::make_unique<WaylandServer::LayerSurface>();
+  layerSurface->server = server;
+  layerSurface->surface = surface;
+  layerSurface->layer = layer;
+  layerSurface->nameSpace = nameSpace ? nameSpace : "";
+  wl_resource* layerResource = wl_resource_create(client, &zwlr_layer_surface_v1_interface, 1, id);
+  if (!layerResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  layerSurface->resource = layerResource;
+  auto* raw = layerSurface.get();
+  surface->layerSurface = raw;
+  surface->toplevel = true;
+  surface->cursor = false;
+  if (server->cursorSurface_ == surface) server->cursorSurface_ = nullptr;
+  server->layerSurfaces_.push_back(std::move(layerSurface));
+  wl_resource_set_implementation(layerResource, &layerSurfaceImpl, raw, layerSurfaceDestroyResource);
+}
+
+struct zwlr_layer_shell_v1_interface const layerShellImpl{
+    .get_layer_surface = layerShellGetLayerSurface,
+    .destroy = layerShellDestroy,
+};
+
+void bindLayerShell(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &zwlr_layer_shell_v1_interface, std::min(version, 1u), id);
+  wl_resource_set_implementation(resource, &layerShellImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1515,9 +1717,10 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
       wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 2, this, bindCursorShapeManager);
   idleInhibitManagerGlobal_ =
       wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
+  layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 1, this, bindLayerShell);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
-      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_) {
+      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -1571,8 +1774,8 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
         .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
         .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
         .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
-        .titleBarHeight = kTitleBarHeight,
-        .title = titleForSurface(this, surface.get()),
+        .titleBarHeight = surface->layerSurface ? 0 : kTitleBarHeight,
+        .title = surface->layerSurface ? std::string{} : titleForSurface(this, surface.get()),
         .focused = keyboardFocus_ == surface.get(),
         .serial = surface->serial,
         .rgbaPixels = surface->rgbaPixels,
@@ -2237,6 +2440,7 @@ void WaylandServer::destroySurface(Surface* surface) {
     }
   }
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
+  if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
   for (auto it = idleInhibitors_.begin(); it != idleInhibitors_.end();) {
     if ((*it)->surface == surface) {
       wl_resource_destroy((*it)->resource);
@@ -2270,6 +2474,9 @@ void WaylandServer::destroyXdgToplevel(XdgToplevel* toplevel) {
 }
 
 void WaylandServer::destroyShmPool(ShmPool* pool) {
+  for (auto& buffer : shmBuffers_) {
+    if (buffer->pool == pool) buffer->pool = nullptr;
+  }
   if (pool->data) munmap(pool->data, static_cast<std::size_t>(pool->size));
   if (pool->fd >= 0) close(pool->fd);
   shmPools_.erase(std::remove_if(shmPools_.begin(), shmPools_.end(),
@@ -2278,6 +2485,8 @@ void WaylandServer::destroyShmPool(ShmPool* pool) {
 }
 
 void WaylandServer::destroyShmBuffer(ShmBuffer* buffer) {
+  if (buffer->data) munmap(buffer->data, static_cast<std::size_t>(buffer->size));
+  if (buffer->fd >= 0) close(buffer->fd);
   shmBuffers_.erase(std::remove_if(shmBuffers_.begin(), shmBuffers_.end(),
                                    [&](auto const& candidate) { return candidate.get() == buffer; }),
                     shmBuffers_.end());
@@ -2351,6 +2560,16 @@ void WaylandServer::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
                      [&](auto const& candidate) { return candidate.get() == inhibitor; }),
       idleInhibitors_.end());
   std::fprintf(stderr, "flux-compositor: idle inhibitors active=%zu\n", idleInhibitors_.size());
+}
+
+void WaylandServer::destroyLayerSurface(LayerSurface* layerSurface) {
+  if (layerSurface && layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
+    layerSurface->surface->layerSurface = nullptr;
+  }
+  layerSurfaces_.erase(
+      std::remove_if(layerSurfaces_.begin(), layerSurfaces_.end(),
+                     [&](auto const& candidate) { return candidate.get() == layerSurface; }),
+      layerSurfaces_.end());
 }
 
 } // namespace flux::compositor

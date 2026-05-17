@@ -104,6 +104,7 @@ public:
   struct Viewport;
   struct CursorShapeDevice;
   struct IdleInhibitor;
+  struct LayerSurface;
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
@@ -117,6 +118,7 @@ public:
   void destroyViewport(Viewport* viewport);
   void destroyCursorShapeDevice(CursorShapeDevice* device);
   void destroyIdleInhibitor(IdleInhibitor* inhibitor);
+  void destroyLayerSurface(LayerSurface* layerSurface);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -130,6 +132,7 @@ public:
   wl_global* viewporterGlobal_ = nullptr;
   wl_global* cursorShapeManagerGlobal_ = nullptr;
   wl_global* idleInhibitManagerGlobal_ = nullptr;
+  wl_global* layerShellGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
   WaylandOutputInfo output_;
@@ -144,6 +147,7 @@ public:
   std::vector<std::unique_ptr<Viewport>> viewports_;
   std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
   std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
+  std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;

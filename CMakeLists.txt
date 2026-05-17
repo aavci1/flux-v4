@@ -411,6 +411,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
     src/Compositor/Protocols/viewporter-protocol.c
+    src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
   )
 endif()
@@ -615,6 +616,22 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wpedantic
   )
   target_link_libraries(flux-compositor-idle-inhibit-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-layer-shell-demo
+    src/Compositor/LayerShellDemoClient.cpp
+    src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-layer-shell-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-layer-shell-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-layer-shell-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
 endif()
 
 option(FLUX_BUILD_TESTS
