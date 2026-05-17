@@ -102,6 +102,7 @@ public:
   wl_global* xdgWmBaseGlobal_ = nullptr;
   wl_global* linuxDmabufGlobal_ = nullptr;
   wl_global* xdgDecorationManagerGlobal_ = nullptr;
+  wl_global* xdgOutputManagerGlobal_ = nullptr;
   std::string socketName_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;

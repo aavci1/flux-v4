@@ -564,7 +564,7 @@ Total new code this phase: ~3300 LOC.
 
 ## 7. Phase 4: Protocols for ecosystem compatibility
 
-**Status:** not yet implemented.
+**Status:** first compatibility protocol in progress. `xdg_output_v1` is implemented for the single-output compositor geometry.
 
 ### 7.1 Goal
 
@@ -576,7 +576,7 @@ Protocols to implement, in rough priority order:
 
 - **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay).
 - **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Common.
-- **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry.
+- **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry. Implemented for the current single-output layout.
 - **`wp_presentation_time`**: gives clients precise vblank-timing information for frame pacing. Used by video players and games for smooth playback.
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it.
@@ -605,7 +605,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A GTK4 app (e.g., `gnome-text-editor`) works correctly with the implemented protocols (decoration, cursor, clipboard, focus).
 - ✗ A Qt6 app works correctly.
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
-- ✗ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them.
+- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1` is exposed; the rest of phase 4 remains pending.
 - ✗ A test layer-shell client (e.g., `eww` or a small custom test) renders at the correct layer.
 
 ### 7.6 LOC estimate
@@ -752,7 +752,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
-| Phase 4: Protocol ecosystem | Not started | - | - | - |
+| Phase 4: Protocol ecosystem | xdg-output checkpoint active | 2026-05-17 | - | `zxdg_output_manager_v1` is exposed and reports the single output's logical position, size, name, and description. |
 | Phase 5: Animation + polish | Not started | - | - | - |
 
 ### 12.1 Framework changes log
@@ -773,6 +773,7 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-16 | local working tree | Added compositor-owned server-side title bars and left-button move-drag handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added `wl_pointer.set_cursor` handling so client cursor surfaces draw as the pointer image instead of as separate windows. | Linux compositor-only pointer behavior; no Metal API involved. |
 | 2026-05-17 | local working tree | Added compositor window resizing, half-screen snap/drag-unsnap behavior, keyboard shortcuts, keyboard modifier forwarding, titlebar titles, and close-on-click-release handling. | Linux compositor-only window-management behavior; no Metal API involved. |
+| 2026-05-17 | local working tree | Added `xdg-output-unstable-v1` protocol bindings and exposed `zxdg_output_manager_v1` for single-output logical geometry. | Linux compositor-only protocol integration; no Metal API involved. |
 
 ### 12.2 Open questions
 

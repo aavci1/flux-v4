@@ -406,6 +406,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/KmsInput.cpp
     src/Compositor/Protocols/xdg-shell-protocol.c
     src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
+    src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
   )
 endif()

@@ -2,6 +2,7 @@
 
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
+#include "xdg-output-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 
 #include <drm_fourcc.h>
@@ -1054,6 +1055,59 @@ void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t versi
   wl_resource_set_implementation(resource, &xdgDecorationManagerImpl, data, nullptr);
 }
 
+void xdgOutputManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgOutputDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct zxdg_output_v1_interface const xdgOutputImpl{
+    .destroy = xdgOutputDestroy,
+};
+
+void xdgOutputManagerGetXdgOutput(wl_client* client,
+                                  wl_resource* resource,
+                                  std::uint32_t id,
+                                  wl_resource* outputResource) {
+  auto* server = serverFrom(resource);
+  std::uint32_t const version = static_cast<std::uint32_t>(wl_resource_get_version(resource));
+  wl_resource* xdgOutput = wl_resource_create(client, &zxdg_output_v1_interface, std::min(version, 3u), id);
+  if (!xdgOutput) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(xdgOutput, &xdgOutputImpl, server, nullptr);
+
+  WaylandOutputInfo const& output = server->output_;
+  zxdg_output_v1_send_logical_position(xdgOutput, 0, 0);
+  zxdg_output_v1_send_logical_size(xdgOutput, output.width, output.height);
+  if (version >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION) {
+    zxdg_output_v1_send_name(xdgOutput, output.name.c_str());
+  }
+  if (version >= ZXDG_OUTPUT_V1_DESCRIPTION_SINCE_VERSION) {
+    zxdg_output_v1_send_description(xdgOutput, "Flux compositor output");
+  }
+
+  if (version >= 3) {
+    wl_output_send_done(outputResource);
+  } else {
+    zxdg_output_v1_send_done(xdgOutput);
+  }
+}
+
+struct zxdg_output_manager_v1_interface const xdgOutputManagerImpl{
+    .destroy = xdgOutputManagerDestroy,
+    .get_xdg_output = xdgOutputManagerGetXdgOutput,
+};
+
+void bindXdgOutputManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &zxdg_output_manager_v1_interface,
+                                             std::min(version, 3u), id);
+  wl_resource_set_implementation(resource, &xdgOutputManagerImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1070,8 +1124,10 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   linuxDmabufGlobal_ = wl_global_create(display_, &zwp_linux_dmabuf_v1_interface, 3, this, bindLinuxDmabuf);
   xdgDecorationManagerGlobal_ =
       wl_global_create(display_, &zxdg_decoration_manager_v1_interface, 1, this, bindXdgDecorationManager);
+  xdgOutputManagerGlobal_ =
+      wl_global_create(display_, &zxdg_output_manager_v1_interface, 3, this, bindXdgOutputManager);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
-      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_) {
+      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -1152,6 +1208,9 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
       .height = surface->height,
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
+      .titleBarHeight = 0,
+      .title = {},
+      .focused = false,
       .serial = surface->serial,
       .rgbaPixels = surface->rgbaPixels,
       .dmabufFormat = 0,
