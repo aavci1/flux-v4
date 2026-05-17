@@ -221,7 +221,10 @@ static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
 static std::string utf8FromXkbKeysym(xkb_keysym_t sym) {
   char buffer[8]{};
   int const n = xkb_keysym_to_utf8(sym, buffer, sizeof(buffer));
-  return n > 1 ? std::string(buffer, static_cast<std::size_t>(n - 1)) : std::string{};
+  if (n <= 1) return {};
+  auto const first = static_cast<unsigned char>(buffer[0]);
+  if (first < 0x20u || first == 0x7fu) return {};
+  return std::string(buffer, static_cast<std::size_t>(n - 1));
 }
 
 } // namespace flux::linux_platform

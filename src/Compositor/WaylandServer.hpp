@@ -135,6 +135,11 @@ public:
   bool metaDown_ = false;
   bool ctrlDown_ = false;
   bool altDown_ = false;
+  bool shiftDown_ = false;
+  std::uint32_t shiftModifierIndex_ = ~0u;
+  std::uint32_t ctrlModifierIndex_ = ~0u;
+  std::uint32_t altModifierIndex_ = ~0u;
+  std::uint32_t logoModifierIndex_ = ~0u;
   float pointerX_ = 32.f;
   float pointerY_ = 32.f;
   std::uint64_t nextSurfaceId_ = 1;

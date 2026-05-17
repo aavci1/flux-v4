@@ -31,6 +31,7 @@ constexpr std::int32_t kTitleBarHeight = 28;
 constexpr std::int32_t kResizeGripSize = 14;
 constexpr std::int32_t kMinWindowWidth = 160;
 constexpr std::int32_t kMinWindowHeight = 120;
+constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 
 WaylandServer* serverFrom(wl_resource* resource) {
   return static_cast<WaylandServer*>(wl_resource_get_user_data(resource));
@@ -415,6 +416,25 @@ int createKeymapFd(std::uint32_t& size) {
   if (fd >= 0) close(fd);
   free(keymapString);
   return -1;
+}
+
+void initializeKeyboardModifierIndices(WaylandServer* server) {
+  xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+  if (!context) return;
+  xkb_rule_names names{};
+  xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (!keymap) {
+    xkb_context_unref(context);
+    return;
+  }
+
+  server->shiftModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_SHIFT);
+  server->ctrlModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_CTRL);
+  server->altModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_ALT);
+  server->logoModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_LOGO);
+
+  xkb_keymap_unref(keymap);
+  xkb_context_unref(context);
 }
 
 void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, int fd, std::int32_t size) {
@@ -1024,6 +1044,8 @@ void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t versi
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
+  initializeKeyboardModifierIndices(this);
+
   display_ = wl_display_create();
   if (!display_) throw std::runtime_error("wl_display_create failed");
 
@@ -1247,6 +1269,8 @@ void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::
   }
 }
 
+std::uint32_t keyboardModifierMask(WaylandServer* server);
+
 void setKeyboardFocus(WaylandServer* server, WaylandServer::Surface* next) {
   if (server->keyboardFocus_ == next) return;
   std::uint32_t serial = server->nextInputSerial_++;
@@ -1259,11 +1283,31 @@ void setKeyboardFocus(WaylandServer* server, WaylandServer::Surface* next) {
   if (next) {
     wl_array keys;
     wl_array_init(&keys);
+    std::uint32_t const modifiers = keyboardModifierMask(server);
     for (wl_resource* keyboard : server->keyboardResources_) {
       wl_keyboard_send_enter(keyboard, serial, next->resource, &keys);
-      wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, 0, 0, 0, 0);
+      wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, 0, 0, 0);
     }
     wl_array_release(&keys);
+  }
+}
+
+std::uint32_t modifierBit(std::uint32_t index, bool active) {
+  if (!active || index == kInvalidModifierIndex || index >= 32u) return 0u;
+  return 1u << index;
+}
+
+std::uint32_t keyboardModifierMask(WaylandServer* server) {
+  return modifierBit(server->shiftModifierIndex_, server->shiftDown_) |
+         modifierBit(server->ctrlModifierIndex_, server->ctrlDown_) |
+         modifierBit(server->altModifierIndex_, server->altDown_) |
+         modifierBit(server->logoModifierIndex_, server->metaDown_);
+}
+
+void sendKeyboardModifiers(WaylandServer* server) {
+  std::uint32_t const depressed = keyboardModifierMask(server);
+  for (wl_resource* keyboard : server->keyboardResources_) {
+    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, depressed, 0, 0, 0);
   }
 }
 
@@ -1356,16 +1400,29 @@ void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surfac
 }
 
 bool updateShortcutModifier(WaylandServer* server, std::uint32_t key, bool pressed) {
+  bool changed = false;
   if (key == KEY_LEFTMETA || key == KEY_RIGHTMETA) {
+    changed = server->metaDown_ != pressed;
     server->metaDown_ = pressed;
+    if (changed) sendKeyboardModifiers(server);
     return true;
   }
   if (key == KEY_LEFTCTRL || key == KEY_RIGHTCTRL) {
+    changed = server->ctrlDown_ != pressed;
     server->ctrlDown_ = pressed;
+    if (changed) sendKeyboardModifiers(server);
     return false;
   }
   if (key == KEY_LEFTALT || key == KEY_RIGHTALT) {
+    changed = server->altDown_ != pressed;
     server->altDown_ = pressed;
+    if (changed) sendKeyboardModifiers(server);
+    return false;
+  }
+  if (key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
+    changed = server->shiftDown_ != pressed;
+    server->shiftDown_ = pressed;
+    if (changed) sendKeyboardModifiers(server);
     return false;
   }
   return false;
