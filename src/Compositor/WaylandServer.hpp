@@ -186,6 +186,10 @@ public:
   std::vector<std::unique_ptr<DataSource>> dataSources_;
   std::vector<std::unique_ptr<DataOffer>> dataOffers_;
   DataSource* selectionSource_ = nullptr;
+  DataSource* dndSource_ = nullptr;
+  Surface* dndOrigin_ = nullptr;
+  Surface* dndTarget_ = nullptr;
+  DataOffer* dndOffer_ = nullptr;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;

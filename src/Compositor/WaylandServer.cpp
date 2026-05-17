@@ -242,6 +242,8 @@ struct WaylandServer::DataOffer {
   DataSource* source = nullptr;
 };
 
+WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y);
+
 struct WaylandServer::XdgSurface {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
@@ -2354,7 +2356,11 @@ struct wl_data_source_interface const dataSourceImpl{
     .set_actions = dataSourceSetActions,
 };
 
-void dataOfferAccept(wl_client*, wl_resource*, std::uint32_t, char const*) {}
+void dataOfferAccept(wl_client*, wl_resource* resource, std::uint32_t, char const* mimeType) {
+  auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
+  if (!offer || !offer->source || !offer->source->resource) return;
+  wl_data_source_send_target(offer->source->resource, mimeType);
+}
 
 void dataOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
   auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
@@ -2370,7 +2376,13 @@ void dataOfferDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void dataOfferFinish(wl_client*, wl_resource*) {}
+void dataOfferFinish(wl_client*, wl_resource* resource) {
+  auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
+  if (!offer || !offer->source || !offer->source->resource) return;
+  if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
+    wl_data_source_send_dnd_finished(offer->source->resource);
+  }
+}
 void dataOfferSetActions(wl_client*, wl_resource*, std::uint32_t, std::uint32_t) {}
 
 struct wl_data_offer_interface const dataOfferImpl{
@@ -2416,7 +2428,104 @@ void sendSelectionForFocus(WaylandServer* server) {
   }
 }
 
-void dataDeviceStartDrag(wl_client*, wl_resource*, wl_resource*, wl_resource*, wl_resource*, std::uint32_t) {}
+WaylandServer::DataDevice* dataDeviceForClient(WaylandServer* server, wl_client* client) {
+  for (auto const& device : server->dataDevices_) {
+    if (device->resource && wl_resource_get_client(device->resource) == client) return device.get();
+  }
+  return nullptr;
+}
+
+void clearDnd(WaylandServer* server) {
+  if (server->dndTarget_) {
+    if (auto* device = dataDeviceForClient(server, wl_resource_get_client(server->dndTarget_->resource))) {
+      wl_data_device_send_leave(device->resource);
+    }
+  }
+  if (server->dndOffer_ && server->dndOffer_->resource) {
+    wl_resource_destroy(server->dndOffer_->resource);
+  }
+  server->dndSource_ = nullptr;
+  server->dndOrigin_ = nullptr;
+  server->dndTarget_ = nullptr;
+  server->dndOffer_ = nullptr;
+}
+
+WaylandServer::DataOffer* createDndOffer(WaylandServer* server, wl_client* client) {
+  if (!server->dndSource_ || server->dndSource_->mimeTypes.empty()) return nullptr;
+  auto offer = std::make_unique<WaylandServer::DataOffer>();
+  offer->server = server;
+  offer->source = server->dndSource_;
+  wl_resource* offerResource = wl_resource_create(client, &wl_data_offer_interface, 3, 0);
+  if (!offerResource) {
+    wl_client_post_no_memory(client);
+    return nullptr;
+  }
+  offer->resource = offerResource;
+  auto* raw = offer.get();
+  server->dataOffers_.push_back(std::move(offer));
+  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, dataOfferDestroyResource);
+  return raw;
+}
+
+void updateDndTarget(WaylandServer* server, WaylandServer::Surface* target, std::uint32_t timeMs) {
+  if (!server->dndSource_) return;
+  if (target == server->dndOrigin_) target = nullptr;
+  if (target != server->dndTarget_) {
+    if (server->dndTarget_) {
+      if (auto* previousDevice = dataDeviceForClient(server, wl_resource_get_client(server->dndTarget_->resource))) {
+        wl_data_device_send_leave(previousDevice->resource);
+      }
+    }
+    if (server->dndOffer_ && server->dndOffer_->resource) {
+      wl_resource_destroy(server->dndOffer_->resource);
+    }
+    server->dndTarget_ = target;
+    server->dndOffer_ = nullptr;
+    if (target) {
+      wl_client* targetClient = wl_resource_get_client(target->resource);
+      WaylandServer::DataDevice* targetDevice = dataDeviceForClient(server, targetClient);
+      if (targetDevice) {
+        server->dndOffer_ = createDndOffer(server, targetClient);
+        wl_resource* offerResource = server->dndOffer_ ? server->dndOffer_->resource : nullptr;
+        if (offerResource) {
+          wl_data_device_send_data_offer(targetDevice->resource, offerResource);
+          for (auto const& mimeType : server->dndOffer_->source->mimeTypes) {
+            wl_data_offer_send_offer(offerResource, mimeType.c_str());
+          }
+        }
+        std::uint32_t const serial = server->nextInputSerial_++;
+        wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(target->windowX));
+        wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(target->windowY));
+        wl_data_device_send_enter(targetDevice->resource, serial, target->resource, x, y, offerResource);
+      }
+    }
+  }
+  if (server->dndTarget_) {
+    if (auto* device = dataDeviceForClient(server, wl_resource_get_client(server->dndTarget_->resource))) {
+      wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(server->dndTarget_->windowX));
+      wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(server->dndTarget_->windowY));
+      wl_data_device_send_motion(device->resource, timeMs, x, y);
+    }
+  }
+}
+
+void dataDeviceStartDrag(wl_client* client,
+                         wl_resource* resource,
+                         wl_resource* sourceResource,
+                         wl_resource* originResource,
+                         wl_resource*,
+                         std::uint32_t) {
+  auto* device = dataFrom<WaylandServer::DataDevice>(resource);
+  if (!device) return;
+  auto* server = device->server;
+  auto* source = dataFrom<WaylandServer::DataSource>(sourceResource);
+  auto* origin = dataFrom<WaylandServer::Surface>(originResource);
+  if (!origin || wl_resource_get_client(origin->resource) != client) return;
+  if (server->dndSource_) clearDnd(server);
+  server->dndSource_ = source;
+  server->dndOrigin_ = origin;
+  updateDndTarget(server, surfaceAt(server, server->pointerX_, server->pointerY_), 0);
+}
 
 void dataDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
   auto* device = dataFrom<WaylandServer::DataDevice>(resource);
@@ -3062,6 +3171,10 @@ void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t time
     updateDrag(this);
     return;
   }
+  if (dndSource_) {
+    updateDndTarget(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    return;
+  }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
   sendRelativePointerMotion(this, dx, dy, timeMs);
 }
@@ -3090,11 +3203,30 @@ void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t time
     updateDrag(this);
     return;
   }
+  if (dndSource_) {
+    updateDndTarget(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    return;
+  }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
 }
 
 void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
+  if (button == BTN_LEFT && !pressed && dndSource_) {
+    updateDndTarget(this, target, timeMs);
+    if (dndTarget_) {
+      if (auto* device = dataDeviceForClient(this, wl_resource_get_client(dndTarget_->resource))) {
+        wl_data_device_send_drop(device->resource);
+      }
+      if (dndSource_->resource && wl_resource_get_version(dndSource_->resource) >= WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
+        wl_data_source_send_dnd_drop_performed(dndSource_->resource);
+      }
+    } else if (dndSource_->resource) {
+      wl_data_source_send_cancelled(dndSource_->resource);
+    }
+    clearDnd(this);
+    return;
+  }
   if (button == BTN_LEFT) {
     if (pressed) {
       if (Surface* closeTarget = closeButtonAt(this, pointerX_, pointerY_)) {
@@ -3325,6 +3457,7 @@ void WaylandServer::destroySurface(Surface* surface) {
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
+  if (dndOrigin_ == surface || dndTarget_ == surface) clearDnd(this);
   for (auto& device : cursorShapeDevices_) {
     if (device->pointer && wl_resource_get_client(device->pointer) == wl_resource_get_client(surface->resource)) {
       device->pointer = nullptr;
@@ -3567,6 +3700,10 @@ void WaylandServer::destroyPrimarySelectionOffer(PrimarySelectionOffer* offer) {
 }
 
 void WaylandServer::destroyDataDevice(DataDevice* device) {
+  if (dndTarget_ && device->resource &&
+      wl_resource_get_client(device->resource) == wl_resource_get_client(dndTarget_->resource)) {
+    clearDnd(this);
+  }
   dataDevices_.erase(std::remove_if(dataDevices_.begin(),
                                     dataDevices_.end(),
                                     [&](auto const& candidate) { return candidate.get() == device; }),
@@ -3578,6 +3715,7 @@ void WaylandServer::destroyDataSource(DataSource* source) {
     selectionSource_ = nullptr;
     sendSelectionForFocus(this);
   }
+  if (dndSource_ == source) clearDnd(this);
   for (auto& offer : dataOffers_) {
     if (offer->source == source) offer->source = nullptr;
   }
@@ -3588,6 +3726,7 @@ void WaylandServer::destroyDataSource(DataSource* source) {
 }
 
 void WaylandServer::destroyDataOffer(DataOffer* offer) {
+  if (dndOffer_ == offer) dndOffer_ = nullptr;
   dataOffers_.erase(std::remove_if(dataOffers_.begin(),
                                    dataOffers_.end(),
                                    [&](auto const& candidate) { return candidate.get() == offer; }),
