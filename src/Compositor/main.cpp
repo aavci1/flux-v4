@@ -1,7 +1,9 @@
 #include <Flux/Core/Color.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/VulkanContext.hpp>
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
@@ -235,6 +237,60 @@ int main(int, char**) {
                            flux::FillStyle::none(),
                            flux::StrokeStyle::solid(borderColor, 1.f),
                            flux::ShadowStyle::none());
+          float constexpr closeSize = 18.f;
+          float constexpr closeInset = 5.f;
+          float const closeX = windowX + windowWidth - closeInset - closeSize;
+          float const closeY = windowY - titleBarHeight + closeInset;
+          flux::Color const closeFill =
+              clientSurface.focused ? flux::Color{0.86f, 0.20f, 0.22f, 1.f}
+                                    : flux::Color{0.48f, 0.20f, 0.22f, 1.f};
+          flux::Color const closeStroke =
+              clientSurface.focused ? flux::Color{0.98f, 0.88f, 0.88f, 1.f}
+                                    : flux::Color{0.68f, 0.58f, 0.58f, 1.f};
+          canvas->drawCircle({closeX + closeSize * 0.5f, closeY + closeSize * 0.5f},
+                             closeSize * 0.5f,
+                             flux::FillStyle::solid(closeFill),
+                             flux::StrokeStyle::none());
+          canvas->drawLine({closeX + 6.f, closeY + 6.f},
+                           {closeX + closeSize - 6.f, closeY + closeSize - 6.f},
+                           flux::StrokeStyle::solid(closeStroke, 1.5f));
+          canvas->drawLine({closeX + closeSize - 6.f, closeY + 6.f},
+                           {closeX + 6.f, closeY + closeSize - 6.f},
+                           flux::StrokeStyle::solid(closeStroke, 1.5f));
+          float const titleLeft = windowX + 10.f;
+          float const titleWidth = std::max(0.f, closeX - titleLeft - 8.f);
+          if (titleWidth > 0.f && !clientSurface.title.empty()) {
+            flux::Font titleFont{};
+            titleFont.size = 13.f;
+            titleFont.weight = 500.f;
+            flux::TextLayoutOptions titleOptions{
+                .verticalAlignment = flux::VerticalAlignment::Center,
+                .wrapping = flux::TextWrapping::NoWrap,
+                .maxLines = 1,
+            };
+            flux::Color const titleColor =
+                clientSurface.focused ? flux::Color{0.94f, 0.96f, 0.98f, 1.f}
+                                      : flux::Color{0.72f, 0.75f, 0.80f, 1.f};
+            flux::TextSystem& compositorTextSystem = textSystem;
+            auto titleLayout =
+                compositorTextSystem.layout(clientSurface.title,
+                                            titleFont,
+                                            titleColor,
+                                            flux::Rect::sharp(titleLeft,
+                                                              windowY - titleBarHeight,
+                                                              titleWidth,
+                                                              titleBarHeight),
+                                            titleOptions);
+            if (titleLayout) {
+              canvas->save();
+              canvas->clipRect(flux::Rect::sharp(titleLeft,
+                                                 windowY - titleBarHeight,
+                                                 titleWidth,
+                                                 titleBarHeight));
+              canvas->drawTextLayout(*titleLayout, {0.f, 0.f});
+              canvas->restore();
+            }
+          }
           flux::Color const gripColor =
               clientSurface.focused ? flux::Color{0.78f, 0.82f, 0.88f, 1.f}
                                     : flux::Color{0.55f, 0.58f, 0.64f, 1.f};

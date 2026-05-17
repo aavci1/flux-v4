@@ -32,6 +32,8 @@ constexpr std::int32_t kResizeGripSize = 14;
 constexpr std::int32_t kMinWindowWidth = 160;
 constexpr std::int32_t kMinWindowHeight = 120;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
+constexpr std::int32_t kCloseButtonSize = 18;
+constexpr std::int32_t kCloseButtonInset = 5;
 
 WaylandServer* serverFrom(wl_resource* resource) {
   return static_cast<WaylandServer*>(wl_resource_get_user_data(resource));
@@ -659,6 +661,17 @@ WaylandServer::XdgToplevel* toplevelForSurface(WaylandServer* server, WaylandSer
   return found == server->toplevels_.end() ? nullptr : found->get();
 }
 
+std::string titleForSurface(WaylandServer const* server, WaylandServer::Surface const* surface) {
+  auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
+                            [surface](auto const& toplevel) {
+                              return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
+                            });
+  if (found == server->toplevels_.end()) return "Window";
+  if (!(*found)->title.empty()) return (*found)->title;
+  if (!(*found)->appId.empty()) return (*found)->appId;
+  return "Window";
+}
+
 void sendToplevelConfigure(WaylandServer* server,
                            WaylandServer::XdgToplevel* toplevel,
                            std::int32_t width,
@@ -1103,6 +1116,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
         .bufferWidth = surface->width,
         .bufferHeight = surface->height,
         .titleBarHeight = kTitleBarHeight,
+        .title = titleForSurface(this, surface.get()),
         .focused = keyboardFocus_ == surface.get(),
         .serial = surface->serial,
         .rgbaPixels = surface->rgbaPixels,
@@ -1200,6 +1214,21 @@ WaylandServer::Surface* titlebarAt(WaylandServer* server, float x, float y) {
     float const top = static_cast<float>(surface->windowY - kTitleBarHeight);
     float const right = left + static_cast<float>(width);
     float const bottom = static_cast<float>(surface->windowY);
+    if (x >= left && x < right && y >= top && y < bottom) return surface;
+  }
+  return nullptr;
+}
+
+WaylandServer::Surface* closeButtonAt(WaylandServer* server, float x, float y) {
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    WaylandServer::Surface* surface = it->get();
+    std::int32_t const width = displayWidth(surface);
+    std::int32_t const height = displayHeight(surface);
+    if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
+    float const left = static_cast<float>(surface->windowX + width - kCloseButtonInset - kCloseButtonSize);
+    float const top = static_cast<float>(surface->windowY - kTitleBarHeight + kCloseButtonInset);
+    float const right = left + static_cast<float>(kCloseButtonSize);
+    float const bottom = top + static_cast<float>(kCloseButtonSize);
     if (x >= left && x < right && y >= top && y < bottom) return surface;
   }
   return nullptr;
@@ -1542,6 +1571,12 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (button == BTN_LEFT) {
     if (pressed) {
+      if (Surface* closeTarget = closeButtonAt(this, pointerX_, pointerY_)) {
+        raiseSurface(this, closeTarget);
+        setKeyboardFocus(this, closeTarget);
+        closePressSurface_ = closeTarget;
+        return;
+      }
       std::uint32_t resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
       Surface* resizeTarget = resizeGripAt(this, pointerX_, pointerY_, resizeEdges);
       if (resizeTarget) {
@@ -1571,6 +1606,15 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
         dragOffsetY_ = pointerY_ - static_cast<float>(chromeTarget->windowY);
         return;
       }
+    } else if (closePressSurface_) {
+      Surface* closeTarget = closeButtonAt(this, pointerX_, pointerY_);
+      if (closeTarget && closeTarget == closePressSurface_) {
+        setKeyboardFocus(this, closePressSurface_);
+        closeFocusedToplevel(this);
+        flushClients();
+      }
+      closePressSurface_ = nullptr;
+      return;
     } else if (resizeSurface_) {
       updateResize(this);
       resizeSurface_ = nullptr;
@@ -1719,6 +1763,7 @@ void WaylandServer::destroySurface(Surface* surface) {
   if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
   if (dragSurface_ == surface) dragSurface_ = nullptr;
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
+  if (closePressSurface_ == surface) closePressSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
   for (wl_resource* callback : surface->frameCallbacks) {
     wl_resource_destroy(callback);

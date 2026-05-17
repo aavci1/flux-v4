@@ -1,6 +1,6 @@
 # Flux Compositor
 
-**Status:** phase 2 first-client path in progress in `flux-v4`; phase 1 basic TTY smoke passed.
+**Status:** phase 3 input/window-management path in progress in `flux-v4`; phase 1 and phase 2 hardware smoke checks passed.
 **Repository:** `flux-compositor` is currently built from this repository as `flux-compositor` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
@@ -343,7 +343,7 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 
 ## 5. Phase 2: Wayland server, one client
 
-**Status:** first-client path in progress. The compositor now opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, and draws committed SHM surface pixels. `flux-compositor-dmabuf-demo` verifies that a GBM-backed dma-buf buffer reaches the compositor and appears on screen; direct Vulkan sampling and explicit synchronization still need hardening.
+**Status:** SHM and dma-buf smoke paths passed on hardware. The compositor opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, draws committed SHM surface pixels, and displays GBM-backed dma-buf demo buffers. Direct Vulkan sampling and explicit synchronization still need hardening.
 
 ### 5.1 Goal
 
@@ -465,7 +465,7 @@ Total new code this phase: ~1850 LOC.
 
 ## 6. Phase 3: Input and window management
 
-**Status:** first input slice smoke passed. The compositor now exposes real pointer and keyboard seat capabilities, forwards basic pointer/key events to the focused Wayland surface, draws a software cursor, and raises windows on click. Drag/resize/chrome/popups are still pending.
+**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, compositor shortcuts, title text, and a click-on-release close button. Popup support is explicitly deferred after the first experimental popup demo froze the test laptop.
 
 ### 6.1 Goal
 
@@ -486,7 +486,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, close button, optional resize grip.
 - Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Arrow to snap; Ctrl+Alt+Backspace to terminate the compositor.
-- xdg_popup support (right-click menus, dropdown menus in apps need this).
+- xdg_popup support (right-click menus, dropdown menus in apps need this). This remains deferred until a safer popup-specific development plan is in place; the first experimental path froze the test laptop and was reverted.
 
 ### 6.3 Out of scope for phase 3
 
@@ -527,16 +527,16 @@ Window management state is held in the compositor, not in Wayland. Wayland tells
 
 ### 6.6 Acceptance criteria
 
-- ✗ Two Flux apps run simultaneously, each in their own window.
-- ✗ Windows can be moved by dragging their title bars.
-- ✗ Windows can be resized by dragging their corners.
+- ✓ Two Flux apps run simultaneously, each in their own window.
+- ✓ Windows can be moved by dragging their title bars.
+- ✓ Windows can be resized by dragging their corners.
 - ✓ Clicking a window brings it to the top and gives it focus.
-- ◐ Keyboard input is routed to the focused window. Basic key events are sent; modifier correctness still needs hardening.
+- ✓ Keyboard input is routed to the focused window, including modifier updates and text-editing keys verified by Flux demos.
 - ✓ Cursor renders correctly and follows the pointer.
-- ✗ Cursor changes when entering a region of the client that requested a different cursor.
-- ✗ Snap-to-half works on dragging a window to the left or right edge.
-- ✗ Super+Q closes the focused window.
-- ✗ xdg-popup-based menus (right-click in supported clients) appear and dismiss correctly.
+- ✓ Cursor changes when the client supplies a cursor surface through `wl_pointer.set_cursor`.
+- ✓ Snap-to-half works from Super+Left/Super+Right and dragging from the titlebar restores the previous size without losing the cursor/titlebar grab.
+- ✓ Super+Q closes the focused window; the compositor close button sends xdg_toplevel close on click release.
+- ✗ xdg-popup-based menus (right-click in supported clients) appear and dismiss correctly. Deferred after the experimental popup demo froze the test laptop.
 - ✗ A non-trivial third-party client works: `foot` (the terminal). It should be usable: open, type, close, focus interactions.
 
 ### 6.7 LOC estimate
@@ -750,8 +750,8 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
-| Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, and dma-buf demo drawing are verified on hardware; direct Vulkan sampling and Flux app smoke pending. |
-| Phase 3: Input + window management | Chrome/cursor checkpoint ready | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard` resources, basic focus, click-to-raise, key forwarding, and a software cursor are verified on hardware after granting `/dev/input/event*` read access; a first server-side title bar, move-drag path, and client cursor-surface handling are implemented and awaiting hardware smoke. Resize pending. |
+| Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
+| Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
 | Phase 4: Protocol ecosystem | Not started | - | - | - |
 | Phase 5: Animation + polish | Not started | - | - | - |
 
@@ -772,12 +772,14 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-16 | local working tree | Added `flux-compositor-dmabuf-demo`, a tiny GBM-backed Wayland client for the first dma-buf hardware smoke test. | Linux-only compositor test utility; no Metal API involved. |
 | 2026-05-16 | local working tree | Added compositor-owned server-side title bars and left-button move-drag handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added `wl_pointer.set_cursor` handling so client cursor surfaces draw as the pointer image instead of as separate windows. | Linux compositor-only pointer behavior; no Metal API involved. |
+| 2026-05-17 | local working tree | Added compositor window resizing, half-screen snap/drag-unsnap behavior, keyboard shortcuts, keyboard modifier forwarding, titlebar titles, and close-on-click-release handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 
 ### 12.2 Open questions
 
 Tracked as work proceeds. Removed when answered.
 
-- Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Decide based on evidence in phase 2.
+- Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Is the current "copy SHM into Flux-managed image" path sufficient for cursor buffers, or should Flux gain a lower-copy shared-memory image factory? Decide based on cursor-buffer characteristics.
+- Phase 3: What is the safest way to reintroduce xdg_popup support after the first experimental popup demo froze the test laptop?
 - Phase 4: When is `wp_presentation_time` precision needed enough to surface present-time from `RenderTarget::endFrame`? Decide when implementing the protocol.
 - Phase 5: Does multi-output land in v1 or post-v1?

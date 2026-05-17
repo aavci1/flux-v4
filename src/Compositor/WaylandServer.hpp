@@ -37,6 +37,7 @@ struct CommittedSurfaceSnapshot {
   std::int32_t bufferWidth = 0;
   std::int32_t bufferHeight = 0;
   std::int32_t titleBarHeight = 0;
+  std::string title;
   bool focused = false;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
@@ -118,6 +119,7 @@ public:
   Surface* keyboardFocus_ = nullptr;
   Surface* dragSurface_ = nullptr;
   Surface* resizeSurface_ = nullptr;
+  Surface* closePressSurface_ = nullptr;
   Surface* cursorSurface_ = nullptr;
   std::int32_t cursorHotspotX_ = 0;
   std::int32_t cursorHotspotY_ = 0;
