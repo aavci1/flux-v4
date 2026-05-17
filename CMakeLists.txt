@@ -415,6 +415,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Compositor/Protocols/presentation-time-protocol.c
     src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
     src/Compositor/Protocols/pointer-constraints-unstable-v1-protocol.c
+    src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
   )
 endif()
@@ -680,6 +681,21 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wpedantic
   )
   target_link_libraries(flux-compositor-pointer-constraints-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-primary-selection-demo
+    src/Compositor/PrimarySelectionDemoClient.cpp
+    src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-primary-selection-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-primary-selection-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-primary-selection-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 
 endif()
 
