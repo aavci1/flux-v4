@@ -102,6 +102,7 @@ public:
   struct DmabufBuffer;
   struct ToplevelDecoration;
   struct Viewport;
+  struct FractionalScale;
   struct CursorShapeDevice;
   struct IdleInhibitor;
   struct LayerSurface;
@@ -125,6 +126,7 @@ public:
   void destroyDmabufBuffer(DmabufBuffer* buffer);
   void destroyToplevelDecoration(ToplevelDecoration* decoration);
   void destroyViewport(Viewport* viewport);
+  void destroyFractionalScale(FractionalScale* fractionalScale);
   void destroyCursorShapeDevice(CursorShapeDevice* device);
   void destroyIdleInhibitor(IdleInhibitor* inhibitor);
   void destroyLayerSurface(LayerSurface* layerSurface);
@@ -148,6 +150,7 @@ public:
   wl_global* xdgDecorationManagerGlobal_ = nullptr;
   wl_global* xdgOutputManagerGlobal_ = nullptr;
   wl_global* viewporterGlobal_ = nullptr;
+  wl_global* fractionalScaleManagerGlobal_ = nullptr;
   wl_global* cursorShapeManagerGlobal_ = nullptr;
   wl_global* idleInhibitManagerGlobal_ = nullptr;
   wl_global* layerShellGlobal_ = nullptr;
@@ -168,6 +171,7 @@ public:
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<Viewport>> viewports_;
+  std::vector<std::unique_ptr<FractionalScale>> fractionalScales_;
   std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
   std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
   std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;

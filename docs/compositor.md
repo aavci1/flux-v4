@@ -564,7 +564,7 @@ Total new code this phase: ~3300 LOC.
 
 ## 7. Phase 4: Protocols for ecosystem compatibility
 
-**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, an initial `wp_presentation_time` path, `zwp_relative_pointer_v1`, initial `zwp_pointer_constraints_v1` support, `zwp_primary_selection_v1`, and initial `wl_data_device_manager` clipboard selection are implemented.
+**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, an initial `wp_presentation_time` path, `zwp_relative_pointer_v1`, initial `zwp_pointer_constraints_v1` support, `zwp_primary_selection_v1`, initial `wl_data_device_manager` clipboard selection, and `wp_fractional_scale_v1` are implemented.
 
 ### 7.1 Goal
 
@@ -583,7 +583,7 @@ Protocols to implement, in rough priority order:
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`. Drag-and-drop remains pending.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented as protocol/state tracking; actual idle blanking is not implemented yet.
 - **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Deferred after the first smoke client hard-froze the test laptop; revisit with a safer harness and better crash logging.
-- **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales.
+- **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales. Implemented as protocol negotiation with a fixed preferred scale of 120, meaning 1.0x, for the current single-scale output. Actual non-1.0 output scaling remains future work.
 
 ### 7.3 Out of scope for phase 4
 
@@ -605,13 +605,14 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A GTK4 app (e.g., `gnome-text-editor`) works correctly with the implemented protocols (decoration, cursor, clipboard, focus).
 - ✗ A Qt6 app works correctly.
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
-- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, and `wl_data_device_manager` are exposed; the rest of phase 4 remains pending.
+- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager`, and `wp_fractional_scale_v1` are exposed; drag-and-drop and deferred activation remain pending.
 - ✓ A purpose-built test layer-shell client renders at the top layer.
 - ◐ A purpose-built presentation-time client receives `clock_id` and presented feedback after its committed frame is presented; hardware-precise timestamps and refresh counters remain pending.
 - ✓ A purpose-built relative-pointer client receives relative motion deltas while its window has pointer focus.
 - ✓ A purpose-built pointer-constraints client receives pointer-lock activation and relative motion while the virtual pointer stays locked.
 - ✓ A purpose-built primary-selection client can set a UTF-8 text primary selection and receive it back through the compositor.
 - ✓ A purpose-built clipboard client can set a UTF-8 text clipboard selection and receive it back through the compositor.
+- ◐ A purpose-built fractional-scale client receives preferred scale 120, meaning 1.0x; non-1.0 output scale selection remains pending.
 
 ### 7.6 LOC estimate
 
@@ -757,7 +758,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
-| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are exposed with smoke demos where useful. Activation is deferred after its smoke client hard-froze the test laptop. |
+| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager`, and `wp_fractional_scale_v1` are exposed with smoke demos where useful. Activation is deferred after its smoke client hard-froze the test laptop. |
 | Phase 5: Animation + polish | Not started | - | - | - |
 
 ### 12.1 Framework changes log

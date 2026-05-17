@@ -411,6 +411,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
     src/Compositor/Protocols/viewporter-protocol.c
+    src/Compositor/Protocols/fractional-scale-v1-protocol.c
     src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
     src/Compositor/Protocols/presentation-time-protocol.c
     src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
@@ -589,6 +590,21 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wpedantic
   )
   target_link_libraries(flux-compositor-viewport-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-fractional-scale-demo
+    src/Compositor/FractionalScaleDemoClient.cpp
+    src/Compositor/Protocols/fractional-scale-v1-protocol.c
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-fractional-scale-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-fractional-scale-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-fractional-scale-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 
   add_executable(flux-compositor-cursor-shape-demo
     src/Compositor/CursorShapeDemoClient.cpp

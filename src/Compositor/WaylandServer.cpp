@@ -1,6 +1,7 @@
 #include "Compositor/WaylandServer.hpp"
 
 #include "cursor-shape-v1-server-protocol.h"
+#include "fractional-scale-v1-server-protocol.h"
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
@@ -73,6 +74,7 @@ extern struct wl_pointer_interface const pointerImpl;
 extern struct wl_keyboard_interface const keyboardImpl;
 extern struct wl_seat_interface const seatImpl;
 extern struct wp_viewport_interface const viewportImpl;
+extern struct wp_fractional_scale_v1_interface const fractionalScaleImpl;
 extern struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl;
 extern struct zwlr_layer_surface_v1_interface const layerSurfaceImpl;
 extern struct wp_presentation_interface const presentationImpl;
@@ -130,6 +132,7 @@ struct WaylandServer::Surface {
   std::int32_t restoreHeight = 0;
   DmabufBuffer* dmabufBuffer = nullptr;
   Viewport* viewport = nullptr;
+  FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;
   std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
   std::vector<PresentationFeedback*> presentationFeedbacks;
@@ -137,6 +140,12 @@ struct WaylandServer::Surface {
 };
 
 struct WaylandServer::Viewport {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
+};
+
+struct WaylandServer::FractionalScale {
   WaylandServer* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
@@ -355,6 +364,12 @@ void toplevelDecorationDestroyResource(wl_resource* resource) {
 void viewportDestroyResource(wl_resource* resource) {
   if (auto* viewport = dataFrom<WaylandServer::Viewport>(resource)) {
     viewport->server->destroyViewport(viewport);
+  }
+}
+
+void fractionalScaleDestroyResource(wl_resource* resource) {
+  if (auto* fractionalScale = dataFrom<WaylandServer::FractionalScale>(resource)) {
+    fractionalScale->server->destroyFractionalScale(fractionalScale);
   }
 }
 
@@ -1590,6 +1605,62 @@ void bindViewporter(wl_client* client, void* data, std::uint32_t version, std::u
   wl_resource_set_implementation(resource, &viewporterImpl, data, nullptr);
 }
 
+void fractionalScaleManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void fractionalScaleDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct wp_fractional_scale_v1_interface const fractionalScaleImpl{
+    .destroy = fractionalScaleDestroy,
+};
+
+void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* resource, std::uint32_t id,
+                                              wl_resource* surfaceResource) {
+  auto* server = serverFrom(resource);
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (!surface) {
+    wl_resource_post_error(resource,
+                           WP_FRACTIONAL_SCALE_MANAGER_V1_ERROR_FRACTIONAL_SCALE_EXISTS,
+                           "fractional scale surface was destroyed");
+    return;
+  }
+  if (surface->fractionalScale) {
+    wl_resource_post_error(resource,
+                           WP_FRACTIONAL_SCALE_MANAGER_V1_ERROR_FRACTIONAL_SCALE_EXISTS,
+                           "surface already has a fractional scale object");
+    return;
+  }
+
+  auto fractionalScale = std::make_unique<WaylandServer::FractionalScale>();
+  fractionalScale->server = server;
+  fractionalScale->surface = surface;
+  wl_resource* fractionalScaleResource = wl_resource_create(client, &wp_fractional_scale_v1_interface, 1, id);
+  if (!fractionalScaleResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  fractionalScale->resource = fractionalScaleResource;
+  auto* raw = fractionalScale.get();
+  surface->fractionalScale = raw;
+  server->fractionalScales_.push_back(std::move(fractionalScale));
+  wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, fractionalScaleDestroyResource);
+  wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, 120);
+}
+
+struct wp_fractional_scale_manager_v1_interface const fractionalScaleManagerImpl{
+    .destroy = fractionalScaleManagerDestroy,
+    .get_fractional_scale = fractionalScaleManagerGetFractionalScale,
+};
+
+void bindFractionalScaleManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &wp_fractional_scale_manager_v1_interface, std::min(version, 1u), id);
+  wl_resource_set_implementation(resource, &fractionalScaleManagerImpl, data, nullptr);
+}
+
 void cursorShapeManagerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -2435,6 +2506,8 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   xdgOutputManagerGlobal_ =
       wl_global_create(display_, &zxdg_output_manager_v1_interface, 3, this, bindXdgOutputManager);
   viewporterGlobal_ = wl_global_create(display_, &wp_viewporter_interface, 1, this, bindViewporter);
+  fractionalScaleManagerGlobal_ =
+      wl_global_create(display_, &wp_fractional_scale_manager_v1_interface, 1, this, bindFractionalScaleManager);
   cursorShapeManagerGlobal_ =
       wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 2, this, bindCursorShapeManager);
   idleInhibitManagerGlobal_ =
@@ -2450,9 +2523,9 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
-      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ ||
-      !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ ||
-      !dataDeviceManagerGlobal_) {
+      !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ ||
+      !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_ ||
+      !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -3258,6 +3331,7 @@ void WaylandServer::destroySurface(Surface* surface) {
     }
   }
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
+  if (surface->fractionalScale) wl_resource_destroy(surface->fractionalScale->resource);
   if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
   for (auto it = pointerConstraints_.begin(); it != pointerConstraints_.end();) {
     if ((*it)->surface == surface) {
@@ -3385,6 +3459,17 @@ void WaylandServer::destroyViewport(Viewport* viewport) {
   viewports_.erase(std::remove_if(viewports_.begin(), viewports_.end(),
                                   [&](auto const& candidate) { return candidate.get() == viewport; }),
                    viewports_.end());
+}
+
+void WaylandServer::destroyFractionalScale(FractionalScale* fractionalScale) {
+  if (fractionalScale->surface && fractionalScale->surface->fractionalScale == fractionalScale) {
+    fractionalScale->surface->fractionalScale = nullptr;
+  }
+  fractionalScales_.erase(
+      std::remove_if(fractionalScales_.begin(),
+                     fractionalScales_.end(),
+                     [&](auto const& candidate) { return candidate.get() == fractionalScale; }),
+      fractionalScales_.end());
 }
 
 void WaylandServer::destroyCursorShapeDevice(CursorShapeDevice* device) {
