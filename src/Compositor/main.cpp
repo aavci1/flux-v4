@@ -59,6 +59,7 @@ struct ClosingSurfaceVisual {
 
 struct CompositorConfig {
   flux::Color backgroundColor{0.20f, 0.50f, 0.95f, 1.0f};
+  bool animationsEnabled = true;
 };
 
 float clamp01(float value) {
@@ -126,6 +127,16 @@ std::optional<flux::Color> parseHexColor(std::string_view value) {
   };
 }
 
+std::optional<bool> parseBool(std::string_view value) {
+  std::string text = unquote(value);
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (text == "true" || text == "yes" || text == "on" || text == "1") return true;
+  if (text == "false" || text == "no" || text == "off" || text == "0") return false;
+  return std::nullopt;
+}
+
 std::optional<std::string> configPath() {
   if (char const* explicitPath = std::getenv("FLUX_COMPOSITOR_CONFIG"); explicitPath && *explicitPath) {
     return std::string(explicitPath);
@@ -162,6 +173,15 @@ CompositorConfig loadConfig() {
       } else {
         std::fprintf(stderr,
                      "flux-compositor: ignoring invalid background color in %s:%u\n",
+                     path->c_str(),
+                     lineNumber);
+      }
+    } else if (key == "animations") {
+      if (auto enabled = parseBool(value)) {
+        config.animationsEnabled = *enabled;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid animations value in %s:%u\n",
                      path->c_str(),
                      lineNumber);
       }
@@ -481,7 +501,7 @@ int main(int, char**) {
         float const titleBarHeight = static_cast<float>(clientSurface.titleBarHeight);
         float const animationMs = static_cast<float>(
             std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
-        float const openProgress = easeOutCubic(animationMs / 140.f);
+        float const openProgress = config.animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
         float const openScale = 0.965f + 0.035f * openProgress;
         float const openOpacity = openProgress;
         float const outerHeight = windowHeight + titleBarHeight;
@@ -609,7 +629,10 @@ int main(int, char**) {
       for (auto const& [surfaceId, visual] : surfaceVisuals) {
         if (liveSurfaceIds.contains(surfaceId)) continue;
         auto cached = clientImages.find(surfaceId);
-        if (!visual.hasLastSnapshot || cached == clientImages.end() || !cached->second.image) continue;
+        if (!config.animationsEnabled || !visual.hasLastSnapshot || cached == clientImages.end() ||
+            !cached->second.image) {
+          continue;
+        }
         closingSurfaces[surfaceId] = ClosingSurfaceVisual{
             .snapshot = visual.lastSnapshot,
             .image = cached->second.image,
