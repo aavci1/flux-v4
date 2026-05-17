@@ -42,6 +42,14 @@ struct CachedClientImage {
 
 struct SurfaceVisualState {
   std::chrono::steady_clock::time_point firstSeen{};
+  flux::compositor::CommittedSurfaceSnapshot lastSnapshot{};
+  bool hasLastSnapshot = false;
+};
+
+struct ClosingSurfaceVisual {
+  flux::compositor::CommittedSurfaceSnapshot snapshot{};
+  std::shared_ptr<flux::Image> image;
+  std::chrono::steady_clock::time_point closedAt{};
 };
 
 float clamp01(float value) {
@@ -52,6 +60,43 @@ float easeOutCubic(float value) {
   float const t = clamp01(value);
   float const inverse = 1.f - t;
   return 1.f - inverse * inverse * inverse;
+}
+
+void drawSurfaceImage(flux::Canvas& canvas,
+                      flux::compositor::CommittedSurfaceSnapshot const& surface,
+                      flux::Image& image,
+                      float opacity,
+                      float scale) {
+  float const windowX = static_cast<float>(surface.x);
+  float const windowY = static_cast<float>(surface.y);
+  float const windowWidth = static_cast<float>(surface.width);
+  float const windowHeight = static_cast<float>(surface.height);
+  float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
+  float const outerHeight = windowHeight + titleBarHeight;
+  flux::Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
+  canvas.save();
+  canvas.setOpacity(canvas.opacity() * opacity);
+  if (scale != 1.f) {
+    canvas.translate(pivot.x, pivot.y);
+    canvas.scale(scale);
+    canvas.translate(-pivot.x, -pivot.y);
+  }
+  float const sourceWidth = surface.sourceWidth > 0.f
+                                ? surface.sourceWidth
+                                : static_cast<float>(image.size().width);
+  float const sourceHeight = surface.sourceHeight > 0.f
+                                 ? surface.sourceHeight
+                                 : static_cast<float>(image.size().height);
+  canvas.drawImage(image,
+                   flux::Rect::sharp(surface.sourceX,
+                                     surface.sourceY,
+                                     sourceWidth,
+                                     sourceHeight),
+                   flux::Rect::sharp(windowX,
+                                     windowY,
+                                     windowWidth,
+                                     windowHeight));
+  canvas.restore();
 }
 
 void updateCachedImage(flux::compositor::WaylandServer& wayland,
@@ -287,6 +332,7 @@ int main(int, char**) {
     flux::Color const clearColor{0.20f, 0.50f, 0.95f, 1.0f};
     std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
+    std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
     CachedClientImage cursorImage;
     while (gRunning.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       device->pollEvents(0);
@@ -312,6 +358,8 @@ int main(int, char**) {
         liveSurfaceIds.insert(clientSurface.id);
         auto& visual = surfaceVisuals[clientSurface.id];
         if (visual.firstSeen.time_since_epoch().count() == 0) visual.firstSeen = frameTime;
+        visual.lastSnapshot = clientSurface;
+        visual.hasLastSnapshot = true;
         auto& cached = clientImages[clientSurface.id];
         updateCachedImage(wayland, *canvas, clientSurface, cached);
         if (!cached.image) continue;
@@ -447,6 +495,28 @@ int main(int, char**) {
                                             windowWidth,
                                             windowHeight));
         canvas->restore();
+      }
+      for (auto const& [surfaceId, visual] : surfaceVisuals) {
+        if (liveSurfaceIds.contains(surfaceId)) continue;
+        auto cached = clientImages.find(surfaceId);
+        if (!visual.hasLastSnapshot || cached == clientImages.end() || !cached->second.image) continue;
+        closingSurfaces[surfaceId] = ClosingSurfaceVisual{
+            .snapshot = visual.lastSnapshot,
+            .image = cached->second.image,
+            .closedAt = frameTime,
+        };
+      }
+      for (auto it = closingSurfaces.begin(); it != closingSurfaces.end();) {
+        float const closeMs = static_cast<float>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - it->second.closedAt).count());
+        float const progress = clamp01(closeMs / 120.f);
+        if (progress >= 1.f || !it->second.image) {
+          it = closingSurfaces.erase(it);
+          continue;
+        }
+        float const eased = easeOutCubic(progress);
+        drawSurfaceImage(*canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
+        ++it;
       }
       if (auto snapPreview = wayland.snapPreview()) {
         flux::Rect const previewRect = flux::Rect::sharp(static_cast<float>(snapPreview->x),

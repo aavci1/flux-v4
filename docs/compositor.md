@@ -634,7 +634,7 @@ Total new code this phase: ~4000 LOC.
 
 ## 8. Phase 5: Animation, polish, daily-driveability
 
-**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, and titlebar drag-to-edge shows a snap preview before release.
+**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, and titlebar drag-to-edge shows a snap preview before release.
 
 ### 8.1 Goal
 
@@ -642,7 +642,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 
 ### 8.2 Scope
 
-- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in and snap preview overlay are implemented in the compositor render loop.
+- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, and snap preview overlay are implemented in the compositor render loop.
 - **Configuration file:** `~/.config/flux-compositor/config.toml`. Keybindings, window-management preferences, animation toggles. Hot-reload optional.
 - **Hardware cursor:** use KMS cursor planes when supported. Falls back to compositor-drawn software cursor. Faster cursor movement, lower latency.
 - **Frame timing improvements:** adaptive sync if the hardware supports it (FreeSync). Triple-buffering when beneficial.
@@ -662,7 +662,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 ### 8.4 Acceptance criteria
 
 - ✗ The compositor runs reliably for a full day of dogfooding without crashes.
-- ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation and snap preview overlay are implemented; close/move/resize/snap commit animations remain pending.
+- ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, and snap preview overlay are implemented; move/resize/snap commit animations remain pending.
 - ✗ Configuration via the config file works for keybindings and basic preferences.
 - ✗ Hardware cursor works on the test hardware (AMD Vega supports cursor planes).
 - ✗ User documentation explains how to build, install, configure, and use the compositor.
@@ -760,7 +760,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, and `wp_fractional_scale_v1` are exposed with smoke demos where useful. Activation is deferred after its smoke client hard-froze the test laptop. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in and titlebar drag-to-edge shows a snap preview; close/move/resize/snap commit animation, configuration, hardware cursor, frame timing, wallpaper, and docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, and titlebar drag-to-edge shows a snap preview; move/resize/snap commit animation, configuration, hardware cursor, frame timing, wallpaper, and docs remain pending. |
 
 ### 12.1 Framework changes log
 
