@@ -3,6 +3,7 @@
 #include "cursor-shape-v1-server-protocol.h"
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
+#include "presentation-time-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
@@ -24,6 +25,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cerrno>
+#include <ctime>
 #include <fstream>
 #include <optional>
 #include <stdexcept>
@@ -70,6 +72,7 @@ extern struct wl_seat_interface const seatImpl;
 extern struct wp_viewport_interface const viewportImpl;
 extern struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl;
 extern struct zwlr_layer_surface_v1_interface const layerSurfaceImpl;
+extern struct wp_presentation_interface const presentationImpl;
 
 } // namespace
 
@@ -116,6 +119,8 @@ struct WaylandServer::Surface {
   DmabufBuffer* dmabufBuffer = nullptr;
   Viewport* viewport = nullptr;
   LayerSurface* layerSurface = nullptr;
+  std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
+  std::vector<PresentationFeedback*> presentationFeedbacks;
   std::vector<wl_resource*> frameCallbacks;
 };
 
@@ -151,6 +156,12 @@ struct WaylandServer::LayerSurface {
   std::int32_t marginBottom = 0;
   std::int32_t marginLeft = 0;
   bool configured = false;
+};
+
+struct WaylandServer::PresentationFeedback {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
 };
 
 struct WaylandServer::XdgSurface {
@@ -293,6 +304,12 @@ void idleInhibitorDestroyResource(wl_resource* resource) {
 void layerSurfaceDestroyResource(wl_resource* resource) {
   if (auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource)) {
     layerSurface->server->destroyLayerSurface(layerSurface);
+  }
+}
+
+void presentationFeedbackDestroyResource(wl_resource* resource) {
+  if (auto* feedback = dataFrom<WaylandServer::PresentationFeedback>(resource)) {
+    feedback->server->destroyPresentationFeedback(feedback);
   }
 }
 
@@ -481,6 +498,16 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->server->flushClients();
     return;
   }
+  std::vector<WaylandServer::PresentationFeedback*> supersededFeedbacks =
+      std::move(surface->presentationFeedbacks);
+  surface->presentationFeedbacks.clear();
+  for (auto* feedback : supersededFeedbacks) {
+    wp_presentation_feedback_send_discarded(feedback->resource);
+    wl_resource_destroy(feedback->resource);
+  }
+  surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
+  surface->pendingPresentationFeedbacks.clear();
+
   surface->currentBuffer = surface->pendingBuffer;
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
@@ -1694,6 +1721,48 @@ void bindLayerShell(wl_client* client, void* data, std::uint32_t version, std::u
   wl_resource_set_implementation(resource, &layerShellImpl, data, nullptr);
 }
 
+void presentationDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void presentationFeedback(wl_client* client, wl_resource* resource, wl_resource* surfaceResource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (!surface) {
+    wl_resource_post_error(resource, 0, "invalid surface for presentation feedback");
+    return;
+  }
+
+  auto feedback = std::make_unique<WaylandServer::PresentationFeedback>();
+  feedback->server = server;
+  feedback->surface = surface;
+  wl_resource* feedbackResource = wl_resource_create(client, &wp_presentation_feedback_interface, 2, id);
+  if (!feedbackResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  feedback->resource = feedbackResource;
+  auto* raw = feedback.get();
+  server->presentationFeedbacks_.push_back(std::move(feedback));
+  surface->pendingPresentationFeedbacks.push_back(raw);
+  wl_resource_set_implementation(feedbackResource, nullptr, raw, presentationFeedbackDestroyResource);
+}
+
+struct wp_presentation_interface const presentationImpl{
+    .destroy = presentationDestroy,
+    .feedback = presentationFeedback,
+};
+
+void bindPresentation(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &wp_presentation_interface, std::min(version, 2u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(resource, &presentationImpl, data, nullptr);
+  wp_presentation_send_clock_id(resource, CLOCK_MONOTONIC);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1718,9 +1787,10 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   idleInhibitManagerGlobal_ =
       wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
   layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 1, this, bindLayerShell);
+  presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
-      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_) {
+      !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2404,7 +2474,32 @@ void WaylandServer::flushClients() {
 }
 
 void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  std::uint64_t const seconds = static_cast<std::uint64_t>(now.tv_sec);
+  std::uint32_t const tvSecHi = static_cast<std::uint32_t>(seconds >> 32u);
+  std::uint32_t const tvSecLo = static_cast<std::uint32_t>(seconds & 0xffffffffu);
+  std::uint32_t const tvNsec = static_cast<std::uint32_t>(now.tv_nsec);
+  std::uint32_t const refreshNsec =
+      output_.refreshMilliHz > 0
+          ? static_cast<std::uint32_t>(1'000'000'000'000ull / static_cast<std::uint64_t>(output_.refreshMilliHz))
+          : 0u;
+
   for (auto const& surface : surfaces_) {
+    std::vector<PresentationFeedback*> feedbacks = std::move(surface->presentationFeedbacks);
+    surface->presentationFeedbacks.clear();
+    for (auto* feedback : feedbacks) {
+      if (!feedback || !feedback->resource) continue;
+      wp_presentation_feedback_send_presented(feedback->resource,
+                                              tvSecHi,
+                                              tvSecLo,
+                                              tvNsec,
+                                              refreshNsec,
+                                              0,
+                                              0,
+                                              0);
+      wl_resource_destroy(feedback->resource);
+    }
     std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);
     surface->frameCallbacks.clear();
     for (wl_resource* callback : callbacks) {
@@ -2441,6 +2536,20 @@ void WaylandServer::destroySurface(Surface* surface) {
   }
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
   if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
+  std::vector<PresentationFeedback*> pendingFeedbacks = std::move(surface->pendingPresentationFeedbacks);
+  surface->pendingPresentationFeedbacks.clear();
+  for (auto* feedback : pendingFeedbacks) {
+    if (!feedback || !feedback->resource) continue;
+    wp_presentation_feedback_send_discarded(feedback->resource);
+    wl_resource_destroy(feedback->resource);
+  }
+  std::vector<PresentationFeedback*> committedFeedbacks = std::move(surface->presentationFeedbacks);
+  surface->presentationFeedbacks.clear();
+  for (auto* feedback : committedFeedbacks) {
+    if (!feedback || !feedback->resource) continue;
+    wp_presentation_feedback_send_discarded(feedback->resource);
+    wl_resource_destroy(feedback->resource);
+  }
   for (auto it = idleInhibitors_.begin(); it != idleInhibitors_.end();) {
     if ((*it)->surface == surface) {
       wl_resource_destroy((*it)->resource);
@@ -2570,6 +2679,21 @@ void WaylandServer::destroyLayerSurface(LayerSurface* layerSurface) {
       std::remove_if(layerSurfaces_.begin(), layerSurfaces_.end(),
                      [&](auto const& candidate) { return candidate.get() == layerSurface; }),
       layerSurfaces_.end());
+}
+
+void WaylandServer::destroyPresentationFeedback(PresentationFeedback* feedback) {
+  if (feedback && feedback->surface) {
+    auto eraseFeedback = [feedback](std::vector<PresentationFeedback*>& feedbacks) {
+      feedbacks.erase(std::remove(feedbacks.begin(), feedbacks.end(), feedback), feedbacks.end());
+    };
+    eraseFeedback(feedback->surface->pendingPresentationFeedbacks);
+    eraseFeedback(feedback->surface->presentationFeedbacks);
+  }
+  presentationFeedbacks_.erase(
+      std::remove_if(presentationFeedbacks_.begin(),
+                     presentationFeedbacks_.end(),
+                     [&](auto const& candidate) { return candidate.get() == feedback; }),
+      presentationFeedbacks_.end());
 }
 
 } // namespace flux::compositor

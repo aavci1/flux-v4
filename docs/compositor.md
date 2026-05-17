@@ -564,7 +564,7 @@ Total new code this phase: ~3300 LOC.
 
 ## 7. Phase 4: Protocols for ecosystem compatibility
 
-**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are implemented.
+**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, and an initial `wp_presentation_time` path are implemented.
 
 ### 7.1 Goal
 
@@ -574,10 +574,10 @@ Real-world Wayland apps work. Implements the protocols that typical Linux apps (
 
 Protocols to implement, in rough priority order:
 
-- **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay).
+- **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling and a purpose-built `flux-compositor-layer-shell-demo`.
 - **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented, with a purpose-built `flux-compositor-viewport-demo` smoke client.
 - **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry. Implemented for the current single-output layout.
-- **`wp_presentation_time`**: gives clients precise vblank-timing information for frame pacing. Used by video players and games for smooth playback.
+- **`wp_presentation_time`**: gives clients precise vblank-timing information for frame pacing. Used by video players and games for smooth playback. Initial implementation exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Hardware-derived timestamps, refresh counters, and sync-output association remain hardening work.
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn fallback cursor shapes.
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard and middle-click-paste support.
@@ -605,8 +605,9 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A GTK4 app (e.g., `gnome-text-editor`) works correctly with the implemented protocols (decoration, cursor, clipboard, focus).
 - ✗ A Qt6 app works correctly.
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
-- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, and `zwp_idle_inhibit_manager_v1` are exposed; the rest of phase 4 remains pending.
-- ✗ A test layer-shell client (e.g., `eww` or a small custom test) renders at the correct layer.
+- ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, and `wp_presentation_time` are exposed; the rest of phase 4 remains pending.
+- ✓ A purpose-built test layer-shell client renders at the top layer.
+- ◐ A purpose-built presentation-time client receives `clock_id` and presented feedback after its committed frame is presented; hardware-precise timestamps and refresh counters remain pending.
 
 ### 7.6 LOC estimate
 
@@ -786,5 +787,5 @@ Tracked as work proceeds. Removed when answered.
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Is the current "copy SHM into Flux-managed image" path sufficient for cursor buffers, or should Flux gain a lower-copy shared-memory image factory? Decide based on cursor-buffer characteristics.
 - Phase 3: What is the safest way to reintroduce xdg_popup support after the first experimental popup demo froze the test laptop?
-- Phase 4: When is `wp_presentation_time` precision needed enough to surface present-time from `RenderTarget::endFrame`? Decide when implementing the protocol.
+- Phase 4: `wp_presentation_time` currently uses a compositor-sampled `CLOCK_MONOTONIC` timestamp after `canvas->present()`. Hardware-derived presentation timestamps and refresh counters should be surfaced from the render/output path when video/game smoothness work needs that precision.
 - Phase 5: Does multi-output land in v1 or post-v1?
