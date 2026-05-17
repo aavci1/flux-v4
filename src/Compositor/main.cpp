@@ -313,13 +313,17 @@ int main(int, char**) {
           drawGrip(windowX + 3.f, windowY + windowHeight - grip - 3.f);
           drawGrip(windowX + windowWidth - grip - 3.f, windowY + windowHeight - grip - 3.f);
         }
-        float const imageWidth = static_cast<float>(cached.image->size().width);
-        float const imageHeight = static_cast<float>(cached.image->size().height);
+        float const sourceWidth = clientSurface.sourceWidth > 0.f
+                                      ? clientSurface.sourceWidth
+                                      : static_cast<float>(cached.image->size().width);
+        float const sourceHeight = clientSurface.sourceHeight > 0.f
+                                       ? clientSurface.sourceHeight
+                                       : static_cast<float>(cached.image->size().height);
         canvas->drawImage(*cached.image,
-                          flux::Rect::sharp(0.f,
-                                            0.f,
-                                            imageWidth,
-                                            imageHeight),
+                          flux::Rect::sharp(clientSurface.sourceX,
+                                            clientSurface.sourceY,
+                                            sourceWidth,
+                                            sourceHeight),
                           flux::Rect::sharp(windowX,
                                             windowY,
                                             windowWidth,
@@ -328,13 +332,17 @@ int main(int, char**) {
       if (auto cursorSurface = wayland.cursorSurface()) {
         updateCachedImage(wayland, *canvas, *cursorSurface, cursorImage);
         if (cursorImage.image) {
-          float const cursorImageWidth = static_cast<float>(cursorImage.image->size().width);
-          float const cursorImageHeight = static_cast<float>(cursorImage.image->size().height);
+          float const cursorSourceWidth = cursorSurface->sourceWidth > 0.f
+                                              ? cursorSurface->sourceWidth
+                                              : static_cast<float>(cursorImage.image->size().width);
+          float const cursorSourceHeight = cursorSurface->sourceHeight > 0.f
+                                               ? cursorSurface->sourceHeight
+                                               : static_cast<float>(cursorImage.image->size().height);
           canvas->drawImage(*cursorImage.image,
-                            flux::Rect::sharp(0.f,
-                                              0.f,
-                                              cursorImageWidth,
-                                              cursorImageHeight),
+                            flux::Rect::sharp(cursorSurface->sourceX,
+                                              cursorSurface->sourceY,
+                                              cursorSourceWidth,
+                                              cursorSourceHeight),
                             flux::Rect::sharp(static_cast<float>(cursorSurface->x),
                                               static_cast<float>(cursorSurface->y),
                                               static_cast<float>(cursorSurface->width),

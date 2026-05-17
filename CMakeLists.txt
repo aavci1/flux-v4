@@ -407,6 +407,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Compositor/Protocols/xdg-shell-protocol.c
     src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
+    src/Compositor/Protocols/viewporter-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
   )
 endif()
@@ -565,6 +566,21 @@ if(FLUX_BUILD_COMPOSITOR)
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::GBM
     PkgConfig::LIBDRM)
+
+  add_executable(flux-compositor-viewport-demo
+    src/Compositor/ViewportDemoClient.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+    src/Compositor/Protocols/viewporter-protocol.c
+  )
+  target_include_directories(flux-compositor-viewport-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-viewport-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-viewport-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 endif()
 
 option(FLUX_BUILD_TESTS

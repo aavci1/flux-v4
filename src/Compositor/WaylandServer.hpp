@@ -36,6 +36,10 @@ struct CommittedSurfaceSnapshot {
   std::int32_t height = 0;
   std::int32_t bufferWidth = 0;
   std::int32_t bufferHeight = 0;
+  float sourceX = 0.f;
+  float sourceY = 0.f;
+  float sourceWidth = 0.f;
+  float sourceHeight = 0.f;
   std::int32_t titleBarHeight = 0;
   std::string title;
   bool focused = false;
@@ -83,6 +87,7 @@ public:
   struct DmabufParams;
   struct DmabufBuffer;
   struct ToplevelDecoration;
+  struct Viewport;
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
@@ -93,6 +98,7 @@ public:
   void destroyDmabufParams(DmabufParams* params);
   void destroyDmabufBuffer(DmabufBuffer* buffer);
   void destroyToplevelDecoration(ToplevelDecoration* decoration);
+  void destroyViewport(Viewport* viewport);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -103,6 +109,7 @@ public:
   wl_global* linuxDmabufGlobal_ = nullptr;
   wl_global* xdgDecorationManagerGlobal_ = nullptr;
   wl_global* xdgOutputManagerGlobal_ = nullptr;
+  wl_global* viewporterGlobal_ = nullptr;
   std::string socketName_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
@@ -113,6 +120,7 @@ public:
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
+  std::vector<std::unique_ptr<Viewport>> viewports_;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;

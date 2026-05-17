@@ -1,6 +1,7 @@
 #include "Compositor/WaylandServer.hpp"
 
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
+#include "viewporter-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-output-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -62,6 +63,7 @@ extern struct xdg_toplevel_interface const xdgToplevelImpl;
 extern struct wl_pointer_interface const pointerImpl;
 extern struct wl_keyboard_interface const keyboardImpl;
 extern struct wl_seat_interface const seatImpl;
+extern struct wp_viewport_interface const viewportImpl;
 
 } // namespace
 
@@ -84,13 +86,36 @@ struct WaylandServer::Surface {
   std::int32_t height = 0;
   std::int32_t frameWidth = 0;
   std::int32_t frameHeight = 0;
+  float sourceX = 0.f;
+  float sourceY = 0.f;
+  float sourceWidth = 0.f;
+  float sourceHeight = 0.f;
+  bool sourceSet = false;
+  float pendingSourceX = 0.f;
+  float pendingSourceY = 0.f;
+  float pendingSourceWidth = 0.f;
+  float pendingSourceHeight = 0.f;
+  bool pendingSourceSet = false;
+  std::int32_t destinationWidth = 0;
+  std::int32_t destinationHeight = 0;
+  bool destinationSet = false;
+  std::int32_t pendingDestinationWidth = 0;
+  std::int32_t pendingDestinationHeight = 0;
+  bool pendingDestinationSet = false;
   bool snapped = false;
   std::int32_t restoreX = 96;
   std::int32_t restoreY = 96;
   std::int32_t restoreWidth = 0;
   std::int32_t restoreHeight = 0;
   DmabufBuffer* dmabufBuffer = nullptr;
+  Viewport* viewport = nullptr;
   std::vector<wl_resource*> frameCallbacks;
+};
+
+struct WaylandServer::Viewport {
+  WaylandServer* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
 };
 
 struct WaylandServer::XdgSurface {
@@ -209,6 +234,12 @@ void toplevelDecorationDestroyResource(wl_resource* resource) {
   }
 }
 
+void viewportDestroyResource(wl_resource* resource) {
+  if (auto* viewport = dataFrom<WaylandServer::Viewport>(resource)) {
+    viewport->server->destroyViewport(viewport);
+  }
+}
+
 void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
@@ -320,6 +351,69 @@ bool copyShmBufferToRgba(WaylandServer::ShmBuffer const& buffer, std::vector<std
   return true;
 }
 
+bool isIntegerSize(float value) {
+  return std::floor(value) == value;
+}
+
+bool applyViewportState(WaylandServer::Surface* surface) {
+  surface->sourceSet = surface->pendingSourceSet;
+  surface->sourceX = surface->pendingSourceX;
+  surface->sourceY = surface->pendingSourceY;
+  surface->sourceWidth = surface->pendingSourceWidth;
+  surface->sourceHeight = surface->pendingSourceHeight;
+  surface->destinationSet = surface->pendingDestinationSet;
+  surface->destinationWidth = surface->pendingDestinationWidth;
+  surface->destinationHeight = surface->pendingDestinationHeight;
+
+  if (surface->width <= 0 || surface->height <= 0) {
+    surface->frameWidth = 0;
+    surface->frameHeight = 0;
+    return true;
+  }
+
+  if (surface->sourceSet) {
+    if (surface->sourceX < 0.f || surface->sourceY < 0.f ||
+        surface->sourceWidth <= 0.f || surface->sourceHeight <= 0.f) {
+      if (surface->viewport && surface->viewport->resource) {
+        wl_resource_post_error(surface->viewport->resource,
+                               WP_VIEWPORT_ERROR_BAD_VALUE,
+                               "invalid viewport source rectangle");
+      }
+      return false;
+    }
+    if (surface->sourceX + surface->sourceWidth > static_cast<float>(surface->width) ||
+        surface->sourceY + surface->sourceHeight > static_cast<float>(surface->height)) {
+      if (surface->viewport && surface->viewport->resource) {
+        wl_resource_post_error(surface->viewport->resource,
+                               WP_VIEWPORT_ERROR_OUT_OF_BUFFER,
+                               "viewport source rectangle exceeds buffer");
+      }
+      return false;
+    }
+  }
+
+  if (surface->destinationSet) {
+    surface->frameWidth = surface->destinationWidth;
+    surface->frameHeight = surface->destinationHeight;
+  } else if (surface->sourceSet) {
+    if (!isIntegerSize(surface->sourceWidth) || !isIntegerSize(surface->sourceHeight)) {
+      if (surface->viewport && surface->viewport->resource) {
+        wl_resource_post_error(surface->viewport->resource,
+                               WP_VIEWPORT_ERROR_BAD_SIZE,
+                               "viewport source size must be integer without a destination size");
+      }
+      return false;
+    }
+    surface->frameWidth = static_cast<std::int32_t>(surface->sourceWidth);
+    surface->frameHeight = static_cast<std::int32_t>(surface->sourceHeight);
+  } else {
+    surface->frameWidth = surface->width;
+    surface->frameHeight = surface->height;
+  }
+
+  return true;
+}
+
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = dataFrom<WaylandServer::Surface>(resource);
   surface->currentBuffer = surface->pendingBuffer;
@@ -330,8 +424,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->rgbaPixels = std::move(pixels);
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
-        if (surface->frameWidth <= 0) surface->frameWidth = surface->width;
-        if (surface->frameHeight <= 0) surface->frameHeight = surface->height;
+        if (!applyViewportState(surface)) return;
         surface->dmabufBuffer = nullptr;
         ++surface->serial;
       }
@@ -340,8 +433,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->rgbaPixels.clear();
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
-        if (surface->frameWidth <= 0) surface->frameWidth = surface->width;
-        if (surface->frameHeight <= 0) surface->frameHeight = surface->height;
+        if (!applyViewportState(surface)) return;
         surface->dmabufBuffer = dmabufBuffer;
         ++surface->serial;
         std::fprintf(stderr,
@@ -1108,6 +1200,116 @@ void bindXdgOutputManager(wl_client* client, void* data, std::uint32_t version, 
   wl_resource_set_implementation(resource, &xdgOutputManagerImpl, data, nullptr);
 }
 
+void viewporterDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void viewportDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed_t y,
+                       wl_fixed_t width, wl_fixed_t height) {
+  auto* viewport = dataFrom<WaylandServer::Viewport>(resource);
+  if (!viewport || !viewport->surface) {
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
+    return;
+  }
+
+  bool const unset = x == wl_fixed_from_int(-1) && y == wl_fixed_from_int(-1) &&
+                     width == wl_fixed_from_int(-1) && height == wl_fixed_from_int(-1);
+  if (unset) {
+    viewport->surface->pendingSourceSet = false;
+    viewport->surface->pendingSourceX = 0.f;
+    viewport->surface->pendingSourceY = 0.f;
+    viewport->surface->pendingSourceWidth = 0.f;
+    viewport->surface->pendingSourceHeight = 0.f;
+    return;
+  }
+
+  double const sourceX = wl_fixed_to_double(x);
+  double const sourceY = wl_fixed_to_double(y);
+  double const sourceWidth = wl_fixed_to_double(width);
+  double const sourceHeight = wl_fixed_to_double(height);
+  if (sourceX < 0.0 || sourceY < 0.0 || sourceWidth <= 0.0 || sourceHeight <= 0.0) {
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_BAD_VALUE, "invalid viewport source rectangle");
+    return;
+  }
+
+  viewport->surface->pendingSourceSet = true;
+  viewport->surface->pendingSourceX = static_cast<float>(sourceX);
+  viewport->surface->pendingSourceY = static_cast<float>(sourceY);
+  viewport->surface->pendingSourceWidth = static_cast<float>(sourceWidth);
+  viewport->surface->pendingSourceHeight = static_cast<float>(sourceHeight);
+}
+
+void viewportSetDestination(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
+  auto* viewport = dataFrom<WaylandServer::Viewport>(resource);
+  if (!viewport || !viewport->surface) {
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
+    return;
+  }
+
+  if (width == -1 && height == -1) {
+    viewport->surface->pendingDestinationSet = false;
+    viewport->surface->pendingDestinationWidth = 0;
+    viewport->surface->pendingDestinationHeight = 0;
+    return;
+  }
+  if (width <= 0 || height <= 0) {
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_BAD_VALUE, "invalid viewport destination size");
+    return;
+  }
+
+  viewport->surface->pendingDestinationSet = true;
+  viewport->surface->pendingDestinationWidth = width;
+  viewport->surface->pendingDestinationHeight = height;
+}
+
+struct wp_viewport_interface const viewportImpl{
+    .destroy = viewportDestroy,
+    .set_source = viewportSetSource,
+    .set_destination = viewportSetDestination,
+};
+
+void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32_t id,
+                           wl_resource* surfaceResource) {
+  auto* server = serverFrom(resource);
+  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  if (!surface) {
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
+    return;
+  }
+  if (surface->viewport) {
+    wl_resource_post_error(resource, WP_VIEWPORTER_ERROR_VIEWPORT_EXISTS, "surface already has a viewport");
+    return;
+  }
+
+  auto viewport = std::make_unique<WaylandServer::Viewport>();
+  viewport->server = server;
+  viewport->surface = surface;
+  wl_resource* viewportResource = wl_resource_create(client, &wp_viewport_interface, 1, id);
+  if (!viewportResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  viewport->resource = viewportResource;
+  auto* raw = viewport.get();
+  surface->viewport = raw;
+  server->viewports_.push_back(std::move(viewport));
+  wl_resource_set_implementation(viewportResource, &viewportImpl, raw, viewportDestroyResource);
+}
+
+struct wp_viewporter_interface const viewporterImpl{
+    .destroy = viewporterDestroy,
+    .get_viewport = viewporterGetViewport,
+};
+
+void bindViewporter(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &wp_viewporter_interface, std::min(version, 1u), id);
+  wl_resource_set_implementation(resource, &viewporterImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1126,8 +1328,9 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
       wl_global_create(display_, &zxdg_decoration_manager_v1_interface, 1, this, bindXdgDecorationManager);
   xdgOutputManagerGlobal_ =
       wl_global_create(display_, &zxdg_output_manager_v1_interface, 3, this, bindXdgOutputManager);
+  viewporterGlobal_ = wl_global_create(display_, &wp_viewporter_interface, 1, this, bindViewporter);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
-      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_) {
+      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -1171,6 +1374,10 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
         .height = displayHeight(surface.get()),
         .bufferWidth = surface->width,
         .bufferHeight = surface->height,
+        .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
+        .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
+        .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
+        .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
         .titleBarHeight = kTitleBarHeight,
         .title = titleForSurface(this, surface.get()),
         .focused = keyboardFocus_ == surface.get(),
@@ -1208,6 +1415,10 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
       .height = surface->height,
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
+      .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
+      .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
+      .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
+      .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
       .titleBarHeight = 0,
       .title = {},
       .focused = false,
@@ -1824,6 +2035,7 @@ void WaylandServer::destroySurface(Surface* surface) {
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
+  if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
   for (wl_resource* callback : surface->frameCallbacks) {
     wl_resource_destroy(callback);
   }
@@ -1898,6 +2110,23 @@ void WaylandServer::destroyToplevelDecoration(ToplevelDecoration* decoration) {
       std::remove_if(toplevelDecorations_.begin(), toplevelDecorations_.end(),
                      [&](auto const& candidate) { return candidate.get() == decoration; }),
       toplevelDecorations_.end());
+}
+
+void WaylandServer::destroyViewport(Viewport* viewport) {
+  if (viewport->surface && viewport->surface->viewport == viewport) {
+    viewport->surface->viewport = nullptr;
+    viewport->surface->pendingSourceSet = false;
+    viewport->surface->pendingSourceX = 0.f;
+    viewport->surface->pendingSourceY = 0.f;
+    viewport->surface->pendingSourceWidth = 0.f;
+    viewport->surface->pendingSourceHeight = 0.f;
+    viewport->surface->pendingDestinationSet = false;
+    viewport->surface->pendingDestinationWidth = 0;
+    viewport->surface->pendingDestinationHeight = 0;
+  }
+  viewports_.erase(std::remove_if(viewports_.begin(), viewports_.end(),
+                                  [&](auto const& candidate) { return candidate.get() == viewport; }),
+                   viewports_.end());
 }
 
 } // namespace flux::compositor
