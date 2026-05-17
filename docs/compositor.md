@@ -465,7 +465,7 @@ Total new code this phase: ~1850 LOC.
 
 ## 6. Phase 3: Input and window management
 
-**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, compositor shortcuts, title text, and a click-on-release close button. Popup support is explicitly deferred after the first experimental popup demo froze the test laptop.
+**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, double-click-titlebar maximize/restore, compositor shortcuts, title text, and a click-on-release close button. Popup support is explicitly deferred after the first experimental popup demo froze the test laptop.
 
 ### 6.1 Goal
 
@@ -483,6 +483,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - Drag title bar to move window.
 - Drag corner to resize window (xdg-shell's resize protocol).
 - Snap to halves on edge drag (compositor-driven, not a protocol feature).
+- Double-click titlebar to maximize or restore.
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, close button, optional resize grip.
 - Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Arrow to snap; Ctrl+Alt+Backspace to terminate the compositor.
@@ -535,6 +536,7 @@ Window management state is held in the compositor, not in Wayland. Wayland tells
 - ✓ Cursor renders correctly and follows the pointer.
 - ✓ Cursor changes when the client supplies a cursor surface through `wl_pointer.set_cursor`.
 - ✓ Snap-to-half works from Super+Left/Super+Right and dragging from the titlebar restores the previous size without losing the cursor/titlebar grab.
+- ✓ Double-clicking the titlebar maximizes/restores the window.
 - ✓ Super+Q closes the focused window; the compositor close button sends xdg_toplevel close on click release.
 - ✗ xdg-popup-based menus (right-click in supported clients) appear and dismiss correctly. Deferred after the experimental popup demo froze the test laptop.
 - ✗ A non-trivial third-party client works: `foot` (the terminal). It should be usable: open, type, close, focus interactions.
@@ -634,7 +636,7 @@ Total new code this phase: ~4000 LOC.
 
 ## 8. Phase 5: Animation, polish, daily-driveability
 
-**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, titlebar drag-to-edge shows a snap preview before release, and startup config can set the background color or disable animations.
+**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, snap/maximize geometry changes are animated, titlebar drag-to-edge shows a snap preview before release, and startup config can set the background color or disable animations.
 
 ### 8.1 Goal
 
@@ -642,7 +644,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 
 ### 8.2 Scope
 
-- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, and snap preview overlay are implemented in the compositor render loop.
+- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented.
 - **Configuration file:** `~/.config/flux-compositor/config.toml`. Keybindings, window-management preferences, animation toggles. Hot-reload optional. Initial startup parsing supports `background = "#RRGGBB"` and `animations = false`; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing.
 - **Hardware cursor:** use KMS cursor planes when supported. Falls back to compositor-drawn software cursor. Faster cursor movement, lower latency.
 - **Frame timing improvements:** adaptive sync if the hardware supports it (FreeSync). Triple-buffering when beneficial.
@@ -662,7 +664,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 ### 8.4 Acceptance criteria
 
 - ✗ The compositor runs reliably for a full day of dogfooding without crashes.
-- ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, and snap preview overlay are implemented; move/resize/snap commit animations remain pending.
+- ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented; interactive move/resize smoothing remains pending.
 - ◐ Configuration via the config file works for keybindings and basic preferences. Startup background color and animation-toggle parsing are implemented; keybindings and hot reload remain pending.
 - ✗ Hardware cursor works on the test hardware (AMD Vega supports cursor planes).
 - ✗ User documentation explains how to build, install, configure, and use the compositor.
@@ -758,9 +760,9 @@ This section is updated as work progresses. Entries record completion of each ph
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
-| Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
+| Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, and `wp_fractional_scale_v1` are exposed with smoke demos where useful. Activation is deferred after its smoke client hard-froze the test laptop. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, titlebar drag-to-edge shows a snap preview, and config can set the startup background color or disable animations; move/resize/snap commit animation, keybinding config, hardware cursor, frame timing, wallpaper, and docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, and config can set the startup background color or disable animations; interactive move/resize smoothing, keybinding config, hardware cursor, frame timing, wallpaper, and docs remain pending. |
 
 ### 12.1 Framework changes log
 

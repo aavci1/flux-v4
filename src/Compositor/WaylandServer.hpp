@@ -88,6 +88,7 @@ public:
 
   void dispatch();
   void flushClients();
+  void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   void sendFrameCallbacks(std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);
@@ -206,6 +207,7 @@ public:
   Surface* dragSurface_ = nullptr;
   Surface* resizeSurface_ = nullptr;
   Surface* closePressSurface_ = nullptr;
+  Surface* lastTitleClickSurface_ = nullptr;
   Surface* cursorSurface_ = nullptr;
   CursorShape cursorShape_ = CursorShape::Arrow;
   std::int32_t cursorHotspotX_ = 0;
@@ -213,6 +215,7 @@ public:
   std::uint32_t pointerEnterSerial_ = 0;
   float dragOffsetX_ = 0.f;
   float dragOffsetY_ = 0.f;
+  std::uint32_t lastTitleClickTimeMs_ = 0;
   float resizeStartX_ = 0.f;
   float resizeStartY_ = 0.f;
   std::int32_t resizeStartWindowX_ = 0;

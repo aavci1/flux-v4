@@ -477,22 +477,23 @@ int main(int, char**) {
       device->pollEvents(0);
       wayland.dispatch();
       if (!device->isVtForeground()) continue;
+      auto const frameTime = std::chrono::steady_clock::now();
+      wayland.updateAnimations(monotonicMilliseconds(), config.animationsEnabled);
 
       canvas->beginFrame();
       canvas->clear(clearColor);
       auto committedSurfaces = wayland.committedSurfaces();
-      auto const frameTime = std::chrono::steady_clock::now();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
       for (auto const& clientSurface : committedSurfaces) {
         liveSurfaceIds.insert(clientSurface.id);
         auto& visual = surfaceVisuals[clientSurface.id];
         if (visual.firstSeen.time_since_epoch().count() == 0) visual.firstSeen = frameTime;
-        visual.lastSnapshot = clientSurface;
-        visual.hasLastSnapshot = true;
         auto& cached = clientImages[clientSurface.id];
         updateCachedImage(wayland, *canvas, clientSurface, cached);
         if (!cached.image) continue;
+        visual.lastSnapshot = clientSurface;
+        visual.hasLastSnapshot = true;
 
         float const windowX = static_cast<float>(clientSurface.x);
         float const windowY = static_cast<float>(clientSurface.y);

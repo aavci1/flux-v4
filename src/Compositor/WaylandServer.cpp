@@ -44,6 +44,7 @@ constexpr std::int32_t kResizeGripSize = 14;
 constexpr std::int32_t kSnapEdgeThreshold = 32;
 constexpr std::int32_t kMinWindowWidth = 160;
 constexpr std::int32_t kMinWindowHeight = 120;
+constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 constexpr std::int32_t kCloseButtonSize = 18;
 constexpr std::int32_t kCloseButtonInset = 5;
@@ -127,6 +128,19 @@ struct WaylandServer::Surface {
   std::int32_t pendingDestinationHeight = 0;
   bool pendingDestinationSet = false;
   bool snapped = false;
+  bool maximized = false;
+  std::int32_t geometryAnimationStartX = 0;
+  std::int32_t geometryAnimationStartY = 0;
+  std::int32_t geometryAnimationStartWidth = 0;
+  std::int32_t geometryAnimationStartHeight = 0;
+  bool geometryAnimationActive = false;
+  std::uint32_t geometryAnimationStartedAtMs = 0;
+  std::int32_t geometryAnimationTargetX = 0;
+  std::int32_t geometryAnimationTargetY = 0;
+  std::int32_t geometryAnimationTargetWidth = 0;
+  std::int32_t geometryAnimationTargetHeight = 0;
+  std::int32_t geometryAnimationLastConfigureWidth = 0;
+  std::int32_t geometryAnimationLastConfigureHeight = 0;
   std::int32_t restoreX = 96;
   std::int32_t restoreY = 96;
   std::int32_t restoreWidth = 0;
@@ -1031,6 +1045,29 @@ std::int32_t displayHeight(WaylandServer::Surface const* surface) {
 
 bool hasAnchor(std::uint32_t anchor, std::uint32_t edge) {
   return (anchor & edge) != 0;
+}
+
+std::uint32_t monotonicMilliseconds() {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint32_t>(static_cast<std::uint64_t>(now.tv_sec) * 1000ull +
+                                    static_cast<std::uint64_t>(now.tv_nsec) / 1'000'000ull);
+}
+
+float clamp01(float value) {
+  return std::clamp(value, 0.f, 1.f);
+}
+
+float easeInOutCubic(float value) {
+  float const t = clamp01(value);
+  if (t < 0.5f) return 4.f * t * t * t;
+  float const inverse = -2.f * t + 2.f;
+  return 1.f - inverse * inverse * inverse * 0.5f;
+}
+
+std::int32_t lerpInt(std::int32_t from, std::int32_t to, float t) {
+  return static_cast<std::int32_t>(std::lround(static_cast<float>(from) +
+                                               static_cast<float>(to - from) * t));
 }
 
 void applyLayerGeometry(WaylandServer::LayerSurface* layerSurface) {
@@ -3016,9 +3053,37 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* serve
   };
 }
 
+void startGeometryAnimation(WaylandServer* server,
+                            WaylandServer::Surface* surface,
+                            std::int32_t targetX,
+                            std::int32_t targetY,
+                            std::int32_t targetWidth,
+                            std::int32_t targetHeight) {
+  if (!surface) return;
+  surface->geometryAnimationStartX = surface->windowX;
+  surface->geometryAnimationStartY = surface->windowY;
+  surface->geometryAnimationStartWidth = displayWidth(surface);
+  surface->geometryAnimationStartHeight = displayHeight(surface);
+  surface->geometryAnimationTargetX = targetX;
+  surface->geometryAnimationTargetY = targetY;
+  surface->geometryAnimationTargetWidth = targetWidth;
+  surface->geometryAnimationTargetHeight = targetHeight;
+  surface->geometryAnimationLastConfigureWidth = displayWidth(surface);
+  surface->geometryAnimationLastConfigureHeight = displayHeight(surface);
+  surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
+  surface->geometryAnimationActive = true;
+  if (surface->geometryAnimationStartX == targetX && surface->geometryAnimationStartY == targetY &&
+      surface->geometryAnimationStartWidth == targetWidth &&
+      surface->geometryAnimationStartHeight == targetHeight) {
+    surface->geometryAnimationActive = false;
+    return;
+  }
+  server->flushClients();
+}
+
 void snapToplevel(WaylandServer* server, WaylandServer::Surface* surface, bool leftHalf) {
   if (!surface || !surface->toplevel) return;
-  if (!surface->snapped) {
+  if (!surface->snapped && !surface->maximized) {
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
     surface->restoreWidth = displayWidth(surface);
@@ -3026,12 +3091,14 @@ void snapToplevel(WaylandServer* server, WaylandServer::Surface* surface, bool l
   }
   std::int32_t const width = std::max(kMinWindowWidth, server->output_.width / 2);
   std::int32_t const height = std::max(kMinWindowHeight, server->output_.height - kTitleBarHeight);
-  surface->windowX = leftHalf ? 0 : std::max(0, server->output_.width - width);
-  surface->windowY = kTitleBarHeight;
-  surface->frameWidth = width;
-  surface->frameHeight = height;
   surface->snapped = true;
-  sendToplevelConfigure(server, toplevelForSurface(server, surface), width, height);
+  surface->maximized = false;
+  startGeometryAnimation(server,
+                         surface,
+                         leftHalf ? 0 : std::max(0, server->output_.width - width),
+                         kTitleBarHeight,
+                         width,
+                         height);
 }
 
 void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
@@ -3039,7 +3106,7 @@ void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
 }
 
 void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surface) {
-  if (!surface || !surface->snapped) return;
+  if (!surface || (!surface->snapped && !surface->maximized)) return;
   std::int32_t const snappedWidth = std::max(1, displayWidth(surface));
   std::int32_t const restoreWidth =
       std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
@@ -3060,9 +3127,40 @@ void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surfac
   surface->frameWidth = restoreWidth;
   surface->frameHeight = restoreHeight;
   surface->snapped = false;
+  surface->maximized = false;
+  surface->geometryAnimationActive = false;
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
   server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
   sendToplevelConfigure(server, toplevelForSurface(server, surface), restoreWidth, restoreHeight);
+}
+
+void toggleMaximizedToplevel(WaylandServer* server, WaylandServer::Surface* surface) {
+  if (!surface || !surface->toplevel) return;
+  if (surface->maximized) {
+    std::int32_t const restoreWidth =
+        std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
+    std::int32_t const restoreHeight =
+        std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
+    std::int32_t const restoreX = std::clamp(surface->restoreX, 0, std::max(0, server->output_.width - restoreWidth));
+    std::int32_t const restoreY =
+        std::clamp(surface->restoreY, kTitleBarHeight, std::max(kTitleBarHeight, server->output_.height - restoreHeight));
+    surface->maximized = false;
+    surface->snapped = false;
+    startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
+    return;
+  }
+
+  if (!surface->snapped) {
+    surface->restoreX = surface->windowX;
+    surface->restoreY = surface->windowY;
+    surface->restoreWidth = displayWidth(surface);
+    surface->restoreHeight = displayHeight(surface);
+  }
+  std::int32_t const width = std::max(kMinWindowWidth, server->output_.width);
+  std::int32_t const height = std::max(kMinWindowHeight, server->output_.height - kTitleBarHeight);
+  surface->maximized = true;
+  surface->snapped = false;
+  startGeometryAnimation(server, surface, 0, kTitleBarHeight, width, height);
 }
 
 bool updateShortcutModifier(WaylandServer* server, std::uint32_t key, bool pressed) {
@@ -3128,6 +3226,7 @@ void updateDrag(WaylandServer* server) {
 void updateResize(WaylandServer* server) {
   WaylandServer::Surface* surface = server->resizeSurface_;
   if (!surface) return;
+  surface->geometryAnimationActive = false;
 
   float const dx = server->pointerX_ - server->resizeStartX_;
   float const dy = server->pointerY_ - server->resizeStartY_;
@@ -3272,6 +3371,8 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
         setKeyboardFocus(this, resizeTarget);
         sendPointerFocus(this, nullptr, timeMs);
         resizeTarget->snapped = false;
+        resizeTarget->maximized = false;
+        resizeTarget->geometryAnimationActive = false;
         resizeSurface_ = resizeTarget;
         resizeStartX_ = pointerX_;
         resizeStartY_ = pointerY_;
@@ -3289,6 +3390,15 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
         raiseSurface(this, chromeTarget);
         setKeyboardFocus(this, chromeTarget);
         sendPointerFocus(this, nullptr, timeMs);
+        bool const doubleClick = lastTitleClickSurface_ == chromeTarget &&
+                                 timeMs - lastTitleClickTimeMs_ <= 400u;
+        lastTitleClickSurface_ = chromeTarget;
+        lastTitleClickTimeMs_ = timeMs;
+        if (doubleClick) {
+          dragSurface_ = nullptr;
+          toggleMaximizedToplevel(this, chromeTarget);
+          return;
+        }
         dragSurface_ = chromeTarget;
         dragOffsetX_ = pointerX_ - static_cast<float>(chromeTarget->windowX);
         dragOffsetY_ = pointerY_ - static_cast<float>(chromeTarget->windowY);
@@ -3425,6 +3535,56 @@ void WaylandServer::flushClients() {
   if (display_) wl_display_flush_clients(display_);
 }
 
+void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
+  bool sentConfigure = false;
+  for (auto const& surface : surfaces_) {
+    if (!surface->geometryAnimationActive) continue;
+
+    float const linearProgress =
+        animationsEnabled
+            ? static_cast<float>(timeMs - surface->geometryAnimationStartedAtMs) /
+                  static_cast<float>(kGeometryAnimationMs)
+            : 1.f;
+    float const progress = easeInOutCubic(linearProgress);
+    std::int32_t const nextX = lerpInt(surface->geometryAnimationStartX, surface->geometryAnimationTargetX, progress);
+    std::int32_t const nextY = lerpInt(surface->geometryAnimationStartY, surface->geometryAnimationTargetY, progress);
+    std::int32_t const nextWidth =
+        std::max(kMinWindowWidth,
+                 lerpInt(surface->geometryAnimationStartWidth, surface->geometryAnimationTargetWidth, progress));
+    std::int32_t const nextHeight =
+        std::max(kMinWindowHeight,
+                 lerpInt(surface->geometryAnimationStartHeight, surface->geometryAnimationTargetHeight, progress));
+
+    surface->windowX = nextX;
+    surface->windowY = nextY;
+    surface->frameWidth = nextWidth;
+    surface->frameHeight = nextHeight;
+    if (nextWidth != surface->geometryAnimationLastConfigureWidth ||
+        nextHeight != surface->geometryAnimationLastConfigureHeight) {
+      surface->geometryAnimationLastConfigureWidth = nextWidth;
+      surface->geometryAnimationLastConfigureHeight = nextHeight;
+      sendToplevelConfigure(this, toplevelForSurface(this, surface.get()), nextWidth, nextHeight);
+      sentConfigure = true;
+    }
+
+    if (linearProgress >= 1.f) {
+      surface->windowX = surface->geometryAnimationTargetX;
+      surface->windowY = surface->geometryAnimationTargetY;
+      surface->frameWidth = surface->geometryAnimationTargetWidth;
+      surface->frameHeight = surface->geometryAnimationTargetHeight;
+      surface->geometryAnimationActive = false;
+      if (surface->frameWidth != surface->geometryAnimationLastConfigureWidth ||
+          surface->frameHeight != surface->geometryAnimationLastConfigureHeight) {
+        surface->geometryAnimationLastConfigureWidth = surface->frameWidth;
+        surface->geometryAnimationLastConfigureHeight = surface->frameHeight;
+        sendToplevelConfigure(this, toplevelForSurface(this, surface.get()), surface->frameWidth, surface->frameHeight);
+        sentConfigure = true;
+      }
+    }
+  }
+  if (sentConfigure) flushClients();
+}
+
 void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
   timespec now{};
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -3489,6 +3649,7 @@ void WaylandServer::destroySurface(Surface* surface) {
   if (dragSurface_ == surface) dragSurface_ = nullptr;
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
+  if (lastTitleClickSurface_ == surface) lastTitleClickSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
   if (dndOrigin_ == surface || dndTarget_ == surface) clearDnd(this);
   for (auto& device : cursorShapeDevices_) {
