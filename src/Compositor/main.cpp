@@ -14,11 +14,16 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -52,6 +57,10 @@ struct ClosingSurfaceVisual {
   std::chrono::steady_clock::time_point closedAt{};
 };
 
+struct CompositorConfig {
+  flux::Color backgroundColor{0.20f, 0.50f, 0.95f, 1.0f};
+};
+
 float clamp01(float value) {
   return std::clamp(value, 0.f, 1.f);
 }
@@ -60,6 +69,106 @@ float easeOutCubic(float value) {
   float const t = clamp01(value);
   float const inverse = 1.f - t;
   return 1.f - inverse * inverse * inverse;
+}
+
+std::string trim(std::string_view value) {
+  std::size_t begin = 0;
+  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+  std::size_t end = value.size();
+  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
+  return std::string(value.substr(begin, end - begin));
+}
+
+std::string stripTomlComment(std::string_view line) {
+  bool inString = false;
+  for (std::size_t i = 0; i < line.size(); ++i) {
+    char const c = line[i];
+    if (c == '"' && (i == 0 || line[i - 1u] != '\\')) inString = !inString;
+    if (c == '#' && !inString) return std::string(line.substr(0, i));
+  }
+  return std::string(line);
+}
+
+std::string unquote(std::string_view value) {
+  std::string trimmed = trim(value);
+  if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
+    return trimmed.substr(1, trimmed.size() - 2u);
+  }
+  return trimmed;
+}
+
+std::optional<unsigned int> hexDigit(char c) {
+  if (c >= '0' && c <= '9') return static_cast<unsigned int>(c - '0');
+  if (c >= 'a' && c <= 'f') return static_cast<unsigned int>(c - 'a' + 10);
+  if (c >= 'A' && c <= 'F') return static_cast<unsigned int>(c - 'A' + 10);
+  return std::nullopt;
+}
+
+std::optional<unsigned int> hexByte(std::string_view value, std::size_t offset) {
+  auto hi = hexDigit(value[offset]);
+  auto lo = hexDigit(value[offset + 1u]);
+  if (!hi || !lo) return std::nullopt;
+  return (*hi << 4u) | *lo;
+}
+
+std::optional<flux::Color> parseHexColor(std::string_view value) {
+  std::string text = unquote(value);
+  if (text.size() != 7 || text[0] != '#') return std::nullopt;
+  auto red = hexByte(text, 1);
+  auto green = hexByte(text, 3);
+  auto blue = hexByte(text, 5);
+  if (!red || !green || !blue) return std::nullopt;
+  return flux::Color{
+      static_cast<float>(*red) / 255.f,
+      static_cast<float>(*green) / 255.f,
+      static_cast<float>(*blue) / 255.f,
+      1.f,
+  };
+}
+
+std::optional<std::string> configPath() {
+  if (char const* explicitPath = std::getenv("FLUX_COMPOSITOR_CONFIG"); explicitPath && *explicitPath) {
+    return std::string(explicitPath);
+  }
+  if (char const* configHome = std::getenv("XDG_CONFIG_HOME"); configHome && *configHome) {
+    return std::string(configHome) + "/flux-compositor/config.toml";
+  }
+  if (char const* home = std::getenv("HOME"); home && *home) {
+    return std::string(home) + "/.config/flux-compositor/config.toml";
+  }
+  return std::nullopt;
+}
+
+CompositorConfig loadConfig() {
+  CompositorConfig config;
+  auto path = configPath();
+  if (!path) return config;
+  std::ifstream file(*path);
+  if (!file) return config;
+
+  std::string line;
+  unsigned int lineNumber = 0;
+  while (std::getline(file, line)) {
+    ++lineNumber;
+    std::string clean = trim(stripTomlComment(line));
+    if (clean.empty() || clean.front() == '[') continue;
+    std::size_t const equals = clean.find('=');
+    if (equals == std::string::npos) continue;
+    std::string key = trim(std::string_view(clean).substr(0, equals));
+    std::string value = trim(std::string_view(clean).substr(equals + 1u));
+    if (key == "background" || key == "background_color") {
+      if (auto color = parseHexColor(value)) {
+        config.backgroundColor = *color;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid background color in %s:%u\n",
+                     path->c_str(),
+                     lineNumber);
+      }
+    }
+  }
+  std::fprintf(stderr, "flux-compositor: loaded config %s\n", path->c_str());
+  return config;
 }
 
 void drawSurfaceImage(flux::Canvas& canvas,
@@ -329,7 +438,8 @@ int main(int, char**) {
                  output.height(),
                  output.name().c_str());
 
-    flux::Color const clearColor{0.20f, 0.50f, 0.95f, 1.0f};
+    CompositorConfig const config = loadConfig();
+    flux::Color const clearColor = config.backgroundColor;
     std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
     std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
