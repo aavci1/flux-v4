@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -65,6 +66,13 @@ struct CompositorConfig {
   flux::ImageFillMode wallpaperMode = flux::ImageFillMode::Cover;
   bool animationsEnabled = true;
   std::vector<flux::compositor::WaylandServer::ShortcutBinding> shortcutBindings;
+};
+
+struct LoadedCompositorConfig {
+  CompositorConfig config;
+  std::optional<std::string> path;
+  std::filesystem::file_time_type modifiedAt{};
+  bool hasModifiedAt = false;
 };
 
 float clamp01(float value) {
@@ -365,6 +373,30 @@ CompositorConfig loadConfig() {
   return config;
 }
 
+LoadedCompositorConfig loadConfigWithMetadata() {
+  LoadedCompositorConfig loaded{
+      .config = loadConfig(),
+      .path = configPath(),
+  };
+  if (loaded.path) {
+    std::error_code error;
+    auto modifiedAt = std::filesystem::last_write_time(*loaded.path, error);
+    if (!error) {
+      loaded.modifiedAt = modifiedAt;
+      loaded.hasModifiedAt = true;
+    }
+  }
+  return loaded;
+}
+
+bool configChanged(LoadedCompositorConfig const& loaded) {
+  if (!loaded.path) return false;
+  std::error_code error;
+  auto modifiedAt = std::filesystem::last_write_time(*loaded.path, error);
+  if (error) return loaded.hasModifiedAt;
+  return !loaded.hasModifiedAt || modifiedAt != loaded.modifiedAt;
+}
+
 void drawSurfaceImage(flux::Canvas& canvas,
                       flux::compositor::CommittedSurfaceSnapshot const& surface,
                       flux::Image& image,
@@ -632,20 +664,32 @@ int main(int, char**) {
                  output.height(),
                  output.name().c_str());
 
-    CompositorConfig const config = loadConfig();
+    LoadedCompositorConfig loadedConfig = loadConfigWithMetadata();
+    CompositorConfig config = loadedConfig.config;
     wayland.setShortcutBindings(config.shortcutBindings);
-    flux::Color const clearColor = config.backgroundColor;
-    flux::FillStyle const backgroundFill =
+    flux::Color clearColor = config.backgroundColor;
+    flux::FillStyle backgroundFill =
         config.backgroundGradientEnd
             ? flux::FillStyle::linearGradient(config.backgroundColor, *config.backgroundGradientEnd, {0.f, 0.f}, {1.f, 1.f})
             : flux::FillStyle::solid(config.backgroundColor);
     std::shared_ptr<flux::Image> wallpaperImage;
-    if (config.wallpaperPath) {
-      wallpaperImage = flux::loadImageFromFile(*config.wallpaperPath, canvas->gpuDevice());
-      if (!wallpaperImage) {
-        std::fprintf(stderr, "flux-compositor: failed to load wallpaper %s\n", config.wallpaperPath->c_str());
+    auto applyConfig = [&] {
+      config = loadedConfig.config;
+      wayland.setShortcutBindings(config.shortcutBindings);
+      clearColor = config.backgroundColor;
+      backgroundFill =
+          config.backgroundGradientEnd
+              ? flux::FillStyle::linearGradient(config.backgroundColor, *config.backgroundGradientEnd, {0.f, 0.f}, {1.f, 1.f})
+              : flux::FillStyle::solid(config.backgroundColor);
+      wallpaperImage.reset();
+      if (config.wallpaperPath) {
+        wallpaperImage = flux::loadImageFromFile(*config.wallpaperPath, canvas->gpuDevice());
+        if (!wallpaperImage) {
+          std::fprintf(stderr, "flux-compositor: failed to load wallpaper %s\n", config.wallpaperPath->c_str());
+        }
       }
-    }
+    };
+    applyConfig();
     std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
     std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
@@ -653,6 +697,10 @@ int main(int, char**) {
     while (gRunning.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       device->pollEvents(0);
       wayland.dispatch();
+      if (configChanged(loadedConfig)) {
+        loadedConfig = loadConfigWithMetadata();
+        applyConfig();
+      }
       if (!device->isVtForeground()) {
         device->pollEvents(250);
         wayland.dispatch();
