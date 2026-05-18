@@ -106,7 +106,9 @@ bool shouldTraceRenderSnapshot(flux::compositor::CommittedSurfaceSnapshot const&
          current.activeSizing != previous.activeSizing ||
          current.serial != previous.serial ||
          current.sourceX != previous.sourceX || current.sourceY != previous.sourceY ||
-         current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight;
+         current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight ||
+         current.destinationWidth != previous.destinationWidth ||
+         current.destinationHeight != previous.destinationHeight;
 }
 
 std::string trim(std::string_view value) {
@@ -969,12 +971,16 @@ int main(int, char**) {
         float const sourceHeight = clientSurface.sourceHeight > 0.f
                                        ? clientSurface.sourceHeight
                                        : static_cast<float>(cached.image->size().height);
-        bool const staleGrowthBuffer =
+        bool const staleResizeBuffer =
             clientSurface.activeSizing &&
-            clientSurface.bufferWidth <= static_cast<int>(std::ceil(windowWidth)) &&
-            clientSurface.bufferHeight <= static_cast<int>(std::ceil(windowHeight));
-        float const contentWidth = staleGrowthBuffer ? sourceWidth : windowWidth;
-        float const contentHeight = staleGrowthBuffer ? sourceHeight : windowHeight;
+            (clientSurface.destinationWidth != static_cast<int>(std::lround(windowWidth)) ||
+             clientSurface.destinationHeight != static_cast<int>(std::lround(windowHeight)));
+        float const contentWidth = staleResizeBuffer
+                                       ? static_cast<float>(clientSurface.destinationWidth)
+                                       : windowWidth;
+        float const contentHeight = staleResizeBuffer
+                                        ? static_cast<float>(clientSurface.destinationHeight)
+                                        : windowHeight;
         canvas->save();
         canvas->clipRect(flux::Rect::sharp(windowX, windowY, windowWidth, windowHeight));
         canvas->drawImage(*cached.image,

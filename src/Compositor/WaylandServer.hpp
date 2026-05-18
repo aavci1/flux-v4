@@ -53,6 +53,8 @@ struct CommittedSurfaceSnapshot {
   float sourceY = 0.f;
   float sourceWidth = 0.f;
   float sourceHeight = 0.f;
+  std::int32_t destinationWidth = 0;
+  std::int32_t destinationHeight = 0;
   std::int32_t titleBarHeight = 0;
   std::string title;
   bool focused = false;

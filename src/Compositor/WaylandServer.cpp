@@ -738,12 +738,12 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   surface->pendingPresentationFeedbacks.clear();
 
   if (!hasBufferAttach) {
-    if (pendingViewportSourceFitsCurrentBuffer(surface)) {
+    if (surface->pendingSourceSet || surface->pendingDestinationSet) {
+      traceResizeSurface("commit-state-defer-viewport", surface);
+    } else if (pendingViewportSourceFitsCurrentBuffer(surface)) {
       if (!applyViewportState(surface)) return;
       applyLayerGeometry(surface->layerSurface);
       traceResizeSurface("commit-state", surface);
-    } else {
-      traceResizeSurface("commit-state-defer-viewport", surface);
     }
     return;
   }
@@ -2830,6 +2830,8 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
         .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
         .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
         .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
+        .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface.get()),
+        .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface.get()),
         .titleBarHeight = surface->layerSurface ? 0 : kTitleBarHeight,
         .title = surface->layerSurface ? std::string{} : titleForSurface(this, surface.get()),
         .focused = keyboardFocus_ == surface.get(),
@@ -2872,6 +2874,8 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
       .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
       .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
       .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
+      .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
+      .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
       .titleBarHeight = 0,
       .title = {},
       .focused = false,
