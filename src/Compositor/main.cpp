@@ -13,15 +13,12 @@
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <exception>
 #include <memory>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -33,16 +30,6 @@ std::atomic<bool> gRunning{true};
 
 void onSignal(int) {
   gRunning.store(false, std::memory_order_relaxed);
-}
-
-float clamp01(float value) {
-  return std::clamp(value, 0.f, 1.f);
-}
-
-float easeOutCubic(float value) {
-  float const t = clamp01(value);
-  float const inverse = 1.f - t;
-  return 1.f - inverse * inverse * inverse;
 }
 
 std::uint32_t monotonicMilliseconds() {
@@ -104,9 +91,7 @@ int main(int, char**) {
       appliedConfig = flux::compositor::applyCompositorConfig(loadedConfig.config, *canvas);
       wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
     };
-    std::unordered_map<std::uint64_t, flux::compositor::CachedClientImage> clientImages;
-    std::unordered_map<std::uint64_t, flux::compositor::SurfaceVisualState> surfaceVisuals;
-    std::unordered_map<std::uint64_t, flux::compositor::ClosingSurfaceVisual> closingSurfaces;
+    flux::compositor::SurfaceRenderState surfaceRenderState;
     flux::compositor::CachedClientImage cursorImage;
     bool hardwareArrowCursor = false;
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
@@ -146,8 +131,8 @@ int main(int, char**) {
       liveSurfaceIds.reserve(committedSurfaces.size());
       for (auto const& clientSurface : committedSurfaces) {
         liveSurfaceIds.insert(clientSurface.id);
-        auto& visual = surfaceVisuals[clientSurface.id];
-        auto& cached = clientImages[clientSurface.id];
+        auto& visual = surfaceRenderState.surfaceVisuals[clientSurface.id];
+        auto& cached = surfaceRenderState.clientImages[clientSurface.id];
         flux::compositor::drawCommittedSurface(wayland,
                                                *canvas,
                                                textSystem,
@@ -157,31 +142,11 @@ int main(int, char**) {
                                                frameTime,
                                                appliedConfig.config.animationsEnabled);
       }
-      for (auto const& [surfaceId, visual] : surfaceVisuals) {
-        if (liveSurfaceIds.contains(surfaceId)) continue;
-        auto cached = clientImages.find(surfaceId);
-        if (!appliedConfig.config.animationsEnabled || !visual.hasLastSnapshot || cached == clientImages.end() ||
-            !cached->second.image) {
-          continue;
-        }
-        closingSurfaces[surfaceId] = flux::compositor::ClosingSurfaceVisual{
-            .snapshot = visual.lastSnapshot,
-            .image = cached->second.image,
-            .closedAt = frameTime,
-        };
-      }
-      for (auto it = closingSurfaces.begin(); it != closingSurfaces.end();) {
-        float const closeMs = static_cast<float>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - it->second.closedAt).count());
-        float const progress = clamp01(closeMs / 120.f);
-        if (progress >= 1.f || !it->second.image) {
-          it = closingSurfaces.erase(it);
-          continue;
-        }
-        float const eased = easeOutCubic(progress);
-        flux::compositor::drawSurfaceImage(*canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
-        ++it;
-      }
+      flux::compositor::captureClosingSurfaces(surfaceRenderState,
+                                               liveSurfaceIds,
+                                               frameTime,
+                                               appliedConfig.config.animationsEnabled);
+      flux::compositor::drawClosingSurfaces(*canvas, surfaceRenderState, frameTime);
       if (auto snapPreview = wayland.snapPreview()) {
         flux::compositor::drawSnapPreview(*canvas, *snapPreview);
       }
@@ -193,20 +158,7 @@ int main(int, char**) {
                                              hardwareCursorPixels,
                                              hardwareCursorWidth,
                                              hardwareCursorHeight);
-      for (auto it = clientImages.begin(); it != clientImages.end();) {
-        if (liveSurfaceIds.contains(it->first)) {
-          ++it;
-        } else {
-          it = clientImages.erase(it);
-        }
-      }
-      for (auto it = surfaceVisuals.begin(); it != surfaceVisuals.end();) {
-        if (liveSurfaceIds.contains(it->first)) {
-          ++it;
-        } else {
-          it = surfaceVisuals.erase(it);
-        }
-      }
+      flux::compositor::pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
       canvas->present();
       wayland.sendFrameCallbacks(monotonicMilliseconds());
     }

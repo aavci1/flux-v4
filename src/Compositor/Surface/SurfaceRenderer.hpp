@@ -9,6 +9,8 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace flux::compositor {
 
@@ -29,6 +31,12 @@ struct ClosingSurfaceVisual {
   CommittedSurfaceSnapshot snapshot{};
   std::shared_ptr<Image> image;
   std::chrono::steady_clock::time_point closedAt{};
+};
+
+struct SurfaceRenderState {
+  std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
+  std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
 };
 
 [[nodiscard]] bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
@@ -53,5 +61,17 @@ void drawCommittedSurface(WaylandServer& wayland,
                           CachedClientImage& cached,
                           std::chrono::steady_clock::time_point frameTime,
                           bool animationsEnabled);
+
+void captureClosingSurfaces(SurfaceRenderState& state,
+                            std::unordered_set<std::uint64_t> const& liveSurfaceIds,
+                            std::chrono::steady_clock::time_point frameTime,
+                            bool animationsEnabled);
+
+void drawClosingSurfaces(Canvas& canvas,
+                         SurfaceRenderState& state,
+                         std::chrono::steady_clock::time_point frameTime);
+
+void pruneSurfaceRenderState(SurfaceRenderState& state,
+                             std::unordered_set<std::uint64_t> const& liveSurfaceIds);
 
 } // namespace flux::compositor

@@ -229,4 +229,58 @@ void drawCommittedSurface(WaylandServer& wayland,
   canvas.restore();
 }
 
+void captureClosingSurfaces(SurfaceRenderState& state,
+                            std::unordered_set<std::uint64_t> const& liveSurfaceIds,
+                            std::chrono::steady_clock::time_point frameTime,
+                            bool animationsEnabled) {
+  for (auto const& [surfaceId, visual] : state.surfaceVisuals) {
+    if (liveSurfaceIds.contains(surfaceId)) continue;
+    auto cached = state.clientImages.find(surfaceId);
+    if (!animationsEnabled || !visual.hasLastSnapshot || cached == state.clientImages.end() ||
+        !cached->second.image) {
+      continue;
+    }
+    state.closingSurfaces[surfaceId] = ClosingSurfaceVisual{
+        .snapshot = visual.lastSnapshot,
+        .image = cached->second.image,
+        .closedAt = frameTime,
+    };
+  }
+}
+
+void drawClosingSurfaces(Canvas& canvas,
+                         SurfaceRenderState& state,
+                         std::chrono::steady_clock::time_point frameTime) {
+  for (auto it = state.closingSurfaces.begin(); it != state.closingSurfaces.end();) {
+    float const closeMs = static_cast<float>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - it->second.closedAt).count());
+    float const progress = clamp01(closeMs / 120.f);
+    if (progress >= 1.f || !it->second.image) {
+      it = state.closingSurfaces.erase(it);
+      continue;
+    }
+    float const eased = easeOutCubic(progress);
+    drawSurfaceImage(canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
+    ++it;
+  }
+}
+
+void pruneSurfaceRenderState(SurfaceRenderState& state,
+                             std::unordered_set<std::uint64_t> const& liveSurfaceIds) {
+  for (auto it = state.clientImages.begin(); it != state.clientImages.end();) {
+    if (liveSurfaceIds.contains(it->first)) {
+      ++it;
+    } else {
+      it = state.clientImages.erase(it);
+    }
+  }
+  for (auto it = state.surfaceVisuals.begin(); it != state.surfaceVisuals.end();) {
+    if (liveSurfaceIds.contains(it->first)) {
+      ++it;
+    } else {
+      it = state.surfaceVisuals.erase(it);
+    }
+  }
+}
+
 } // namespace flux::compositor
