@@ -43,8 +43,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
       .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
       .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
-      .titleBarHeight = withChrome && !surface->layerSurface && !surface->popup ? kTitleBarHeight : 0,
-      .title = withChrome && !surface->layerSurface && !surface->popup ? titleForSurface(server, surface) : std::string{},
+      .titleBarHeight = withChrome && surfaceIsXdgToplevel(surface) ? kTitleBarHeight : 0,
+      .title = withChrome && surfaceIsXdgToplevel(surface) ? titleForSurface(server, surface) : std::string{},
       .focused = server->keyboardFocus_ == surface,
       .activeSizing = server->resizeSurface_ == surface ||
                       surface->geometryAnimationActive ||
@@ -90,7 +90,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
-    if (!surface->toplevel) continue;
+    if (!surfaceIsTopLevelRenderable(surface.get())) continue;
     if (surface->xdgPopup && surface->xdgPopup->dismissed) continue;
     if (surfaceIsRenderable(surface.get())) {
       snapshots.push_back(snapshotForSurface(this, surface.get(), surface->windowX, surface->windowY, true));

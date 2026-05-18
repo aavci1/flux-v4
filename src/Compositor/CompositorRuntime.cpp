@@ -16,6 +16,7 @@
 #include <chrono>
 #include <charconv>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <exception>
 #include <memory>
@@ -151,18 +152,21 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                  wayland.preferredScale());
 
     auto applyConfig = [&] {
+      float const previousScale = wayland.preferredScale();
       appliedConfig = applyCompositorConfig(loadedConfig.config, *canvas);
       wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
       wayland.setPreferredScale(appliedConfig.config.scale);
-      canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
-      canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
-      std::fprintf(stderr,
-                   "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
-                   output.width(),
-                   output.height(),
-                   wayland.logicalOutputWidth(),
-                   wayland.logicalOutputHeight(),
-                   wayland.preferredScale());
+      if (std::abs(previousScale - wayland.preferredScale()) > 0.001f) {
+        canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
+        canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
+        std::fprintf(stderr,
+                     "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
+                     output.width(),
+                     output.height(),
+                     wayland.logicalOutputWidth(),
+                     wayland.logicalOutputHeight(),
+                     wayland.preferredScale());
+      }
     };
 
     SurfaceRenderState surfaceRenderState;

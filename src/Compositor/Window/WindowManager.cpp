@@ -19,6 +19,7 @@
 #include <vector>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
+#include <xkbcommon/xkbcommon.h>
 
 namespace flux::compositor {
 namespace {
@@ -33,7 +34,7 @@ constexpr std::int32_t kCloseButtonSize = 12;
 constexpr std::int32_t kCloseButtonInset = 11;
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->toplevel && !surface->popup && !surface->layerSurface && !surface->subsurface;
+  return surfaceIsXdgToplevel(surface);
 }
 
 bool containsPoint(float x, float y, float left, float top, float right, float bottom) {
@@ -127,7 +128,7 @@ std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, Way
   if (bounds.width <= 0 || bounds.height <= 0) return std::nullopt;
 
   WaylandServer::Impl::Surface* parent = popup->parentSurface;
-  while (parent && parent->popup) {
+  while (surfaceIsXdgPopup(parent)) {
     WaylandServer::Impl::XdgPopup* parentPopup = popupForSurface(server, parent);
     if (!parentPopup || parentPopup->dismissed) return std::nullopt;
     if (parentPopup->configuredWidth <= 0 || parentPopup->configuredHeight <= 0) return std::nullopt;
@@ -172,14 +173,15 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || surface->popup || width <= 0 || height <= 0) continue;
+    if (!surface || surfaceIsXdgPopup(surface) || width <= 0 || height <= 0) continue;
 
     float const contentLeft = static_cast<float>(surface->windowX);
     float const contentTop = static_cast<float>(surface->windowY);
     float const contentRight = contentLeft + static_cast<float>(width);
     float const contentBottom = contentTop + static_cast<float>(height);
     if (!isManagedToplevel(surface)) {
-      if (surface->toplevel && containsPoint(x, y, contentLeft, contentTop, contentRight, contentBottom)) {
+      if (surfaceIsTopLevelRenderable(surface) &&
+          containsPoint(x, y, contentLeft, contentTop, contentRight, contentBottom)) {
         return std::nullopt;
       }
       continue;
@@ -208,7 +210,10 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || !surface->toplevel || surface->popup || width <= 0 || height <= 0) continue;
+    if (!surface || !surfaceIsTopLevelRenderable(surface) || surfaceIsXdgPopup(surface) ||
+        width <= 0 || height <= 0) {
+      continue;
+    }
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(width);
@@ -523,6 +528,7 @@ WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server) {
 }
 
 bool closeFocusedToplevel(WaylandServer::Impl* server) {
+  if (topmostPopup(server)) return dismissTopPopup(server);
   WaylandServer::Impl::XdgToplevel* toplevel = focusedToplevel(server);
   if (!toplevel || !toplevel->resource) return false;
   xdg_toplevel_send_close(toplevel->resource);
@@ -752,64 +758,58 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
   return false;
 }
 
-std::optional<char> commandLauncherCharForKey(std::uint32_t key, bool shift) {
-  auto letter = [&](char c) -> std::optional<char> {
-    return shift ? static_cast<char>(std::toupper(static_cast<unsigned char>(c))) : c;
-  };
-  switch (key) {
-  case KEY_A: return letter('a');
-  case KEY_B: return letter('b');
-  case KEY_C: return letter('c');
-  case KEY_D: return letter('d');
-  case KEY_E: return letter('e');
-  case KEY_F: return letter('f');
-  case KEY_G: return letter('g');
-  case KEY_H: return letter('h');
-  case KEY_I: return letter('i');
-  case KEY_J: return letter('j');
-  case KEY_K: return letter('k');
-  case KEY_L: return letter('l');
-  case KEY_M: return letter('m');
-  case KEY_N: return letter('n');
-  case KEY_O: return letter('o');
-  case KEY_P: return letter('p');
-  case KEY_Q: return letter('q');
-  case KEY_R: return letter('r');
-  case KEY_S: return letter('s');
-  case KEY_T: return letter('t');
-  case KEY_U: return letter('u');
-  case KEY_V: return letter('v');
-  case KEY_W: return letter('w');
-  case KEY_X: return letter('x');
-  case KEY_Y: return letter('y');
-  case KEY_Z: return letter('z');
-  default: break;
+std::string commandLauncherTextForKey(WaylandServer::Impl* server, std::uint32_t key) {
+  if (!server || !server->xkbState_) return {};
+  char utf8[64]{};
+  int const written = xkb_state_key_get_utf8(server->xkbState_, key + 8u, utf8, sizeof(utf8));
+  if (written <= 0) return {};
+  return std::string(utf8, static_cast<std::size_t>(written));
+}
+
+std::vector<std::string> parseCommandLine(std::string const& command) {
+  std::vector<std::string> args;
+  std::string current;
+  char quote = '\0';
+  bool escaping = false;
+  for (char c : command) {
+    if (escaping) {
+      current.push_back(c);
+      escaping = false;
+      continue;
+    }
+    if (c == '\\') {
+      escaping = true;
+      continue;
+    }
+    if (quote != '\0') {
+      if (c == quote) {
+        quote = '\0';
+      } else {
+        current.push_back(c);
+      }
+      continue;
+    }
+    if (c == '\'' || c == '"') {
+      quote = c;
+      continue;
+    }
+    if (std::isspace(static_cast<unsigned char>(c))) {
+      if (!current.empty()) {
+        args.push_back(std::move(current));
+        current.clear();
+      }
+      continue;
+    }
+    current.push_back(c);
   }
-  if (key >= KEY_1 && key <= KEY_9) {
-    static char const normal[] = "123456789";
-    static char const shifted[] = "!@#$%^&*(";
-    std::size_t const index = key - KEY_1;
-    return shift ? shifted[index] : normal[index];
-  }
-  if (key == KEY_0) return shift ? ')' : '0';
-  switch (key) {
-  case KEY_SPACE: return ' ';
-  case KEY_DOT: return shift ? '>' : '.';
-  case KEY_COMMA: return shift ? '<' : ',';
-  case KEY_MINUS: return shift ? '_' : '-';
-  case KEY_EQUAL: return shift ? '+' : '=';
-  case KEY_SLASH: return shift ? '?' : '/';
-  case KEY_BACKSLASH: return shift ? '|' : '\\';
-  case KEY_SEMICOLON: return shift ? ':' : ';';
-  case KEY_APOSTROPHE: return shift ? '"' : '\'';
-  case KEY_GRAVE: return shift ? '~' : '`';
-  case KEY_LEFTBRACE: return shift ? '{' : '[';
-  case KEY_RIGHTBRACE: return shift ? '}' : ']';
-  default: return std::nullopt;
-  }
+  if (escaping) current.push_back('\\');
+  if (!current.empty()) args.push_back(std::move(current));
+  return args;
 }
 
 void spawnCommand(std::string const& command, std::string const& waylandDisplay) {
+  std::vector<std::string> args = parseCommandLine(command);
+  if (args.empty()) return;
   pid_t const child = fork();
   if (child < 0) {
     std::fprintf(stderr, "flux-compositor: fork failed while launching command\n");
@@ -821,7 +821,11 @@ void spawnCommand(std::string const& command, std::string const& waylandDisplay)
     if (grandchild < 0) _exit(126);
     if (grandchild > 0) _exit(0);
     setenv("WAYLAND_DISPLAY", waylandDisplay.c_str(), 1);
-    execl("/bin/sh", "sh", "-lc", command.c_str(), static_cast<char*>(nullptr));
+    std::vector<char*> argv;
+    argv.reserve(args.size() + 1u);
+    for (std::string& arg : args) argv.push_back(arg.data());
+    argv.push_back(nullptr);
+    execvp(argv.front(), argv.data());
     _exit(127);
   }
   int status = 0;
@@ -865,8 +869,8 @@ bool handleCommandLauncherKey(WaylandServer::Impl* server, std::uint32_t key, bo
     if (!server->commandLauncherText_.empty()) server->commandLauncherText_.pop_back();
     return true;
   default:
-    if (auto c = commandLauncherCharForKey(key, server->shiftDown_)) {
-      if (server->commandLauncherText_.size() < 512u) server->commandLauncherText_.push_back(*c);
+    if (std::string text = commandLauncherTextForKey(server, key); !text.empty()) {
+      if (server->commandLauncherText_.size() + text.size() <= 512u) server->commandLauncherText_ += text;
       return true;
     }
     return true;
@@ -1191,6 +1195,11 @@ void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t 
 }
 
 void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
+  if (xkbState_) {
+    xkb_state_update_key(xkbState_,
+                         key + 8u,
+                         pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
+  }
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
   if (consumeModifier) return;
   if (commandLauncherVisible_ && handleCommandLauncherKey(this, key, pressed)) return;

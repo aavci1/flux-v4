@@ -16,7 +16,20 @@
 #include <string>
 #include <vector>
 
+struct xkb_context;
+struct xkb_keymap;
+struct xkb_state;
+
 namespace flux::compositor {
+
+enum class SurfaceRole : std::uint8_t {
+  None,
+  XdgToplevel,
+  XdgPopup,
+  LayerSurface,
+  Subsurface,
+  Cursor,
+};
 
 struct WaylandServer::Impl {
   struct Surface;
@@ -103,6 +116,9 @@ struct WaylandServer::Impl {
   void destroyActivationToken(ActivationToken* token);
 
   wl_display* display_ = nullptr;
+  xkb_context* xkbContext_ = nullptr;
+  xkb_keymap* xkbKeymap_ = nullptr;
+  xkb_state* xkbState_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
   wl_global* subcompositorGlobal_ = nullptr;
   wl_global* shmGlobal_ = nullptr;
@@ -222,10 +238,7 @@ struct WaylandServer::Impl::Surface {
   std::int32_t scale = 1;
   std::int32_t windowX = 96;
   std::int32_t windowY = 96;
-  bool toplevel = false;
-  bool popup = false;
-  bool subsurface = false;
-  bool cursor = false;
+  SurfaceRole role = SurfaceRole::None;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
   std::int32_t width = 0;
@@ -279,6 +292,37 @@ struct WaylandServer::Impl::Surface {
   std::vector<PresentationFeedback*> presentationFeedbacks;
   std::vector<wl_resource*> frameCallbacks;
 };
+
+inline bool surfaceHasNoRole(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::None;
+}
+
+inline bool surfaceIsXdgToplevel(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::XdgToplevel;
+}
+
+inline bool surfaceIsXdgPopup(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::XdgPopup;
+}
+
+inline bool surfaceIsLayerSurface(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::LayerSurface;
+}
+
+inline bool surfaceIsSubsurface(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::Subsurface;
+}
+
+inline bool surfaceIsCursor(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::Cursor;
+}
+
+inline bool surfaceIsTopLevelRenderable(WaylandServer::Impl::Surface const* surface) {
+  return surface &&
+         (surface->role == SurfaceRole::XdgToplevel ||
+          surface->role == SurfaceRole::XdgPopup ||
+          surface->role == SurfaceRole::LayerSurface);
+}
 
 struct WaylandServer::Impl::Subsurface {
   WaylandServer::Impl* server = nullptr;

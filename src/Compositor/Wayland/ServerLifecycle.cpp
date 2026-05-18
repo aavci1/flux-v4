@@ -48,23 +48,22 @@
 namespace flux::compositor {
 namespace {
 
-void initializeKeyboardModifierIndices(WaylandServer::Impl* server) {
-  xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  if (!context) return;
+void initializeKeyboard(WaylandServer::Impl* server) {
+  server->xkbContext_ = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+  if (!server->xkbContext_) return;
   xkb_rule_names names{};
-  xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-  if (!keymap) {
-    xkb_context_unref(context);
+  server->xkbKeymap_ = xkb_keymap_new_from_names(server->xkbContext_, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (!server->xkbKeymap_) {
+    xkb_context_unref(server->xkbContext_);
+    server->xkbContext_ = nullptr;
     return;
   }
+  server->xkbState_ = xkb_state_new(server->xkbKeymap_);
 
-  server->shiftModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_SHIFT);
-  server->ctrlModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_CTRL);
-  server->altModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_ALT);
-  server->logoModifierIndex_ = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_LOGO);
-
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
+  server->shiftModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_SHIFT);
+  server->ctrlModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_CTRL);
+  server->altModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_ALT);
+  server->logoModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_LOGO);
 }
 
 std::uint32_t preferredScale120(float scale) {
@@ -84,7 +83,7 @@ std::int32_t scaledLogicalSize(std::int32_t physicalSize, float scale) {
 } // namespace
 
 WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output)) {
-  initializeKeyboardModifierIndices(this);
+  initializeKeyboard(this);
   shortcutBindings_ = {
       {.action = ShortcutAction::CloseFocused, .key = KEY_Q, .meta = true},
       {.action = ShortcutAction::CycleFocus, .key = KEY_TAB, .meta = true},
@@ -150,9 +149,13 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
 
 WaylandServer::Impl::~Impl() {
   if (!displayNameFile_.empty()) unlink(displayNameFile_.c_str());
-  if (!display_) return;
-  wl_display_destroy_clients(display_);
-  wl_display_destroy(display_);
+  if (display_) {
+    wl_display_destroy_clients(display_);
+    wl_display_destroy(display_);
+  }
+  if (xkbState_) xkb_state_unref(xkbState_);
+  if (xkbKeymap_) xkb_keymap_unref(xkbKeymap_);
+  if (xkbContext_) xkb_context_unref(xkbContext_);
 }
 
 char const* WaylandServer::Impl::socketName() const noexcept {

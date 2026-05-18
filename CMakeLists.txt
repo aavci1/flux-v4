@@ -391,7 +391,6 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
   pkg_check_modules(WAYLAND_SERVER REQUIRED IMPORTED_TARGET wayland-server)
-  pkg_check_modules(XCURSOR REQUIRED IMPORTED_TARGET xcursor)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
@@ -612,7 +611,6 @@ if(FLUX_BUILD_COMPOSITOR)
     flux
     tomlplusplus::tomlplusplus
     PkgConfig::WAYLAND_SERVER
-    PkgConfig::XCURSOR
     PkgConfig::LIBDRM)
 
   add_executable(flux-compositor-shm-demo

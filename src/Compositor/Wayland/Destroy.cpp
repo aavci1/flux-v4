@@ -96,7 +96,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
 void WaylandServer::Impl::destroySubsurface(Subsurface* subsurface) {
   if (subsurface && subsurface->surface && subsurface->surface->subsurfaceRole == subsurface) {
     subsurface->surface->subsurfaceRole = nullptr;
-    subsurface->surface->subsurface = false;
+    if (surfaceIsSubsurface(subsurface->surface)) subsurface->surface->role = SurfaceRole::None;
   }
   eraseResource(subsurfaces_, subsurface);
 }
@@ -110,6 +110,9 @@ void WaylandServer::Impl::destroyXdgPositioner(XdgPositioner* positioner) {
 }
 
 void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
+  if (toplevel && toplevel->xdgSurface && surfaceIsXdgToplevel(toplevel->xdgSurface->surface)) {
+    toplevel->xdgSurface->surface->role = SurfaceRole::None;
+  }
   while (auto* decoration = decorationFor(this, toplevel)) {
     wl_resource_destroy(decoration->resource);
   }
@@ -119,8 +122,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
 void WaylandServer::Impl::destroyXdgPopup(XdgPopup* popup) {
   if (popup && popup->xdgSurface && popup->xdgSurface->surface && popup->xdgSurface->surface->xdgPopup == popup) {
     popup->xdgSurface->surface->xdgPopup = nullptr;
-    popup->xdgSurface->surface->popup = false;
-    popup->xdgSurface->surface->toplevel = false;
+    if (surfaceIsXdgPopup(popup->xdgSurface->surface)) popup->xdgSurface->surface->role = SurfaceRole::None;
   }
   eraseResource(popups_, popup);
 }
@@ -203,6 +205,7 @@ void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
   if (layerSurface && layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
     layerSurface->surface->layerSurface = nullptr;
+    if (surfaceIsLayerSurface(layerSurface->surface)) layerSurface->surface->role = SurfaceRole::None;
   }
   eraseResource(layerSurfaces_, layerSurface);
 }

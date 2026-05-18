@@ -25,14 +25,6 @@ std::string trim(std::string_view value) {
   return std::string(value.substr(begin, end - begin));
 }
 
-std::string unquote(std::string_view value) {
-  std::string trimmed = trim(value);
-  if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
-    return trimmed.substr(1, trimmed.size() - 2u);
-  }
-  return trimmed;
-}
-
 std::optional<unsigned int> hexDigit(char c) {
   if (c >= '0' && c <= '9') return static_cast<unsigned int>(c - '0');
   if (c >= 'a' && c <= 'f') return static_cast<unsigned int>(c - 'a' + 10);
@@ -48,7 +40,7 @@ std::optional<unsigned int> hexByte(std::string_view value, std::size_t offset) 
 }
 
 std::optional<Color> parseHexColor(std::string_view value) {
-  std::string text = unquote(value);
+  std::string text = trim(value);
   if (text.empty() || text[0] != '#') return std::nullopt;
   std::optional<unsigned int> red;
   std::optional<unsigned int> green;
@@ -82,7 +74,7 @@ std::optional<Color> parseHexColor(std::string_view value) {
 }
 
 std::optional<std::pair<Color, Color>> parseLinearGradient(std::string_view value) {
-  std::string text = unquote(value);
+  std::string text = trim(value);
   std::replace(text.begin(), text.end(), ',', ' ');
   std::size_t const split = text.find_first_of(" \t");
   if (split == std::string::npos) return std::nullopt;
@@ -96,7 +88,7 @@ std::optional<std::pair<Color, Color>> parseLinearGradient(std::string_view valu
 }
 
 std::optional<bool> parseBool(std::string_view value) {
-  std::string text = unquote(value);
+  std::string text = trim(value);
   std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
     return static_cast<char>(std::tolower(c));
   });
@@ -106,7 +98,7 @@ std::optional<bool> parseBool(std::string_view value) {
 }
 
 std::optional<float> parseScale(std::string_view value) {
-  std::string text = unquote(value);
+  std::string text = trim(value);
   float scale = 1.f;
   auto const* begin = text.data();
   auto const* end = text.data() + text.size();
@@ -116,7 +108,7 @@ std::optional<float> parseScale(std::string_view value) {
 }
 
 std::optional<int> parseInteger(std::string_view value) {
-  std::string text = unquote(value);
+  std::string text = trim(value);
   int result = 0;
   auto const* begin = text.data();
   auto const* end = text.data() + text.size();
@@ -133,7 +125,7 @@ std::string lowerAscii(std::string value) {
 }
 
 std::optional<ImageFillMode> parseImageFillMode(std::string_view value) {
-  std::string text = lowerAscii(unquote(value));
+  std::string text = lowerAscii(trim(value));
   if (text == "stretch" || text == "fill") return ImageFillMode::Stretch;
   if (text == "fit" || text == "contain") return ImageFillMode::Fit;
   if (text == "cover") return ImageFillMode::Cover;
@@ -227,7 +219,7 @@ std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
 
 std::optional<WaylandServer::ShortcutBinding> parseShortcut(WaylandServer::ShortcutAction action,
                                                             std::string_view value) {
-  auto text = lowerAscii(unquote(value));
+  auto text = lowerAscii(trim(value));
   WaylandServer::ShortcutBinding binding{.action = action};
   std::size_t start = 0;
   while (start <= text.size()) {

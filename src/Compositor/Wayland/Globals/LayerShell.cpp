@@ -72,7 +72,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
                                char const* nameSpace) {
   auto* server = serverFrom(resource);
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
-  if (!surface || surface->toplevel || surface->layerSurface || surface->cursor || surface->subsurface) {
+  if (!surfaceHasNoRole(surface)) {
     wl_resource_post_error(resource, ZWLR_LAYER_SHELL_V1_ERROR_ROLE, "wl_surface already has a role");
     return;
   }
@@ -94,8 +94,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
   layerSurface->resource = layerResource;
   auto* raw = layerSurface.get();
   surface->layerSurface = raw;
-  surface->toplevel = true;
-  surface->cursor = false;
+  surface->role = SurfaceRole::LayerSurface;
   if (server->cursorSurface_ == surface) server->cursorSurface_ = nullptr;
   server->layerSurfaces_.push_back(std::move(layerSurface));
   wl_resource_set_implementation(layerResource, &layerSurfaceImpl, raw, destroyResourceCallback<WaylandServer::Impl::LayerSurface, WaylandServer::Impl, &WaylandServer::Impl::destroyLayerSurface>);

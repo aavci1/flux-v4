@@ -2,19 +2,19 @@
 
 #include <Flux/Core/Geometry.hpp>
 
-#include <X11/Xcursor/Xcursor.h>
-#ifdef CursorShape
-#undef CursorShape
-#endif
-
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace flux::compositor {
 namespace {
@@ -28,11 +28,96 @@ struct ThemeCursor {
   std::int32_t hotspotY = 0;
 };
 
-struct XcursorImagesDeleter {
-  void operator()(XcursorImages* images) const noexcept {
-    if (images) XcursorImagesDestroy(images);
+constexpr std::uint32_t kXcursorMagic = 0x72756358u;
+constexpr std::uint32_t kXcursorImageType = 0xfffd0002u;
+constexpr std::uint32_t kXcursorImageVersion = 1u;
+
+std::optional<std::uint32_t> readU32(std::ifstream& file) {
+  unsigned char bytes[4]{};
+  file.read(reinterpret_cast<char*>(bytes), sizeof(bytes));
+  if (!file) return std::nullopt;
+  return static_cast<std::uint32_t>(bytes[0]) |
+         (static_cast<std::uint32_t>(bytes[1]) << 8u) |
+         (static_cast<std::uint32_t>(bytes[2]) << 16u) |
+         (static_cast<std::uint32_t>(bytes[3]) << 24u);
+}
+
+std::vector<std::string> splitCommaList(std::string const& value) {
+  std::vector<std::string> result;
+  std::stringstream stream(value);
+  std::string item;
+  while (std::getline(stream, item, ',')) {
+    item.erase(item.begin(), std::find_if(item.begin(), item.end(), [](unsigned char c) {
+      return !std::isspace(c);
+    }));
+    item.erase(std::find_if(item.rbegin(), item.rend(), [](unsigned char c) {
+      return !std::isspace(c);
+    }).base(), item.end());
+    if (!item.empty()) result.push_back(std::move(item));
   }
-};
+  return result;
+}
+
+std::vector<std::filesystem::path> iconSearchPaths() {
+  std::vector<std::filesystem::path> paths;
+  if (char const* xcursorPath = std::getenv("XCURSOR_PATH"); xcursorPath && *xcursorPath) {
+    std::stringstream stream(xcursorPath);
+    std::string item;
+    while (std::getline(stream, item, ':')) {
+      if (!item.empty()) paths.emplace_back(item);
+    }
+  }
+  if (char const* home = std::getenv("HOME"); home && *home) {
+    paths.emplace_back(std::filesystem::path(home) / ".icons");
+    paths.emplace_back(std::filesystem::path(home) / ".local/share/icons");
+  }
+  paths.emplace_back("/usr/local/share/icons");
+  paths.emplace_back("/usr/share/icons");
+  paths.emplace_back("/usr/share/pixmaps");
+  return paths;
+}
+
+std::vector<std::string> inheritedThemes(std::string const& themeName,
+                                         std::vector<std::filesystem::path> const& searchPaths) {
+  for (auto const& base : searchPaths) {
+    std::ifstream file(base / themeName / "index.theme");
+    if (!file) continue;
+    std::string line;
+    while (std::getline(file, line)) {
+      if (line.rfind("Inherits=", 0) == 0) return splitCommaList(line.substr(9));
+    }
+  }
+  return {};
+}
+
+std::optional<std::filesystem::path> findCursorFile(std::string const& cursorName,
+                                                    std::string const& themeName,
+                                                    std::vector<std::filesystem::path> const& searchPaths,
+                                                    std::unordered_set<std::string>& visited) {
+  if (themeName.empty() || !visited.insert(themeName).second) return std::nullopt;
+  for (auto const& base : searchPaths) {
+    std::filesystem::path candidate = base / themeName / "cursors" / cursorName;
+    if (std::filesystem::is_regular_file(candidate)) return candidate;
+  }
+  for (std::string const& inherited : inheritedThemes(themeName, searchPaths)) {
+    if (auto path = findCursorFile(cursorName, inherited, searchPaths, visited)) return path;
+  }
+  return std::nullopt;
+}
+
+std::optional<std::filesystem::path> findCursorFile(std::string const& cursorName,
+                                                    std::string const& themeName) {
+  std::vector<std::filesystem::path> const paths = iconSearchPaths();
+  std::vector<std::string> themes;
+  if (!themeName.empty()) themes.push_back(themeName);
+  themes.push_back("default");
+  themes.push_back("hicolor");
+  for (std::string const& theme : themes) {
+    std::unordered_set<std::string> visited;
+    if (auto path = findCursorFile(cursorName, theme, paths, visited)) return path;
+  }
+  return std::nullopt;
+}
 
 char const* const* cursorNames(CursorShape cursor) {
   static char const* const arrow[] = {"default", "left_ptr", nullptr};
@@ -100,40 +185,91 @@ std::optional<ThemeCursor> loadThemeCursor(CursorShape shape,
                                            int baseSize) {
   int const size = std::max(16, static_cast<int>(std::lround(static_cast<float>(baseSize) *
                                                             std::max(0.5f, scale))));
-  char const* theme = themeName.empty() ? nullptr : themeName.c_str();
 
   for (char const* const* name = cursorNames(shape); *name; ++name) {
-    std::unique_ptr<XcursorImages, XcursorImagesDeleter> images{
-        XcursorLibraryLoadImages(*name, theme, size)};
-    if (!images || images->nimage <= 0 || !images->images || !images->images[0]) continue;
+    auto path = findCursorFile(*name, themeName);
+    if (!path) continue;
+    std::ifstream file(*path, std::ios::binary);
+    if (!file) continue;
 
-    XcursorImage const* image = images->images[0];
-    if (image->width == 0 || image->height == 0 || !image->pixels) continue;
+    auto const magic = readU32(file);
+    auto const headerSize = readU32(file);
+    (void)readU32(file); // file version
+    auto const tocCount = readU32(file);
+    if (!magic || *magic != kXcursorMagic || !headerSize || *headerSize < 16u || !tocCount) continue;
+    file.seekg(static_cast<std::streamoff>(*headerSize), std::ios::beg);
+    if (!file) continue;
 
-    ThemeCursor cursor{
-        .rgbaPixels = {},
-        .premultipliedArgbPixels = {},
-        .width = static_cast<std::uint32_t>(image->width),
-        .height = static_cast<std::uint32_t>(image->height),
-        .hotspotX = static_cast<std::int32_t>(image->xhot),
-        .hotspotY = static_cast<std::int32_t>(image->yhot),
+    struct TocEntry {
+      std::uint32_t type = 0;
+      std::uint32_t subtype = 0;
+      std::uint32_t position = 0;
     };
-    std::size_t const count = static_cast<std::size_t>(cursor.width) * cursor.height;
-    cursor.rgbaPixels.resize(count * 4u);
-    cursor.premultipliedArgbPixels.resize(count);
-    for (std::size_t i = 0; i < count; ++i) {
-      XcursorPixel const pixel = image->pixels[i];
-      auto const a = static_cast<std::uint8_t>((pixel >> 24u) & 0xffu);
-      auto const r = static_cast<std::uint8_t>((pixel >> 16u) & 0xffu);
-      auto const g = static_cast<std::uint8_t>((pixel >> 8u) & 0xffu);
-      auto const b = static_cast<std::uint8_t>(pixel & 0xffu);
+    std::vector<TocEntry> entries;
+    entries.reserve(*tocCount);
+    for (std::uint32_t i = 0; i < *tocCount; ++i) {
+      auto type = readU32(file);
+      auto subtype = readU32(file);
+      auto position = readU32(file);
+      if (!type || !subtype || !position) break;
+      if (*type == kXcursorImageType) entries.push_back({.type = *type, .subtype = *subtype, .position = *position});
+    }
+    if (entries.empty()) continue;
+    std::sort(entries.begin(), entries.end(), [size](TocEntry const& lhs, TocEntry const& rhs) {
+      return std::abs(static_cast<int>(lhs.subtype) - size) < std::abs(static_cast<int>(rhs.subtype) - size);
+    });
+
+    for (TocEntry const& entry : entries) {
+      file.clear();
+      file.seekg(static_cast<std::streamoff>(entry.position), std::ios::beg);
+      auto const chunkHeader = readU32(file);
+      auto const chunkType = readU32(file);
+      auto const chunkSubtype = readU32(file);
+      auto const chunkVersion = readU32(file);
+      auto const width = readU32(file);
+      auto const height = readU32(file);
+      auto const hotspotX = readU32(file);
+      auto const hotspotY = readU32(file);
+      (void)readU32(file); // delay
+      if (!chunkHeader || !chunkType || !chunkSubtype || !chunkVersion || !width || !height ||
+          !hotspotX || !hotspotY) {
+        continue;
+      }
+      if (*chunkType != kXcursorImageType || *chunkVersion != kXcursorImageVersion ||
+          *width == 0 || *height == 0 || *width > 1024u || *height > 1024u) {
+        continue;
+      }
+      std::size_t const count = static_cast<std::size_t>(*width) * static_cast<std::size_t>(*height);
+      ThemeCursor cursor{
+          .rgbaPixels = {},
+          .premultipliedArgbPixels = {},
+          .width = *width,
+          .height = *height,
+          .hotspotX = static_cast<std::int32_t>(*hotspotX),
+          .hotspotY = static_cast<std::int32_t>(*hotspotY),
+      };
+      cursor.rgbaPixels.resize(count * 4u);
+      cursor.premultipliedArgbPixels.resize(count);
+      bool ok = true;
+      for (std::size_t i = 0; i < count; ++i) {
+        auto pixelValue = readU32(file);
+        if (!pixelValue) {
+          ok = false;
+          break;
+        }
+        std::uint32_t const pixel = *pixelValue;
+        auto const a = static_cast<std::uint8_t>((pixel >> 24u) & 0xffu);
+        auto const r = static_cast<std::uint8_t>((pixel >> 16u) & 0xffu);
+        auto const g = static_cast<std::uint8_t>((pixel >> 8u) & 0xffu);
+        auto const b = static_cast<std::uint8_t>(pixel & 0xffu);
       cursor.rgbaPixels[i * 4u + 0u] = r;
       cursor.rgbaPixels[i * 4u + 1u] = g;
       cursor.rgbaPixels[i * 4u + 2u] = b;
       cursor.rgbaPixels[i * 4u + 3u] = a;
       cursor.premultipliedArgbPixels[i] = premulArgb(a, r, g, b);
+      }
+      if (ok) return cursor;
     }
-    return cursor;
   }
 
   if (shape != CursorShape::Arrow) return loadThemeCursor(CursorShape::Arrow, scale, themeName, baseSize);

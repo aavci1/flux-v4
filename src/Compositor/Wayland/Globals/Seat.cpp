@@ -36,19 +36,10 @@ void keyboardDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) removeResource(server->keyboardResources_, resource);
 }
 
-int createKeymapFd(std::uint32_t& size) {
+int createKeymapFd(WaylandServer::Impl* server, std::uint32_t& size) {
   size = 0;
-  xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  if (!context) return -1;
-  xkb_rule_names names{};
-  xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-  if (!keymap) {
-    xkb_context_unref(context);
-    return -1;
-  }
-  char* keymapString = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
+  if (!server || !server->xkbKeymap_) return -1;
+  char* keymapString = xkb_keymap_get_as_string(server->xkbKeymap_, XKB_KEYMAP_FORMAT_TEXT_V1);
   if (!keymapString) return -1;
 
   std::size_t const length = std::strlen(keymapString) + 1u;
@@ -82,8 +73,8 @@ void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resou
   }
 
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
-  if (!surface || surface->toplevel || surface->subsurface) return;
-  surface->cursor = true;
+  if (!surfaceHasNoRole(surface) && !surfaceIsCursor(surface)) return;
+  surface->role = SurfaceRole::Cursor;
   server->cursorSurface_ = surface;
   server->cursorHotspotX_ = hotspotX;
   server->cursorHotspotY_ = hotspotY;
@@ -130,7 +121,7 @@ void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id)
   wl_resource_set_implementation(keyboard, &keyboardImpl, server, keyboardDestroyResource);
 
   std::uint32_t keymapSize = 0;
-  int keymapFd = createKeymapFd(keymapSize);
+  int keymapFd = createKeymapFd(server, keymapSize);
   if (keymapFd >= 0) {
     wl_keyboard_send_keymap(keyboard, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, keymapFd, keymapSize);
     close(keymapFd);

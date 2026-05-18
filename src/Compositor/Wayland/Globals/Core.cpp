@@ -82,7 +82,7 @@ void subcompositorGetSubsurface(wl_client* client,
     wl_resource_post_error(resource, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "invalid subsurface or parent surface");
     return;
   }
-  if (surface->toplevel || surface->popup || surface->layerSurface || surface->cursor || surface->subsurface) {
+  if (!surfaceHasNoRole(surface)) {
     wl_resource_post_error(resource, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "wl_surface already has another role");
     return;
   }
@@ -98,7 +98,7 @@ void subcompositorGetSubsurface(wl_client* client,
   }
   subsurface->resource = subsurfaceResource;
   auto* raw = subsurface.get();
-  surface->subsurface = true;
+  surface->role = SurfaceRole::Subsurface;
   surface->subsurfaceRole = raw;
   server->subsurfaces_.push_back(std::move(subsurface));
   wl_resource_set_implementation(subsurfaceResource,

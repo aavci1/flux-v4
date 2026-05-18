@@ -112,6 +112,24 @@ extern struct zxdg_toplevel_decoration_v1_interface const xdgToplevelDecorationI
 extern struct xdg_surface_interface const xdgSurfaceImpl;
 extern struct xdg_toplevel_interface const xdgToplevelImpl;
 
+WindowGeometry initialToplevelPlacement(WaylandServer::Impl* server) {
+  std::int32_t const step = 36;
+  std::int32_t const start = 80;
+  std::int32_t const maxX = std::max(0, server->logicalOutputWidth() - kCompositorMinWindowWidth);
+  std::int32_t const maxY = std::max(kCompositorTitleBarHeight,
+                                     server->logicalOutputHeight() - kCompositorMinWindowHeight);
+  std::int32_t const slotsX = std::max(1, (maxX - start) / step + 1);
+  std::int32_t const slotsY = std::max(1, (maxY - start) / step + 1);
+  std::int32_t const slotCount = std::max(1, slotsX * slotsY);
+  std::int32_t const slot = static_cast<std::int32_t>(server->toplevels_.size() % static_cast<std::size_t>(slotCount));
+  return {
+      .x = std::clamp(start + (slot % slotsX) * step, 0, maxX),
+      .y = std::clamp(start + (slot / slotsX) * step, kCompositorTitleBarHeight, maxY),
+      .width = 0,
+      .height = 0,
+  };
+}
+
 void sendDecorationConfigure(WaylandServer::Impl::ToplevelDecoration* decoration) {
   zxdg_toplevel_decoration_v1_send_configure(decoration->resource, decoration->mode);
   if (decoration->toplevel && decoration->toplevel->xdgSurface && decoration->toplevel->xdgSurface->resource) {
@@ -305,19 +323,18 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
-  if (xdgSurface->surface->toplevel || xdgSurface->surface->popup ||
-      xdgSurface->surface->layerSurface || xdgSurface->surface->subsurface) {
+  if (!surfaceHasNoRole(xdgSurface->surface)) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }
   auto toplevel = std::make_unique<WaylandServer::Impl::XdgToplevel>();
   toplevel->server = xdgSurface->server;
   toplevel->xdgSurface = xdgSurface;
-  xdgSurface->surface->toplevel = true;
-  xdgSurface->surface->cursor = false;
+  xdgSurface->surface->role = SurfaceRole::XdgToplevel;
   if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
-  xdgSurface->surface->windowX = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
-  xdgSurface->surface->windowY = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
+  WindowGeometry const placement = initialToplevelPlacement(xdgSurface->server);
+  xdgSurface->surface->windowX = placement.x;
+  xdgSurface->surface->windowY = placement.y;
   wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface,
                                                      wl_resource_get_version(resource), id);
   if (!toplevelResource) {
@@ -451,8 +468,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
     return;
   }
-  if (xdgSurface->surface->toplevel || xdgSurface->surface->layerSurface || xdgSurface->surface->cursor ||
-      xdgSurface->surface->subsurface) {
+  if (!surfaceHasNoRole(xdgSurface->surface)) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }
@@ -469,9 +485,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
   }
   popup->resource = popupResource;
   auto* raw = popup.get();
-  xdgSurface->surface->toplevel = true;
-  xdgSurface->surface->popup = true;
-  xdgSurface->surface->cursor = false;
+  xdgSurface->surface->role = SurfaceRole::XdgPopup;
   xdgSurface->surface->xdgPopup = raw;
   if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
   configurePopup(raw, positioner);

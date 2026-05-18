@@ -90,7 +90,7 @@ void activationGetToken(wl_client* client, wl_resource* resource, std::uint32_t 
 void activationActivate(wl_client*, wl_resource* resource, char const*, wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
-  if (!server || !surface || !surface->toplevel) return;
+  if (!server || !surfaceIsXdgToplevel(surface)) return;
 
   std::uint32_t const now = monotonicMilliseconds();
   if (server->lastActivationSurface_ == surface && now - server->lastActivationTimeMs_ < 500u) {
