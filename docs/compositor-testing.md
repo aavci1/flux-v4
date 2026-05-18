@@ -22,6 +22,12 @@ sudo setfacl -m "u:$USER:rw" /dev/input/event*
 ./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
 ```
 
+To test a specific config file, use:
+
+```sh
+./build-kms-compositor/flux-compositor --config /path/to/config.toml 2>&1 | tee compositor.log
+```
+
 Expected result: the configured background appears, the system cursor is visible, moving the mouse moves the cursor, and `Ctrl+Alt+Backspace` exits the compositor.
 
 ## Core Demo Tests

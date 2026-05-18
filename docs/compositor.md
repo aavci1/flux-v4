@@ -797,6 +797,11 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-18 | compositor-cleanup-spec implementation | Split the remaining Wayland server monolith into a pimpl forwarding layer plus lifecycle, snapshot/dmabuf fallback, frame scheduling, and destroy-cleanup translation units; public Wayland snapshot/shortcut types moved to `Wayland/WaylandTypes.hpp`. | Linux compositor-only structure; no Metal API involved. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Moved KMS compositor runtime orchestration out of `main.cpp` into `CompositorRuntime.cpp`; `main.cpp` now only handles process signals and calls the runtime. | Linux compositor-only executable structure; no Metal API involved. |
 | 2026-05-18 | e5cc4ec | Added compositor-side Xcursor theme loading for default/cursor-shape cursors, removed built-in compositor cursor artwork, and generalized KMS cursor-plane upload to themed cursors plus compatible client cursor surfaces. | Linux compositor-only cursor integration; no Metal API involved. |
+| 2026-05-18 | 77123e8 | Added compositor user/testing documentation, broadened deterministic config/geometry tests, and fixed Linux key-code parsing for configurable single-letter shortcuts. | Linux compositor docs/tests and config parsing; no backend API surface. |
+| 2026-05-18 | 4826a6c | Moved non-grabbing xdg-popup placement into unit-tested window geometry helpers. | Linux compositor-only popup positioning hardening; no Metal API involved. |
+| 2026-05-18 | 7c74c1a | Updated compositor status to reflect docs and popup geometry test coverage. | Documentation-only status update. |
+| 2026-05-18 | 141ebd7 | Added config-file support for compositor cursor theme and size with Xcursor environment fallback. | Linux compositor-only cursor configuration; no Metal API involved. |
+| 2026-05-18 | 7fec81f | Added `flux-compositor --config PATH` and `--help` so test configs can be selected without editing environment variables. | Linux compositor-only executable usability; no Metal API involved. |
 
 ### 12.2 Open questions
 
@@ -808,11 +813,18 @@ Tracked as work proceeds. Removed when answered.
 
 ### 12.3 Remaining implementation work
 
+Autonomous-safe work that can continue without live compositor testing:
+
+- Documentation: install/session-manager packaging docs still need to be written.
+- Tests: add more deterministic coverage for config reload behavior, layer-shell geometry, surface commit state, data-device edge cases, and presentation-feedback bookkeeping where the code can be isolated without KMS hardware.
+- Refactoring: continue extracting deterministic protocol math and state transitions out of Wayland callbacks when that makes behavior testable without changing runtime semantics.
+
+Hardware or real-app validation work:
+
 - Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
-- Popup hardening: full popup input-grab semantics and broader real-app menu behavior remain pending; non-grabbing popup placement is now deterministic unit-tested.
+- Popup hardening: broader real-app menu behavior remains pending. Full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
 - Presentation timing: replace the initial `wp_presentation_time` feedback with hardware-derived timestamps, refresh counters, and sync-output association.
 - Frame pacing: adaptive sync and triple-buffering remain pending.
 - Idle behavior: `zwp_idle_inhibit_manager_v1` tracks inhibitors, but actual idle blanking is not implemented.
 - Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.
 - Multi-output: still undecided for v1 versus post-v1.
-- User documentation: install/session-manager packaging docs still need to be written.
