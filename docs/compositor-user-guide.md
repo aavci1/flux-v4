@@ -30,6 +30,12 @@ Run from a real TTY. The compositor owns the selected KMS output until it exits.
 ./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
 ```
 
+Use a specific config file without changing the environment:
+
+```sh
+./build-kms-compositor/flux-compositor --config /path/to/config.toml 2>&1 | tee compositor.log
+```
+
 Expected startup behavior:
 
 - The output switches to the Flux compositor.
@@ -71,9 +77,10 @@ If the cursor is visible but does not move, or no shortcuts work, check ACLs fir
 
 The compositor creates a default config file when none exists. The path is selected in this order:
 
-1. `FLUX_COMPOSITOR_CONFIG`
-2. `$XDG_CONFIG_HOME/flux-compositor/config.toml`
-3. `$HOME/.config/flux-compositor/config.toml`
+1. `--config PATH`
+2. `FLUX_COMPOSITOR_CONFIG`
+3. `$XDG_CONFIG_HOME/flux-compositor/config.toml`
+4. `$HOME/.config/flux-compositor/config.toml`
 
 The file is reloaded at runtime when it changes.
 

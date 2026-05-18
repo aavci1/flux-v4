@@ -1,7 +1,10 @@
 #include "Compositor/CompositorRuntime.hpp"
 
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <csignal>
+#include <string_view>
 
 namespace {
 
@@ -11,9 +14,32 @@ void onSignal(int) {
   gRunning.store(false, std::memory_order_relaxed);
 }
 
+void printUsage(char const* argv0) {
+  std::printf("Usage: %s [--config PATH] [--help]\n", argv0 ? argv0 : "flux-compositor");
+}
+
 } // namespace
 
-int main(int, char**) {
+int main(int argc, char** argv) {
+  for (int i = 1; i < argc; ++i) {
+    std::string_view const arg(argv[i] ? argv[i] : "");
+    if (arg == "--help" || arg == "-h") {
+      printUsage(argv[0]);
+      return 0;
+    }
+    if (arg == "--config") {
+      if (i + 1 >= argc) {
+        std::fprintf(stderr, "flux-compositor: --config requires a path\n");
+        return 2;
+      }
+      setenv("FLUX_COMPOSITOR_CONFIG", argv[++i], 1);
+      continue;
+    }
+    std::fprintf(stderr, "flux-compositor: unknown option %s\n", arg.data());
+    printUsage(argv[0]);
+    return 2;
+  }
+
   std::signal(SIGTERM, onSignal);
   // Ctrl+C belongs to the focused Wayland client. The compositor exits via
   // SIGTERM or its configured terminate shortcut.
