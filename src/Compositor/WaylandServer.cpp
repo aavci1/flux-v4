@@ -46,6 +46,10 @@ std::optional<SnapPreviewSnapshot> WaylandServer::snapPreview() const {
   return impl_->snapPreview();
 }
 
+CommandLauncherSnapshot WaylandServer::commandLauncher() const {
+  return impl_->commandLauncher();
+}
+
 std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) const {
   return impl_->duplicateDmabufFds(surfaceId);
 }

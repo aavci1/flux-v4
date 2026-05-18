@@ -58,6 +58,7 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
+  [[nodiscard]] CommandLauncherSnapshot commandLauncher() const;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 
@@ -188,6 +189,9 @@ struct WaylandServer::Impl {
   bool ctrlDown_ = false;
   bool altDown_ = false;
   bool shiftDown_ = false;
+  bool commandLauncherVisible_ = false;
+  std::string commandLauncherText_;
+  std::string commandLauncherMessage_;
   std::vector<ShortcutBinding> shortcutBindings_;
   std::uint32_t shiftModifierIndex_ = ~0u;
   std::uint32_t ctrlModifierIndex_ = ~0u;

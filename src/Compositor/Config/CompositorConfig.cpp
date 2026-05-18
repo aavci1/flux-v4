@@ -156,6 +156,7 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
       {.action = Action::SnapRight, .key = KEY_RIGHT, .meta = true},
       {.action = Action::Maximize, .key = KEY_UP, .meta = true},
       {.action = Action::Restore, .key = KEY_DOWN, .meta = true},
+      {.action = Action::LaunchCommand, .key = KEY_SPACE, .meta = true},
       {.action = Action::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 }
@@ -245,6 +246,9 @@ std::optional<WaylandServer::ShortcutAction> shortcutActionForKey(std::string co
       {"maximize", Action::Maximize},
       {"quit", Action::Terminate},
       {"restore", Action::Restore},
+      {"launch", Action::LaunchCommand},
+      {"launch_command", Action::LaunchCommand},
+      {"run", Action::LaunchCommand},
       {"snap_left", Action::SnapLeft},
       {"snap_right", Action::SnapRight},
       {"terminate", Action::Terminate},
@@ -304,6 +308,7 @@ snap_left = "super+left"
 snap_right = "super+right"
 maximize = "super+up"
 restore = "super+down"
+launch_command = "super+space"
 terminate = "ctrl+alt+backspace"
 )";
 }

@@ -154,6 +154,18 @@ Run a few regular Flux examples from the KMS build. Good smoke cases:
 
 Expected result: windows are decorated, focus works, keyboard input goes to the focused client, client content remains sharp at integer scale, and resizing does not stretch the last client frame.
 
+### Command Launcher
+
+Press `Super+Space`, type a command such as:
+
+```sh
+./build-kms-compositor/flux-compositor-shm-demo
+```
+
+Press Enter.
+
+Expected result: a centered command launcher appears, the typed command is visible, Enter launches the app against the running compositor, and Escape dismisses the launcher without launching anything.
+
 ## Real App Tests
 
 ### foot

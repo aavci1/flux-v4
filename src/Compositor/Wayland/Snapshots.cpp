@@ -142,6 +142,14 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
   return snapshot;
 }
 
+CommandLauncherSnapshot WaylandServer::Impl::commandLauncher() const {
+  return {
+      .visible = commandLauncherVisible_,
+      .command = commandLauncherText_,
+      .message = commandLauncherMessage_,
+  };
+}
+
 std::vector<int> WaylandServer::Impl::duplicateDmabufFds(std::uint64_t surfaceId) const {
   auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
                               [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });

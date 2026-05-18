@@ -92,6 +92,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
       {.action = ShortcutAction::SnapRight, .key = KEY_RIGHT, .meta = true},
       {.action = ShortcutAction::Maximize, .key = KEY_UP, .meta = true},
       {.action = ShortcutAction::Restore, .key = KEY_DOWN, .meta = true},
+      {.action = ShortcutAction::LaunchCommand, .key = KEY_SPACE, .meta = true},
       {.action = ShortcutAction::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 

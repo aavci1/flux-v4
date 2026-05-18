@@ -119,6 +119,7 @@ snap_left = "super+left"
 snap_right = "super+right"
 maximize = "super+up"
 restore = "super+down"
+launch_command = "super+space"
 terminate = "ctrl+alt+backspace"
 ```
 
@@ -140,16 +141,25 @@ Current shortcuts:
 | `Super+Right` | Snap focused window to the right half |
 | `Super+Up` | Maximize focused window |
 | `Super+Down` | Restore a snapped or maximized window |
+| `Super+Space` | Open the command launcher |
 | `Ctrl+Alt+Backspace` | Terminate the compositor |
 
 Mouse behavior:
 
-- Click title bar close button to close a window.
+- Click the left title bar close button to close a window.
 - Drag title bar to move a window.
 - Drag a snapped or maximized title bar to restore it once dragging starts.
 - Drag left, right, or top edge of the output to preview snap or maximize.
 - Drag window edges and corners to resize.
 - Click a window to focus it and raise it.
+
+Command launcher:
+
+- Press `Super+Space`.
+- Type a command, for example `./build-kms-compositor/solitaire-app`.
+- Press Enter to launch it; Escape cancels.
+
+The launched process receives `WAYLAND_DISPLAY` for the running compositor automatically.
 
 ## Cursor Theme
 

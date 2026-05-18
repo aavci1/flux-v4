@@ -248,6 +248,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (auto snapPreview = wayland.snapPreview()) {
         drawSnapPreview(*canvas, *snapPreview);
       }
+      drawCommandLauncher(*canvas,
+                          textSystem,
+                          wayland.commandLauncher(),
+                          wayland.logicalOutputWidth(),
+                          wayland.logicalOutputHeight());
       drawCompositorCursor(wayland,
                            *canvas,
                            output,

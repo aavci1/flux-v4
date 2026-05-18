@@ -6,8 +6,12 @@
 #include "xdg-shell-server-protocol.h"
 
 #include <linux/input-event-codes.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <csignal>
 #include <algorithm>
+#include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -25,8 +29,8 @@ constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
-constexpr std::int32_t kCloseButtonSize = 18;
-constexpr std::int32_t kCloseButtonInset = 5;
+constexpr std::int32_t kCloseButtonSize = 12;
+constexpr std::int32_t kCloseButtonInset = 11;
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->toplevel && !surface->popup && !surface->layerSurface && !surface->subsurface;
@@ -223,8 +227,8 @@ WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x
     float const frameRight = frameLeft + static_cast<float>(width);
     float const frameBottom = static_cast<float>(surface->windowY + height);
     if (!containsPoint(x, y, frameLeft, frameTop, frameRight, frameBottom)) continue;
-    float const left = frameRight - static_cast<float>(kCloseButtonInset + kCloseButtonSize);
-    float const top = frameTop + static_cast<float>(kCloseButtonInset);
+    float const left = frameLeft + static_cast<float>(kCloseButtonInset);
+    float const top = frameTop + (static_cast<float>(kTitleBarHeight - kCloseButtonSize) * 0.5f);
     float const right = left + static_cast<float>(kCloseButtonSize);
     float const bottom = top + static_cast<float>(kCloseButtonSize);
     return containsPoint(x, y, left, top, right, bottom) ? surface : nullptr;
@@ -669,12 +673,139 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
     case WaylandServer::ShortcutAction::Restore:
       restoreFocusedToplevel(server);
       return true;
+    case WaylandServer::ShortcutAction::LaunchCommand:
+      server->commandLauncherVisible_ = true;
+      server->commandLauncherText_.clear();
+      server->commandLauncherMessage_ = "Type a command and press Enter";
+      sendPointerFocus(server, nullptr, timeMs);
+      return true;
     case WaylandServer::ShortcutAction::Terminate:
       std::raise(SIGTERM);
       return true;
     }
   }
   return false;
+}
+
+std::optional<char> commandLauncherCharForKey(std::uint32_t key, bool shift) {
+  auto letter = [&](char c) -> std::optional<char> {
+    return shift ? static_cast<char>(std::toupper(static_cast<unsigned char>(c))) : c;
+  };
+  switch (key) {
+  case KEY_A: return letter('a');
+  case KEY_B: return letter('b');
+  case KEY_C: return letter('c');
+  case KEY_D: return letter('d');
+  case KEY_E: return letter('e');
+  case KEY_F: return letter('f');
+  case KEY_G: return letter('g');
+  case KEY_H: return letter('h');
+  case KEY_I: return letter('i');
+  case KEY_J: return letter('j');
+  case KEY_K: return letter('k');
+  case KEY_L: return letter('l');
+  case KEY_M: return letter('m');
+  case KEY_N: return letter('n');
+  case KEY_O: return letter('o');
+  case KEY_P: return letter('p');
+  case KEY_Q: return letter('q');
+  case KEY_R: return letter('r');
+  case KEY_S: return letter('s');
+  case KEY_T: return letter('t');
+  case KEY_U: return letter('u');
+  case KEY_V: return letter('v');
+  case KEY_W: return letter('w');
+  case KEY_X: return letter('x');
+  case KEY_Y: return letter('y');
+  case KEY_Z: return letter('z');
+  default: break;
+  }
+  if (key >= KEY_1 && key <= KEY_9) {
+    static char const normal[] = "123456789";
+    static char const shifted[] = "!@#$%^&*(";
+    std::size_t const index = key - KEY_1;
+    return shift ? shifted[index] : normal[index];
+  }
+  if (key == KEY_0) return shift ? ')' : '0';
+  switch (key) {
+  case KEY_SPACE: return ' ';
+  case KEY_DOT: return shift ? '>' : '.';
+  case KEY_COMMA: return shift ? '<' : ',';
+  case KEY_MINUS: return shift ? '_' : '-';
+  case KEY_EQUAL: return shift ? '+' : '=';
+  case KEY_SLASH: return shift ? '?' : '/';
+  case KEY_BACKSLASH: return shift ? '|' : '\\';
+  case KEY_SEMICOLON: return shift ? ':' : ';';
+  case KEY_APOSTROPHE: return shift ? '"' : '\'';
+  case KEY_GRAVE: return shift ? '~' : '`';
+  case KEY_LEFTBRACE: return shift ? '{' : '[';
+  case KEY_RIGHTBRACE: return shift ? '}' : ']';
+  default: return std::nullopt;
+  }
+}
+
+void spawnCommand(std::string const& command, std::string const& waylandDisplay) {
+  pid_t const child = fork();
+  if (child < 0) {
+    std::fprintf(stderr, "flux-compositor: fork failed while launching command\n");
+    return;
+  }
+  if (child == 0) {
+    if (setsid() < 0) _exit(126);
+    pid_t const grandchild = fork();
+    if (grandchild < 0) _exit(126);
+    if (grandchild > 0) _exit(0);
+    setenv("WAYLAND_DISPLAY", waylandDisplay.c_str(), 1);
+    execl("/bin/sh", "sh", "-lc", command.c_str(), static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  int status = 0;
+  while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+}
+
+bool handleCommandLauncherKey(WaylandServer::Impl* server, std::uint32_t key, bool pressed) {
+  if (!server->commandLauncherVisible_) return false;
+  if (!pressed) return true;
+  if (server->ctrlDown_ || server->altDown_ || server->metaDown_) return true;
+
+  switch (key) {
+  case KEY_ESC:
+    server->commandLauncherVisible_ = false;
+    server->commandLauncherText_.clear();
+    server->commandLauncherMessage_.clear();
+    return true;
+  case KEY_ENTER:
+  case KEY_KPENTER: {
+    std::string command = server->commandLauncherText_;
+    command.erase(command.begin(),
+                  std::find_if(command.begin(), command.end(), [](unsigned char c) {
+                    return !std::isspace(c);
+                  }));
+    command.erase(std::find_if(command.rbegin(), command.rend(), [](unsigned char c) {
+                    return !std::isspace(c);
+                  }).base(),
+                  command.end());
+    if (command.empty()) {
+      server->commandLauncherMessage_ = "Type a command";
+      return true;
+    }
+    std::fprintf(stderr, "flux-compositor: launching command: %s\n", command.c_str());
+    server->commandLauncherVisible_ = false;
+    server->commandLauncherText_.clear();
+    server->commandLauncherMessage_.clear();
+    spawnCommand(command, server->socketName_);
+    return true;
+  }
+  case KEY_BACKSPACE:
+    if (!server->commandLauncherText_.empty()) server->commandLauncherText_.pop_back();
+    return true;
+  default:
+    if (auto c = commandLauncherCharForKey(key, server->shiftDown_)) {
+      if (server->commandLauncherText_.size() < 512u) server->commandLauncherText_.push_back(*c);
+      return true;
+    }
+    return true;
+  }
 }
 
 void updateDrag(WaylandServer::Impl* server) {
@@ -756,6 +887,10 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
                            static_cast<float>(constraint->surface->windowY),
                            static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
   }
+  if (commandLauncherVisible_) {
+    sendPointerFocus(this, nullptr, timeMs);
+    return;
+  }
   if (resizeSurface_) {
     updateResize(this);
     return;
@@ -793,6 +928,10 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
                            static_cast<float>(constraint->surface->windowY),
                            static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
   }
+  if (commandLauncherVisible_) {
+    sendPointerFocus(this, nullptr, timeMs);
+    return;
+  }
   if (resizeSurface_) {
     updateResize(this);
     return;
@@ -809,6 +948,12 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
 }
 
 void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
+  if (commandLauncherVisible_) {
+    (void)button;
+    (void)pressed;
+    (void)timeMs;
+    return;
+  }
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (button == BTN_LEFT && !pressed && dndSource_) {
     updateDndTarget(this, target, timeMs);
@@ -942,6 +1087,12 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
 }
 
 void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
+  if (commandLauncherVisible_) {
+    (void)dx;
+    (void)dy;
+    (void)timeMs;
+    return;
+  }
   if (!pointerFocus_) return;
   for (wl_resource* pointer : pointerResources_) {
     if (!resourceBelongsToSurfaceClient(pointer, pointerFocus_)) continue;
@@ -958,6 +1109,7 @@ void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t 
 void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
   if (consumeModifier) return;
+  if (commandLauncherVisible_ && handleCommandLauncherKey(this, key, pressed)) return;
   if (pressed && key == KEY_ESC && dismissTopPopup(this)) return;
   if (handleCompositorShortcut(this, key, pressed, timeMs)) return;
   if (!keyboardFocus_) return;

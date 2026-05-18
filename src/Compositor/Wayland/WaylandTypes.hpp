@@ -65,6 +65,12 @@ struct SnapPreviewSnapshot {
   std::int32_t height = 0;
 };
 
+struct CommandLauncherSnapshot {
+  bool visible = false;
+  std::string command;
+  std::string message;
+};
+
 enum class ShortcutAction : std::uint8_t {
   CloseFocused,
   CycleFocus,
@@ -72,6 +78,7 @@ enum class ShortcutAction : std::uint8_t {
   SnapRight,
   Maximize,
   Restore,
+  LaunchCommand,
   Terminate,
 };
 

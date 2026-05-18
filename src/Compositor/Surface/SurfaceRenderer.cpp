@@ -248,6 +248,8 @@ void drawCommittedSurface(WaylandServer& wayland,
   float const windowWidth = static_cast<float>(surface.width);
   float const windowHeight = static_cast<float>(surface.height);
   float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
+  CornerRadius const contentCorners = titleBarHeight > 0.f ? CornerRadius{0.f, 0.f, 10.f, 10.f}
+                                                           : CornerRadius{};
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
   float const openProgress = animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
@@ -281,7 +283,7 @@ void drawCommittedSurface(WaylandServer& wayland,
                                   ? static_cast<float>(surface.destinationHeight)
                                   : windowHeight;
   canvas.save();
-  canvas.clipRect(Rect::sharp(windowX, windowY, windowWidth, windowHeight));
+  canvas.clipRect(Rect::sharp(windowX, windowY, windowWidth, windowHeight), contentCorners);
   canvas.drawImage(*cached.image,
                    Rect::sharp(surface.sourceX,
                                surface.sourceY,
@@ -290,7 +292,8 @@ void drawCommittedSurface(WaylandServer& wayland,
                    Rect::sharp(windowX,
                                windowY,
                                contentWidth,
-                               contentHeight));
+                               contentHeight),
+                   clientContentSmallerThanFrame ? CornerRadius{} : contentCorners);
   if (clientContentSmallerThanFrame) {
     float const rightPad = std::max(0.f, windowWidth - contentWidth);
     float const bottomPad = std::max(0.f, windowHeight - contentHeight);
@@ -305,7 +308,8 @@ void drawCommittedSurface(WaylandServer& wayland,
                        Rect::sharp(windowX + contentWidth,
                                    windowY,
                                    rightPad,
-                                   contentHeight));
+                                   contentHeight),
+                       CornerRadius{});
     }
     if (bottomPad > 0.f) {
       canvas.drawImage(*cached.image,
@@ -316,7 +320,8 @@ void drawCommittedSurface(WaylandServer& wayland,
                        Rect::sharp(windowX,
                                    windowY + contentHeight,
                                    contentWidth,
-                                   bottomPad));
+                                   bottomPad),
+                       CornerRadius{});
     }
     if (rightPad > 0.f && bottomPad > 0.f) {
       canvas.drawImage(*cached.image,
@@ -327,7 +332,8 @@ void drawCommittedSurface(WaylandServer& wayland,
                        Rect::sharp(windowX + contentWidth,
                                    windowY + contentHeight,
                                    rightPad,
-                                   bottomPad));
+                                   bottomPad),
+                       CornerRadius{});
     }
   }
   canvas.restore();

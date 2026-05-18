@@ -219,6 +219,7 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   file << "[keybindings]\n";
   file << "close_focused = \"shift+super+q\"\n";
   file << "cycle = \"alt+tab\"\n";
+  file << "run = \"ctrl+space\"\n";
   file << "quit = \"ctrl+alt+delete\"\n";
   file.close();
   setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
@@ -241,6 +242,12 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   CHECK(cycle->alt);
   CHECK_FALSE(cycle->meta);
   CHECK(cycle->key == KEY_TAB);
+
+  auto launch = findAction(flux::compositor::WaylandServer::ShortcutAction::LaunchCommand);
+  REQUIRE(launch != config.shortcutBindings.end());
+  CHECK(launch->ctrl);
+  CHECK_FALSE(launch->meta);
+  CHECK(launch->key == KEY_SPACE);
 
   auto terminate = findAction(flux::compositor::WaylandServer::ShortcutAction::Terminate);
   REQUIRE(terminate != config.shortcutBindings.end());
