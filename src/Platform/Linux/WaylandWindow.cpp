@@ -12,6 +12,7 @@
 
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
+#include "Detail/ResizeTrace.hpp"
 #include "viewporter-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -25,7 +26,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cstdarg>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -68,30 +68,6 @@ MouseButton mouseButtonFromLinux(std::uint32_t button) {
 bool debugDecorations() {
   char const* value = std::getenv("FLUX_DEBUG_WAYLAND_DECORATIONS");
   return value && *value && std::strcmp(value, "0") != 0;
-}
-
-bool resizeTrace() {
-  char const* value = std::getenv("FLUX_WAYLAND_RESIZE_TRACE");
-  return value && *value && std::strcmp(value, "0") != 0;
-}
-
-void resizeTraceLog(char const* format, ...) {
-  va_list args;
-  va_start(args, format);
-  va_list stderrArgs;
-  va_copy(stderrArgs, args);
-  std::vfprintf(stderr, format, stderrArgs);
-  va_end(stderrArgs);
-
-  char const* path = std::getenv("FLUX_WAYLAND_RESIZE_TRACE_LOG");
-  if (!path || !*path) {
-    path = "/tmp/flux-wayland-resize.log";
-  }
-  if (FILE* file = std::fopen(path, "a")) {
-    std::vfprintf(file, format, args);
-    std::fclose(file);
-  }
-  va_end(args);
 }
 
 char const* const* cursorNames(Cursor cursor) {
@@ -434,8 +410,8 @@ public:
   void requestAnimationFrame() override {
     if (framePending_ || !surface_) return;
     framePending_ = true;
-    if (resizeTrace()) {
-      resizeTraceLog("wayland-resize-trace: request-frame window=%u size=%dx%d\n",
+    if (detail::resizeTraceEnabled()) {
+      detail::resizeTrace("wayland-window", "request-frame window=%u size=%dx%d\n",
                    handle_, static_cast<int>(std::lround(size_.width)),
                    static_cast<int>(std::lround(size_.height)));
     }
@@ -450,8 +426,8 @@ public:
   }
 
   void completeAnimationFrame(bool needsAnotherFrame) override {
-    if (resizeTrace()) {
-      resizeTraceLog("wayland-resize-trace: complete-frame window=%u needsAnother=%d\n",
+    if (detail::resizeTraceEnabled()) {
+      detail::resizeTrace("wayland-window", "complete-frame window=%u needsAnother=%d\n",
                    handle_, needsAnotherFrame ? 1 : 0);
     }
     wl_display_flush(display_);
@@ -551,8 +527,8 @@ private:
     }
     if (!self->framePending_) return;
     self->framePending_ = false;
-    if (resizeTrace()) {
-      resizeTraceLog("wayland-resize-trace: frame-done window=%u size=%dx%d\n",
+    if (detail::resizeTraceEnabled()) {
+      detail::resizeTrace("wayland-window", "frame-done window=%u size=%dx%d\n",
                    self->handle_, static_cast<int>(std::lround(self->size_.width)),
                    static_cast<int>(std::lround(self->size_.height)));
     }
@@ -566,8 +542,8 @@ private:
     auto* self = static_cast<WaylandWindow*>(data);
     xdg_surface_ack_configure(surface, serial);
     self->configured_ = true;
-    if (resizeTrace()) {
-      resizeTraceLog("wayland-resize-trace: xdg-configure window=%u serial=%u pending=%dx%d\n",
+    if (detail::resizeTraceEnabled()) {
+      detail::resizeTrace("wayland-window", "xdg-configure window=%u serial=%u pending=%dx%d\n",
                    self->handle_, serial, self->pendingWidth_, self->pendingHeight_);
     }
     if (self->pendingWidth_ > 0 && self->pendingHeight_ > 0) {
@@ -582,8 +558,8 @@ private:
     if (width > 0 && height > 0) {
       self->pendingWidth_ = width;
       self->pendingHeight_ = height;
-      if (resizeTrace()) {
-        resizeTraceLog("wayland-resize-trace: toplevel-configure window=%u size=%dx%d\n",
+      if (detail::resizeTraceEnabled()) {
+        detail::resizeTrace("wayland-window", "toplevel-configure window=%u size=%dx%d\n",
                      self->handle_, width, height);
       }
     }
@@ -651,11 +627,11 @@ private:
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
-    if (resizeTrace()) {
+    if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count();
-      resizeTraceLog(
-          "wayland-resize-trace: apply-configure window=%u size=%dx%d framePending=%d elapsed=%.3fms\n",
+      detail::resizeTrace("wayland-window", 
+          "apply-configure window=%u size=%dx%d framePending=%d elapsed=%.3fms\n",
           handle_, width, height, framePending_ ? 1 : 0,
           static_cast<double>(elapsed) / 1000.0);
     }
@@ -792,8 +768,8 @@ private:
     resizeRedrawPending_ = true;
     Application::instance().requestWindowRedraw(handle_);
     wakeEventLoop();
-    if (resizeTrace()) {
-      resizeTraceLog("wayland-resize-trace: request-resize-redraw window=%u framePending=%d\n",
+    if (detail::resizeTraceEnabled()) {
+      detail::resizeTrace("wayland-window", "request-resize-redraw window=%u framePending=%d\n",
                    handle_, framePending_ ? 1 : 0);
     }
   }
@@ -831,11 +807,11 @@ private:
       Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, pendingResizeSize_});
     }
     Application::instance().eventQueue().dispatch();
-    if (resizeTrace()) {
+    if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count();
-      resizeTraceLog(
-          "wayland-resize-trace: flush-deferred window=%u size=%.0fx%.0f framePending=%d elapsed=%.3fms\n",
+      detail::resizeTrace("wayland-window", 
+          "flush-deferred window=%u size=%.0fx%.0f framePending=%d elapsed=%.3fms\n",
           handle_, pendingResizeSize_.width, pendingResizeSize_.height, framePending_ ? 1 : 0,
           static_cast<double>(elapsed) / 1000.0);
     }

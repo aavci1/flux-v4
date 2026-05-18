@@ -1,5 +1,6 @@
 #include "Compositor/WaylandServer.hpp"
 
+#include "Detail/ResizeTrace.hpp"
 #include "cursor-shape-v1-server-protocol.h"
 #include "fractional-scale-v1-server-protocol.h"
 #include "idle-inhibit-unstable-v1-server-protocol.h"
@@ -591,14 +592,6 @@ bool isIntegerSize(float value) {
   return std::floor(value) == value;
 }
 
-bool resizeTraceEnabled() {
-  static bool const enabled = [] {
-    char const* value = std::getenv("FLUX_COMPOSITOR_RESIZE_TRACE");
-    return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
-  }();
-  return enabled;
-}
-
 void setConfiguredFrameSize(WaylandServer::Surface* surface, std::int32_t width, std::int32_t height) {
   if (!surface) return;
   surface->frameWidth = width;
@@ -606,31 +599,32 @@ void setConfiguredFrameSize(WaylandServer::Surface* surface, std::int32_t width,
 }
 
 void traceResizeSurface(char const* event, WaylandServer::Surface const* surface) {
-  if (!resizeTraceEnabled() || !surface) return;
-  std::fprintf(stderr,
-               "resize-trace: %s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d buffer=%dx%d "
-               "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu snapped=%d maximized=%d anim=%d\n",
-               event,
-               static_cast<unsigned long long>(surface->id),
-               surface->windowX,
-               surface->windowY,
-               surface->frameWidth,
-               surface->frameHeight,
-               (surface->server->resizeSurface_ == surface || surface->geometryAnimationActive) ? 1 : 0,
-               surface->width,
-               surface->height,
-               surface->sourceSet ? 1 : 0,
-               surface->sourceX,
-               surface->sourceY,
-               surface->sourceWidth,
-               surface->sourceHeight,
-               surface->destinationSet ? 1 : 0,
-               surface->destinationWidth,
-               surface->destinationHeight,
-               static_cast<unsigned long long>(surface->serial),
-               surface->snapped ? 1 : 0,
-               surface->maximized ? 1 : 0,
-               surface->geometryAnimationActive ? 1 : 0);
+  if (!surface) return;
+  flux::detail::resizeTrace(
+      "compositor",
+      "%s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d buffer=%dx%d "
+      "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu snapped=%d maximized=%d anim=%d\n",
+      event,
+      static_cast<unsigned long long>(surface->id),
+      surface->windowX,
+      surface->windowY,
+      surface->frameWidth,
+      surface->frameHeight,
+      (surface->server->resizeSurface_ == surface || surface->geometryAnimationActive) ? 1 : 0,
+      surface->width,
+      surface->height,
+      surface->sourceSet ? 1 : 0,
+      surface->sourceX,
+      surface->sourceY,
+      surface->sourceWidth,
+      surface->sourceHeight,
+      surface->destinationSet ? 1 : 0,
+      surface->destinationWidth,
+      surface->destinationHeight,
+      static_cast<unsigned long long>(surface->serial),
+      surface->snapped ? 1 : 0,
+      surface->maximized ? 1 : 0,
+      surface->geometryAnimationActive ? 1 : 0);
 }
 
 bool applyViewportState(WaylandServer::Surface* surface) {
@@ -1118,16 +1112,14 @@ void sendToplevelConfigure(WaylandServer* server,
   wl_array_init(&states);
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
   wl_array_release(&states);
-  if (resizeTraceEnabled()) {
-    std::fprintf(stderr,
-                 "resize-trace: configure surface=%llu size=%dx%d serial=%u\n",
-                 static_cast<unsigned long long>(toplevel->xdgSurface->surface
-                                                     ? toplevel->xdgSurface->surface->id
-                                                     : 0),
-                 width,
-                 height,
-                 server->nextConfigureSerial_);
-  }
+  flux::detail::resizeTrace("compositor",
+                            "configure surface=%llu size=%dx%d serial=%u\n",
+                            static_cast<unsigned long long>(toplevel->xdgSurface->surface
+                                                                ? toplevel->xdgSurface->surface->id
+                                                                : 0),
+                            width,
+                            height,
+                            server->nextConfigureSerial_);
   xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
 }
 
@@ -3386,21 +3378,19 @@ void updateResize(WaylandServer* server) {
   server->resizeLastWidth_ = nextWidth;
   server->resizeLastHeight_ = nextHeight;
   setConfiguredFrameSize(surface, nextWidth, nextHeight);
-  if (resizeTraceEnabled()) {
-    std::fprintf(stderr,
-                 "resize-trace: update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
-                 "delta=%.1f,%.1f edges=%u\n",
-                 static_cast<unsigned long long>(surface->id),
-                 server->pointerX_,
-                 server->pointerY_,
-                 surface->windowX,
-                 surface->windowY,
-                 nextWidth,
-                 nextHeight,
-                 dx,
-                 dy,
-                 server->resizeEdges_);
-  }
+  flux::detail::resizeTrace("compositor",
+                            "update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
+                            "delta=%.1f,%.1f edges=%u\n",
+                            static_cast<unsigned long long>(surface->id),
+                            server->pointerX_,
+                            server->pointerY_,
+                            surface->windowX,
+                            surface->windowY,
+                            nextWidth,
+                            nextHeight,
+                            dx,
+                            dy,
+                            server->resizeEdges_);
   sendToplevelConfigure(server, toplevelForSurface(server, surface), nextWidth, nextHeight);
 }
 
@@ -3512,19 +3502,17 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
         resizeLastWidth_ = resizeStartWidth_;
         resizeLastHeight_ = resizeStartHeight_;
         resizeEdges_ = resizeEdges;
-        if (resizeTraceEnabled()) {
-          std::fprintf(stderr,
-                       "resize-trace: begin-resize surface=%llu pointer=%.1f,%.1f edges=%u startWindow=%d,%d "
-                       "startSize=%dx%d\n",
-                       static_cast<unsigned long long>(resizeTarget->id),
-                       pointerX_,
-                       pointerY_,
-                       resizeEdges_,
-                       resizeStartWindowX_,
-                       resizeStartWindowY_,
-                       resizeStartWidth_,
-                       resizeStartHeight_);
-        }
+        flux::detail::resizeTrace("compositor",
+                                  "begin-resize surface=%llu pointer=%.1f,%.1f edges=%u startWindow=%d,%d "
+                                  "startSize=%dx%d\n",
+                                  static_cast<unsigned long long>(resizeTarget->id),
+                                  pointerX_,
+                                  pointerY_,
+                                  resizeEdges_,
+                                  resizeStartWindowX_,
+                                  resizeStartWindowY_,
+                                  resizeStartWidth_,
+                                  resizeStartHeight_);
         return;
       }
       Surface* chromeTarget = titlebarAt(this, pointerX_, pointerY_);

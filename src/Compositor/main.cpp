@@ -8,6 +8,7 @@
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
 #include "Compositor/WaylandServer.hpp"
+#include "Detail/ResizeTrace.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
@@ -87,17 +88,9 @@ float easeOutCubic(float value) {
   return 1.f - inverse * inverse * inverse;
 }
 
-bool resizeTraceEnabled() {
-  static bool const enabled = [] {
-    char const* value = std::getenv("FLUX_COMPOSITOR_RESIZE_TRACE");
-    return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
-  }();
-  return enabled;
-}
-
 bool shouldTraceRenderSnapshot(flux::compositor::CommittedSurfaceSnapshot const& current,
                                SurfaceVisualState const& visual) {
-  if (!resizeTraceEnabled()) return false;
+  if (!flux::detail::resizeTraceEnabled()) return false;
   if (!visual.hasLastSnapshot) return true;
   auto const& previous = visual.lastSnapshot;
   return current.x != previous.x || current.y != previous.y ||
@@ -829,23 +822,26 @@ int main(int, char**) {
         bool const traceSnapshot = shouldTraceRenderSnapshot(clientSurface, visual);
         if (traceSnapshot) {
           auto const imageSize = cached.image->size();
-          std::fprintf(stderr,
-                       "resize-trace: render-snapshot surface=%llu window=%d,%d frame=%dx%d buffer=%dx%d "
-                       "image=%dx%d source=%.1f,%.1f %.1fx%.1f serial=%llu\n",
-                       static_cast<unsigned long long>(clientSurface.id),
-                       clientSurface.x,
-                       clientSurface.y,
-                       clientSurface.width,
-                       clientSurface.height,
-                       clientSurface.bufferWidth,
-                       clientSurface.bufferHeight,
-                       static_cast<int>(imageSize.width),
-                       static_cast<int>(imageSize.height),
-                       clientSurface.sourceX,
-                       clientSurface.sourceY,
-                       clientSurface.sourceWidth,
-                       clientSurface.sourceHeight,
-                       static_cast<unsigned long long>(clientSurface.serial));
+          flux::detail::resizeTrace(
+              "compositor-render",
+              "render-snapshot surface=%llu window=%d,%d frame=%dx%d buffer=%dx%d "
+              "image=%dx%d source=%.1f,%.1f %.1fx%.1f dest=%dx%d serial=%llu\n",
+              static_cast<unsigned long long>(clientSurface.id),
+              clientSurface.x,
+              clientSurface.y,
+              clientSurface.width,
+              clientSurface.height,
+              clientSurface.bufferWidth,
+              clientSurface.bufferHeight,
+              static_cast<int>(imageSize.width),
+              static_cast<int>(imageSize.height),
+              clientSurface.sourceX,
+              clientSurface.sourceY,
+              clientSurface.sourceWidth,
+              clientSurface.sourceHeight,
+              clientSurface.destinationWidth,
+              clientSurface.destinationHeight,
+              static_cast<unsigned long long>(clientSurface.serial));
         }
         visual.lastSnapshot = clientSurface;
         visual.hasLastSnapshot = true;

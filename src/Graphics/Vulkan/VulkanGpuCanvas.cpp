@@ -9,6 +9,7 @@
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
+#include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
@@ -34,7 +35,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdarg>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -248,30 +248,6 @@ void hashStops(std::uint64_t &h, std::array<GradientStop, kMaxGradientStops> con
     hashValue(h, stops[i].position);
     hashColor(h, stops[i].color);
   }
-}
-
-bool waylandResizeTrace() {
-  char const *value = std::getenv("FLUX_WAYLAND_RESIZE_TRACE");
-  return value && *value && std::strcmp(value, "0") != 0;
-}
-
-void waylandResizeTraceLog(char const *format, ...) {
-  va_list args;
-  va_start(args, format);
-  va_list stderrArgs;
-  va_copy(stderrArgs, args);
-  std::vfprintf(stderr, format, stderrArgs);
-  va_end(stderrArgs);
-
-  char const *path = std::getenv("FLUX_WAYLAND_RESIZE_TRACE_LOG");
-  if (!path || !*path) {
-    path = "/tmp/flux-wayland-resize.log";
-  }
-  if (FILE *file = std::fopen(path, "a")) {
-    std::vfprintf(file, format, args);
-    std::fclose(file);
-  }
-  va_end(args);
 }
 
 std::uint64_t hashFill(FillStyle const &fill) {
@@ -997,15 +973,17 @@ public:
       swapchainTargetWidth_ = fbW + (addHeadroom ? std::max(128, fbW / 4) : 0);
       swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(128, fbH / 4) : 0);
       swapchainDirty_ = true;
-      if (waylandResizeTrace()) {
-        waylandResizeTraceLog(
-          "wayland-resize-trace: vulkan-resize window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d dirty=1\n",
+      if (detail::resizeTraceEnabled()) {
+        detail::resizeTrace(
+          "vulkan-resize",
+          "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d dirty=1\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
                      swapchainTargetWidth_, swapchainTargetHeight_);
       }
-    } else if (framebufferChanged && waylandResizeTrace()) {
-      waylandResizeTraceLog(
-        "wayland-resize-trace: vulkan-resize window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u dirty=0\n",
+    } else if (framebufferChanged && detail::resizeTraceEnabled()) {
+      detail::resizeTrace(
+        "vulkan-resize",
+        "window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u dirty=0\n",
                    handle_, width_, height_, framebufferWidth_, framebufferHeight_,
                    swapExtent_.width, swapExtent_.height);
     }
@@ -1145,11 +1123,12 @@ public:
       if (!swapchain_)
         return;
       presentImpl();
-      if (waylandResizeTrace()) {
+      if (detail::resizeTraceEnabled()) {
         auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - presentStart).count();
-        waylandResizeTraceLog(
-          "wayland-resize-trace: vulkan-present window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u elapsed=%.3fms\n",
+        detail::resizeTrace(
+          "vulkan-present",
+          "window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u elapsed=%.3fms\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
                      swapExtent_.width, swapExtent_.height,
                      static_cast<double>(elapsed) / 1000.0);
@@ -2548,11 +2527,12 @@ private:
     if (oldSwapchain)
       vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
     swapchainDirty_ = false;
-    if (waylandResizeTrace()) {
+    if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - recreateStart).count();
-      waylandResizeTraceLog(
-          "wayland-resize-trace: vulkan-recreate-swapchain window=%u framebuffer=%dx%d extent=%ux%u images=%zu elapsed=%.3fms\n",
+      detail::resizeTrace(
+          "vulkan-recreate-swapchain",
+          "window=%u framebuffer=%dx%d extent=%ux%u images=%zu elapsed=%.3fms\n",
                    handle_, framebufferWidth_, framebufferHeight_, swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
                    static_cast<double>(elapsed) / 1000.0);
     }

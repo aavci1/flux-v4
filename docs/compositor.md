@@ -636,7 +636,7 @@ Total new code this phase: ~4000 LOC.
 
 ## 8. Phase 5: Animation, polish, daily-driveability
 
-**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, snap/maximize geometry changes are animated, titlebar drag-to-edge shows a snap preview before release, and startup config can set the background color or disable animations.
+**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, snap/maximize geometry changes are animated, titlebar drag-to-edge shows a snap preview before release, startup config can set the background color or disable animations, and live window resize avoids stale-content scaling while reducing Vulkan swapchain churn.
 
 ### 8.1 Goal
 
@@ -665,7 +665,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 ### 8.4 Acceptance criteria
 
 - ✗ The compositor runs reliably for a full day of dogfooding without crashes.
-- ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented; interactive move/resize smoothing remains pending.
+- ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, server-driven snap/maximize geometry animation, snap preview overlay, and live resize stabilization are implemented; broader animation polish remains pending.
 - ◐ Configuration via the config file works for keybindings and basic preferences. Background color/gradient/wallpaper, animation-toggle parsing, compositor keybinding overrides, and hot reload are implemented.
 - ◐ Hardware cursor works on the test hardware (AMD Vega supports cursor planes). Built-in arrow cursor uses the KMS cursor plane; client-provided cursor surfaces and non-arrow shapes still use the software cursor path.
 - ✗ User documentation explains how to build, install, configure, and use the compositor.
@@ -763,7 +763,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, and close-on-click-release are implemented. Popup support was attempted, froze the test laptop, and is deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, and `wp_fractional_scale_v1` are exposed with smoke demos where useful. Activation is deferred after its smoke client hard-froze the test laptop. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, the built-in arrow cursor can use a KMS cursor plane, and frame pacing waits for DRM vblank when available; interactive move/resize smoothing, full client-cursor hardware upload, adaptive sync/triple buffering, and docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, the built-in arrow cursor can use a KMS cursor plane, and frame pacing waits for DRM vblank when available; full client-cursor hardware upload, adaptive sync/triple buffering, and docs remain pending. |
 
 ### 12.1 Framework changes log
 
@@ -788,6 +788,8 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, compositor-drawn fallback shapes, and a cursor-shape smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings, compositor-side inhibitor tracking, and an idle-inhibit smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added a shared compositor demo-client support header so smoke clients connect to the compositor-published display socket and time out instead of silently guessing `wayland-0` or blocking indefinitely. | Linux-only compositor test utility support; no Metal API involved. |
+| 2026-05-18 | c2c3e59..f84b263 | Stabilized live resize: compositor resize geometry state, stale-content clipping, Vulkan swapchain reuse with size headroom, `wp_viewporter` client integration in `WaylandWindow`, and compositor-side viewport commit handling. | Mac unaffected: `CAMetalLayer` manages drawable size natively and has no Vulkan-style swapchain recreation per resize. No Metal API required. |
+| 2026-05-18 | compositor-cleanup-spec commit 1 | Unified resize tracing into `flux::detail::resizeTrace`, using `FLUX_RESIZE_TRACE` and `FLUX_RESIZE_TRACE_LOG` across Vulkan, Wayland-window, and compositor resize paths. | No Metal API surface; tracing exists for Vulkan/Linux resize behavior and is a framework-internal utility. |
 
 ### 12.2 Open questions
 
