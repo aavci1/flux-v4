@@ -44,7 +44,7 @@ For reference, each problem is restated with its evidence in the current tree.
 
 6. **Zero unit tests in the compositor module.** Demo clients serve as smoke tests but there is no `tests/CompositorTests.cpp`. The TOML parser, keybinding lookup, snap-math, focus state machine, and surface state transitions are all deterministic, unit-testable, and currently untested.
 
-7. **Hardware-locking deferrals.** xdg-popups and xdg-activation both locked the test laptop on their first implementation attempts. Both are deferred. They cannot stay deferred indefinitely: popups are required for menus and dropdowns in most real apps. The likely cause is input-grab or render-loop spinning; a safer implementation plan is needed before reattempting.
+7. **Hardware-locking deferrals.** xdg-popups and xdg-activation both locked the test laptop on their first implementation attempts. The safe reintroduction path now covers non-grabbing popup rendering and activation-token focus requests with purpose-built smoke demos. Popup input grabs and real-app menu dismissal behavior remain pending because they are the hardware-risky part.
 
 ### 2.2 New findings from the latest review
 
@@ -400,15 +400,15 @@ The xdg_surface configure/ack-configure cycle has well-defined invariants. Test 
 
 ## 5. The hardware-locking bugs
 
-xdg-popups and xdg-activation are deferred because their first implementations locked the test laptop. They cannot stay deferred — popups are required by most real apps.
+xdg-popups and xdg-activation were deferred because their first implementations locked the test laptop. The safe first stage is now implemented and hardware-smoked: popups render without input grabs, and activation can raise/focus a target window without lockups. Popup input grabs and real-app menu dismissal behavior remain pending.
 
 After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is contained: a new file in `Wayland/Globals/XdgPopup.cpp`, with no risk to other protocols. The implementation can have aggressive sanity-checking that, if it goes wrong, fails to construct the popup rather than spinning the compositor.
 
 ### 5.1 Plan for safely reintroducing xdg-popups
 
-1. **Implement the protocol stub without any input grab.** Just respond to `get_popup` by creating a popup object that's tracked but renders as a regular surface (no popup-specific behavior). This isolates the protocol implementation from the input-grab logic that likely caused the freeze.
+1. **Implement the protocol stub without any input grab.** Just respond to `get_popup` by creating a popup object that's tracked but renders as a regular surface (no popup-specific behavior). This isolates the protocol implementation from the input-grab logic that likely caused the freeze. Implemented and smoked with `flux-compositor-popup-demo`.
 
-2. **Render the popup correctly without grab.** Popups have positioning constraints (anchor, gravity, slide-along-edge fallback). Implement these statically — given a parent and a positioner, compute the popup's screen position. No animations, no grab.
+2. **Render the popup correctly without grab.** Popups have positioning constraints (anchor, gravity, slide-along-edge fallback). Implement these statically — given a parent and a positioner, compute the popup's screen position. No animations, no grab. Implemented and smoked with `flux-compositor-popup-demo`.
 
 3. **Add the input grab last.** Wayland's grab semantics are subtle: the popup's input grab is bounded (it can be "interactive" or "non-interactive"), and a misbehaving grab can starve the rest of the input system. Implement with explicit timeouts on grab acquisition; if a popup has held an input grab for more than N seconds without user interaction, force-release and log.
 
@@ -416,7 +416,7 @@ After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is 
 
 ### 5.2 Plan for safely reintroducing xdg-activation
 
-Activation is simpler: a client requests focus, optionally with a token from a previous focus event. The lockup likely came from a focus loop (activation triggers a focus event which triggers another activation, etc.). Add a simple loop-detection: if the same surface tries to activate twice within N milliseconds without an intervening user input, deny the second request.
+Activation is simpler: a client requests focus, optionally with a token from a previous focus event. The lockup likely came from a focus loop (activation triggers a focus event which triggers another activation, etc.). A simple loop-detection denies repeated requests for the same surface within a short window. Implemented and smoked with `flux-compositor-activation-demo`.
 
 ### 5.3 Acceptance
 
@@ -493,7 +493,7 @@ After all 12 commits land:
 - ✗ Single resize-tracing utility in Flux Detail module.
 - ✗ `tests/CompositorTests.cpp` exists with ~300 LOC of deterministic tests covering config, keybindings, snap math, focus, surface states.
 - ✗ xdg-popups work for `foot`, GTK4 dropdowns, and similar.
-- ✗ xdg-activation works without lockups.
+- ✓ xdg-activation works without lockups in the purpose-built activation smoke demo.
 - ✗ Framework changes log up to date through this work, including the four resize commits.
 - ✗ Phase status reflects current reality.
 - ✗ Module dependency audit passes.

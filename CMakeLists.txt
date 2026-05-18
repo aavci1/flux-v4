@@ -432,6 +432,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Compositor/Protocols/pointer-constraints-unstable-v1-protocol.c
     src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
+    src/Compositor/Protocols/xdg-activation-v1-protocol.c
   )
 endif()
 
@@ -766,6 +767,35 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wpedantic
   )
   target_link_libraries(flux-compositor-dnd-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-popup-demo
+    src/Compositor/PopupDemoClient.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-popup-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-popup-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-popup-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
+  add_executable(flux-compositor-activation-demo
+    src/Compositor/ActivationDemoClient.cpp
+    src/Compositor/Protocols/xdg-activation-v1-protocol.c
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(flux-compositor-activation-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(flux-compositor-activation-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-activation-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 
 endif()
 

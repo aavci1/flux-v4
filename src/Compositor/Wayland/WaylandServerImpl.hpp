@@ -5,6 +5,7 @@
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
+#include "xdg-shell-server-protocol.h"
 
 #include <drm_fourcc.h>
 #include <wayland-server-core.h>
@@ -19,8 +20,10 @@ namespace flux::compositor {
 
 struct WaylandServer::Impl {
   struct Surface;
+  struct XdgPositioner;
   struct XdgSurface;
   struct XdgToplevel;
+  struct XdgPopup;
   struct ShmPool;
   struct ShmBuffer;
   struct DmabufParams;
@@ -40,6 +43,7 @@ struct WaylandServer::Impl {
   struct DataDevice;
   struct DataSource;
   struct DataOffer;
+  struct ActivationToken;
 
   explicit Impl(WaylandOutputInfo output);
   ~Impl();
@@ -66,8 +70,10 @@ struct WaylandServer::Impl {
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
+  void destroyXdgPositioner(XdgPositioner* positioner);
   void destroyXdgSurface(XdgSurface* surface);
   void destroyXdgToplevel(XdgToplevel* toplevel);
+  void destroyXdgPopup(XdgPopup* popup);
   void destroyShmPool(ShmPool* pool);
   void destroyShmBuffer(ShmBuffer* buffer);
   void destroyDmabufParams(DmabufParams* params);
@@ -87,6 +93,7 @@ struct WaylandServer::Impl {
   void destroyDataDevice(DataDevice* device);
   void destroyDataSource(DataSource* source);
   void destroyDataOffer(DataOffer* offer);
+  void destroyActivationToken(ActivationToken* token);
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
@@ -107,12 +114,15 @@ struct WaylandServer::Impl {
   wl_global* pointerConstraintsGlobal_ = nullptr;
   wl_global* primarySelectionManagerGlobal_ = nullptr;
   wl_global* dataDeviceManagerGlobal_ = nullptr;
+  wl_global* activationGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
+  std::vector<std::unique_ptr<XdgPositioner>> xdgPositioners_;
   std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
   std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
+  std::vector<std::unique_ptr<XdgPopup>> popups_;
   std::vector<std::unique_ptr<ShmPool>> shmPools_;
   std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
@@ -133,6 +143,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<DataDevice>> dataDevices_;
   std::vector<std::unique_ptr<DataSource>> dataSources_;
   std::vector<std::unique_ptr<DataOffer>> dataOffers_;
+  std::vector<std::unique_ptr<ActivationToken>> activationTokens_;
   DataSource* selectionSource_ = nullptr;
   DataSource* dndSource_ = nullptr;
   Surface* dndOrigin_ = nullptr;
@@ -176,8 +187,11 @@ struct WaylandServer::Impl {
   float pointerX_ = 32.f;
   float pointerY_ = 32.f;
   std::uint64_t nextSurfaceId_ = 1;
+  std::uint64_t nextActivationTokenId_ = 1;
   std::uint32_t nextConfigureSerial_ = 1;
   std::uint32_t nextInputSerial_ = 1;
+  Surface* lastActivationSurface_ = nullptr;
+  std::uint32_t lastActivationTimeMs_ = 0;
 };
 
 struct WaylandServer::Impl::Surface {
@@ -193,6 +207,7 @@ struct WaylandServer::Impl::Surface {
   std::int32_t windowX = 96;
   std::int32_t windowY = 96;
   bool toplevel = false;
+  bool popup = false;
   bool cursor = false;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
@@ -238,6 +253,7 @@ struct WaylandServer::Impl::Surface {
   Viewport* viewport = nullptr;
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;
+  XdgPopup* xdgPopup = nullptr;
   std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
   std::vector<PresentationFeedback*> presentationFeedbacks;
   std::vector<wl_resource*> frameCallbacks;
@@ -346,8 +362,34 @@ struct WaylandServer::Impl::DataOffer {
   DataSource* source = nullptr;
 };
 
+struct WaylandServer::Impl::ActivationToken {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  std::string token;
+  std::string appId;
+  Surface* surface = nullptr;
+  std::uint32_t serial = 0;
+  bool committed = false;
+};
+
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y);
 std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server);
+
+struct WaylandServer::Impl::XdgPositioner {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+  std::int32_t anchorRectX = 0;
+  std::int32_t anchorRectY = 0;
+  std::int32_t anchorRectWidth = 0;
+  std::int32_t anchorRectHeight = 0;
+  std::uint32_t anchor = XDG_POSITIONER_ANCHOR_NONE;
+  std::uint32_t gravity = XDG_POSITIONER_GRAVITY_NONE;
+  std::uint32_t constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_NONE;
+  std::int32_t offsetX = 0;
+  std::int32_t offsetY = 0;
+};
 
 struct WaylandServer::Impl::XdgSurface {
   WaylandServer::Impl* server = nullptr;
@@ -362,6 +404,18 @@ struct WaylandServer::Impl::XdgToplevel {
   XdgSurface* xdgSurface = nullptr;
   std::string title;
   std::string appId;
+};
+
+struct WaylandServer::Impl::XdgPopup {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  XdgSurface* xdgSurface = nullptr;
+  Surface* parentSurface = nullptr;
+  std::int32_t configuredX = 0;
+  std::int32_t configuredY = 0;
+  std::int32_t configuredWidth = 1;
+  std::int32_t configuredHeight = 1;
+  bool grabbed = false;
 };
 
 struct WaylandServer::Impl::ShmPool {

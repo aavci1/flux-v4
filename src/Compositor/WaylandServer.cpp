@@ -19,6 +19,7 @@
 #include "relative-pointer-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
+#include "xdg-activation-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-output-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -81,6 +82,8 @@ extern struct wl_data_offer_interface const dataOfferImpl;
 extern struct zwp_relative_pointer_v1_interface const relativePointerImpl;
 
 } // namespace
+
+void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 
 namespace {
 
@@ -663,22 +666,74 @@ void xdgWmBaseDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+void xdgPositionerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgPositionerSetSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->width = width;
+  positioner->height = height;
+}
+
+void xdgPositionerSetAnchorRect(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
+                                std::int32_t width, std::int32_t height) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->anchorRectX = x;
+  positioner->anchorRectY = y;
+  positioner->anchorRectWidth = width;
+  positioner->anchorRectHeight = height;
+}
+
+void xdgPositionerSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->anchor = anchor;
+}
+
+void xdgPositionerSetGravity(wl_client*, wl_resource* resource, std::uint32_t gravity) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->gravity = gravity;
+}
+
+void xdgPositionerSetConstraintAdjustment(wl_client*, wl_resource* resource, std::uint32_t adjustment) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->constraintAdjustment = adjustment;
+}
+
+void xdgPositionerSetOffset(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->offsetX = x;
+  positioner->offsetY = y;
+}
+
+struct xdg_positioner_interface const positionerImpl{
+    .destroy = xdgPositionerDestroy,
+    .set_size = xdgPositionerSetSize,
+    .set_anchor_rect = xdgPositionerSetAnchorRect,
+    .set_anchor = xdgPositionerSetAnchor,
+    .set_gravity = xdgPositionerSetGravity,
+    .set_constraint_adjustment = xdgPositionerSetConstraintAdjustment,
+    .set_offset = xdgPositionerSetOffset,
+    .set_reactive = [](wl_client*, wl_resource*) {},
+    .set_parent_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
+    .set_parent_configure = [](wl_client*, wl_resource*, std::uint32_t) {},
+};
+
 void xdgWmBaseCreatePositioner(wl_client* client, wl_resource* resource, std::uint32_t id) {
-  static struct xdg_positioner_interface const positionerImpl{
-      .destroy = inertDestroy,
-      .set_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
-      .set_anchor_rect = [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
-      .set_anchor = [](wl_client*, wl_resource*, std::uint32_t) {},
-      .set_gravity = [](wl_client*, wl_resource*, std::uint32_t) {},
-      .set_constraint_adjustment = [](wl_client*, wl_resource*, std::uint32_t) {},
-      .set_offset = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
-      .set_reactive = [](wl_client*, wl_resource*) {},
-      .set_parent_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
-      .set_parent_configure = [](wl_client*, wl_resource*, std::uint32_t) {},
-  };
-  (void)resource;
-  wl_resource* positioner = wl_resource_create(client, &xdg_positioner_interface, 6, id);
-  wl_resource_set_implementation(positioner, &positionerImpl, nullptr, nullptr);
+  auto* server = serverFrom(resource);
+  auto positioner = std::make_unique<WaylandServer::Impl::XdgPositioner>();
+  positioner->server = server;
+  wl_resource* positionerResource = wl_resource_create(client, &xdg_positioner_interface, 6, id);
+  if (!positionerResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  positioner->resource = positionerResource;
+  auto* raw = positioner.get();
+  server->xdgPositioners_.push_back(std::move(positioner));
+  wl_resource_set_implementation(positionerResource,
+                                 &positionerImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgPositioner,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyXdgPositioner>);
 }
 
 void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint32_t id,
@@ -736,11 +791,149 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   xdg_surface_send_configure(resource, xdgSurface->server->nextConfigureSerial_++);
 }
 
-void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t id, wl_resource*, wl_resource*) {
-  wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER,
-                         "xdg_popup is not implemented in phase 2");
-  (void)client;
-  (void)id;
+std::int32_t popupAnchorX(WaylandServer::Impl::XdgPositioner const* positioner) {
+  std::int32_t x = positioner->anchorRectX;
+  if (positioner->anchor == XDG_POSITIONER_ANCHOR_TOP ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_NONE) {
+    x += positioner->anchorRectWidth / 2;
+  } else if (positioner->anchor == XDG_POSITIONER_ANCHOR_TOP_RIGHT ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_RIGHT ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT) {
+    x += positioner->anchorRectWidth;
+  }
+  return x + positioner->offsetX;
+}
+
+std::int32_t popupAnchorY(WaylandServer::Impl::XdgPositioner const* positioner) {
+  std::int32_t y = positioner->anchorRectY;
+  if (positioner->anchor == XDG_POSITIONER_ANCHOR_LEFT ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_RIGHT ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_NONE) {
+    y += positioner->anchorRectHeight / 2;
+  } else if (positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_LEFT ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT) {
+    y += positioner->anchorRectHeight;
+  }
+  return y + positioner->offsetY;
+}
+
+void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::XdgPositioner const* positioner) {
+  if (!popup || !popup->xdgSurface || !popup->xdgSurface->surface || !positioner) return;
+  WaylandServer::Impl::Surface* surface = popup->xdgSurface->surface;
+  WaylandServer::Impl::Surface const* parent = popup->parentSurface;
+  std::int32_t const width = std::max(1, positioner->width);
+  std::int32_t const height = std::max(1, positioner->height);
+  std::int32_t x = (parent ? parent->windowX : 0) + popupAnchorX(positioner);
+  std::int32_t y = (parent ? parent->windowY : 0) + popupAnchorY(positioner);
+  if (positioner->gravity == XDG_POSITIONER_GRAVITY_LEFT ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_LEFT ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_BOTTOM_LEFT) {
+    x -= width;
+  } else if (positioner->gravity == XDG_POSITIONER_GRAVITY_NONE ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_TOP ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_BOTTOM) {
+    x -= width / 2;
+  }
+  if (positioner->gravity == XDG_POSITIONER_GRAVITY_TOP ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_LEFT ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_RIGHT) {
+    y -= height;
+  } else if (positioner->gravity == XDG_POSITIONER_GRAVITY_NONE ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_LEFT ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_RIGHT) {
+    y -= height / 2;
+  }
+
+  x = std::clamp(x, 0, std::max(0, popup->server->output_.width - width));
+  y = std::clamp(y, 0, std::max(0, popup->server->output_.height - height));
+  surface->windowX = x;
+  surface->windowY = y;
+  setConfiguredFrameSize(surface, width, height);
+  popup->configuredX = parent ? x - parent->windowX : x;
+  popup->configuredY = parent ? y - parent->windowY : y;
+  popup->configuredWidth = width;
+  popup->configuredHeight = height;
+}
+
+void sendPopupConfigure(WaylandServer::Impl::XdgPopup* popup) {
+  if (!popup || !popup->resource || !popup->xdgSurface || !popup->xdgSurface->resource) return;
+  xdg_popup_send_configure(popup->resource,
+                           popup->configuredX,
+                           popup->configuredY,
+                           popup->configuredWidth,
+                           popup->configuredHeight);
+  xdg_surface_send_configure(popup->xdgSurface->resource, popup->server->nextConfigureSerial_++);
+}
+
+void xdgPopupDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t) {
+  auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
+  if (popup) popup->grabbed = true;
+}
+
+void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* positionerResource, std::uint32_t token) {
+  auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
+  if (!popup || !positioner) return;
+  configurePopup(popup, positioner);
+  if (wl_resource_get_version(resource) >= XDG_POPUP_REPOSITIONED_SINCE_VERSION) {
+    xdg_popup_send_repositioned(resource, token);
+  }
+  sendPopupConfigure(popup);
+}
+
+struct xdg_popup_interface const xdgPopupImpl{
+    .destroy = xdgPopupDestroy,
+    .grab = xdgPopupGrab,
+    .reposition = xdgPopupReposition,
+};
+
+void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t id,
+                        wl_resource* parentResource, wl_resource* positionerResource) {
+  auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
+  if (!xdgSurface || !xdgSurface->surface || !positioner ||
+      positioner->width <= 0 || positioner->height <= 0 ||
+      positioner->anchorRectWidth <= 0 || positioner->anchorRectHeight <= 0) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
+    return;
+  }
+  if (xdgSurface->surface->toplevel || xdgSurface->surface->layerSurface || xdgSurface->surface->cursor) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
+    return;
+  }
+
+  auto* parentXdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(parentResource);
+  auto popup = std::make_unique<WaylandServer::Impl::XdgPopup>();
+  popup->server = xdgSurface->server;
+  popup->xdgSurface = xdgSurface;
+  popup->parentSurface = parentXdgSurface ? parentXdgSurface->surface : nullptr;
+  wl_resource* popupResource = wl_resource_create(client, &xdg_popup_interface, wl_resource_get_version(resource), id);
+  if (!popupResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  popup->resource = popupResource;
+  auto* raw = popup.get();
+  xdgSurface->surface->toplevel = true;
+  xdgSurface->surface->popup = true;
+  xdgSurface->surface->cursor = false;
+  xdgSurface->surface->xdgPopup = raw;
+  if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
+  configurePopup(raw, positioner);
+  xdgSurface->server->popups_.push_back(std::move(popup));
+  wl_resource_set_implementation(popupResource,
+                                 &xdgPopupImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgPopup,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyXdgPopup>);
+  sendPopupConfigure(raw);
 }
 
 void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
@@ -1177,10 +1370,7 @@ void layerSurfaceSetMargin(wl_client*, wl_resource* resource, std::int32_t top, 
 
 void layerSurfaceSetKeyboardInteractivity(wl_client*, wl_resource*, std::uint32_t) {}
 
-void layerSurfaceGetPopup(wl_client*, wl_resource* resource, wl_resource*) {
-  wl_resource_post_error(resource, ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SURFACE_STATE,
-                         "layer-shell popups are not implemented yet");
-}
+void layerSurfaceGetPopup(wl_client*, wl_resource*, wl_resource*) {}
 
 void layerSurfaceAckConfigure(wl_client*, wl_resource*, std::uint32_t) {}
 
@@ -1920,6 +2110,102 @@ void bindDataDeviceManager(wl_client* client, void* data, std::uint32_t version,
   wl_resource_set_implementation(resource, &dataDeviceManagerImpl, data, nullptr);
 }
 
+void activationTokenDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void activationTokenSetSerial(wl_client*, wl_resource* resource, std::uint32_t serial, wl_resource*) {
+  auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
+  if (token && !token->committed) token->serial = serial;
+}
+
+void activationTokenSetAppId(wl_client*, wl_resource* resource, char const* appId) {
+  auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
+  if (token && !token->committed) token->appId = appId ? appId : "";
+}
+
+void activationTokenSetSurface(wl_client*, wl_resource* resource, wl_resource* surfaceResource) {
+  auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
+  if (token && !token->committed) token->surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
+}
+
+void activationTokenCommit(wl_client*, wl_resource* resource) {
+  auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
+  if (!token) return;
+  if (token->committed) {
+    wl_resource_post_error(resource, XDG_ACTIVATION_TOKEN_V1_ERROR_ALREADY_USED, "activation token already committed");
+    return;
+  }
+  token->committed = true;
+  xdg_activation_token_v1_send_done(resource, token->token.c_str());
+}
+
+struct xdg_activation_token_v1_interface const activationTokenImpl{
+    .set_serial = activationTokenSetSerial,
+    .set_app_id = activationTokenSetAppId,
+    .set_surface = activationTokenSetSurface,
+    .commit = activationTokenCommit,
+    .destroy = activationTokenDestroy,
+};
+
+void activationDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void activationGetToken(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  auto token = std::make_unique<WaylandServer::Impl::ActivationToken>();
+  token->server = server;
+  token->token = "flux-" + std::to_string(server->nextActivationTokenId_++);
+  wl_resource* tokenResource =
+      wl_resource_create(client, &xdg_activation_token_v1_interface, wl_resource_get_version(resource), id);
+  if (!tokenResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  token->resource = tokenResource;
+  auto* raw = token.get();
+  server->activationTokens_.push_back(std::move(token));
+  wl_resource_set_implementation(tokenResource,
+                                 &activationTokenImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::ActivationToken,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyActivationToken>);
+}
+
+void activationActivate(wl_client*, wl_resource* resource, char const*, wl_resource* surfaceResource) {
+  auto* server = serverFrom(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
+  if (!server || !surface || !surface->toplevel) return;
+
+  std::uint32_t const now = monotonicMilliseconds();
+  if (server->lastActivationSurface_ == surface && now - server->lastActivationTimeMs_ < 500u) {
+    std::fprintf(stderr, "flux-compositor: denied repeated xdg-activation request for surface=%llu\n",
+                 static_cast<unsigned long long>(surface->id));
+    return;
+  }
+  server->lastActivationSurface_ = surface;
+  server->lastActivationTimeMs_ = now;
+  focusSurface(server, surface, now);
+  server->flushClients();
+}
+
+struct xdg_activation_v1_interface const activationImpl{
+    .destroy = activationDestroy,
+    .get_activation_token = activationGetToken,
+    .activate = activationActivate,
+};
+
+void bindActivation(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &xdg_activation_v1_interface, std::min(version, 1u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(resource, &activationImpl, data, nullptr);
+}
+
 } // namespace
 
 WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -1961,11 +2247,12 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   primarySelectionManagerGlobal_ =
       wl_global_create(display_, &zwp_primary_selection_device_manager_v1_interface, 1, this, bindPrimarySelectionManager);
   dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
+  activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
   if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
       !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
       !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ ||
       !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_ ||
-      !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_) {
+      !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ || !activationGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2021,8 +2308,8 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
         .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
         .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface.get()),
         .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface.get()),
-        .titleBarHeight = surface->layerSurface ? 0 : kTitleBarHeight,
-        .title = surface->layerSurface ? std::string{} : titleForSurface(this, surface.get()),
+        .titleBarHeight = surface->layerSurface || surface->popup ? 0 : kTitleBarHeight,
+        .title = surface->layerSurface || surface->popup ? std::string{} : titleForSurface(this, surface.get()),
         .focused = keyboardFocus_ == surface.get(),
         .activeSizing = resizeSurface_ == surface.get() || surface->geometryAnimationActive,
         .serial = surface->serial,
@@ -2956,6 +3243,13 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
   if (lastTitleClickSurface_ == surface) lastTitleClickSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
+  if (lastActivationSurface_ == surface) lastActivationSurface_ = nullptr;
+  for (auto& token : activationTokens_) {
+    if (token->surface == surface) token->surface = nullptr;
+  }
+  for (auto& popup : popups_) {
+    if (popup->parentSurface == surface) popup->parentSurface = nullptr;
+  }
   if (dndOrigin_ == surface || dndTarget_ == surface) clearDnd(this);
   for (auto& device : cursorShapeDevices_) {
     if (device->pointer && wl_resource_get_client(device->pointer) == wl_resource_get_client(surface->resource)) {
@@ -2965,6 +3259,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
   if (surface->fractionalScale) wl_resource_destroy(surface->fractionalScale->resource);
   if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
+  if (surface->xdgPopup) wl_resource_destroy(surface->xdgPopup->resource);
   for (auto it = pointerConstraints_.begin(); it != pointerConstraints_.end();) {
     if ((*it)->surface == surface) {
       wl_resource_destroy((*it)->resource);
@@ -3006,11 +3301,24 @@ void WaylandServer::Impl::destroyXdgSurface(XdgSurface* surface) {
   eraseResource(xdgSurfaces_, surface);
 }
 
+void WaylandServer::Impl::destroyXdgPositioner(XdgPositioner* positioner) {
+  eraseResource(xdgPositioners_, positioner);
+}
+
 void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   while (auto* decoration = decorationFor(this, toplevel)) {
     wl_resource_destroy(decoration->resource);
   }
   eraseResource(toplevels_, toplevel);
+}
+
+void WaylandServer::Impl::destroyXdgPopup(XdgPopup* popup) {
+  if (popup && popup->xdgSurface && popup->xdgSurface->surface && popup->xdgSurface->surface->xdgPopup == popup) {
+    popup->xdgSurface->surface->xdgPopup = nullptr;
+    popup->xdgSurface->surface->popup = false;
+    popup->xdgSurface->surface->toplevel = false;
+  }
+  eraseResource(popups_, popup);
 }
 
 void WaylandServer::Impl::destroyShmPool(ShmPool* pool) {
@@ -3163,6 +3471,10 @@ void WaylandServer::Impl::destroyDataSource(DataSource* source) {
 void WaylandServer::Impl::destroyDataOffer(DataOffer* offer) {
   if (dndOffer_ == offer) dndOffer_ = nullptr;
   eraseResource(dataOffers_, offer);
+}
+
+void WaylandServer::Impl::destroyActivationToken(ActivationToken* token) {
+  eraseResource(activationTokens_, token);
 }
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : impl_(std::make_unique<Impl>(std::move(output))) {}
