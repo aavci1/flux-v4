@@ -162,7 +162,7 @@ Set them before launching the compositor if you need to force a theme or size.
 - Single output only.
 - No display-manager, login, lock screen, workspaces, or XWayland.
 - Input device permissions are still manual unless your session grants ACLs.
-- Popup support works for the test demos and uses popup-first pointer hit testing, but broader `foot`/GTK/Qt/browser menu behavior still needs real-app validation.
+- Popup support works for the test demos and uses popup-first pointer hit testing. The popup demo has visible hover/click validation. Broader `foot`/GTK/Qt/browser menu behavior still needs real-app validation with app configs that actually open popups.
 - Presentation-time support exists, but timestamp precision still needs hardware-derived presentation data.
 - Idle-inhibit protocol state is tracked; actual idle blanking and inhibition policy are not implemented yet.
 

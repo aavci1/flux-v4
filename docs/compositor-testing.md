@@ -122,7 +122,7 @@ Expected result: two windows appear. Drag the orange source rectangle to the blu
 ./build-kms-compositor/flux-compositor-popup-demo
 ```
 
-Expected result: the popup appears next to its parent surface, receives input, and dismisses without freezing the compositor.
+Expected result: the popup appears next to its parent surface. Moving the pointer over popup rows changes the highlighted row, clicking a row turns it green and logs the click, clicking outside dismisses it, and the compositor does not freeze.
 
 ### Activation
 
@@ -156,7 +156,7 @@ Expected result:
 - `Ctrl+C` kills a process inside `foot`; it should not kill the compositor.
 - Multiple windows can be opened and focused.
 - Resizing should reflow terminal content rather than stretch it.
-- Right-click popup menu behavior still needs validation against `foot` expectations.
+- Plain right-click may not open a menu with the default local `foot` config; the default binding is selection extension. Use a configured popup/menu action if testing `foot` popups specifically.
 
 ## Regression Checks
 

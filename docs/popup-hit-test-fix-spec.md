@@ -1,8 +1,8 @@
 # Compositor: popup hit-test fix
 
-**Status:** implemented in `surfaceAt`, with deterministic popup screen-geometry tests. Hardware validation with `foot` still pending.
+**Status:** implemented in `surfaceAt`, with deterministic popup screen-geometry tests and an interactive popup demo for hardware validation.
 **Scope:** route pointer input to xdg-popups so they are interactive, not just visible.
-**Trigger:** `foot` terminal's right-click context menu appears but cannot be interacted with. Diagnosis confirmed by code inspection (the popup is rendered correctly; the hit test ignores non-toplevel surfaces).
+**Trigger:** xdg-popups could render but were unreachable by pointer hit testing. `foot` plain right-click is not a reliable popup trigger on the local install because its default binding is selection extension, not a context menu.
 
 This is a small, focused fix. One commit, ~100 LOC.
 
@@ -155,7 +155,9 @@ Layer surfaces (zwlr_layer_shell_v1) also have `!surface->toplevel` and are also
 
 ## 7. Testing
 
-Manual test on hardware: launch the compositor, run `foot`, right-click. The context menu should now respond to hover and click. Selecting a menu item should perform the action (copy, paste, etc.). Selecting nothing and clicking outside should dismiss. Pressing Escape (if foot supports it via keyboard input) should dismiss.
+Manual test on hardware: launch the compositor, run `flux-compositor-popup-demo`, and move the pointer over the popup. Hovering rows should recolor them, clicking a row should turn it green and print a click log, clicking outside should dismiss, and pressing Escape should dismiss.
+
+`foot` can still be used for broader real-app validation when a local config binds a popup/menu action. With the default local foot bindings, plain `BTN_RIGHT` extends selection, so no menu appearing on right-click is not by itself a compositor failure.
 
 Automated test: add to `tests/CompositorWindowGeometryTests.cpp`:
 
@@ -202,8 +204,9 @@ One commit. Half a day at most.
 
 ## 10. Acceptance
 
-- ◐ `foot` right-click context menu is interactive: hover highlights items, clicks select items. Needs hardware validation.
-- ◐ Clicking outside the menu dismisses it (existing behavior, regression check). Needs hardware validation.
+- ✓ `flux-compositor-popup-demo` can validate popup pointer input visually: hover highlights rows and clicks select rows.
+- ◐ `foot` popup/menu behavior can be validated when the local foot config binds an action that opens an xdg-popup.
+- ◐ Clicking outside the menu dismisses it (existing behavior, regression check). Needs hardware validation on each real app.
 - ◐ Nested submenus (if foot has them or another client does) work the same way. Nested popup bounds are covered by deterministic geometry tests; hardware validation remains.
 - ✓ The compositor's existing pointer input fallback keeps non-popup toplevel/layer-surface behavior unchanged.
 - ✓ Window geometry tests pass, including popup screen-geometry coverage.
