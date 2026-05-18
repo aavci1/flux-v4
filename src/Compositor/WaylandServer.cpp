@@ -880,7 +880,7 @@ void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t
 void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* positionerResource, std::uint32_t token) {
   auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
   auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
-  if (!popup || !positioner) return;
+  if (!popup || !positioner || popup->dismissed) return;
   configurePopup(popup, positioner);
   if (wl_resource_get_version(resource) >= XDG_POPUP_REPOSITIONED_SINCE_VERSION) {
     xdg_popup_send_repositioned(resource, token);
@@ -2197,6 +2197,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
     if (!surface->toplevel) continue;
+    if (surface->xdgPopup && surface->xdgPopup->dismissed) continue;
     if (surface->width <= 0 || surface->height <= 0) continue;
     if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) continue;
     CommittedSurfaceSnapshot snapshot{
@@ -2434,6 +2435,42 @@ void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy
                                                  fixedDx,
                                                  fixedDy);
   }
+}
+
+WaylandServer::Impl::XdgPopup* topmostPopup(WaylandServer::Impl* server) {
+  for (auto it = server->popups_.rbegin(); it != server->popups_.rend(); ++it) {
+    WaylandServer::Impl::XdgPopup* popup = it->get();
+    if (!popup || popup->dismissed || !popup->resource || !popup->xdgSurface || !popup->xdgSurface->surface) continue;
+    return popup;
+  }
+  return nullptr;
+}
+
+bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer::Impl::XdgPopup* popup) {
+  return surface && popup && popup->xdgSurface && surface == popup->xdgSurface->surface;
+}
+
+bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
+  if (!popup || popup->dismissed) return false;
+  popup->dismissed = true;
+  if (popup->xdgSurface && popup->xdgSurface->surface) {
+    popup->xdgSurface->surface->toplevel = false;
+    if (popup->server->pointerFocus_ == popup->xdgSurface->surface) popup->server->pointerFocus_ = nullptr;
+    if (popup->server->keyboardFocus_ == popup->xdgSurface->surface) popup->server->keyboardFocus_ = nullptr;
+  }
+  if (popup->resource) xdg_popup_send_popup_done(popup->resource);
+  popup->server->flushClients();
+  return true;
+}
+
+bool dismissTopPopup(WaylandServer::Impl* server) {
+  return dismissPopup(topmostPopup(server));
+}
+
+bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target) {
+  WaylandServer::Impl::XdgPopup* popup = topmostPopup(server);
+  if (!popup || surfaceBelongsToPopup(target, popup)) return false;
+  return dismissPopup(popup);
 }
 
 std::uint32_t keyboardModifierMask(WaylandServer::Impl* server);
@@ -2836,6 +2873,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     clearDnd(this);
     return;
   }
+  if (pressed && dismissTopPopupOutside(this, target)) return;
   if (button == BTN_LEFT) {
     if (pressed) {
       if (Surface* closeTarget = closeButtonAt(this, pointerX_, pointerY_)) {
@@ -2952,6 +2990,7 @@ void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t 
 void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
   if (consumeModifier) return;
+  if (pressed && key == KEY_ESC && dismissTopPopup(this)) return;
   if (handleCompositorShortcut(this, key, pressed, timeMs)) return;
   if (!keyboardFocus_) return;
   std::uint32_t serial = nextInputSerial_++;

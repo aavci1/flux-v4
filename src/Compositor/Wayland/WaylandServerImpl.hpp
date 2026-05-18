@@ -416,6 +416,7 @@ struct WaylandServer::Impl::XdgPopup {
   std::int32_t configuredWidth = 1;
   std::int32_t configuredHeight = 1;
   bool grabbed = false;
+  bool dismissed = false;
 };
 
 struct WaylandServer::Impl::ShmPool {

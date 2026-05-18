@@ -487,7 +487,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, close button, optional resize grip.
 - Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Arrow to snap; Ctrl+Alt+Backspace to terminate the compositor.
-- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, and non-grabbing `grab` acknowledgement are implemented and covered by `flux-compositor-popup-demo`. Popup input grabs remain intentionally deferred until the non-grab path is hardware-smoked.
+- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented and covered by `flux-compositor-popup-demo`. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
 
 ### 6.3 Out of scope for phase 3
 
@@ -611,7 +611,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✓ A purpose-built test layer-shell client renders at the top layer.
 - ◐ A purpose-built presentation-time client receives `clock_id` and presented feedback after its committed frame is presented; hardware-precise timestamps and refresh counters remain pending.
 - ✓ A purpose-built relative-pointer client receives relative motion deltas while its window has pointer focus.
-- ◐ A purpose-built popup client can create and render a positioned popup without taking an input grab; outside-click/Escape popup dismissal remains pending.
+- ◐ A purpose-built popup client can create, render, and dismiss a positioned popup without taking an input grab; full popup input-grab semantics remain pending.
 - ◐ A purpose-built activation client can request an activation token and ask the compositor to raise/focus another window.
 - ✓ A purpose-built pointer-constraints client receives pointer-lock activation and relative motion while the virtual pointer stays locked.
 - ✓ A purpose-built primary-selection client can set a UTF-8 text primary selection and receive it back through the compositor.
@@ -763,7 +763,7 @@ This section is updated as work progresses. Entries record completion of each ph
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
-| Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering are implemented with a popup smoke demo. Popup input grabs remain deferred. |
+| Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. |
 | Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, the built-in arrow cursor can use a KMS cursor plane, and frame pacing waits for DRM vblank when available; full client-cursor hardware upload, adaptive sync/triple buffering, and docs remain pending. |
 

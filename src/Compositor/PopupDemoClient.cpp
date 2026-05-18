@@ -259,7 +259,8 @@ int main() {
     commitBuffer(client.surface, client.parentBuffer);
     wl_display_flush(client.display);
     createPopup(client);
-    std::fprintf(stderr, "flux-compositor-popup-demo: expect a parent window and a small popup rectangle\n");
+    std::fprintf(stderr,
+                 "flux-compositor-popup-demo: expect a parent window and a small popup rectangle; click outside the popup or press Escape to dismiss it\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;

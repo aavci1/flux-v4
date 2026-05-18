@@ -400,7 +400,7 @@ The xdg_surface configure/ack-configure cycle has well-defined invariants. Test 
 
 ## 5. The hardware-locking bugs
 
-xdg-popups and xdg-activation were deferred because their first implementations locked the test laptop. The safe first stage is now implemented and hardware-smoked: popups render without input grabs, and activation can raise/focus a target window without lockups. Popup input grabs and real-app menu dismissal behavior remain pending.
+xdg-popups and xdg-activation were deferred because their first implementations locked the test laptop. The safe first stage is now implemented and hardware-smoked: popups render and dismiss without input grabs, and activation can raise/focus a target window without lockups. Popup input grabs and real-app menu behavior remain pending.
 
 After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is contained: a new file in `Wayland/Globals/XdgPopup.cpp`, with no risk to other protocols. The implementation can have aggressive sanity-checking that, if it goes wrong, fails to construct the popup rather than spinning the compositor.
 
@@ -408,7 +408,7 @@ After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is 
 
 1. **Implement the protocol stub without any input grab.** Just respond to `get_popup` by creating a popup object that's tracked but renders as a regular surface (no popup-specific behavior). This isolates the protocol implementation from the input-grab logic that likely caused the freeze. Implemented and smoked with `flux-compositor-popup-demo`.
 
-2. **Render the popup correctly without grab.** Popups have positioning constraints (anchor, gravity, slide-along-edge fallback). Implement these statically — given a parent and a positioner, compute the popup's screen position. No animations, no grab. Implemented and smoked with `flux-compositor-popup-demo`.
+2. **Render and dismiss the popup correctly without grab.** Popups have positioning constraints (anchor, gravity, slide-along-edge fallback). Implement these statically — given a parent and a positioner, compute the popup's screen position. Outside-click and Escape dismissal send `popup_done` and unmap the popup. No animations, no grab. Implemented and smoked with `flux-compositor-popup-demo`.
 
 3. **Add the input grab last.** Wayland's grab semantics are subtle: the popup's input grab is bounded (it can be "interactive" or "non-interactive"), and a misbehaving grab can starve the rest of the input system. Implement with explicit timeouts on grab acquisition; if a popup has held an input grab for more than N seconds without user interaction, force-release and log.
 
