@@ -24,4 +24,22 @@ AppliedCompositorConfig applyCompositorConfig(CompositorConfig const& config, Ca
   return applied;
 }
 
+void drawCompositorBackground(Canvas& canvas,
+                              AppliedCompositorConfig const& config,
+                              std::uint32_t outputWidth,
+                              std::uint32_t outputHeight) {
+  canvas.clear(config.config.backgroundColor);
+  auto const bounds = Rect::sharp(0.f, 0.f, static_cast<float>(outputWidth), static_cast<float>(outputHeight));
+  if (config.config.backgroundGradientEnd) {
+    canvas.drawRect(bounds,
+                    CornerRadius{0.f},
+                    config.backgroundFill,
+                    StrokeStyle::none(),
+                    ShadowStyle::none());
+  }
+  if (config.wallpaperImage) {
+    canvas.drawImage(*config.wallpaperImage, bounds, config.config.wallpaperMode);
+  }
+}
+
 } // namespace flux::compositor

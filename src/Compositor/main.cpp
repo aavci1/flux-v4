@@ -140,22 +140,7 @@ int main(int, char**) {
       wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
 
       canvas->beginFrame();
-      canvas->clear(appliedConfig.config.backgroundColor);
-      if (appliedConfig.config.backgroundGradientEnd) {
-        canvas->drawRect(flux::Rect::sharp(0.f, 0.f, static_cast<float>(output.width()), static_cast<float>(output.height())),
-                         flux::CornerRadius{0.f},
-                         appliedConfig.backgroundFill,
-                         flux::StrokeStyle::none(),
-                         flux::ShadowStyle::none());
-      }
-      if (appliedConfig.wallpaperImage) {
-        canvas->drawImage(*appliedConfig.wallpaperImage,
-                          flux::Rect::sharp(0.f,
-                                            0.f,
-                                            static_cast<float>(output.width()),
-                                            static_cast<float>(output.height())),
-                          appliedConfig.config.wallpaperMode);
-      }
+      flux::compositor::drawCompositorBackground(*canvas, appliedConfig, output.width(), output.height());
       auto committedSurfaces = wayland.committedSurfaces();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
