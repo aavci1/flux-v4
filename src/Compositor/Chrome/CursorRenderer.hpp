@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Compositor/Surface/SurfaceRenderer.hpp"
 #include "Compositor/WaylandServer.hpp"
 
 #include <Flux/Graphics/Canvas.hpp>
@@ -10,17 +11,25 @@
 
 namespace flux::compositor {
 
-struct CachedClientImage;
+struct CursorRenderState {
+  CachedClientImage clientImage;
+  CachedClientImage themeImage;
+  CursorShape themeShape = CursorShape::Arrow;
+  float themeScale = 0.f;
+  std::int32_t themeHotspotX = 0;
+  std::int32_t themeHotspotY = 0;
+  std::uint64_t themeSerial = 0;
+  std::uint64_t hardwareSerial = 0;
+  std::uint64_t hardwareClientId = 0;
+  CursorShape hardwareShape = CursorShape::Arrow;
+  bool hardwareVisible = false;
+  bool hardwareClient = false;
+};
 
-[[nodiscard]] std::vector<std::uint32_t> makeHardwareArrowCursor(std::uint32_t width, std::uint32_t height);
-void drawFallbackCursor(Canvas& canvas, CursorShape shape, float cursorX, float cursorY);
 void drawCompositorCursor(WaylandServer& wayland,
                           Canvas& canvas,
                           platform::KmsOutput const& output,
-                          CachedClientImage& cursorImage,
-                          bool hardwareArrowCursor,
-                          std::vector<std::uint32_t> const& hardwareCursorPixels,
-                          std::uint32_t hardwareCursorWidth,
-                          std::uint32_t hardwareCursorHeight);
+                          CursorRenderState& cursorState,
+                          bool hardwareCursorEnabled);
 
 } // namespace flux::compositor

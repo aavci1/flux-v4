@@ -164,6 +164,7 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
   if (fd < 0) return false;
   if (impl_->cursorBuffer_.handle &&
       (impl_->cursorBuffer_.width != width || impl_->cursorBuffer_.height != height)) {
+    hideCursor();
     impl_->destroyCursorBuffer();
   }
 
@@ -202,6 +203,9 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
     rc = drmModeSetCursor(fd, impl_->connector_.crtcId, impl_->cursorBuffer_.handle, width, height);
   }
   impl_->cursorVisible_ = rc == 0;
+  if (!impl_->cursorVisible_) {
+    drmModeSetCursor(fd, impl_->connector_.crtcId, 0, 0, 0);
+  }
   return impl_->cursorVisible_;
 }
 

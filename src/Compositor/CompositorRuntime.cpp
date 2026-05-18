@@ -123,17 +123,12 @@ int runKmsCompositor(std::atomic<bool>& running) {
     };
 
     SurfaceRenderState surfaceRenderState;
-    CachedClientImage cursorImage;
-    bool hardwareArrowCursor = false;
+    CursorRenderState cursorState;
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
-    std::vector<std::uint32_t> hardwareCursorPixels;
-    if (appliedConfig.config.hardwareCursorEnabled && hardwareCursorWidth > 0 && hardwareCursorHeight > 0) {
-      hardwareCursorPixels = makeHardwareArrowCursor(hardwareCursorWidth, hardwareCursorHeight);
-      hardwareArrowCursor = output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
-      if (!hardwareArrowCursor) {
-        std::fprintf(stderr, "flux-compositor: hardware cursor unavailable; using software cursor\n");
-      }
+    bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
+    if (!hardwareCursorAvailable && appliedConfig.config.hardwareCursorEnabled) {
+      std::fprintf(stderr, "flux-compositor: hardware cursor unavailable; using software cursor\n");
     }
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
@@ -188,11 +183,8 @@ int runKmsCompositor(std::atomic<bool>& running) {
       drawCompositorCursor(wayland,
                            *canvas,
                            output,
-                           cursorImage,
-                           hardwareArrowCursor,
-                           hardwareCursorPixels,
-                           hardwareCursorWidth,
-                           hardwareCursorHeight);
+                           cursorState,
+                           appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
       canvas->present();
       wayland.sendFrameCallbacks(monotonicMilliseconds());
