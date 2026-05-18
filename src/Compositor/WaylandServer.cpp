@@ -54,16 +54,6 @@ constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 constexpr std::int32_t kCloseButtonSize = 18;
 constexpr std::int32_t kCloseButtonInset = 5;
 
-WaylandServer::Impl* serverFrom(wl_resource* resource) {
-  return static_cast<WaylandServer::Impl*>(wl_resource_get_user_data(resource));
-}
-
-template <typename T>
-T* dataFrom(wl_resource* resource) {
-  if (!resource) return nullptr;
-  return static_cast<T*>(wl_resource_get_user_data(resource));
-}
-
 void inertDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -94,10 +84,6 @@ extern struct zwp_relative_pointer_v1_interface const relativePointerImpl;
 } // namespace
 
 namespace {
-
-void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
-  resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
-}
 
 void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
 void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
@@ -154,7 +140,7 @@ void surfaceDestroy(wl_client*, wl_resource* resource) {
 }
 
 void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::int32_t x, std::int32_t y) {
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   surface->pendingBuffer = buffer;
   surface->pendingBufferAttached = true;
   surface->x = x;
@@ -162,7 +148,7 @@ void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::
 }
 
 void surfaceFrame(wl_client* client, wl_resource* resource, std::uint32_t id) {
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   wl_resource* callback = wl_resource_create(client, &wl_callback_interface, 1, id);
   if (!callback) {
     wl_client_post_no_memory(client);
@@ -343,7 +329,7 @@ bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Impl::Surface const* 
 }
 
 void surfaceCommit(wl_client*, wl_resource* resource) {
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   bool const hasBufferAttach = surface->pendingBufferAttached;
   if (surface->layerSurface && !surface->layerSurface->configured && !hasBufferAttach) {
     surface->layerSurface->configured = true;
@@ -420,7 +406,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
 }
 
 void surfaceSetBufferScale(wl_client*, wl_resource* resource, std::int32_t scale) {
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   surface->scale = std::max(1, scale);
 }
 
@@ -518,7 +504,7 @@ struct wl_shm_interface const shmImpl{
 
 void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t id, std::int32_t offset,
                          std::int32_t width, std::int32_t height, std::int32_t stride, std::uint32_t format) {
-  auto* pool = dataFrom<WaylandServer::Impl::ShmPool>(resource);
+  auto* pool = resourceData<WaylandServer::Impl::ShmPool>(resource);
   auto buffer = std::make_unique<WaylandServer::Impl::ShmBuffer>();
   buffer->server = pool->server;
   buffer->pool = pool;
@@ -541,7 +527,7 @@ void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t
 }
 
 void shmPoolResize(wl_client*, wl_resource* resource, std::int32_t size) {
-  auto* pool = dataFrom<WaylandServer::Impl::ShmPool>(resource);
+  auto* pool = resourceData<WaylandServer::Impl::ShmPool>(resource);
   if (pool->data) {
     munmap(pool->data, static_cast<std::size_t>(pool->size));
     pool->data = nullptr;
@@ -629,7 +615,7 @@ void linuxBufferParamsDestroy(wl_client*, wl_resource* resource) {
 void linuxBufferParamsAdd(wl_client*, wl_resource* resource, int fd, std::uint32_t planeIndex,
                           std::uint32_t offset, std::uint32_t stride, std::uint32_t modifierHi,
                           std::uint32_t modifierLo) {
-  auto* params = dataFrom<WaylandServer::Impl::DmabufParams>(resource);
+  auto* params = resourceData<WaylandServer::Impl::DmabufParams>(resource);
   if (params->used) {
     close(fd);
     wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED,
@@ -660,7 +646,7 @@ void linuxBufferParamsAdd(wl_client*, wl_resource* resource, int fd, std::uint32
 
 void linuxBufferParamsCreate(wl_client* client, wl_resource* resource, std::int32_t width,
                              std::int32_t height, std::uint32_t format, std::uint32_t flags) {
-  auto* params = dataFrom<WaylandServer::Impl::DmabufParams>(resource);
+  auto* params = resourceData<WaylandServer::Impl::DmabufParams>(resource);
   if (!validateDmabufParams(params, width, height, format)) return;
   params->used = true;
   wl_resource* buffer = createDmabufBuffer(client, params, 0, width, height, format, flags);
@@ -670,7 +656,7 @@ void linuxBufferParamsCreate(wl_client* client, wl_resource* resource, std::int3
 void linuxBufferParamsCreateImmed(wl_client* client, wl_resource* resource, std::uint32_t bufferId,
                                   std::int32_t width, std::int32_t height, std::uint32_t format,
                                   std::uint32_t flags) {
-  auto* params = dataFrom<WaylandServer::Impl::DmabufParams>(resource);
+  auto* params = resourceData<WaylandServer::Impl::DmabufParams>(resource);
   if (!validateDmabufParams(params, width, height, format)) return;
   params->used = true;
   createDmabufBuffer(client, params, bufferId, width, height, format, flags);
@@ -888,7 +874,7 @@ void xdgDecorationManagerDestroy(wl_client*, wl_resource* resource) {
 void xdgDecorationManagerGetToplevelDecoration(wl_client* client, wl_resource* resource, std::uint32_t id,
                                                wl_resource* toplevelResource) {
   auto* server = serverFrom(resource);
-  auto* toplevel = dataFrom<WaylandServer::Impl::XdgToplevel>(toplevelResource);
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(toplevelResource);
   if (decorationFor(server, toplevel)) {
     wl_resource_post_error(resource, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED,
                            "xdg_toplevel already has a decoration object");
@@ -922,7 +908,7 @@ void xdgToplevelDecorationDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32_t mode) {
-  auto* decoration = dataFrom<WaylandServer::Impl::ToplevelDecoration>(resource);
+  auto* decoration = resourceData<WaylandServer::Impl::ToplevelDecoration>(resource);
   if (mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) {
     wl_resource_post_error(resource, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_INVALID_MODE,
                            "invalid xdg-decoration mode %u", mode);
@@ -933,7 +919,7 @@ void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32
 }
 
 void xdgToplevelDecorationUnsetMode(wl_client*, wl_resource* resource) {
-  auto* decoration = dataFrom<WaylandServer::Impl::ToplevelDecoration>(resource);
+  auto* decoration = resourceData<WaylandServer::Impl::ToplevelDecoration>(resource);
   decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
   sendDecorationConfigure(decoration);
 }
@@ -969,7 +955,7 @@ void xdgWmBaseCreatePositioner(wl_client* client, wl_resource* resource, std::ui
 void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint32_t id,
                             wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   auto xdgSurface = std::make_unique<WaylandServer::Impl::XdgSurface>();
   xdgSurface->server = server;
   xdgSurface->surface = surface;
@@ -995,7 +981,7 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
-  auto* xdgSurface = dataFrom<WaylandServer::Impl::XdgSurface>(resource);
+  auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
   if (xdgSurface->surface->layerSurface) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has a layer-shell role");
     return;
@@ -1029,7 +1015,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
 }
 
 void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
-  dataFrom<WaylandServer::Impl::XdgSurface>(resource)->configured = true;
+  resourceData<WaylandServer::Impl::XdgSurface>(resource)->configured = true;
 }
 
 struct xdg_surface_interface const xdgSurfaceImpl{
@@ -1045,15 +1031,15 @@ void xdgToplevelDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
-  dataFrom<WaylandServer::Impl::XdgToplevel>(resource)->title = title ? title : "";
+  resourceData<WaylandServer::Impl::XdgToplevel>(resource)->title = title ? title : "";
 }
 
 void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
-  dataFrom<WaylandServer::Impl::XdgToplevel>(resource)->appId = appId ? appId : "";
+  resourceData<WaylandServer::Impl::XdgToplevel>(resource)->appId = appId ? appId : "";
 }
 
 void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t, std::uint32_t edges) {
-  auto* toplevel = dataFrom<WaylandServer::Impl::XdgToplevel>(resource);
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
@@ -1111,7 +1097,7 @@ void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resou
     return;
   }
 
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface || surface->toplevel) return;
   surface->cursor = true;
   server->cursorSurface_ = surface;
@@ -1284,7 +1270,7 @@ void viewportDestroy(wl_client*, wl_resource* resource) {
 
 void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed_t y,
                        wl_fixed_t width, wl_fixed_t height) {
-  auto* viewport = dataFrom<WaylandServer::Impl::Viewport>(resource);
+  auto* viewport = resourceData<WaylandServer::Impl::Viewport>(resource);
   if (!viewport || !viewport->surface) {
     wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
     return;
@@ -1318,7 +1304,7 @@ void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed
 }
 
 void viewportSetDestination(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
-  auto* viewport = dataFrom<WaylandServer::Impl::Viewport>(resource);
+  auto* viewport = resourceData<WaylandServer::Impl::Viewport>(resource);
   if (!viewport || !viewport->surface) {
     wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
     return;
@@ -1349,7 +1335,7 @@ struct wp_viewport_interface const viewportImpl{
 void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32_t id,
                            wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
     return;
@@ -1399,7 +1385,7 @@ struct wp_fractional_scale_v1_interface const fractionalScaleImpl{
 void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* resource, std::uint32_t id,
                                               wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource,
                            WP_FRACTIONAL_SCALE_MANAGER_V1_ERROR_FRACTIONAL_SCALE_EXISTS,
@@ -1490,7 +1476,7 @@ void cursorShapeDeviceDestroy(wl_client*, wl_resource* resource) {
 }
 
 void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t serial, std::uint32_t shape) {
-  auto* device = dataFrom<WaylandServer::Impl::CursorShapeDevice>(resource);
+  auto* device = resourceData<WaylandServer::Impl::CursorShapeDevice>(resource);
   if (!device || !device->server) return;
   std::uint32_t const version = static_cast<std::uint32_t>(wl_resource_get_version(resource));
   if (!wp_cursor_shape_device_v1_shape_is_valid(shape, version)) {
@@ -1559,7 +1545,7 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
                                        std::uint32_t id,
                                        wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource, 0, "invalid idle inhibitor surface");
     return;
@@ -1598,14 +1584,14 @@ void layerShellDestroy(wl_client*, wl_resource* resource) {
 }
 
 void layerSurfaceSetSize(wl_client*, wl_resource* resource, std::uint32_t width, std::uint32_t height) {
-  auto* layerSurface = dataFrom<WaylandServer::Impl::LayerSurface>(resource);
+  auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   layerSurface->width = width;
   layerSurface->height = height;
 }
 
 void layerSurfaceSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
-  auto* layerSurface = dataFrom<WaylandServer::Impl::LayerSurface>(resource);
+  auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   std::uint32_t const valid = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                              ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
@@ -1620,7 +1606,7 @@ void layerSurfaceSetExclusiveZone(wl_client*, wl_resource*, std::int32_t) {}
 
 void layerSurfaceSetMargin(wl_client*, wl_resource* resource, std::int32_t top, std::int32_t right,
                            std::int32_t bottom, std::int32_t left) {
-  auto* layerSurface = dataFrom<WaylandServer::Impl::LayerSurface>(resource);
+  auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   layerSurface->marginTop = top;
   layerSurface->marginRight = right;
@@ -1656,7 +1642,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
                                wl_resource* surfaceResource, wl_resource*, std::uint32_t layer,
                                char const* nameSpace) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface || surface->toplevel || surface->layerSurface || surface->cursor) {
     wl_resource_post_error(resource, ZWLR_LAYER_SHELL_V1_ERROR_ROLE, "wl_surface already has a role");
     return;
@@ -1702,7 +1688,7 @@ void presentationDestroy(wl_client*, wl_resource* resource) {
 
 void presentationFeedback(wl_client* client, wl_resource* resource, wl_resource* surfaceResource, std::uint32_t id) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource, 0, "invalid surface for presentation feedback");
     return;
@@ -1844,7 +1830,7 @@ void lockedPointerDestroy(wl_client*, wl_resource* resource) {
 }
 
 void lockedPointerSetCursorPositionHint(wl_client*, wl_resource* resource, wl_fixed_t surfaceX, wl_fixed_t surfaceY) {
-  auto* constraint = dataFrom<WaylandServer::Impl::PointerConstraint>(resource);
+  auto* constraint = resourceData<WaylandServer::Impl::PointerConstraint>(resource);
   if (!constraint) return;
   constraint->cursorHintX = static_cast<float>(wl_fixed_to_double(surfaceX));
   constraint->cursorHintY = static_cast<float>(wl_fixed_to_double(surfaceY));
@@ -1877,7 +1863,7 @@ void createPointerConstraint(wl_client* client,
                              std::uint32_t lifetime,
                              WaylandServer::Impl::PointerConstraint::Kind kind) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (surfaceAlreadyConstrained(server, surface, pointerResource)) {
     wl_resource_post_error(resource,
                            ZWP_POINTER_CONSTRAINTS_V1_ERROR_ALREADY_CONSTRAINED,
@@ -1965,7 +1951,7 @@ void primarySelectionManagerDestroy(wl_client*, wl_resource* resource) {
 }
 
 void primarySelectionSourceOffer(wl_client*, wl_resource* resource, char const* mimeType) {
-  auto* source = dataFrom<WaylandServer::Impl::PrimarySelectionSource>(resource);
+  auto* source = resourceData<WaylandServer::Impl::PrimarySelectionSource>(resource);
   if (!source || !mimeType) return;
   if (std::find(source->mimeTypes.begin(), source->mimeTypes.end(), mimeType) == source->mimeTypes.end()) {
     source->mimeTypes.emplace_back(mimeType);
@@ -2022,10 +2008,10 @@ void sendPrimarySelectionForFocus(WaylandServer::Impl* server) {
 }
 
 void primarySelectionDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
-  auto* device = dataFrom<WaylandServer::Impl::PrimarySelectionDevice>(resource);
+  auto* device = resourceData<WaylandServer::Impl::PrimarySelectionDevice>(resource);
   if (!device) return;
   auto* server = device->server;
-  auto* source = dataFrom<WaylandServer::Impl::PrimarySelectionSource>(sourceResource);
+  auto* source = resourceData<WaylandServer::Impl::PrimarySelectionSource>(sourceResource);
   if (server->primarySelectionSource_ && server->primarySelectionSource_ != source &&
       server->primarySelectionSource_->resource) {
     zwp_primary_selection_source_v1_send_cancelled(server->primarySelectionSource_->resource);
@@ -2040,7 +2026,7 @@ struct zwp_primary_selection_device_v1_interface const primarySelectionDeviceImp
 };
 
 void primarySelectionOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
-  auto* offer = dataFrom<WaylandServer::Impl::PrimarySelectionOffer>(resource);
+  auto* offer = resourceData<WaylandServer::Impl::PrimarySelectionOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource || !mimeType) {
     close(fd);
     return;
@@ -2114,7 +2100,7 @@ void dataDeviceManagerDestroy(wl_client*, wl_resource* resource) {
 }
 
 void dataSourceOffer(wl_client*, wl_resource* resource, char const* mimeType) {
-  auto* source = dataFrom<WaylandServer::Impl::DataSource>(resource);
+  auto* source = resourceData<WaylandServer::Impl::DataSource>(resource);
   if (!source || !mimeType) return;
   if (std::find(source->mimeTypes.begin(), source->mimeTypes.end(), mimeType) == source->mimeTypes.end()) {
     source->mimeTypes.emplace_back(mimeType);
@@ -2134,13 +2120,13 @@ struct wl_data_source_interface const dataSourceImpl{
 };
 
 void dataOfferAccept(wl_client*, wl_resource* resource, std::uint32_t, char const* mimeType) {
-  auto* offer = dataFrom<WaylandServer::Impl::DataOffer>(resource);
+  auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource) return;
   wl_data_source_send_target(offer->source->resource, mimeType);
 }
 
 void dataOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
-  auto* offer = dataFrom<WaylandServer::Impl::DataOffer>(resource);
+  auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource || !mimeType) {
     close(fd);
     return;
@@ -2154,7 +2140,7 @@ void dataOfferDestroy(wl_client*, wl_resource* resource) {
 }
 
 void dataOfferFinish(wl_client*, wl_resource* resource) {
-  auto* offer = dataFrom<WaylandServer::Impl::DataOffer>(resource);
+  auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource) return;
   if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
     wl_data_source_send_dnd_finished(offer->source->resource);
@@ -2292,11 +2278,11 @@ void dataDeviceStartDrag(wl_client* client,
                          wl_resource* originResource,
                          wl_resource*,
                          std::uint32_t) {
-  auto* device = dataFrom<WaylandServer::Impl::DataDevice>(resource);
+  auto* device = resourceData<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
-  auto* source = dataFrom<WaylandServer::Impl::DataSource>(sourceResource);
-  auto* origin = dataFrom<WaylandServer::Impl::Surface>(originResource);
+  auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
+  auto* origin = resourceData<WaylandServer::Impl::Surface>(originResource);
   if (!origin || wl_resource_get_client(origin->resource) != client) return;
   if (server->dndSource_) clearDnd(server);
   server->dndSource_ = source;
@@ -2305,10 +2291,10 @@ void dataDeviceStartDrag(wl_client* client,
 }
 
 void dataDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
-  auto* device = dataFrom<WaylandServer::Impl::DataDevice>(resource);
+  auto* device = resourceData<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
-  auto* source = dataFrom<WaylandServer::Impl::DataSource>(sourceResource);
+  auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
   if (server->selectionSource_ && server->selectionSource_ != source && server->selectionSource_->resource) {
     wl_data_source_send_cancelled(server->selectionSource_->resource);
   }

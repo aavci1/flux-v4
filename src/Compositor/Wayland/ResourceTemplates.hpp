@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Compositor/WaylandServer.hpp"
+
 #include <algorithm>
 #include <memory>
 #include <vector>
@@ -10,7 +12,12 @@ namespace flux::compositor {
 
 template <typename T>
 T* resourceData(wl_resource* resource) {
+  if (!resource) return nullptr;
   return static_cast<T*>(wl_resource_get_user_data(resource));
+}
+
+inline WaylandServer::Impl* serverFrom(wl_resource* resource) {
+  return resourceData<WaylandServer::Impl>(resource);
 }
 
 template <typename T, typename Owner, void (Owner::*Destroy)(T*)>
@@ -28,6 +35,10 @@ void eraseResource(std::vector<std::unique_ptr<T>>& resources, T const* resource
                                    return candidate.get() == resource;
                                  }),
                   resources.end());
+}
+
+inline void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
+  resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
 
 } // namespace flux::compositor
