@@ -4,6 +4,7 @@
 #include <linux/input-event-codes.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/poll.h>
 #include <unistd.h>
 #include <wayland-client.h>
 
@@ -39,6 +40,8 @@ struct DemoWindow {
   int fd = -1;
   bool configured = false;
   bool source = false;
+  bool blockVisible = false;
+  bool hover = false;
 };
 
 struct DemoClient {
@@ -77,18 +80,38 @@ void setPixel(std::uint8_t* dst, int x, int y, std::uint8_t red, std::uint8_t gr
   dst[offset + 3u] = 0xff;
 }
 
+bool inRect(int x, int y, int left, int top, int width, int height) {
+  return x >= left && x < left + width && y >= top && y < top + height;
+}
+
 void fillPattern(DemoWindow& window) {
   auto* dst = static_cast<std::uint8_t*>(window.pixels);
   for (int y = 0; y < kHeight; ++y) {
     for (int x = 0; x < kWidth; ++x) {
       bool const grid = (x % 28) < 3 || (y % 28) < 3;
       if (window.source) {
-        setPixel(dst, x, y, grid ? 250 : 200, grid ? 245 : 64, grid ? 210 : 82);
+        setPixel(dst, x, y, grid ? 250 : 150, grid ? 245 : 55, grid ? 210 : 70);
       } else {
-        setPixel(dst, x, y, grid ? 210 : 42, grid ? 245 : 135, grid ? 250 : 215);
+        std::uint8_t const red = window.hover ? 65 : 42;
+        std::uint8_t const green = window.hover ? 170 : 135;
+        std::uint8_t const blue = window.hover ? 245 : 215;
+        setPixel(dst, x, y, grid ? 210 : red, grid ? 245 : green, grid ? 250 : blue);
+      }
+      if (window.blockVisible && inRect(x, y, 78, 46, 104, 78)) {
+        bool const border = x < 84 || x >= 176 || y < 52 || y >= 118;
+        setPixel(dst, x, y, border ? 255 : 236, border ? 255 : 74, border ? 255 : 64);
       }
     }
   }
+}
+
+void repaintWindow(DemoWindow& window) {
+  if (!window.surface || !window.buffer || !window.pixels) return;
+  fillPattern(window);
+  wl_surface_attach(window.surface, window.buffer, 0, 0);
+  wl_surface_damage_buffer(window.surface, 0, 0, kWidth, kHeight);
+  wl_surface_commit(window.surface);
+  if (window.client && window.client->display) wl_display_flush(window.client->display);
 }
 
 void createBuffer(DemoClient& client, DemoWindow& window) {
@@ -149,7 +172,12 @@ void sourceSend(void*, wl_data_source*, char const* mimeType, int fd) {
   std::fprintf(stderr, "flux-compositor-dnd-demo: source sent payload\n");
 }
 
-void sourceCancelled(void*, wl_data_source*) {
+void sourceCancelled(void* data, wl_data_source*) {
+  auto* client = static_cast<DemoClient*>(data);
+  client->sourceWindow.blockVisible = true;
+  client->targetWindow.hover = false;
+  repaintWindow(client->sourceWindow);
+  repaintWindow(client->targetWindow);
   std::fprintf(stderr, "flux-compositor-dnd-demo: drag cancelled\n");
 }
 
@@ -161,7 +189,18 @@ void sourceFinished(void*, wl_data_source*) {
   std::fprintf(stderr, "flux-compositor-dnd-demo: drag finished\n");
 }
 
-void sourceAction(void*, wl_data_source*, std::uint32_t) {}
+char const* actionName(std::uint32_t action) {
+  switch (action) {
+  case WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY: return "copy";
+  case WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE: return "move";
+  case WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK: return "ask";
+  default: return "none";
+  }
+}
+
+void sourceAction(void*, wl_data_source*, std::uint32_t action) {
+  std::fprintf(stderr, "flux-compositor-dnd-demo: source action %s\n", actionName(action));
+}
 
 wl_data_source_listener const kDataSourceListener{
     .target = sourceTarget,
@@ -176,8 +215,12 @@ void offerOffer(void*, wl_data_offer*, char const* mimeType) {
   std::fprintf(stderr, "flux-compositor-dnd-demo: target saw offered mime %s\n", mimeType ? mimeType : "(null)");
 }
 
-void offerSourceActions(void*, wl_data_offer*, std::uint32_t) {}
-void offerAction(void*, wl_data_offer*, std::uint32_t) {}
+void offerSourceActions(void*, wl_data_offer*, std::uint32_t actions) {
+  std::fprintf(stderr, "flux-compositor-dnd-demo: target saw source actions 0x%x\n", actions);
+}
+void offerAction(void*, wl_data_offer*, std::uint32_t action) {
+  std::fprintf(stderr, "flux-compositor-dnd-demo: target action %s\n", actionName(action));
+}
 
 wl_data_offer_listener const kDataOfferListener{
     .offer = offerOffer,
@@ -203,12 +246,15 @@ void pointerButton(void* data, wl_pointer*, std::uint32_t serial, std::uint32_t,
     client->dataSource = wl_data_device_manager_create_data_source(client->dataManager);
     wl_data_source_add_listener(client->dataSource, &kDataSourceListener, client);
     wl_data_source_offer(client->dataSource, kMimeText);
+    wl_data_source_set_actions(client->dataSource, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
   }
   wl_data_device_start_drag(client->dataDevice,
                             client->dataSource,
                             client->sourceWindow.surface,
                             nullptr,
                             serial);
+  client->sourceWindow.blockVisible = false;
+  repaintWindow(client->sourceWindow);
   std::fprintf(stderr, "flux-compositor-dnd-demo: drag started; release over the blue target window\n");
 }
 
@@ -236,6 +282,9 @@ wl_pointer_listener const kPointerListener{
 
 void readDroppedText(DemoClient* client) {
   if (client->receiveFd < 0) return;
+  pollfd fd{.fd = client->receiveFd, .events = POLLIN | POLLHUP, .revents = 0};
+  if (poll(&fd, 1, 0) <= 0) return;
+  if ((fd.revents & (POLLIN | POLLHUP)) == 0) return;
   char buffer[256]{};
   ssize_t const bytes = read(client->receiveFd, buffer, sizeof(buffer) - 1u);
   if (bytes > 0) {
@@ -243,7 +292,9 @@ void readDroppedText(DemoClient* client) {
     std::fprintf(stderr, "flux-compositor-dnd-demo: target received \"%s\"\n", buffer);
     close(client->receiveFd);
     client->receiveFd = -1;
-    gRunning.store(false, std::memory_order_relaxed);
+  } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+    close(client->receiveFd);
+    client->receiveFd = -1;
   }
 }
 
@@ -262,11 +313,22 @@ void dataDeviceEnter(void* data,
                      wl_data_offer* offer) {
   auto* client = static_cast<DemoClient*>(data);
   client->currentOffer = offer;
-  if (offer) wl_data_offer_accept(offer, serial, kMimeText);
+  if (offer) {
+    wl_data_offer_accept(offer, serial, kMimeText);
+    wl_data_offer_set_actions(offer,
+                              WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY,
+                              WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+  }
+  client->targetWindow.hover = true;
+  repaintWindow(client->targetWindow);
   std::fprintf(stderr, "flux-compositor-dnd-demo: entered target window\n");
 }
 
-void dataDeviceLeave(void*, wl_data_device*) {}
+void dataDeviceLeave(void* data, wl_data_device*) {
+  auto* client = static_cast<DemoClient*>(data);
+  client->targetWindow.hover = false;
+  repaintWindow(client->targetWindow);
+}
 void dataDeviceMotion(void*, wl_data_device*, std::uint32_t, wl_fixed_t, wl_fixed_t) {}
 
 void dataDeviceDrop(void* data, wl_data_device*) {
@@ -274,10 +336,15 @@ void dataDeviceDrop(void* data, wl_data_device*) {
   if (!client->currentOffer) return;
   int fds[2];
   if (pipe(fds) != 0) throw std::runtime_error(std::string("pipe failed: ") + std::strerror(errno));
+  fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL, 0) | O_NONBLOCK);
   client->receiveFd = fds[0];
   wl_data_offer_receive(client->currentOffer, kMimeText, fds[1]);
   close(fds[1]);
   wl_data_offer_finish(client->currentOffer);
+  client->targetWindow.hover = false;
+  client->targetWindow.blockVisible = true;
+  repaintWindow(client->targetWindow);
+  wl_display_flush(client->display);
   std::fprintf(stderr, "flux-compositor-dnd-demo: drop requested payload\n");
 }
 
@@ -378,6 +445,7 @@ void destroyClient(DemoClient& client) {
 int main() {
   DemoClient client;
   client.sourceWindow.source = true;
+  client.sourceWindow.blockVisible = true;
   try {
     client.display = flux::compositor::demo::connectDisplay("flux-compositor-dnd-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");

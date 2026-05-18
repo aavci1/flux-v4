@@ -29,6 +29,18 @@ std::optional<DmabufPlane> findPlane(WaylandServer::Impl::DmabufParams const* pa
   return *found;
 }
 
+std::optional<std::uint32_t> bytesPerPixel(std::uint32_t format) {
+  switch (format) {
+  case DRM_FORMAT_ARGB8888:
+  case DRM_FORMAT_XRGB8888:
+  case DRM_FORMAT_ABGR8888:
+  case DRM_FORMAT_XBGR8888:
+    return 4u;
+  default:
+    return std::nullopt;
+  }
+}
+
 bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_t width, std::int32_t height,
                           std::uint32_t format) {
   if (params->used) {
@@ -49,6 +61,24 @@ bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_
   if (!findPlane(params, 0).has_value()) {
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
                            "dmabuf plane 0 is required");
+    return false;
+  }
+  if (params->planes.size() != 1) {
+    wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                           "only single-plane RGB dmabufs are currently supported");
+    return false;
+  }
+  DmabufPlane const& plane = params->planes.front();
+  auto bpp = bytesPerPixel(format);
+  if (!bpp || plane.stride < static_cast<std::uint32_t>(width) * *bpp) {
+    wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
+                           "dmabuf plane stride is too small");
+    return false;
+  }
+  if (plane.modifier != DRM_FORMAT_MOD_INVALID && plane.modifier != DRM_FORMAT_MOD_LINEAR) {
+    wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
+                           "unsupported dmabuf modifier 0x%016llx",
+                           static_cast<unsigned long long>(plane.modifier));
     return false;
   }
   return true;
@@ -109,6 +139,12 @@ void linuxBufferParamsAdd(wl_client*, wl_resource* resource, int fd, std::uint32
     close(fd);
     wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET,
                            "dmabuf plane index %u was already set", planeIndex);
+    return;
+  }
+  if (stride == 0) {
+    close(fd);
+    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
+                           "dmabuf plane stride must be positive");
     return;
   }
 
@@ -198,6 +234,10 @@ bool isSupportedDmabufFormat(std::uint32_t format) {
 
 void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, std::min(version, 3u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &linuxDmabufImpl, data, nullptr);
   sendDmabufFormat(resource, DRM_FORMAT_ARGB8888);
   sendDmabufFormat(resource, DRM_FORMAT_XRGB8888);

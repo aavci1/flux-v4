@@ -544,6 +544,12 @@ void KmsApplication::initializeInput() {
   }
   dispatchPendingInput();
   debugLog("input initialization complete with %d device(s)", inputDeviceCount_);
+  if (inputDeviceCount_ == 0) {
+    std::fprintf(stderr,
+                 "[flux:kms] warning: no input devices are readable; mouse and keyboard input will not work. "
+                 "Grant access to /dev/input/event* or run under a seat manager.\n");
+    std::fflush(stderr);
+  }
 }
 
 void KmsApplication::initializeDrmMonitor() {

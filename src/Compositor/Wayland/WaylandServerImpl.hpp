@@ -372,6 +372,7 @@ struct WaylandServer::Impl::DataSource {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::vector<std::string> mimeTypes;
+  std::uint32_t dndActions = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
 };
 
 struct WaylandServer::Impl::DataDevice {
@@ -384,6 +385,11 @@ struct WaylandServer::Impl::DataOffer {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   DataSource* source = nullptr;
+  bool dnd = false;
+  std::string acceptedMimeType;
+  std::uint32_t dndActions = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+  std::uint32_t preferredAction = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+  std::uint32_t selectedAction = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
 };
 
 struct WaylandServer::Impl::ActivationToken {

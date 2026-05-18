@@ -2036,7 +2036,71 @@ void dataSourceDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void dataSourceSetActions(wl_client*, wl_resource*, std::uint32_t) {}
+bool validDndActionMask(std::uint32_t actions) {
+  constexpr std::uint32_t valid = WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
+                                  WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE |
+                                  WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
+  return (actions & ~valid) == 0u;
+}
+
+bool validPreferredDndAction(std::uint32_t action) {
+  return action == WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE ||
+         action == WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY ||
+         action == WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE ||
+         action == WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
+}
+
+std::uint32_t chooseDndAction(std::uint32_t sourceActions,
+                              std::uint32_t targetActions,
+                              std::uint32_t preferredAction) {
+  std::uint32_t const available = sourceActions & targetActions;
+  if (preferredAction != WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE &&
+      (available & preferredAction) != 0u) {
+    return preferredAction;
+  }
+  if ((available & WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY) != 0u) return WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY;
+  if ((available & WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE) != 0u) return WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE;
+  if ((available & WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK) != 0u) return WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
+  return WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+}
+
+void updateDndOfferAction(WaylandServer::Impl::DataOffer* offer) {
+  if (!offer || !offer->dnd || !offer->resource || !offer->source) return;
+  std::uint32_t const selected =
+      chooseDndAction(offer->source->dndActions, offer->dndActions, offer->preferredAction);
+  if (selected == offer->selectedAction) return;
+  offer->selectedAction = selected;
+  if (wl_resource_get_version(offer->resource) >= WL_DATA_OFFER_ACTION_SINCE_VERSION) {
+    wl_data_offer_send_action(offer->resource, selected);
+  }
+  if (offer->source->resource &&
+      wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_ACTION_SINCE_VERSION) {
+    wl_data_source_send_action(offer->source->resource, selected);
+  }
+}
+
+void dataSourceSetActions(wl_client*, wl_resource* resource, std::uint32_t actions) {
+  auto* source = resourceData<WaylandServer::Impl::DataSource>(resource);
+  if (!source) return;
+  if (!validDndActionMask(actions)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_SOURCE_ERROR_INVALID_ACTION_MASK,
+                           "invalid data source DnD action mask");
+    return;
+  }
+  source->dndActions = actions;
+  if (source->server) {
+    for (auto const& offer : source->server->dataOffers_) {
+      if (offer->source == source) {
+        if (offer->dnd && offer->resource &&
+            wl_resource_get_version(offer->resource) >= WL_DATA_OFFER_SOURCE_ACTIONS_SINCE_VERSION) {
+          wl_data_offer_send_source_actions(offer->resource, source->dndActions);
+        }
+        updateDndOfferAction(offer.get());
+      }
+    }
+  }
+}
 
 struct wl_data_source_interface const dataSourceImpl{
     .offer = dataSourceOffer,
@@ -2047,6 +2111,7 @@ struct wl_data_source_interface const dataSourceImpl{
 void dataOfferAccept(wl_client*, wl_resource* resource, std::uint32_t, char const* mimeType) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource) return;
+  offer->acceptedMimeType = mimeType ? mimeType : "";
   wl_data_source_send_target(offer->source->resource, mimeType);
 }
 
@@ -2067,11 +2132,41 @@ void dataOfferDestroy(wl_client*, wl_resource* resource) {
 void dataOfferFinish(wl_client*, wl_resource* resource) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource) return;
+  if (offer->dnd && offer->selectedAction == WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE) {
+    if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
+      wl_data_source_send_cancelled(offer->source->resource);
+    }
+    return;
+  }
   if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
     wl_data_source_send_dnd_finished(offer->source->resource);
   }
 }
-void dataOfferSetActions(wl_client*, wl_resource*, std::uint32_t, std::uint32_t) {}
+void dataOfferSetActions(wl_client*, wl_resource* resource, std::uint32_t actions, std::uint32_t preferredAction) {
+  auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
+  if (!offer) return;
+  if (!validDndActionMask(actions)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_ACTION_MASK,
+                           "invalid data offer DnD action mask");
+    return;
+  }
+  if (!validPreferredDndAction(preferredAction)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_ACTION,
+                           "invalid preferred DnD action");
+    return;
+  }
+  if (preferredAction != WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE && (actions & preferredAction) == 0u) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_ACTION,
+                           "preferred DnD action is not in target action mask");
+    return;
+  }
+  offer->dndActions = actions;
+  offer->preferredAction = preferredAction;
+  updateDndOfferAction(offer);
+}
 
 struct wl_data_offer_interface const dataOfferImpl{
     .accept = dataOfferAccept,
@@ -2123,13 +2218,13 @@ WaylandServer::Impl::DataDevice* dataDeviceForClient(WaylandServer::Impl* server
   return nullptr;
 }
 
-void clearDnd(WaylandServer::Impl* server) {
+void clearDnd(WaylandServer::Impl* server, bool destroyOffer = true) {
   if (server->dndTarget_) {
     if (auto* device = dataDeviceForClient(server, wl_resource_get_client(server->dndTarget_->resource))) {
       wl_data_device_send_leave(device->resource);
     }
   }
-  if (server->dndOffer_ && server->dndOffer_->resource) {
+  if (destroyOffer && server->dndOffer_ && server->dndOffer_->resource) {
     wl_resource_destroy(server->dndOffer_->resource);
   }
   server->dndSource_ = nullptr;
@@ -2143,6 +2238,7 @@ WaylandServer::Impl::DataOffer* createDndOffer(WaylandServer::Impl* server, wl_c
   auto offer = std::make_unique<WaylandServer::Impl::DataOffer>();
   offer->server = server;
   offer->source = server->dndSource_;
+  offer->dnd = true;
   wl_resource* offerResource = wl_resource_create(client, &wl_data_offer_interface, 3, 0);
   if (!offerResource) {
     wl_client_post_no_memory(client);
@@ -2152,6 +2248,10 @@ WaylandServer::Impl::DataOffer* createDndOffer(WaylandServer::Impl* server, wl_c
   auto* raw = offer.get();
   server->dataOffers_.push_back(std::move(offer));
   wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::Impl::DataOffer, WaylandServer::Impl, &WaylandServer::Impl::destroyDataOffer>);
+  if (wl_resource_get_version(offerResource) >= WL_DATA_OFFER_SOURCE_ACTIONS_SINCE_VERSION) {
+    wl_data_offer_send_source_actions(offerResource, server->dndSource_->dndActions);
+  }
+  updateDndOfferAction(raw);
   return raw;
 }
 
@@ -2193,6 +2293,7 @@ void updateDndTarget(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
       wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(server->dndTarget_->windowX));
       wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(server->dndTarget_->windowY));
       wl_data_device_send_motion(device->resource, timeMs, x, y);
+      updateDndOfferAction(server->dndOffer_);
     }
   }
 }
@@ -2212,6 +2313,10 @@ void dataDeviceStartDrag(wl_client* client,
   if (server->dndSource_) clearDnd(server);
   server->dndSource_ = source;
   server->dndOrigin_ = origin;
+  if (source && source->resource &&
+      wl_resource_get_version(source->resource) >= WL_DATA_SOURCE_ACTION_SINCE_VERSION) {
+    wl_data_source_send_action(source->resource, WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE);
+  }
   updateDndTarget(server, surfaceAt(server, server->pointerX_, server->pointerY_), 0);
 }
 
@@ -3142,9 +3247,16 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (button == BTN_LEFT && !pressed && dndSource_) {
     updateDndTarget(this, target, timeMs);
+    bool completedDrop = false;
     if (dndTarget_) {
       if (auto* device = dataDeviceForClient(this, wl_resource_get_client(dndTarget_->resource))) {
+        if (!dndOffer_ || dndOffer_->selectedAction == WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE) {
+          if (dndSource_->resource) wl_data_source_send_cancelled(dndSource_->resource);
+          clearDnd(this);
+          return;
+        }
         wl_data_device_send_drop(device->resource);
+        completedDrop = true;
       }
       if (dndSource_->resource && wl_resource_get_version(dndSource_->resource) >= WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
         wl_data_source_send_dnd_drop_performed(dndSource_->resource);
@@ -3152,7 +3264,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     } else if (dndSource_->resource) {
       wl_data_source_send_cancelled(dndSource_->resource);
     }
-    clearDnd(this);
+    clearDnd(this, !completedDrop);
     return;
   }
   if (pressed && dismissTopPopupOutside(this, target)) return;

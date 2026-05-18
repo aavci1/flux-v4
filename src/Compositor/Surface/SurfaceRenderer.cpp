@@ -10,7 +10,6 @@
 #include <cstdarg>
 #include <cstdio>
 #include <exception>
-#include <unistd.h>
 #include <vector>
 
 namespace flux::compositor {
@@ -114,34 +113,6 @@ void updateCachedImage(WaylandServer& wayland,
                                          canvas.gpuDevice());
   } else if (!surface.dmabufPlanes.empty()) {
     std::vector<std::uint8_t> fallbackPixels;
-    std::vector<int> fds = wayland.duplicateDmabufFds(surface.id);
-    if (fds.size() == surface.dmabufPlanes.size()) {
-      std::vector<Image::DmabufPlane> planes;
-      planes.reserve(surface.dmabufPlanes.size());
-      for (std::size_t i = 0; i < surface.dmabufPlanes.size(); ++i) {
-        planes.push_back({
-            .fd = fds[i],
-            .offset = surface.dmabufPlanes[i].offset,
-            .stride = surface.dmabufPlanes[i].stride,
-            .modifier = surface.dmabufPlanes[i].modifier,
-        });
-      }
-      try {
-        cached.image = Image::fromDmabuf({
-            .width = static_cast<std::uint32_t>(bufferWidth),
-            .height = static_cast<std::uint32_t>(bufferHeight),
-            .drmFormat = surface.dmabufFormat,
-            .planes = planes,
-        });
-        if (cached.image && !cached.logged) {
-          std::fprintf(stderr, "flux-compositor: imported DMABUF as Vulkan image\n");
-        }
-      } catch (std::exception const& e) {
-        std::fprintf(stderr, "flux-compositor: dmabuf import failed: %s\n", e.what());
-      }
-    } else {
-      for (int fd : fds) close(fd);
-    }
     if (wayland.copyDmabufToRgba(surface.id, fallbackPixels)) {
       cached.image = Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
                                            static_cast<std::uint32_t>(bufferHeight),

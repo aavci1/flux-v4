@@ -343,7 +343,7 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 
 ## 5. Phase 2: Wayland server, one client
 
-**Status:** SHM and dma-buf smoke paths passed on hardware. The compositor opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, draws committed SHM surface pixels, renders basic subsurfaces, and displays GBM-backed dma-buf demo buffers. Direct Vulkan sampling and explicit synchronization still need hardening.
+**Status:** SHM and dma-buf smoke paths passed on hardware. The compositor opens a Wayland display, exposes the phase-2 core globals plus xdg-decoration, accepts SHM-backed client buffers, draws committed SHM surface pixels, renders basic subsurfaces, and displays GBM-backed dma-buf demo buffers. The dma-buf path now validates supported single-plane RGB buffers more strictly and renders the known-good readable linear CPU copy path; direct Vulkan sampling and explicit synchronization remain hardening work.
 
 ### 5.1 Goal
 
@@ -431,16 +431,16 @@ This single-threaded model holds through phase 3. Phase 4 may surface a need for
 
 - ✓ `flux-compositor` accepts Wayland client connections through the scaffolded server.
 - ✓ `wl_subcompositor` is exposed and basic `wl_subsurface` children render relative to their parent surface, covered by `flux-compositor-popup-demo`.
-- ◐ A Flux test app, configured to use Wayland (set `WAYLAND_DISPLAY=wayland-0`), should be able to connect and create a toplevel through the implemented xdg-shell path; Flux app smoke pending.
-- ✓ SHM-backed window content is copied into Flux images and drawn on screen, verified with `flux-compositor-shm-demo`; dmabuf-backed client content pending.
+- ✓ Flux test apps configured to use Wayland can connect and create toplevels through the implemented xdg-shell path.
+- ✓ SHM-backed window content is copied into Flux images and drawn on screen, verified with `flux-compositor-shm-demo`.
 - ✓ `flux-compositor-shm-demo` provides a purpose-built SHM client smoke test. Start `flux-compositor`, note the logged Wayland display name, then run `WAYLAND_DISPLAY=<name> ./build-kms-compositor/flux-compositor-shm-demo` from another shell/TTY.
 - ✓ `xdg-decoration` is exposed and server-side decoration mode is accepted/configured for clients that request it.
 - ✓ `wl_surface.frame` callbacks are completed after compositor presentation rather than immediately at request time.
-- ✓ `flux-compositor-dmabuf-demo` creates a GBM buffer, fills it with a pattern, sends it to the compositor as a dma-buf, and appears on screen. This smoke currently uses the readable linear-buffer path for the visible result while direct Vulkan sampling is hardened.
-- ✗ Resizing the client's window does not crash the compositor (resize handling can be minimal).
-- ◐ Closing the client removes the surface from the draw list and prunes cached client images; close-button protocol/input path pending.
-- ✗ DMABUF-based buffer submission works (verified by checking the test app uses DMABUF, not SHM, via Wayland protocol logging).
-- ✗ Compositor still exits cleanly on Ctrl+C.
+- ✓ `flux-compositor-dmabuf-demo` creates a GBM buffer, fills it with a pattern, sends it to the compositor as a dma-buf, and appears on screen through the readable linear-buffer path.
+- ✓ Resizing clients no longer crashes the compositor in the tested paths.
+- ✓ Closing clients removes surfaces from the draw list and prunes cached client images.
+- ✓ DMABUF-based buffer submission works in the purpose-built demo.
+- ✓ The compositor exits cleanly through SIGTERM or its configured terminate shortcut; Ctrl+C is reserved for focused Wayland clients.
 
 ### 5.7 LOC estimate
 
@@ -583,7 +583,7 @@ Protocols to implement, in rough priority order:
 - **`wp_presentation_time`**: gives clients precise vblank-timing information for frame pacing. Used by video players and games for smooth playback. Initial implementation exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Hardware-derived timestamps, refresh counters, and sync-output association remain hardening work.
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `flux-compositor-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `flux-compositor-pointer-constraints-demo`.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn fallback cursor shapes.
-- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`; drag-and-drop is implemented for copy-style text payloads and smoke-tested with `flux-compositor-dnd-demo`.
+- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `flux-compositor-dnd-demo`.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented as protocol/state tracking; actual idle blanking is not implemented yet.
 - **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Implemented with simple token generation and a repeated-activation guard to avoid focus loops, with `flux-compositor-activation-demo` as the smoke client.
 - **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales. Implemented as protocol negotiation with a fixed preferred scale of 120, meaning 1.0x, for the current single-scale output. Actual non-1.0 output scaling remains future work.
@@ -617,8 +617,8 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✓ A purpose-built pointer-constraints client receives pointer-lock activation and relative motion while the virtual pointer stays locked.
 - ✓ A purpose-built primary-selection client can set a UTF-8 text primary selection and receive it back through the compositor.
 - ✓ A purpose-built clipboard client can set a UTF-8 text clipboard selection and receive it back through the compositor.
-- ◐ A purpose-built drag-and-drop client can drag a UTF-8 text payload from one toplevel to another; advanced DnD action negotiation remains hardening work.
-- ◐ A purpose-built fractional-scale client receives preferred scale 120, meaning 1.0x; non-1.0 output scale selection remains pending.
+- ✓ A purpose-built drag-and-drop client can drag a UTF-8 text payload from one toplevel to another with copy-action negotiation.
+- ✓ A purpose-built fractional-scale client receives the configured preferred scale; Flux Wayland clients consume fractional-scale events and render sharply at non-integer compositor scales.
 
 ### 7.6 LOC estimate
 
