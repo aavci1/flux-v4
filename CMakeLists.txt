@@ -278,10 +278,12 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   set(FLUX_XDG_SHELL_XML "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml")
   set(FLUX_XDG_DECORATION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml")
   set(FLUX_VIEWPORTER_XML "${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml")
+  set(FLUX_FRACTIONAL_SCALE_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/fractional-scale-v1.xml")
   foreach(_flux_wayland_protocol_xml IN ITEMS
       "${FLUX_XDG_SHELL_XML}"
       "${FLUX_XDG_DECORATION_XML}"
-      "${FLUX_VIEWPORTER_XML}")
+      "${FLUX_VIEWPORTER_XML}"
+      "${FLUX_FRACTIONAL_SCALE_XML}")
     if(NOT EXISTS "${_flux_wayland_protocol_xml}")
       message(FATAL_ERROR
         "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
@@ -319,6 +321,17 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_VIEWPORTER_XML}
             ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
     DEPENDS ${FLUX_VIEWPORTER_XML}
+    VERBATIM
+  )
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_FRACTIONAL_SCALE_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_FRACTIONAL_SCALE_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
+    DEPENDS ${FLUX_FRACTIONAL_SCALE_XML}
     VERBATIM
   )
   set(_flux_vulkan_shader_headers)
@@ -361,6 +374,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
   )
 elseif(FLUX_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)

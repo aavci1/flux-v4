@@ -17,12 +17,13 @@ struct ScopedEnv {
   explicit ScopedEnv(char const* name)
       : name(name) {
     if (char const* value = std::getenv(name); value) {
+      hadOriginal = true;
       original = value;
     }
   }
 
   ~ScopedEnv() {
-    if (original.empty()) {
+    if (!hadOriginal) {
       unsetenv(name);
     } else {
       setenv(name, original.c_str(), 1);
@@ -30,6 +31,7 @@ struct ScopedEnv {
   }
 
   char const* name;
+  bool hadOriginal = false;
   std::string original;
 };
 
@@ -41,6 +43,28 @@ std::filesystem::path tempConfigPath() {
 }
 
 } // namespace
+
+TEST_CASE("compositor config creates a default file when missing") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  auto const path = std::filesystem::temp_directory_path() /
+                    ("flux-compositor-config-test-dir-" +
+                     std::to_string(static_cast<unsigned long long>(getpid()))) /
+                    "config.toml";
+  std::filesystem::remove_all(path.parent_path());
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+
+  auto loaded = flux::compositor::loadConfigWithMetadata();
+
+  CHECK(loaded.path == path.string());
+  CHECK(loaded.hasModifiedAt);
+  CHECK(std::filesystem::exists(path));
+  CHECK(loaded.config.scale == doctest::Approx(2.0f));
+  CHECK(loaded.config.backgroundColor.r == doctest::Approx(51.f / 255.f));
+  CHECK(loaded.config.backgroundColor.g == doctest::Approx(128.f / 255.f));
+  CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
+
+  std::filesystem::remove_all(path.parent_path());
+}
 
 TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");

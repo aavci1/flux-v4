@@ -13,6 +13,7 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include "Detail/ResizeTrace.hpp"
+#include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -104,6 +105,7 @@ struct SharedWaylandConnection {
   wl_compositor* compositor = nullptr;
   wl_shm* shm = nullptr;
   wp_viewporter* viewporter = nullptr;
+  wp_fractional_scale_manager_v1* fractionalScaleManager = nullptr;
   xdg_wm_base* wmBase = nullptr;
   zxdg_decoration_manager_v1* decorationManager = nullptr;
   wl_seat* seat = nullptr;
@@ -238,6 +240,10 @@ void releaseWaylandConnection() {
     wp_viewporter_destroy(gWaylandConnection.viewporter);
     gWaylandConnection.viewporter = nullptr;
   }
+  if (gWaylandConnection.fractionalScaleManager) {
+    wp_fractional_scale_manager_v1_destroy(gWaylandConnection.fractionalScaleManager);
+    gWaylandConnection.fractionalScaleManager = nullptr;
+  }
   if (gWaylandConnection.wmBase) {
     xdg_wm_base_destroy(gWaylandConnection.wmBase);
     gWaylandConnection.wmBase = nullptr;
@@ -284,6 +290,11 @@ public:
       viewport_ = wp_viewporter_get_viewport(shared->viewporter, surface_);
       updateViewportDestination();
     }
+    if (shared->fractionalScaleManager && viewport_) {
+      fractionalScale_ = wp_fractional_scale_manager_v1_get_fractional_scale(shared->fractionalScaleManager, surface_);
+      wp_fractional_scale_v1_add_listener(fractionalScale_, &fractionalScaleListener_, this);
+      wl_surface_set_buffer_scale(surface_, 1);
+    }
     xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
     xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
     toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
@@ -314,6 +325,7 @@ public:
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
     if (toplevel_) xdg_toplevel_destroy(toplevel_);
     if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
+    if (fractionalScale_) wp_fractional_scale_v1_destroy(fractionalScale_);
     if (viewport_) wp_viewport_destroy(viewport_);
     if (surface_) wl_surface_destroy(surface_);
     if (shared_) releaseWaylandConnection();
@@ -601,22 +613,16 @@ private:
   }
   static void surfacePreferredBufferScale(void* data, wl_surface*, std::int32_t factor) {
     auto* self = static_cast<WaylandWindow*>(data);
-    factor = std::max(1, factor);
-    self->dpiScaleX_ = safeScale(static_cast<float>(factor));
-    self->dpiScaleY_ = self->dpiScaleX_;
-    wl_surface_set_buffer_scale(self->surface_, factor);
-    self->updateViewportDestination();
-    if (self->fluxWindow_) self->fluxWindow_->updateCanvasDpiScale(self->dpiScaleX_, self->dpiScaleY_);
-    Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
-                                                          .handle = self->handle_,
-                                                          .dpi = self->dpiScaleX_,
-                                                          .dpiX = self->dpiScaleX_,
-                                                          .dpiY = self->dpiScaleY_});
-    self->queueResizeEvent();
-    self->applyCursor(self->currentCursor_);
-    self->requestResizeRedraw();
+    if (self->usesFractionalScale()) return;
+    self->applyDpiScale(static_cast<float>(std::max(1, factor)), false);
   }
   static void surfacePreferredBufferTransform(void*, wl_surface*, std::uint32_t) {}
+
+  static void fractionalPreferredScale(void* data, wp_fractional_scale_v1*, std::uint32_t preferredScale) {
+    auto* self = static_cast<WaylandWindow*>(data);
+    float const scale = safeScale(static_cast<float>(preferredScale) / 120.f);
+    self->applyDpiScale(scale, true);
+  }
 
   void applyConfiguredSize(int width, int height) {
     auto const start = std::chrono::steady_clock::now();
@@ -640,6 +646,36 @@ private:
 
   void updateCanvasDpi() {
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+  }
+
+  void resizeCanvasForCurrentSize() {
+    if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
+                                 static_cast<int>(std::lround(size_.height)));
+  }
+
+  bool usesFractionalScale() const {
+    return fractionalScale_ && viewport_;
+  }
+
+  void applyDpiScale(float scale, bool fractionalProtocol) {
+    scale = safeScale(scale);
+    if (std::abs(scale - dpiScaleX_) < 0.001f && std::abs(scale - dpiScaleY_) < 0.001f) return;
+    dpiScaleX_ = scale;
+    dpiScaleY_ = scale;
+    wl_surface_set_buffer_scale(surface_,
+                                fractionalProtocol ? 1
+                                                   : static_cast<std::int32_t>(std::max(1.f, std::round(scale))));
+    updateViewportDestination();
+    if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+    resizeCanvasForCurrentSize();
+    Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
+                                                          .handle = handle_,
+                                                          .dpi = dpiScaleX_,
+                                                          .dpiX = dpiScaleX_,
+                                                          .dpiY = dpiScaleY_});
+    queueResizeEvent();
+    applyCursor(currentCursor_);
+    requestResizeRedraw();
   }
 
   void updateViewportDestination() {
@@ -742,23 +778,12 @@ private:
   }
 
   void updateEnteredScale() {
+    if (usesFractionalScale()) return;
     float scale = 1.f;
     for (wl_output* output : enteredOutputs_) {
       scale = std::max(scale, outputScale(output));
     }
-    if (std::abs(scale - dpiScaleX_) < 0.001f && std::abs(scale - dpiScaleY_) < 0.001f) return;
-    dpiScaleX_ = scale;
-    dpiScaleY_ = scale;
-    wl_surface_set_buffer_scale(surface_, static_cast<std::int32_t>(std::max(1.f, std::round(scale))));
-    updateViewportDestination();
-    if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
-    Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
-                                                          .handle = handle_,
-                                                          .dpi = dpiScaleX_,
-                                                          .dpiX = dpiScaleX_,
-                                                          .dpiY = dpiScaleY_});
-    queueResizeEvent();
-    requestResizeRedraw();
+    applyDpiScale(scale, false);
   }
 
   void queueResizeEvent() {
@@ -822,6 +847,7 @@ private:
   static inline wl_callback_listener frameCallbackListener_{frameDone};
   static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
                                                     surfacePreferredBufferTransform};
+  static inline wp_fractional_scale_v1_listener fractionalScaleListener_{fractionalPreferredScale};
   static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
   static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
                                                        topCapabilities};
@@ -836,6 +862,7 @@ private:
   xdg_toplevel* toplevel_ = nullptr;
   zxdg_toplevel_decoration_v1* decoration_ = nullptr;
   wp_viewport* viewport_ = nullptr;
+  wp_fractional_scale_v1* fractionalScale_ = nullptr;
   Canvas* canvas_ = nullptr;
   SharedWaylandConnection* shared_ = nullptr;
 
@@ -904,6 +931,9 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
   } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
     shared->viewporter = static_cast<wp_viewporter*>(
         wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
+  } else if (std::strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {
+    shared->fractionalScaleManager = static_cast<wp_fractional_scale_manager_v1*>(
+        wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1));
   } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;

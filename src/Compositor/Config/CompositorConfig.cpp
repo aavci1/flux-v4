@@ -227,6 +227,65 @@ std::optional<std::string> configPath() {
   return std::nullopt;
 }
 
+std::string defaultConfigToml() {
+  return R"(# Flux compositor configuration.
+#
+# The compositor reloads this file when it changes. Scale is compositor-level:
+# clients see the corresponding logical output size and render into that space.
+
+background = "#3380f2"
+# background_gradient = "#203040 #405060"
+# wallpaper = "/path/to/wallpaper.png"
+# wallpaper_mode = "cover" # cover, contain, stretch, center, tile
+
+scale = 2.0
+animations = true
+hardware_cursor = true
+
+[keybindings]
+close = "super+q"
+cycle_focus = "super+tab"
+snap_left = "super+left"
+snap_right = "super+right"
+terminate = "ctrl+alt+backspace"
+)";
+}
+
+void ensureDefaultConfigFile(std::string const& path) {
+  std::error_code error;
+  if (std::filesystem::exists(path, error)) return;
+  if (error) {
+    std::fprintf(stderr, "flux-compositor: cannot check config %s: %s\n", path.c_str(), error.message().c_str());
+    return;
+  }
+
+  std::filesystem::path const configPath(path);
+  auto const parent = configPath.parent_path();
+  if (!parent.empty()) {
+    std::filesystem::create_directories(parent, error);
+    if (error) {
+      std::fprintf(stderr,
+                   "flux-compositor: cannot create config directory %s: %s\n",
+                   parent.string().c_str(),
+                   error.message().c_str());
+      return;
+    }
+  }
+
+  std::ofstream file(path);
+  if (!file) {
+    std::fprintf(stderr, "flux-compositor: cannot create config %s\n", path.c_str());
+    return;
+  }
+  file << defaultConfigToml();
+  file.close();
+  if (!file) {
+    std::fprintf(stderr, "flux-compositor: failed while writing config %s\n", path.c_str());
+    return;
+  }
+  std::fprintf(stderr, "flux-compositor: created default config %s\n", path.c_str());
+}
+
 CompositorConfig loadConfig() {
   CompositorConfig config;
   config.shortcutBindings = defaultShortcutBindings();
@@ -333,9 +392,13 @@ CompositorConfig loadConfig() {
 } // namespace
 
 LoadedCompositorConfig loadConfigWithMetadata() {
+  auto path = configPath();
+  if (path) {
+    ensureDefaultConfigFile(*path);
+  }
   LoadedCompositorConfig loaded{
       .config = loadConfig(),
-      .path = configPath(),
+      .path = path,
   };
   if (loaded.path) {
     std::error_code error;
