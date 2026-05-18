@@ -546,6 +546,7 @@ if(FLUX_BUILD_COMPOSITOR)
   add_executable(flux-compositor
     src/Compositor/Chrome/CursorRenderer.cpp
     src/Compositor/Chrome/WindowChromeRenderer.cpp
+    src/Compositor/Config/AppliedCompositorConfig.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/Input/KmsInputBridge.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp

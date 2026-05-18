@@ -7,6 +7,7 @@
 
 #include "Compositor/Chrome/CursorRenderer.hpp"
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
+#include "Compositor/Config/AppliedCompositorConfig.hpp"
 #include "Compositor/Config/CompositorConfig.hpp"
 #include "Compositor/Input/KmsInputBridge.hpp"
 #include "Compositor/Surface/SurfaceRenderer.hpp"
@@ -103,31 +104,13 @@ int main(int, char**) {
                  output.name().c_str());
 
     flux::compositor::LoadedCompositorConfig loadedConfig = flux::compositor::loadConfigWithMetadata();
-    flux::compositor::CompositorConfig config = loadedConfig.config;
-    wayland.setShortcutBindings(config.shortcutBindings);
-    flux::Color clearColor = config.backgroundColor;
-    flux::FillStyle backgroundFill =
-        config.backgroundGradientEnd
-            ? flux::FillStyle::linearGradient(config.backgroundColor, *config.backgroundGradientEnd, {0.f, 0.f}, {1.f, 1.f})
-            : flux::FillStyle::solid(config.backgroundColor);
-    std::shared_ptr<flux::Image> wallpaperImage;
+    flux::compositor::AppliedCompositorConfig appliedConfig =
+        flux::compositor::applyCompositorConfig(loadedConfig.config, *canvas);
+    wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
     auto applyConfig = [&] {
-      config = loadedConfig.config;
-      wayland.setShortcutBindings(config.shortcutBindings);
-      clearColor = config.backgroundColor;
-      backgroundFill =
-          config.backgroundGradientEnd
-              ? flux::FillStyle::linearGradient(config.backgroundColor, *config.backgroundGradientEnd, {0.f, 0.f}, {1.f, 1.f})
-              : flux::FillStyle::solid(config.backgroundColor);
-      wallpaperImage.reset();
-      if (config.wallpaperPath) {
-        wallpaperImage = flux::loadImageFromFile(*config.wallpaperPath, canvas->gpuDevice());
-        if (!wallpaperImage) {
-          std::fprintf(stderr, "flux-compositor: failed to load wallpaper %s\n", config.wallpaperPath->c_str());
-        }
-      }
+      appliedConfig = flux::compositor::applyCompositorConfig(loadedConfig.config, *canvas);
+      wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
     };
-    applyConfig();
     std::unordered_map<std::uint64_t, flux::compositor::CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, flux::compositor::SurfaceVisualState> surfaceVisuals;
     std::unordered_map<std::uint64_t, flux::compositor::ClosingSurfaceVisual> closingSurfaces;
@@ -136,7 +119,7 @@ int main(int, char**) {
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     std::vector<std::uint32_t> hardwareCursorPixels;
-    if (config.hardwareCursorEnabled && hardwareCursorWidth > 0 && hardwareCursorHeight > 0) {
+    if (appliedConfig.config.hardwareCursorEnabled && hardwareCursorWidth > 0 && hardwareCursorHeight > 0) {
       hardwareCursorPixels = flux::compositor::makeHardwareArrowCursor(hardwareCursorWidth, hardwareCursorHeight);
       hardwareArrowCursor = output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
       if (!hardwareArrowCursor) {
@@ -161,24 +144,24 @@ int main(int, char**) {
       wayland.dispatch();
       if (!device->isVtForeground()) continue;
       auto const frameTime = std::chrono::steady_clock::now();
-      wayland.updateAnimations(monotonicMilliseconds(), config.animationsEnabled);
+      wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
 
       canvas->beginFrame();
-      canvas->clear(clearColor);
-      if (config.backgroundGradientEnd) {
+      canvas->clear(appliedConfig.config.backgroundColor);
+      if (appliedConfig.config.backgroundGradientEnd) {
         canvas->drawRect(flux::Rect::sharp(0.f, 0.f, static_cast<float>(output.width()), static_cast<float>(output.height())),
                          flux::CornerRadius{0.f},
-                         backgroundFill,
+                         appliedConfig.backgroundFill,
                          flux::StrokeStyle::none(),
                          flux::ShadowStyle::none());
       }
-      if (wallpaperImage) {
-        canvas->drawImage(*wallpaperImage,
+      if (appliedConfig.wallpaperImage) {
+        canvas->drawImage(*appliedConfig.wallpaperImage,
                           flux::Rect::sharp(0.f,
                                             0.f,
                                             static_cast<float>(output.width()),
                                             static_cast<float>(output.height())),
-                          config.wallpaperMode);
+                          appliedConfig.config.wallpaperMode);
       }
       auto committedSurfaces = wayland.committedSurfaces();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
@@ -224,7 +207,7 @@ int main(int, char**) {
         float const titleBarHeight = static_cast<float>(clientSurface.titleBarHeight);
         float const animationMs = static_cast<float>(
             std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
-        float const openProgress = config.animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
+        float const openProgress = appliedConfig.config.animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
         float const openScale = 0.965f + 0.035f * openProgress;
         float const openOpacity = openProgress;
         float const outerHeight = windowHeight + titleBarHeight;
@@ -270,7 +253,7 @@ int main(int, char**) {
       for (auto const& [surfaceId, visual] : surfaceVisuals) {
         if (liveSurfaceIds.contains(surfaceId)) continue;
         auto cached = clientImages.find(surfaceId);
-        if (!config.animationsEnabled || !visual.hasLastSnapshot || cached == clientImages.end() ||
+        if (!appliedConfig.config.animationsEnabled || !visual.hasLastSnapshot || cached == clientImages.end() ||
             !cached->second.image) {
           continue;
         }
