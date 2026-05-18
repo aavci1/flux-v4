@@ -1,5 +1,6 @@
 #include "Compositor/WaylandServer.hpp"
 
+#include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "cursor-shape-v1-server-protocol.h"
 #include "fractional-scale-v1-server-protocol.h"
@@ -332,138 +333,6 @@ struct WaylandServer::ToplevelDecoration {
 };
 
 namespace {
-
-void surfaceDestroyResource(wl_resource* resource) {
-  if (auto* surface = dataFrom<WaylandServer::Surface>(resource)) {
-    surface->server->destroySurface(surface);
-  }
-}
-
-void xdgSurfaceDestroyResource(wl_resource* resource) {
-  if (auto* surface = dataFrom<WaylandServer::XdgSurface>(resource)) {
-    surface->server->destroyXdgSurface(surface);
-  }
-}
-
-void xdgToplevelDestroyResource(wl_resource* resource) {
-  if (auto* toplevel = dataFrom<WaylandServer::XdgToplevel>(resource)) {
-    toplevel->server->destroyXdgToplevel(toplevel);
-  }
-}
-
-void shmPoolDestroyResource(wl_resource* resource) {
-  if (auto* pool = dataFrom<WaylandServer::ShmPool>(resource)) {
-    pool->server->destroyShmPool(pool);
-  }
-}
-
-void shmBufferDestroyResource(wl_resource* resource) {
-  if (auto* buffer = dataFrom<WaylandServer::ShmBuffer>(resource)) {
-    buffer->server->destroyShmBuffer(buffer);
-  }
-}
-
-void dmabufParamsDestroyResource(wl_resource* resource) {
-  if (auto* params = dataFrom<WaylandServer::DmabufParams>(resource)) {
-    params->server->destroyDmabufParams(params);
-  }
-}
-
-void dmabufBufferDestroyResource(wl_resource* resource) {
-  if (auto* buffer = dataFrom<WaylandServer::DmabufBuffer>(resource)) {
-    buffer->server->destroyDmabufBuffer(buffer);
-  }
-}
-
-void toplevelDecorationDestroyResource(wl_resource* resource) {
-  if (auto* decoration = dataFrom<WaylandServer::ToplevelDecoration>(resource)) {
-    decoration->server->destroyToplevelDecoration(decoration);
-  }
-}
-
-void viewportDestroyResource(wl_resource* resource) {
-  if (auto* viewport = dataFrom<WaylandServer::Viewport>(resource)) {
-    viewport->server->destroyViewport(viewport);
-  }
-}
-
-void fractionalScaleDestroyResource(wl_resource* resource) {
-  if (auto* fractionalScale = dataFrom<WaylandServer::FractionalScale>(resource)) {
-    fractionalScale->server->destroyFractionalScale(fractionalScale);
-  }
-}
-
-void cursorShapeDeviceDestroyResource(wl_resource* resource) {
-  if (auto* device = dataFrom<WaylandServer::CursorShapeDevice>(resource)) {
-    device->server->destroyCursorShapeDevice(device);
-  }
-}
-
-void idleInhibitorDestroyResource(wl_resource* resource) {
-  if (auto* inhibitor = dataFrom<WaylandServer::IdleInhibitor>(resource)) {
-    inhibitor->server->destroyIdleInhibitor(inhibitor);
-  }
-}
-
-void layerSurfaceDestroyResource(wl_resource* resource) {
-  if (auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource)) {
-    layerSurface->server->destroyLayerSurface(layerSurface);
-  }
-}
-
-void presentationFeedbackDestroyResource(wl_resource* resource) {
-  if (auto* feedback = dataFrom<WaylandServer::PresentationFeedback>(resource)) {
-    feedback->server->destroyPresentationFeedback(feedback);
-  }
-}
-
-void relativePointerDestroyResource(wl_resource* resource) {
-  if (auto* pointer = dataFrom<WaylandServer::RelativePointer>(resource)) {
-    pointer->server->destroyRelativePointer(pointer);
-  }
-}
-
-void pointerConstraintDestroyResource(wl_resource* resource) {
-  if (auto* constraint = dataFrom<WaylandServer::PointerConstraint>(resource)) {
-    constraint->server->destroyPointerConstraint(constraint);
-  }
-}
-
-void primarySelectionSourceDestroyResource(wl_resource* resource) {
-  if (auto* source = dataFrom<WaylandServer::PrimarySelectionSource>(resource)) {
-    source->server->destroyPrimarySelectionSource(source);
-  }
-}
-
-void primarySelectionDeviceDestroyResource(wl_resource* resource) {
-  if (auto* device = dataFrom<WaylandServer::PrimarySelectionDevice>(resource)) {
-    device->server->destroyPrimarySelectionDevice(device);
-  }
-}
-
-void primarySelectionOfferDestroyResource(wl_resource* resource) {
-  if (auto* offer = dataFrom<WaylandServer::PrimarySelectionOffer>(resource)) {
-    offer->server->destroyPrimarySelectionOffer(offer);
-  }
-}
-
-void dataSourceDestroyResource(wl_resource* resource) {
-  if (auto* source = dataFrom<WaylandServer::DataSource>(resource)) {
-    source->server->destroyDataSource(source);
-  }
-}
-
-void dataDeviceDestroyResource(wl_resource* resource) {
-  if (auto* device = dataFrom<WaylandServer::DataDevice>(resource)) {
-    device->server->destroyDataDevice(device);
-  }
-}
-
-void dataOfferDestroyResource(wl_resource* resource) {
-  if (auto* offer = dataFrom<WaylandServer::DataOffer>(resource)) {
-    offer->server->destroyDataOffer(offer);
-  }
-}
 
 void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource) {
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
@@ -878,7 +747,7 @@ void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, i
   pool->resource = poolResource;
   auto* raw = pool.get();
   server->shmPools_.push_back(std::move(pool));
-  wl_resource_set_implementation(poolResource, &shmPoolImpl, raw, shmPoolDestroyResource);
+  wl_resource_set_implementation(poolResource, &shmPoolImpl, raw, destroyResourceCallback<WaylandServer::ShmPool, WaylandServer, &WaylandServer::destroyShmPool>);
 }
 
 struct wl_shm_interface const shmImpl{
@@ -907,7 +776,7 @@ void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t
   buffer->resource = bufferResource;
   auto* raw = buffer.get();
   pool->server->shmBuffers_.push_back(std::move(buffer));
-  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, shmBufferDestroyResource);
+  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, destroyResourceCallback<WaylandServer::ShmBuffer, WaylandServer, &WaylandServer::destroyShmBuffer>);
 }
 
 void shmPoolResize(wl_client*, wl_resource* resource, std::int32_t size) {
@@ -988,7 +857,7 @@ wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::DmabufParams* 
   buffer->resource = bufferResource;
   auto* raw = buffer.get();
   params->server->dmabufBuffers_.push_back(std::move(buffer));
-  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, dmabufBufferDestroyResource);
+  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, destroyResourceCallback<WaylandServer::DmabufBuffer, WaylandServer, &WaylandServer::destroyDmabufBuffer>);
   return bufferResource;
 }
 
@@ -1070,7 +939,7 @@ void linuxDmabufCreateParams(wl_client* client, wl_resource* resource, std::uint
   params->resource = paramsResource;
   auto* raw = params.get();
   server->dmabufParams_.push_back(std::move(params));
-  wl_resource_set_implementation(paramsResource, &linuxBufferParamsImpl, raw, dmabufParamsDestroyResource);
+  wl_resource_set_implementation(paramsResource, &linuxBufferParamsImpl, raw, destroyResourceCallback<WaylandServer::DmabufParams, WaylandServer, &WaylandServer::destroyDmabufParams>);
 }
 
 struct zwp_linux_dmabuf_v1_interface const linuxDmabufImpl{
@@ -1239,7 +1108,7 @@ void xdgDecorationManagerGetToplevelDecoration(wl_client* client, wl_resource* r
   auto* raw = decoration.get();
   server->toplevelDecorations_.push_back(std::move(decoration));
   wl_resource_set_implementation(decorationResource, &xdgToplevelDecorationImpl, raw,
-                                 toplevelDecorationDestroyResource);
+                                 destroyResourceCallback<WaylandServer::ToplevelDecoration, WaylandServer, &WaylandServer::destroyToplevelDecoration>);
   sendDecorationConfigure(raw);
 }
 
@@ -1309,7 +1178,7 @@ void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint3
   xdgSurface->resource = xdgResource;
   auto* raw = xdgSurface.get();
   server->xdgSurfaces_.push_back(std::move(xdgSurface));
-  wl_resource_set_implementation(xdgResource, &xdgSurfaceImpl, raw, xdgSurfaceDestroyResource);
+  wl_resource_set_implementation(xdgResource, &xdgSurfaceImpl, raw, destroyResourceCallback<WaylandServer::XdgSurface, WaylandServer, &WaylandServer::destroyXdgSurface>);
 }
 
 void xdgWmBasePong(wl_client*, wl_resource*, std::uint32_t) {}
@@ -1344,7 +1213,7 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   toplevel->resource = toplevelResource;
   auto* raw = toplevel.get();
   xdgSurface->server->toplevels_.push_back(std::move(toplevel));
-  wl_resource_set_implementation(toplevelResource, &xdgToplevelImpl, raw, xdgToplevelDestroyResource);
+  wl_resource_set_implementation(toplevelResource, &xdgToplevelImpl, raw, destroyResourceCallback<WaylandServer::XdgToplevel, WaylandServer, &WaylandServer::destroyXdgToplevel>);
   wl_array states;
   wl_array_init(&states);
   xdg_toplevel_send_configure(toplevelResource, 0, 0, &states);
@@ -1721,7 +1590,7 @@ void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32
   auto* raw = viewport.get();
   surface->viewport = raw;
   server->viewports_.push_back(std::move(viewport));
-  wl_resource_set_implementation(viewportResource, &viewportImpl, raw, viewportDestroyResource);
+  wl_resource_set_implementation(viewportResource, &viewportImpl, raw, destroyResourceCallback<WaylandServer::Viewport, WaylandServer, &WaylandServer::destroyViewport>);
 }
 
 struct wp_viewporter_interface const viewporterImpl{
@@ -1775,7 +1644,7 @@ void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* re
   auto* raw = fractionalScale.get();
   surface->fractionalScale = raw;
   server->fractionalScales_.push_back(std::move(fractionalScale));
-  wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, fractionalScaleDestroyResource);
+  wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, destroyResourceCallback<WaylandServer::FractionalScale, WaylandServer, &WaylandServer::destroyFractionalScale>);
   wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, 120);
 }
 
@@ -1877,7 +1746,7 @@ void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std:
   device->resource = deviceResource;
   auto* raw = device.get();
   server->cursorShapeDevices_.push_back(std::move(device));
-  wl_resource_set_implementation(deviceResource, &cursorShapeDeviceImpl, raw, cursorShapeDeviceDestroyResource);
+  wl_resource_set_implementation(deviceResource, &cursorShapeDeviceImpl, raw, destroyResourceCallback<WaylandServer::CursorShapeDevice, WaylandServer, &WaylandServer::destroyCursorShapeDevice>);
 }
 
 struct wp_cursor_shape_manager_v1_interface const cursorShapeManagerImpl{
@@ -1926,7 +1795,7 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
   inhibitor->resource = inhibitorResource;
   auto* raw = inhibitor.get();
   server->idleInhibitors_.push_back(std::move(inhibitor));
-  wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, idleInhibitorDestroyResource);
+  wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, destroyResourceCallback<WaylandServer::IdleInhibitor, WaylandServer, &WaylandServer::destroyIdleInhibitor>);
   std::fprintf(stderr,
                "flux-compositor: idle inhibitors active=%zu\n",
                server->idleInhibitors_.size());
@@ -2033,7 +1902,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
   surface->cursor = false;
   if (server->cursorSurface_ == surface) server->cursorSurface_ = nullptr;
   server->layerSurfaces_.push_back(std::move(layerSurface));
-  wl_resource_set_implementation(layerResource, &layerSurfaceImpl, raw, layerSurfaceDestroyResource);
+  wl_resource_set_implementation(layerResource, &layerSurfaceImpl, raw, destroyResourceCallback<WaylandServer::LayerSurface, WaylandServer, &WaylandServer::destroyLayerSurface>);
 }
 
 struct zwlr_layer_shell_v1_interface const layerShellImpl{
@@ -2070,7 +1939,7 @@ void presentationFeedback(wl_client* client, wl_resource* resource, wl_resource*
   auto* raw = feedback.get();
   server->presentationFeedbacks_.push_back(std::move(feedback));
   surface->pendingPresentationFeedbacks.push_back(raw);
-  wl_resource_set_implementation(feedbackResource, nullptr, raw, presentationFeedbackDestroyResource);
+  wl_resource_set_implementation(feedbackResource, nullptr, raw, destroyResourceCallback<WaylandServer::PresentationFeedback, WaylandServer, &WaylandServer::destroyPresentationFeedback>);
 }
 
 struct wp_presentation_interface const presentationImpl{
@@ -2116,7 +1985,7 @@ void relativePointerManagerGetRelativePointer(wl_client* client,
   relativePointer->resource = relativePointerResource;
   auto* raw = relativePointer.get();
   server->relativePointers_.push_back(std::move(relativePointer));
-  wl_resource_set_implementation(relativePointerResource, &relativePointerImpl, raw, relativePointerDestroyResource);
+  wl_resource_set_implementation(relativePointerResource, &relativePointerImpl, raw, destroyResourceCallback<WaylandServer::RelativePointer, WaylandServer, &WaylandServer::destroyRelativePointer>);
 }
 
 struct zwp_relative_pointer_manager_v1_interface const relativePointerManagerImpl{
@@ -2258,7 +2127,7 @@ void createPointerConstraint(wl_client* client,
                                      ? static_cast<void const*>(&lockedPointerImpl)
                                      : static_cast<void const*>(&confinedPointerImpl),
                                  raw,
-                                 pointerConstraintDestroyResource);
+                                 destroyResourceCallback<WaylandServer::PointerConstraint, WaylandServer, &WaylandServer::destroyPointerConstraint>);
   updatePointerConstraintActivation(server, raw);
 }
 
@@ -2357,7 +2226,7 @@ void sendPrimarySelectionToDevice(WaylandServer::PrimarySelectionDevice* device)
   offer->resource = offerResource;
   auto* raw = offer.get();
   server->primarySelectionOffers_.push_back(std::move(offer));
-  wl_resource_set_implementation(offerResource, &primarySelectionOfferImpl, raw, primarySelectionOfferDestroyResource);
+  wl_resource_set_implementation(offerResource, &primarySelectionOfferImpl, raw, destroyResourceCallback<WaylandServer::PrimarySelectionOffer, WaylandServer, &WaylandServer::destroyPrimarySelectionOffer>);
   zwp_primary_selection_device_v1_send_data_offer(device->resource, offerResource);
   for (auto const& mimeType : raw->source->mimeTypes) {
     zwp_primary_selection_offer_v1_send_offer(offerResource, mimeType.c_str());
@@ -2420,7 +2289,7 @@ void primarySelectionManagerCreateSource(wl_client* client, wl_resource* resourc
   source->resource = sourceResource;
   auto* raw = source.get();
   server->primarySelectionSources_.push_back(std::move(source));
-  wl_resource_set_implementation(sourceResource, &primarySelectionSourceImpl, raw, primarySelectionSourceDestroyResource);
+  wl_resource_set_implementation(sourceResource, &primarySelectionSourceImpl, raw, destroyResourceCallback<WaylandServer::PrimarySelectionSource, WaylandServer, &WaylandServer::destroyPrimarySelectionSource>);
 }
 
 void primarySelectionManagerGetDevice(wl_client* client,
@@ -2439,7 +2308,7 @@ void primarySelectionManagerGetDevice(wl_client* client,
   device->resource = deviceResource;
   auto* raw = device.get();
   server->primarySelectionDevices_.push_back(std::move(device));
-  wl_resource_set_implementation(deviceResource, &primarySelectionDeviceImpl, raw, primarySelectionDeviceDestroyResource);
+  wl_resource_set_implementation(deviceResource, &primarySelectionDeviceImpl, raw, destroyResourceCallback<WaylandServer::PrimarySelectionDevice, WaylandServer, &WaylandServer::destroyPrimarySelectionDevice>);
   sendPrimarySelectionToDevice(raw);
 }
 
@@ -2541,7 +2410,7 @@ void sendSelectionToDataDevice(WaylandServer::DataDevice* device) {
   offer->resource = offerResource;
   auto* raw = offer.get();
   server->dataOffers_.push_back(std::move(offer));
-  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, dataOfferDestroyResource);
+  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::DataOffer, WaylandServer, &WaylandServer::destroyDataOffer>);
   wl_data_device_send_data_offer(device->resource, offerResource);
   for (auto const& mimeType : raw->source->mimeTypes) {
     wl_data_offer_send_offer(offerResource, mimeType.c_str());
@@ -2590,7 +2459,7 @@ WaylandServer::DataOffer* createDndOffer(WaylandServer* server, wl_client* clien
   offer->resource = offerResource;
   auto* raw = offer.get();
   server->dataOffers_.push_back(std::move(offer));
-  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, dataOfferDestroyResource);
+  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::DataOffer, WaylandServer, &WaylandServer::destroyDataOffer>);
   return raw;
 }
 
@@ -2688,7 +2557,7 @@ void dataDeviceManagerCreateDataSource(wl_client* client, wl_resource* resource,
   source->resource = sourceResource;
   auto* raw = source.get();
   server->dataSources_.push_back(std::move(source));
-  wl_resource_set_implementation(sourceResource, &dataSourceImpl, raw, dataSourceDestroyResource);
+  wl_resource_set_implementation(sourceResource, &dataSourceImpl, raw, destroyResourceCallback<WaylandServer::DataSource, WaylandServer, &WaylandServer::destroyDataSource>);
 }
 
 void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, std::uint32_t id, wl_resource* seat) {
@@ -2704,7 +2573,7 @@ void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, st
   device->resource = deviceResource;
   auto* raw = device.get();
   server->dataDevices_.push_back(std::move(device));
-  wl_resource_set_implementation(deviceResource, &dataDeviceImpl, raw, dataDeviceDestroyResource);
+  wl_resource_set_implementation(deviceResource, &dataDeviceImpl, raw, destroyResourceCallback<WaylandServer::DataDevice, WaylandServer, &WaylandServer::destroyDataDevice>);
   sendSelectionToDataDevice(raw);
 }
 
@@ -3766,7 +3635,7 @@ wl_resource* WaylandServer::createSurface(wl_client* client, std::uint32_t versi
   surface->resource = resource;
   auto* raw = surface.get();
   surfaces_.push_back(std::move(surface));
-  wl_resource_set_implementation(resource, &surfaceImpl, raw, surfaceDestroyResource);
+  wl_resource_set_implementation(resource, &surfaceImpl, raw, destroyResourceCallback<WaylandServer::Surface, WaylandServer, &WaylandServer::destroySurface>);
   return resource;
 }
 
