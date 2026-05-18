@@ -545,6 +545,7 @@ if(FLUX_BUILD_COMPOSITOR)
   endif()
   add_executable(flux-compositor
     src/Compositor/Chrome/CursorRenderer.cpp
+    src/Compositor/Chrome/WindowChromeRenderer.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
