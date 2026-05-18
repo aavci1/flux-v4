@@ -1,5 +1,3 @@
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/VulkanContext.hpp>
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
