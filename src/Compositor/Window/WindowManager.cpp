@@ -79,6 +79,25 @@ ResizeEdge resizeEdgesFromXdg(std::uint32_t edges) {
   }
 }
 
+CursorShape cursorShapeForResizeEdges(std::uint32_t edges) {
+  switch (edges) {
+  case XDG_TOPLEVEL_RESIZE_EDGE_LEFT:
+  case XDG_TOPLEVEL_RESIZE_EDGE_RIGHT:
+    return CursorShape::ResizeEW;
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP:
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM:
+    return CursorShape::ResizeNS;
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT:
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT:
+    return CursorShape::ResizeNWSE;
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT:
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT:
+    return CursorShape::ResizeNESW;
+  default:
+    return CursorShape::Arrow;
+  }
+}
+
 std::uint32_t monotonicMilliseconds() {
   timespec now{};
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -246,26 +265,64 @@ WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x,
     if (!surface || surface->popup || width <= 0 || height <= 0) continue;
     float const left = static_cast<float>(surface->windowX);
     float const frameTop = static_cast<float>(surface->windowY - (isManagedToplevel(surface) ? kTitleBarHeight : 0));
-    float const top = static_cast<float>(surface->windowY);
+    float const contentTop = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(width);
-    float const bottom = top + static_cast<float>(height);
+    float const bottom = contentTop + static_cast<float>(height);
     if (!isManagedToplevel(surface)) {
-      if (surface->toplevel && containsPoint(x, y, left, top, right, bottom)) return nullptr;
+      if (surface->toplevel && containsPoint(x, y, left, contentTop, right, bottom)) return nullptr;
       continue;
     }
     if (!containsPoint(x, y, left, frameTop, right, bottom)) continue;
     bool const nearLeft = x >= left && x < left + kResizeGripSize;
     bool const nearRight = x >= right - kResizeGripSize && x < right;
-    bool const nearTop = y >= top && y < top + kResizeGripSize;
+    bool const nearTop = y >= frameTop && y < frameTop + kResizeGripSize;
     bool const nearBottom = y >= bottom - kResizeGripSize && y < bottom;
     if (nearLeft && nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
     else if (nearRight && nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
     else if (nearLeft && nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
     else if (nearRight && nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
+    else if (nearLeft) edges = XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
+    else if (nearRight) edges = XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
+    else if (nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP;
+    else if (nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
     else return nullptr;
     return surface;
   }
   return nullptr;
+}
+
+void setCompositorCursorOverride(WaylandServer::Impl* server, CursorShape shape) {
+  if (!server) return;
+  server->compositorCursorOverride_ = true;
+  server->compositorCursorShape_ = shape;
+}
+
+void clearCompositorCursorOverride(WaylandServer::Impl* server) {
+  if (!server) return;
+  server->compositorCursorOverride_ = false;
+  server->compositorCursorShape_ = CursorShape::Arrow;
+}
+
+void updateCompositorCursorForPointer(WaylandServer::Impl* server) {
+  if (!server) return;
+  if (server->commandLauncherVisible_ || server->dragSurface_ || server->dndSource_) {
+    clearCompositorCursorOverride(server);
+    return;
+  }
+  if (server->resizeSurface_) {
+    setCompositorCursorOverride(server, cursorShapeForResizeEdges(server->resizeEdges_));
+    return;
+  }
+  if (closeButtonAt(server, server->pointerX_, server->pointerY_)) {
+    clearCompositorCursorOverride(server);
+    return;
+  }
+  std::uint32_t edges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+  if (resizeGripAt(server, server->pointerX_, server->pointerY_, edges)) {
+    setCompositorCursorOverride(server, cursorShapeForResizeEdges(edges));
+    return;
+  }
+  clearCompositorCursorOverride(server);
 }
 
 void raiseSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
@@ -305,6 +362,7 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     }
   }
   server->pointerFocus_ = next;
+  clearCompositorCursorOverride(server);
   server->cursorSurface_ = nullptr;
   server->cursorShape_ = CursorShape::Arrow;
   if (next) {
@@ -889,21 +947,26 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
   }
   if (commandLauncherVisible_) {
     sendPointerFocus(this, nullptr, timeMs);
+    updateCompositorCursorForPointer(this);
     return;
   }
   if (resizeSurface_) {
     updateResize(this);
+    updateCompositorCursorForPointer(this);
     return;
   }
   if (dragSurface_) {
     updateDrag(this);
+    updateCompositorCursorForPointer(this);
     return;
   }
   if (dndSource_) {
     updateDndTarget(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    updateCompositorCursorForPointer(this);
     return;
   }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  updateCompositorCursorForPointer(this);
   sendRelativePointerMotion(this, dx, dy, timeMs);
 }
 
@@ -930,21 +993,26 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
   }
   if (commandLauncherVisible_) {
     sendPointerFocus(this, nullptr, timeMs);
+    updateCompositorCursorForPointer(this);
     return;
   }
   if (resizeSurface_) {
     updateResize(this);
+    updateCompositorCursorForPointer(this);
     return;
   }
   if (dragSurface_) {
     updateDrag(this);
+    updateCompositorCursorForPointer(this);
     return;
   }
   if (dndSource_) {
     updateDndTarget(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    updateCompositorCursorForPointer(this);
     return;
   }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  updateCompositorCursorForPointer(this);
 }
 
 void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
@@ -952,6 +1020,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     (void)button;
     (void)pressed;
     (void)timeMs;
+    updateCompositorCursorForPointer(this);
     return;
   }
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
@@ -1005,6 +1074,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         resizeLastWidth_ = resizeStartWidth_;
         resizeLastHeight_ = resizeStartHeight_;
         resizeEdges_ = resizeEdges;
+        updateCompositorCursorForPointer(this);
         flux::detail::resizeTrace("compositor",
                                   "begin-resize surface=%llu pointer=%.1f,%.1f edges=%u startWindow=%d,%d "
                                   "startSize=%dx%d\n",
@@ -1046,6 +1116,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       }
       closePressSurface_ = nullptr;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+      updateCompositorCursorForPointer(this);
       return;
     } else if (resizeSurface_) {
       updateResize(this);
@@ -1053,6 +1124,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       resizeSurface_ = nullptr;
       resizeEdges_ = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+      updateCompositorCursorForPointer(this);
       return;
     } else if (dragSurface_) {
       if (auto preview = snapPreviewForDrag(this)) {
@@ -1064,6 +1136,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       }
       dragSurface_ = nullptr;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+      updateCompositorCursorForPointer(this);
       return;
     }
   }
@@ -1072,6 +1145,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     raiseSurface(this, target);
     setKeyboardFocus(this, target);
     sendPointerFocus(this, target, timeMs);
+    updateCompositorCursorForPointer(this);
   }
   if (!pointerFocus_) return;
   std::uint32_t serial = nextInputSerial_++;

@@ -101,6 +101,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
 }
 
 std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() const {
+  if (compositorCursorOverride_) return std::nullopt;
   Surface* surface = cursorSurface_;
   if (!surface || surface->width <= 0 || surface->height <= 0) return std::nullopt;
   if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) return std::nullopt;

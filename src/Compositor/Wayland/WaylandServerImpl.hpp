@@ -170,6 +170,8 @@ struct WaylandServer::Impl {
   Surface* lastTitleClickSurface_ = nullptr;
   Surface* cursorSurface_ = nullptr;
   CursorShape cursorShape_ = CursorShape::Arrow;
+  bool compositorCursorOverride_ = false;
+  CursorShape compositorCursorShape_ = CursorShape::Arrow;
   std::int32_t cursorHotspotX_ = 0;
   std::int32_t cursorHotspotY_ = 0;
   std::uint32_t pointerEnterSerial_ = 0;

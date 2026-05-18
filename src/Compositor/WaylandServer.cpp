@@ -111,6 +111,7 @@ float WaylandServer::pointerY() const noexcept {
 }
 
 CursorShape WaylandServer::cursorShape() const noexcept {
+  if (impl_->compositorCursorOverride_) return impl_->compositorCursorShape_;
   return impl_->cursorShape_;
 }
 
