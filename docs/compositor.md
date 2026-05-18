@@ -487,7 +487,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - Double-click titlebar to maximize or restore.
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, close button, optional resize grip.
-- Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Arrow to snap; Ctrl+Alt+Backspace to terminate the compositor.
+- Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Left/Super+Right to snap; Super+Up to maximize; Super+Down to restore snapped/maximized windows; Ctrl+Alt+Backspace to terminate the compositor.
 - xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented and covered by `flux-compositor-popup-demo`. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
 
 ### 6.3 Out of scope for phase 3
@@ -647,9 +647,9 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 
 ### 8.2 Scope
 
-- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented.
+- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented. Titlebar drag to the top edge maximizes; Super+Up maximizes and Super+Down restores maximized/snapped windows.
 - **Configuration file:** `~/.config/flux-compositor/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.webp"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `scale = 2.0`, `animations = false`, `hardware_cursor = false`, and a `[keybindings]` section for compositor shortcuts.
-  Supported keybinding actions are `close`, `cycle_focus`, `snap_left`, `snap_right`, and `terminate`; bindings use strings such as `"Super+Q"` or `"Ctrl+Alt+Backspace"`.
+  Supported keybinding actions are `close`, `cycle_focus`, `snap_left`, `snap_right`, `maximize`, `restore`, and `terminate`; bindings use strings such as `"Super+Q"` or `"Ctrl+Alt+Backspace"`.
 - **Hardware cursor:** use KMS cursor planes when supported. Falls back to compositor-drawn software cursor. Initial implementation uses a KMS cursor plane for the built-in arrow cursor; client-provided cursor surfaces and non-arrow cursor shapes still render through the compositor.
 - **Frame timing improvements:** adaptive sync if the hardware supports it (FreeSync). Triple-buffering when beneficial. Initial KMS vblank pacing uses `drmWaitVBlank` when available and falls back to timer pacing if the driver rejects it.
 - **Background / wallpaper:** the compositor draws a default backdrop. Configurable to a solid color, a gradient, or an image file. (The wallpaper is part of the compositor in v1; a separate `xdg-desktop-portal`-style daemon for wallpaper could come later.)

@@ -60,6 +60,7 @@ struct RestoreDragGeometry {
 [[nodiscard]] std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                                OutputGeometry output);
 [[nodiscard]] WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf);
+[[nodiscard]] WindowGeometry maximizedWindowGeometry(OutputGeometry output);
 [[nodiscard]] WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry);
 [[nodiscard]] WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry);
 

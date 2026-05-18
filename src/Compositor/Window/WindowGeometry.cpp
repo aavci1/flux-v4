@@ -7,6 +7,8 @@ namespace flux::compositor {
 
 std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window, OutputGeometry output) {
   if (window.width <= 0) return std::nullopt;
+  bool const topEdge = window.y <= kCompositorTitleBarHeight + kCompositorSnapEdgeThreshold;
+  if (topEdge) return maximizedWindowGeometry(output);
   bool const leftHalf = window.x <= kCompositorSnapEdgeThreshold;
   bool const rightHalf = window.x + window.width >= output.width - kCompositorSnapEdgeThreshold;
   if (!leftHalf && !rightHalf) return std::nullopt;
@@ -21,6 +23,15 @@ WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf) {
       .y = kCompositorTitleBarHeight,
       .width = width,
       .height = height,
+  };
+}
+
+WindowGeometry maximizedWindowGeometry(OutputGeometry output) {
+  return {
+      .x = 0,
+      .y = kCompositorTitleBarHeight,
+      .width = std::max(kCompositorMinWindowWidth, output.width),
+      .height = std::max(kCompositorMinWindowHeight, output.height - kCompositorTitleBarHeight),
   };
 }
 

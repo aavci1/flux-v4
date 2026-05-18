@@ -18,19 +18,26 @@ TEST_CASE("compositor snap geometry uses full output height minus title bar") {
   CHECK(right.height == 1052);
 }
 
-TEST_CASE("compositor snap preview appears only near horizontal output edges") {
+TEST_CASE("compositor snap preview appears only near output edges") {
   flux::compositor::OutputGeometry const output{.width = 1280, .height = 720};
-  CHECK(flux::compositor::snapPreviewGeometry({.x = 64, .y = 50, .width = 400, .height = 240}, output) == std::nullopt);
+  CHECK(flux::compositor::snapPreviewGeometry({.x = 64, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
 
-  auto left = flux::compositor::snapPreviewGeometry({.x = 16, .y = 50, .width = 400, .height = 240}, output);
+  auto left = flux::compositor::snapPreviewGeometry({.x = 16, .y = 96, .width = 400, .height = 240}, output);
   REQUIRE(left);
   CHECK(left->x == 0);
   CHECK(left->width == 640);
 
-  auto right = flux::compositor::snapPreviewGeometry({.x = 900, .y = 50, .width = 360, .height = 240}, output);
+  auto right = flux::compositor::snapPreviewGeometry({.x = 900, .y = 96, .width = 360, .height = 240}, output);
   REQUIRE(right);
   CHECK(right->x == 640);
   CHECK(right->width == 640);
+
+  auto top = flux::compositor::snapPreviewGeometry({.x = 280, .y = 40, .width = 500, .height = 320}, output);
+  REQUIRE(top);
+  CHECK(top->x == 0);
+  CHECK(top->y == flux::compositor::kCompositorTitleBarHeight);
+  CHECK(top->width == 1280);
+  CHECK(top->height == 692);
 }
 
 TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {

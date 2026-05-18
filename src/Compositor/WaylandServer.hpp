@@ -74,6 +74,8 @@ public:
     CycleFocus,
     SnapLeft,
     SnapRight,
+    Maximize,
+    Restore,
     Terminate,
   };
 

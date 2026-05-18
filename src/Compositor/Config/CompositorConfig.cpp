@@ -128,6 +128,8 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
       {.action = Action::CycleFocus, .key = KEY_TAB, .meta = true},
       {.action = Action::SnapLeft, .key = KEY_LEFT, .meta = true},
       {.action = Action::SnapRight, .key = KEY_RIGHT, .meta = true},
+      {.action = Action::Maximize, .key = KEY_UP, .meta = true},
+      {.action = Action::Restore, .key = KEY_DOWN, .meta = true},
       {.action = Action::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 }
@@ -192,7 +194,9 @@ std::optional<WaylandServer::ShortcutAction> shortcutActionForKey(std::string co
       {"close_focused", Action::CloseFocused},
       {"cycle", Action::CycleFocus},
       {"cycle_focus", Action::CycleFocus},
+      {"maximize", Action::Maximize},
       {"quit", Action::Terminate},
+      {"restore", Action::Restore},
       {"snap_left", Action::SnapLeft},
       {"snap_right", Action::SnapRight},
       {"terminate", Action::Terminate},
@@ -247,6 +251,8 @@ close = "super+q"
 cycle_focus = "super+tab"
 snap_left = "super+left"
 snap_right = "super+right"
+maximize = "super+up"
+restore = "super+down"
 terminate = "ctrl+alt+backspace"
 )";
 }

@@ -2293,6 +2293,8 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
       {.action = ShortcutAction::CycleFocus, .key = KEY_TAB, .meta = true},
       {.action = ShortcutAction::SnapLeft, .key = KEY_LEFT, .meta = true},
       {.action = ShortcutAction::SnapRight, .key = KEY_RIGHT, .meta = true},
+      {.action = ShortcutAction::Maximize, .key = KEY_UP, .meta = true},
+      {.action = ShortcutAction::Restore, .key = KEY_DOWN, .meta = true},
       {.action = ShortcutAction::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 
@@ -2862,8 +2864,49 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
                          target.height);
 }
 
+bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->toplevel || (!surface->snapped && !surface->maximized)) return false;
+  std::int32_t const restoreWidth =
+      std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
+  std::int32_t const restoreHeight =
+      std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
+  std::int32_t const restoreX =
+      std::clamp(surface->restoreX, 0, std::max(0, server->logicalOutputWidth() - restoreWidth));
+  std::int32_t const restoreY =
+      std::clamp(surface->restoreY,
+                 kTitleBarHeight,
+                 std::max(kTitleBarHeight, server->logicalOutputHeight() - restoreHeight));
+  surface->maximized = false;
+  surface->snapped = false;
+  startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
+  return true;
+}
+
+void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->toplevel) return;
+  if (surface->maximized) return;
+  if (!surface->snapped) {
+    surface->restoreX = surface->windowX;
+    surface->restoreY = surface->windowY;
+    surface->restoreWidth = displayWidth(surface);
+    surface->restoreHeight = displayHeight(surface);
+  }
+  WindowGeometry const target = maximizedWindowGeometry(outputGeometryFor(server));
+  surface->maximized = true;
+  surface->snapped = false;
+  startGeometryAnimation(server, surface, target.x, target.y, target.width, target.height);
+}
+
 void snapFocusedToplevel(WaylandServer::Impl* server, bool leftHalf) {
   snapToplevel(server, server->keyboardFocus_, leftHalf);
+}
+
+void maximizeFocusedToplevel(WaylandServer::Impl* server) {
+  maximizeToplevel(server, server->keyboardFocus_);
+}
+
+bool restoreFocusedToplevel(WaylandServer::Impl* server) {
+  return restoreToplevel(server, server->keyboardFocus_);
 }
 
 void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
@@ -2895,30 +2938,10 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
 void toggleMaximizedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->toplevel) return;
   if (surface->maximized) {
-    std::int32_t const restoreWidth =
-        std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
-    std::int32_t const restoreHeight =
-        std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
-    std::int32_t const restoreX = std::clamp(surface->restoreX, 0, std::max(0, server->logicalOutputWidth() - restoreWidth));
-    std::int32_t const restoreY =
-        std::clamp(surface->restoreY, kTitleBarHeight, std::max(kTitleBarHeight, server->logicalOutputHeight() - restoreHeight));
-    surface->maximized = false;
-    surface->snapped = false;
-    startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
+    restoreToplevel(server, surface);
     return;
   }
-
-  if (!surface->snapped) {
-    surface->restoreX = surface->windowX;
-    surface->restoreY = surface->windowY;
-    surface->restoreWidth = displayWidth(surface);
-    surface->restoreHeight = displayHeight(surface);
-  }
-  std::int32_t const width = std::max(kMinWindowWidth, server->logicalOutputWidth());
-  std::int32_t const height = std::max(kMinWindowHeight, server->logicalOutputHeight() - kTitleBarHeight);
-  surface->maximized = true;
-  surface->snapped = false;
-  startGeometryAnimation(server, surface, 0, kTitleBarHeight, width, height);
+  maximizeToplevel(server, surface);
 }
 
 bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool pressed) {
@@ -2969,6 +2992,12 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
       return true;
     case WaylandServer::ShortcutAction::SnapRight:
       snapFocusedToplevel(server, false);
+      return true;
+    case WaylandServer::ShortcutAction::Maximize:
+      maximizeFocusedToplevel(server);
+      return true;
+    case WaylandServer::ShortcutAction::Restore:
+      restoreFocusedToplevel(server);
       return true;
     case WaylandServer::ShortcutAction::Terminate:
       std::raise(SIGTERM);
@@ -3205,7 +3234,11 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       return;
     } else if (dragSurface_) {
       if (auto preview = snapPreviewForDrag(this)) {
-        snapToplevel(this, dragSurface_, preview->x == 0);
+        if (preview->width >= logicalOutputWidth()) {
+          maximizeToplevel(this, dragSurface_);
+        } else {
+          snapToplevel(this, dragSurface_, preview->x == 0);
+        }
       }
       dragSurface_ = nullptr;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
