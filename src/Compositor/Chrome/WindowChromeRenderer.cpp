@@ -113,4 +113,16 @@ void drawWindowChrome(Canvas& canvas, TextSystem& textSystem, CommittedSurfaceSn
   drawGrip(windowX + windowWidth - grip - 3.f, windowY + windowHeight - grip - 3.f);
 }
 
+void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview) {
+  Rect const previewRect = Rect::sharp(static_cast<float>(preview.x),
+                                      static_cast<float>(preview.y),
+                                      static_cast<float>(preview.width),
+                                      static_cast<float>(preview.height));
+  canvas.drawRect(previewRect,
+                  CornerRadius{0.f},
+                  FillStyle::solid(Color{0.86f, 0.93f, 1.0f, 0.22f}),
+                  StrokeStyle::solid(Color{0.92f, 0.97f, 1.0f, 0.82f}, 2.f),
+                  ShadowStyle::none());
+}
+
 } // namespace flux::compositor

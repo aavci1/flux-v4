@@ -276,15 +276,7 @@ int main(int, char**) {
         ++it;
       }
       if (auto snapPreview = wayland.snapPreview()) {
-        flux::Rect const previewRect = flux::Rect::sharp(static_cast<float>(snapPreview->x),
-                                                         static_cast<float>(snapPreview->y),
-                                                         static_cast<float>(snapPreview->width),
-                                                         static_cast<float>(snapPreview->height));
-        canvas->drawRect(previewRect,
-                         flux::CornerRadius{0.f},
-                         flux::FillStyle::solid(flux::Color{0.86f, 0.93f, 1.0f, 0.22f}),
-                         flux::StrokeStyle::solid(flux::Color{0.92f, 0.97f, 1.0f, 0.82f}, 2.f),
-                         flux::ShadowStyle::none());
+        flux::compositor::drawSnapPreview(*canvas, *snapPreview);
       }
       if (auto cursorSurface = wayland.cursorSurface()) {
         if (hardwareArrowCursor) output.hideCursor();
