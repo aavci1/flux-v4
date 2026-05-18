@@ -690,7 +690,9 @@ void releaseSharedVulkanCore() {
   gVulkanCore = {};
 }
 
-void destroySharedTexture(VkDevice device, VmaAllocator allocator, Texture &tex) {
+void destroySharedTexture(VkDevice device, VmaAllocator allocator, VkDescriptorPool descriptorPool, Texture &tex) {
+  if (tex.descriptor && descriptorPool)
+    vkFreeDescriptorSets(device, descriptorPool, 1, &tex.descriptor);
   if (tex.view && tex.ownsView)
     vkDestroyImageView(device, tex.view, nullptr);
   if (tex.image && tex.ownsImage)
@@ -703,7 +705,7 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
   VkDevice const device = core.device;
   if (!device)
     return;
-  destroySharedTexture(device, core.allocator, res.atlas);
+  destroySharedTexture(device, core.allocator, res.descriptorPool, res.atlas);
   if (res.pathPipeline)
     vkDestroyPipeline(device, res.pathPipeline, nullptr);
   if (res.rectPipeline)
@@ -3271,6 +3273,8 @@ private:
   }
 
   void destroyTexture(Texture &tex) {
+    if (tex.descriptor && resources().descriptorPool)
+      vkFreeDescriptorSets(device_, resources().descriptorPool, 1, &tex.descriptor);
     if (tex.view && tex.ownsView)
       vkDestroyImageView(device_, tex.view, nullptr);
     if (tex.image && tex.ownsImage)

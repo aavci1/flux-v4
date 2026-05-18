@@ -367,9 +367,12 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     }
   }
 
-  if (surface->server->resizeSurface_ == surface ||
-      surface->geometryAnimationActive ||
-      surface->awaitingConfigureCommit) {
+  bool const activeSizing = surface->server->resizeSurface_ == surface ||
+                            surface->geometryAnimationActive;
+  bool const matchedConfigure = surface->awaitingConfigureCommit &&
+                                committedDisplayWidth(surface) == surface->awaitingConfigureWidth &&
+                                committedDisplayHeight(surface) == surface->awaitingConfigureHeight;
+  if (activeSizing || matchedConfigure) {
     if (surface->frameWidth <= 0 || surface->frameHeight <= 0) {
       if (surface->server->resizeSurface_ == surface &&
           surface->server->resizeLastWidth_ > 0 &&
@@ -383,6 +386,16 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
                                surface->geometryAnimationTargetHeight);
       }
     }
+    return true;
+  }
+  if (surface->awaitingConfigureCommit) {
+    surface->awaitingConfigureCommit = false;
+    surface->awaitingConfigureWidth = 0;
+    surface->awaitingConfigureHeight = 0;
+  }
+  if ((surface->snapped || surface->maximized) &&
+      surface->frameWidth > 0 &&
+      surface->frameHeight > 0) {
     return true;
   }
 

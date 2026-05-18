@@ -263,14 +263,15 @@ void drawCommittedSurface(WaylandServer& wayland,
   float const sourceHeight = surface.sourceHeight > 0.f
                                  ? surface.sourceHeight
                                  : static_cast<float>(cached.image->size().height);
-  bool const staleResizeBuffer =
-      surface.activeSizing &&
+  bool const clientContentSmallerThanFrame =
+      surface.destinationWidth > 0 &&
+      surface.destinationHeight > 0 &&
       (surface.destinationWidth != static_cast<int>(std::lround(windowWidth)) ||
        surface.destinationHeight != static_cast<int>(std::lround(windowHeight)));
-  float const contentWidth = staleResizeBuffer
+  float const contentWidth = clientContentSmallerThanFrame
                                  ? static_cast<float>(surface.destinationWidth)
                                  : windowWidth;
-  float const contentHeight = staleResizeBuffer
+  float const contentHeight = clientContentSmallerThanFrame
                                   ? static_cast<float>(surface.destinationHeight)
                                   : windowHeight;
   canvas.save();
@@ -284,6 +285,45 @@ void drawCommittedSurface(WaylandServer& wayland,
                                windowY,
                                contentWidth,
                                contentHeight));
+  if (clientContentSmallerThanFrame) {
+    float const rightPad = std::max(0.f, windowWidth - contentWidth);
+    float const bottomPad = std::max(0.f, windowHeight - contentHeight);
+    float const edgeSourceWidth = std::max(1.f, sourceWidth);
+    float const edgeSourceHeight = std::max(1.f, sourceHeight);
+    if (rightPad > 0.f) {
+      canvas.drawImage(*cached.image,
+                       Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
+                                   surface.sourceY,
+                                   1.f,
+                                   edgeSourceHeight),
+                       Rect::sharp(windowX + contentWidth,
+                                   windowY,
+                                   rightPad,
+                                   contentHeight));
+    }
+    if (bottomPad > 0.f) {
+      canvas.drawImage(*cached.image,
+                       Rect::sharp(surface.sourceX,
+                                   surface.sourceY + edgeSourceHeight - 1.f,
+                                   edgeSourceWidth,
+                                   1.f),
+                       Rect::sharp(windowX,
+                                   windowY + contentHeight,
+                                   contentWidth,
+                                   bottomPad));
+    }
+    if (rightPad > 0.f && bottomPad > 0.f) {
+      canvas.drawImage(*cached.image,
+                       Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
+                                   surface.sourceY + edgeSourceHeight - 1.f,
+                                   1.f,
+                                   1.f),
+                       Rect::sharp(windowX + contentWidth,
+                                   windowY + contentHeight,
+                                   rightPad,
+                                   bottomPad));
+    }
+  }
   canvas.restore();
   canvas.restore();
 }
