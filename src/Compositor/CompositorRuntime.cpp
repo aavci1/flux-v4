@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -39,6 +40,22 @@ std::uint32_t monotonicMilliseconds() {
   auto const now = std::chrono::duration_cast<std::chrono::milliseconds>(
       Clock::now().time_since_epoch());
   return static_cast<std::uint32_t>(now.count());
+}
+
+using SteadyClock = std::chrono::steady_clock;
+
+double elapsedMilliseconds(SteadyClock::time_point start) {
+  return std::chrono::duration<double, std::milli>(SteadyClock::now() - start).count();
+}
+
+bool timingTraceEnabled() {
+  char const* value = std::getenv("FLUX_COMPOSITOR_TIMING");
+  return value && *value && std::strcmp(value, "0") != 0;
+}
+
+void traceTiming(char const* label, SteadyClock::time_point start) {
+  if (!timingTraceEnabled()) return;
+  std::fprintf(stderr, "flux-compositor: timing %s %.3fms\n", label, elapsedMilliseconds(start));
 }
 
 struct LoopInstrumentation {
@@ -213,25 +230,39 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     vulkan.addRequiredDeviceExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
     vulkan.addRequiredDeviceExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
     vulkan.addRequiredDeviceExtension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+    auto timingStart = SteadyClock::now();
     VkInstance instance = flux::ensureSharedVulkanInstance();
-    VkSurfaceKHR surface = output.createVulkanSurface(instance);
+    traceTiming("ensure-vulkan-instance", timingStart);
 
     static flux::FreeTypeTextSystem textSystem;
-    std::unique_ptr<flux::Canvas> canvas = flux::createVulkanCanvas(surface, 1u, textSystem);
-    canvas->updateDpiScale(1.f, 1.f);
-    canvas->resize(static_cast<int>(output.width()), static_cast<int>(output.height()));
-
-    std::fprintf(stderr,
-                 "flux-compositor: presenting %ux%u on %s\n",
-                 output.width(),
-                 output.height(),
-                 output.name().c_str());
 
     auto effectiveConfig = [&] {
       CompositorConfig config = loadedConfig.config;
       config.scale = scaleForOutput(config, output.name());
       return config;
     };
+    wayland.setPreferredScale(effectiveConfig().scale);
+
+    auto createCanvas = [&] {
+      auto const surfaceStart = SteadyClock::now();
+      VkSurfaceKHR surface = output.createVulkanSurface(instance);
+      traceTiming("create-vulkan-surface", surfaceStart);
+
+      auto const canvasStart = SteadyClock::now();
+      auto nextCanvas = flux::createVulkanCanvas(surface, 1u, textSystem);
+      nextCanvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
+      nextCanvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
+      traceTiming("create-vulkan-canvas", canvasStart);
+      return nextCanvas;
+    };
+
+    std::unique_ptr<flux::Canvas> canvas = createCanvas();
+
+    std::fprintf(stderr,
+                 "flux-compositor: presenting %ux%u on %s\n",
+                 output.width(),
+                 output.height(),
+                 output.name().c_str());
 
     AppliedCompositorConfig appliedConfig{};
     auto applyOutputScale = [&](bool force) {
@@ -251,7 +282,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
 
     auto applyConfig = [&](bool forceOutputScale = false) {
+      if (!canvas) return;
+      auto const configStart = SteadyClock::now();
       appliedConfig = applyCompositorConfig(effectiveConfig(), *canvas);
+      traceTiming("apply-config", configStart);
       wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
       applyOutputScale(forceOutputScale);
     };
@@ -268,67 +302,18 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
 
     bool forceRender = true;
+    bool skipNextVblank = true;
     bool wasVtForeground = device->isVtForeground();
     constexpr int kIdlePollMs = 250;
-
-    while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
-      ++loopStats.loops;
-      bool const animationFrameNeeded =
-          wayland.hasActiveAnimations() || !surfaceRenderState.closingSurfaces.empty();
-      int const waylandEventFd = wayland.eventFd();
-      std::span<int const> const waylandEventFds(&waylandEventFd, waylandEventFd >= 0 ? 1u : 0u);
-      int const pollTimeoutMs = forceRender || animationFrameNeeded ? 0 : kIdlePollMs;
-      auto timingStart = LoopInstrumentation::Clock::now();
-      bool const pollWoke = device->pollEvents(pollTimeoutMs, waylandEventFds);
-      loopStats.recordPoll(timingStart, pollWoke);
-      timingStart = LoopInstrumentation::Clock::now();
-      wayland.dispatch();
-      loopStats.recordDispatch(timingStart);
-      ++loopStats.configChecks;
-      bool configReloaded = false;
-      if (configChanged(loadedConfig)) {
-        auto const previousOutputSelector = loadedConfig.config.outputSelector;
-        loadedConfig = loadConfigWithMetadata();
-        if (loadedConfig.config.outputSelector != previousOutputSelector) {
-          std::fprintf(stderr,
-                       "flux-compositor: output selector changed; restart required to move compositor outputs\n");
-        }
-        applyConfig();
-        configReloaded = true;
-      }
-      bool const vtForeground = device->isVtForeground();
-      if (vtForeground && !wasVtForeground) {
-        applyConfig(true);
-        forceRender = true;
-      }
-      wasVtForeground = vtForeground;
-      if (!vtForeground) {
-        ++loopStats.vtSleeps;
-        timingStart = LoopInstrumentation::Clock::now();
-        bool const vtPollWoke = device->pollEvents(kIdlePollMs, waylandEventFds);
-        loopStats.recordPoll(timingStart, vtPollWoke);
-        timingStart = LoopInstrumentation::Clock::now();
-        wayland.dispatch();
-        loopStats.recordDispatch(timingStart);
-        loopStats.maybeLog();
-        continue;
-      }
-
-      bool const renderNeeded = forceRender || animationFrameNeeded || pollWoke || configReloaded;
-      if (!renderNeeded) {
-        ++loopStats.idleSkips;
-        loopStats.maybeLog();
-        continue;
-      }
-
-      timingStart = LoopInstrumentation::Clock::now();
-      output.waitForVblank();
-      loopStats.recordVblank(timingStart);
-      if (!device->isVtForeground()) continue;
-      auto const frameTime = std::chrono::steady_clock::now();
-      wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
-
-      timingStart = LoopInstrumentation::Clock::now();
+    auto handleVtResume = [&] {
+      auto const resumeStart = SteadyClock::now();
+      applyOutputScale(true);
+      traceTiming("vt-resume-total", resumeStart);
+      forceRender = true;
+      skipNextVblank = true;
+    };
+    auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
+                                     LoopInstrumentation::Clock::time_point renderStart) {
       canvas->beginFrame();
       drawCompositorBackground(*canvas,
                                appliedConfig,
@@ -373,8 +358,76 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                            appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
       canvas->present();
-      loopStats.recordRender(timingStart);
+      loopStats.recordRender(renderStart);
       wayland.sendFrameCallbacks(monotonicMilliseconds());
+    };
+
+    while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
+      ++loopStats.loops;
+      bool const animationFrameNeeded =
+          wayland.hasActiveAnimations() || !surfaceRenderState.closingSurfaces.empty();
+      int const waylandEventFd = wayland.eventFd();
+      std::span<int const> const waylandEventFds(&waylandEventFd, waylandEventFd >= 0 ? 1u : 0u);
+      int const pollTimeoutMs = forceRender || animationFrameNeeded ? 0 : kIdlePollMs;
+      auto timingStart = LoopInstrumentation::Clock::now();
+      bool const pollWoke = device->pollEvents(pollTimeoutMs, waylandEventFds);
+      loopStats.recordPoll(timingStart, pollWoke);
+      timingStart = LoopInstrumentation::Clock::now();
+      wayland.dispatch();
+      loopStats.recordDispatch(timingStart);
+      ++loopStats.configChecks;
+      bool configReloaded = false;
+      if (configChanged(loadedConfig)) {
+        auto const previousOutputSelector = loadedConfig.config.outputSelector;
+        loadedConfig = loadConfigWithMetadata();
+        if (loadedConfig.config.outputSelector != previousOutputSelector) {
+          std::fprintf(stderr,
+                       "flux-compositor: output selector changed; restart required to move compositor outputs\n");
+        }
+        applyConfig();
+        configReloaded = true;
+      }
+      bool const vtForeground = device->isVtForeground();
+      if (vtForeground && !wasVtForeground) {
+        handleVtResume();
+      }
+      wasVtForeground = vtForeground;
+      if (!vtForeground) {
+        ++loopStats.vtSleeps;
+        timingStart = LoopInstrumentation::Clock::now();
+        bool const vtPollWoke = device->pollEvents(kIdlePollMs, waylandEventFds);
+        loopStats.recordPoll(timingStart, vtPollWoke);
+        timingStart = LoopInstrumentation::Clock::now();
+        wayland.dispatch();
+        loopStats.recordDispatch(timingStart);
+        if (!device->isVtForeground()) {
+          loopStats.maybeLog();
+          continue;
+        }
+        handleVtResume();
+        wasVtForeground = true;
+      }
+
+      bool const renderNeeded = forceRender || animationFrameNeeded || pollWoke || configReloaded;
+      if (!renderNeeded) {
+        ++loopStats.idleSkips;
+        loopStats.maybeLog();
+        continue;
+      }
+
+      timingStart = LoopInstrumentation::Clock::now();
+      if (skipNextVblank) {
+        skipNextVblank = false;
+      } else {
+        output.waitForVblank();
+        loopStats.recordVblank(timingStart);
+      }
+      if (!device->isVtForeground()) continue;
+      auto const frameTime = std::chrono::steady_clock::now();
+      wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
+
+      timingStart = LoopInstrumentation::Clock::now();
+      renderCompositorFrame(frameTime, timingStart);
       forceRender = false;
       loopStats.maybeLog();
     }

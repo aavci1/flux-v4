@@ -16,22 +16,33 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <limits>
 #include <memory>
 #include <span>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace flux {
 
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
-  std::ifstream in(std::filesystem::path(std::string(path)), std::ios::binary);
+  std::filesystem::path const imagePath{std::string(path)};
+  std::ifstream in(imagePath, std::ios::binary);
   if (!in) {
     return nullptr;
   }
 
-  std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  std::error_code ec;
+  auto const fileSize = std::filesystem::file_size(imagePath, ec);
+  if (ec || fileSize == 0 || fileSize > static_cast<std::uintmax_t>(std::numeric_limits<int>::max())) {
+    return nullptr;
+  }
+
+  std::vector<std::uint8_t> data(static_cast<std::size_t>(fileSize));
+  in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+  if (in.gcount() != static_cast<std::streamsize>(data.size())) {
+    return nullptr;
+  }
   if (data.empty() || data.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     return nullptr;
   }
