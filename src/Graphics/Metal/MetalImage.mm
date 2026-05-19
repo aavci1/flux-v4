@@ -1,9 +1,7 @@
 #import <Foundation/Foundation.h>
-#import <MetalKit/MetalKit.h>
+#import <Metal/Metal.h>
 
 #include "Graphics/Metal/MetalImage.hpp"
-
-#include <string>
 
 namespace flux {
 
@@ -60,30 +58,6 @@ std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t 
 
   MTLRegion region = MTLRegionMake2D(0, 0, width, height);
   [tex replaceRegion:region mipmapLevel:0 withBytes:rgbaPixels.data() bytesPerRow:width * 4u];
-  return std::make_shared<MetalImage>(tex);
-}
-
-std::shared_ptr<Image> loadImageFromFile(std::string_view path, void* gpuDevice) {
-  id<MTLDevice> device =
-      gpuDevice ? (__bridge id<MTLDevice>)gpuDevice : MTLCreateSystemDefaultDevice();
-  if (!device) {
-    return nullptr;
-  }
-  NSString* nsPath = [[NSString alloc] initWithBytes:path.data() length:path.size()
-                                              encoding:NSUTF8StringEncoding];
-  if (!nsPath) {
-    return nullptr;
-  }
-  NSError* err = nil;
-  MTKTextureLoader* loader = [[MTKTextureLoader alloc] initWithDevice:device];
-  NSDictionary* opts = @{
-    MTKTextureLoaderOptionTextureUsage : @(MTLTextureUsageShaderRead),
-    MTKTextureLoaderOptionSRGB : @(NO),
-  };
-  id<MTLTexture> tex = [loader newTextureWithContentsOfURL:[NSURL fileURLWithPath:nsPath] options:opts error:&err];
-  if (!tex) {
-    return nullptr;
-  }
   return std::make_shared<MetalImage>(tex);
 }
 

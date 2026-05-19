@@ -39,7 +39,7 @@ using namespace flux::scenegraph;
 
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
-  path /= "../examples/image-demo/test.webp";
+  path /= "../examples/image-demo/test.png";
   return std::filesystem::weakly_canonical(path);
 }
 
@@ -557,7 +557,7 @@ TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), vk.device());
+  std::shared_ptr<Image> image = loadImage(imageFixturePath().string(), vk.device());
   StressScene scene = makeStressScene(textSystem, image);
   REQUIRE(scene.animatedGroup != nullptr);
 

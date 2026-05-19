@@ -141,6 +141,7 @@ set(FLUX_GRAPHICS_SOURCES
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
+  src/Graphics/ImageLoader.cpp
   src/Graphics/RenderTarget.cpp
   src/Graphics/TextCacheDebugOverlay.cpp
   src/Graphics/TextSystem.cpp

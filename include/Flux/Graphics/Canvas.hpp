@@ -114,7 +114,7 @@ public:
   virtual void drawBackdropBlur(Rect const& rect, float radius, Color tint = Colors::transparent,
                                 CornerRadius const& corners = {}) = 0;
 
-  /// Metal: `id<MTLDevice>` as `void*` (use with `loadImageFromFile(path, canvas.gpuDevice())`). Null if unavailable.
+  /// Metal: `id<MTLDevice>` as `void*` (use with `loadImage(path, canvas.gpuDevice())`). Null if unavailable.
   virtual void* gpuDevice() const = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;

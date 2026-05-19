@@ -70,8 +70,8 @@ protected:
   Image() = default;
 };
 
-/// Loads an image from disk into a GPU texture (Metal). `gpuDevice` must be the same device as the drawable
-/// (`Canvas::gpuDevice()`); pass null only on single-GPU systems (uses the system default device).
-std::shared_ptr<Image> loadImageFromFile(std::string_view path, void* gpuDevice = nullptr);
+/// Loads an image from disk into a backend image.
+/// `gpuDevice` must match the target canvas device when the backend requires it.
+std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice = nullptr);
 
 } // namespace flux

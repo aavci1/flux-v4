@@ -24,7 +24,7 @@ sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
   mesa libdrm libinput systemd-libs \
-  freetype2 fontconfig harfbuzz zlib libwebp
+  freetype2 fontconfig harfbuzz zlib
 ```
 
 Driver packages:

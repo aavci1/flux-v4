@@ -31,7 +31,7 @@ using namespace flux::scenegraph;
 
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
-  path /= "../examples/image-demo/test.webp";
+  path /= "../examples/image-demo/test.png";
   return std::filesystem::weakly_canonical(path);
 }
 
@@ -262,7 +262,7 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
     REQUIRE(target);
 
     Canvas& canvas = target.canvas();
-    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas.gpuDevice());
+    std::shared_ptr<Image> image = loadImage(imageFixturePath().string(), canvas.gpuDevice());
     StressScene scene = makeStressScene(textSystem, image);
     REQUIRE(scene.animatedGroup != nullptr);
 
@@ -667,7 +667,7 @@ TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
     HeadlessMetalTarget target{textSystem, 640, 480};
     REQUIRE(target);
 
-    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), target.canvas().gpuDevice());
+    std::shared_ptr<Image> image = loadImage(imageFixturePath().string(), target.canvas().gpuDevice());
     REQUIRE(image);
 
     auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});

@@ -32,17 +32,6 @@
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_NO_HDR
-#define STBI_NO_LINEAR
-#include "stb_image.h"
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
 
 #include <algorithm>
 #include <array>
@@ -51,7 +40,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -3709,77 +3697,6 @@ std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t 
   std::vector<Rgba> pixels(static_cast<std::size_t>(width) * height);
   std::memcpy(pixels.data(), rgbaPixels.data(), expectedSize);
   return std::make_shared<VulkanImage>(static_cast<int>(width), static_cast<int>(height), std::move(pixels));
-}
-
-std::shared_ptr<Image> loadImageWithWebP(std::span<std::uint8_t const> data) {
-  using WebPGetInfoFn = int (*)(std::uint8_t const *, std::size_t, int *, int *);
-  using WebPDecodeRGBAFn = std::uint8_t *(*)(std::uint8_t const *, std::size_t, int *, int *);
-  using WebPFreeFn = void (*)(void *);
-
-  void *lib = dlopen("libwebp.so.7", RTLD_LAZY | RTLD_LOCAL);
-  if (!lib)
-    lib = dlopen("libwebp.so", RTLD_LAZY | RTLD_LOCAL);
-  if (!lib)
-    return nullptr;
-  auto getInfo = reinterpret_cast<WebPGetInfoFn>(dlsym(lib, "WebPGetInfo"));
-  auto decode = reinterpret_cast<WebPDecodeRGBAFn>(dlsym(lib, "WebPDecodeRGBA"));
-  auto freeWebP = reinterpret_cast<WebPFreeFn>(dlsym(lib, "WebPFree"));
-  if (!getInfo || !decode || !freeWebP) {
-    dlclose(lib);
-    return nullptr;
-  }
-  int width = 0, height = 0;
-  if (!getInfo(data.data(), data.size(), &width, &height) || width <= 0 || height <= 0) {
-    dlclose(lib);
-    return nullptr;
-  }
-  int decodedWidth = 0, decodedHeight = 0;
-  std::uint8_t *decoded = decode(data.data(), data.size(), &decodedWidth, &decodedHeight);
-  if (!decoded || decodedWidth != width || decodedHeight != height) {
-    if (decoded)
-      freeWebP(decoded);
-    dlclose(lib);
-    return nullptr;
-  }
-  std::vector<Rgba> rgba(static_cast<std::size_t>(width) * height);
-  std::memcpy(rgba.data(), decoded, rgba.size() * sizeof(Rgba));
-  freeWebP(decoded);
-  dlclose(lib);
-  return std::make_shared<VulkanImage>(width, height, std::move(rgba));
-}
-
-std::shared_ptr<Image> loadImageWithStb(std::span<std::uint8_t const> data) {
-  if (data.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-    return nullptr;
-  }
-  int width = 0;
-  int height = 0;
-  auto const *bytes = reinterpret_cast<stbi_uc const *>(data.data());
-  stbi_uc *decoded = stbi_load_from_memory(bytes, static_cast<int>(data.size()), &width, &height, nullptr,
-                                           STBI_rgb_alpha);
-  if (!decoded || width <= 0 || height <= 0) {
-    if (decoded) stbi_image_free(decoded);
-    return nullptr;
-  }
-
-  std::vector<Rgba> rgba(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
-  std::memcpy(rgba.data(), decoded, rgba.size() * sizeof(Rgba));
-  stbi_image_free(decoded);
-  return std::make_shared<VulkanImage>(width, height, std::move(rgba));
-}
-
-std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
-  std::ifstream in(std::filesystem::path(std::string(path)), std::ios::binary);
-  if (!in)
-    return nullptr;
-  std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  if (data.empty())
-    return nullptr;
-
-  if (auto image = loadImageWithStb(data)) {
-    return image;
-  }
-  return loadImageWithWebP(data);
 }
 
 std::shared_ptr<Image> rasterizeToImage(Canvas &canvas, Size logicalSize, RasterizeDrawCallback draw, float dpiScale) {

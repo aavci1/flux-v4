@@ -19,7 +19,7 @@ namespace {
 
 std::string defaultImagePath() {
     namespace fs = std::filesystem;
-    return fs::absolute(fs::path(__FILE__).parent_path() / "test.webp").string();
+    return fs::absolute(fs::path(__FILE__).parent_path() / "test.png").string();
 }
 
 std::string fileNameForPath(std::string const &path) {
@@ -466,7 +466,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     std::string const imagePath = argc > 1 ? std::string(argv[1]) : defaultImagePath();
-    std::shared_ptr<flux::Image> image = loadImageFromFile(imagePath);
+    std::shared_ptr<flux::Image> image = loadImage(imagePath);
 
     auto &w = app.createWindow<Window>({
         .size = {960, 920},
