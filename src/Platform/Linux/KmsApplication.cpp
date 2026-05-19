@@ -1040,6 +1040,7 @@ void KmsApplication::restoreConsole() {
   if (ttyFd_ < 0 || !consoleInitialized_) return;
   debugLog("restoring console vt=%d foreground=%d previousMode=%d", ourVt_, vtForeground_ ? 1 : 0,
            previousConsoleMode_);
+  acknowledgePendingVtAcquire();
   if (vtProcessMode_) {
     vt_mode mode = previousVtMode_;
     if (mode.mode == VT_PROCESS) mode.mode = VT_AUTO;
@@ -1132,18 +1133,8 @@ void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
     if (drmDropMaster(drmFd_) != 0) debugLog("drmDropMaster failed: %s", std::strerror(errno));
     drmMaster_ = false;
   }
-  if (ttyFd_ >= 0) {
-    if (terminalConfigured_) {
-      if (tcsetattr(ttyFd_, TCSAFLUSH, &previousTermios_) != 0) {
-        debugLog("tcsetattr restore during VT release failed: %s", std::strerror(errno));
-      }
-      tcflush(ttyFd_, TCIFLUSH);
-      terminalConfigured_ = false;
-    }
-    if (ioctl(ttyFd_, KDSETMODE, KD_TEXT) != 0) {
-      debugLog("KDSETMODE(KD_TEXT) during VT release failed: %s", std::strerror(errno));
-    }
-    if (acknowledge && vtProcessMode_ && ioctl(ttyFd_, VT_RELDISP, 1) != 0) {
+  if (ttyFd_ >= 0 && acknowledge && vtProcessMode_) {
+    if (ioctl(ttyFd_, VT_RELDISP, 1) != 0) {
       debugLog("VT_RELDISP release failed: %s", std::strerror(errno));
     }
   }
@@ -1152,9 +1143,6 @@ void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
 void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
   if (vtForeground_) return;
   debugLog("reacquiring DRM master after VT switch");
-  if (ttyFd_ >= 0 && acknowledge && vtProcessMode_ && ioctl(ttyFd_, VT_RELDISP, VT_ACKACQ) != 0) {
-    debugLog("VT_RELDISP acquire ack failed: %s", std::strerror(errno));
-  }
   if (drmFd_ >= 0 && !drmMaster_) {
     for (int attempt = 0; attempt < 10 && !drmMaster_; ++attempt) {
       if (drmSetMaster(drmFd_) == 0) {
@@ -1186,11 +1174,20 @@ void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
       debugLog("tcsetattr compositor mode after VT acquire failed: %s", std::strerror(errno));
     }
   }
+  vtAcquireAckPending_ = ttyFd_ >= 0 && acknowledge && vtProcessMode_;
   vtForeground_ = true;
   for (KmsWindow* window : windows_) {
     if (window) window->resumeFromVtSwitch();
   }
   wakeEventLoop();
+}
+
+void KmsApplication::acknowledgePendingVtAcquire() {
+  if (!vtAcquireAckPending_) return;
+  vtAcquireAckPending_ = false;
+  if (ttyFd_ >= 0 && vtProcessMode_ && ioctl(ttyFd_, VT_RELDISP, VT_ACKACQ) != 0) {
+    debugLog("VT_RELDISP acquire ack failed: %s", std::strerror(errno));
+  }
 }
 
 void KmsApplication::handlePendingVtSignal() {

@@ -277,6 +277,10 @@ void KmsDevice::setInputHandler(std::function<void(KmsInputEvent const&)> handle
   if (impl_ && impl_->app_) impl_->app_->rawInputHandler_ = std::move(handler);
 }
 
+void KmsDevice::acknowledgeVtAcquire() {
+  if (impl_ && impl_->app_) impl_->app_->acknowledgePendingVtAcquire();
+}
+
 bool KmsDevice::pollEvents(int timeoutMs, std::span<int const> extraFds) {
   return impl_ && impl_->app_ ? impl_->app_->pollInputAndWake(timeoutMs, extraFds) : false;
 }

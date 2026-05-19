@@ -108,6 +108,7 @@ private:
   void pollActiveVt();
   void releaseDrmMasterForVt(bool acknowledge);
   void acquireDrmMasterForVt(bool acknowledge);
+  void acknowledgePendingVtAcquire();
   KmsWindow* windowForConnector(std::uint32_t connectorId) const;
   Point windowOrigin(KmsWindow const* window) const;
   Point clampGlobalPointer(Point position) const;
@@ -141,6 +142,7 @@ private:
   bool terminalConfigured_ = false;
   bool vtProcessMode_ = false;
   bool vtForeground_ = true;
+  bool vtAcquireAckPending_ = false;
   int previousConsoleMode_ = 0;
   termios previousTermios_{};
   vt_mode previousVtMode_{};

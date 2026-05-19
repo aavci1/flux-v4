@@ -304,11 +304,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     bool forceRender = true;
     bool skipNextVblank = true;
     bool wasVtForeground = device->isVtForeground();
+    bool vtAcquireFramePending = false;
     constexpr int kIdlePollMs = 250;
     auto handleVtResume = [&] {
       auto const resumeStart = SteadyClock::now();
       applyOutputScale(true);
       traceTiming("vt-resume-total", resumeStart);
+      vtAcquireFramePending = true;
       forceRender = true;
       skipNextVblank = true;
     };
@@ -428,6 +430,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 
       timingStart = LoopInstrumentation::Clock::now();
       renderCompositorFrame(frameTime, timingStart);
+      if (vtAcquireFramePending) {
+        vtAcquireFramePending = false;
+        device->acknowledgeVtAcquire();
+      }
       forceRender = false;
       loopStats.maybeLog();
     }
