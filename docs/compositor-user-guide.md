@@ -129,8 +129,8 @@ terminate = "ctrl+alt+backspace"
 
 `wallpaper_mode` accepts `cover`, `contain`, `stretch`, `center`, and `tile`.
 Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
-the Vulkan renderer loads common image formats through gdk-pixbuf when available, including
-JPEG, PNG, and WebP; WebP also has a direct fallback decoder.
+the Vulkan renderer loads common image formats through stb_image, including JPEG and PNG;
+WebP has a direct fallback decoder.
 
 ## Window Management
 
