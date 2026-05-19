@@ -80,6 +80,7 @@ struct WaylandServer::Impl {
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
   void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
+  [[nodiscard]] bool hasActiveAnimations() const noexcept;
   void sendFrameCallbacks(std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);

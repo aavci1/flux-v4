@@ -277,8 +277,8 @@ void KmsDevice::setInputHandler(std::function<void(KmsInputEvent const&)> handle
   if (impl_ && impl_->app_) impl_->app_->rawInputHandler_ = std::move(handler);
 }
 
-bool KmsDevice::pollEvents(int timeoutMs) {
-  return impl_ && impl_->app_ ? impl_->app_->pollInputAndWake(timeoutMs) : false;
+bool KmsDevice::pollEvents(int timeoutMs, std::span<int const> extraFds) {
+  return impl_ && impl_->app_ ? impl_->app_->pollInputAndWake(timeoutMs, extraFds) : false;
 }
 
 } // namespace flux::platform

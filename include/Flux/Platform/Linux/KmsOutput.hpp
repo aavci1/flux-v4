@@ -64,7 +64,7 @@ public:
   void setInputHandler(std::function<void(KmsInputEvent const&)> handler);
 
   /// Services signal, VT-switch, input, wake, and hotplug events owned by the KMS device.
-  bool pollEvents(int timeoutMs = 0);
+  bool pollEvents(int timeoutMs = 0, std::span<int const> extraFds = {});
 
 private:
   explicit KmsDevice(std::shared_ptr<Impl> impl);

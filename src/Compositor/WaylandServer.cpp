@@ -78,6 +78,10 @@ void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnable
   impl_->updateAnimations(timeMs, animationsEnabled);
 }
 
+bool WaylandServer::hasActiveAnimations() const noexcept {
+  return impl_->hasActiveAnimations();
+}
+
 void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
   impl_->sendFrameCallbacks(timeMs);
 }

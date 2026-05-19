@@ -88,6 +88,12 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
   if (sentConfigure) flushClients();
 }
 
+bool WaylandServer::Impl::hasActiveAnimations() const noexcept {
+  return std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
+    return surface && surface->geometryAnimationActive;
+  });
+}
+
 void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs) {
   timespec now{};
   clock_gettime(CLOCK_MONOTONIC, &now);

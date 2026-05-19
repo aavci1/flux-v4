@@ -17,10 +17,13 @@
 #include <charconv>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -37,6 +40,92 @@ std::uint32_t monotonicMilliseconds() {
       Clock::now().time_since_epoch());
   return static_cast<std::uint32_t>(now.count());
 }
+
+struct LoopInstrumentation {
+  using Clock = std::chrono::steady_clock;
+
+  bool enabled = std::getenv("FLUX_COMPOSITOR_IDLE_PROFILE") != nullptr;
+  Clock::time_point windowStart = Clock::now();
+  std::uint64_t loops = 0;
+  std::uint64_t frames = 0;
+  std::uint64_t idleSkips = 0;
+  std::uint64_t polls = 0;
+  std::uint64_t pollWakeups = 0;
+  std::uint64_t dispatches = 0;
+  std::uint64_t vtSleeps = 0;
+  std::uint64_t configChecks = 0;
+  std::uint64_t lastSurfaceCount = 0;
+  double pollMs = 0.0;
+  double dispatchMs = 0.0;
+  double vblankMs = 0.0;
+  double renderMs = 0.0;
+
+  static double milliseconds(Clock::time_point begin, Clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - begin).count();
+  }
+
+  void recordPoll(Clock::time_point begin, bool woke) {
+    ++polls;
+    if (woke) ++pollWakeups;
+    pollMs += milliseconds(begin, Clock::now());
+  }
+
+  void recordDispatch(Clock::time_point begin) {
+    ++dispatches;
+    dispatchMs += milliseconds(begin, Clock::now());
+  }
+
+  void recordVblank(Clock::time_point begin) {
+    vblankMs += milliseconds(begin, Clock::now());
+  }
+
+  void recordRender(Clock::time_point begin) {
+    ++frames;
+    renderMs += milliseconds(begin, Clock::now());
+  }
+
+  void maybeLog() {
+    if (!enabled) return;
+    auto const now = Clock::now();
+    double const elapsedMs = milliseconds(windowStart, now);
+    if (elapsedMs < 2000.0) return;
+
+    double const seconds = elapsedMs / 1000.0;
+    std::fprintf(stderr,
+                 "flux-compositor: idle-profile %.1fs loops=%llu frames=%llu fps=%.1f polls=%llu poll_wakeups=%llu "
+                 "idle_skips=%llu dispatches=%llu vt_sleeps=%llu config_checks=%llu surfaces=%llu poll_ms=%.2f "
+                 "dispatch_ms=%.2f vblank_ms=%.2f render_ms=%.2f\n",
+                 seconds,
+                 static_cast<unsigned long long>(loops),
+                 static_cast<unsigned long long>(frames),
+                 frames / seconds,
+                 static_cast<unsigned long long>(polls),
+                 static_cast<unsigned long long>(pollWakeups),
+                 static_cast<unsigned long long>(idleSkips),
+                 static_cast<unsigned long long>(dispatches),
+                 static_cast<unsigned long long>(vtSleeps),
+                 static_cast<unsigned long long>(configChecks),
+                 static_cast<unsigned long long>(lastSurfaceCount),
+                 pollMs,
+                 dispatchMs,
+                 vblankMs,
+                 renderMs);
+
+    windowStart = now;
+    loops = 0;
+    frames = 0;
+    idleSkips = 0;
+    polls = 0;
+    pollWakeups = 0;
+    dispatches = 0;
+    vtSleeps = 0;
+    configChecks = 0;
+    pollMs = 0.0;
+    dispatchMs = 0.0;
+    vblankMs = 0.0;
+    renderMs = 0.0;
+  }
+};
 
 std::string lowerAscii(std::string_view value) {
   std::string result(value);
@@ -171,6 +260,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 
     SurfaceRenderState surfaceRenderState;
     CursorRenderState cursorState;
+    LoopInstrumentation loopStats;
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
@@ -178,9 +268,24 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::fprintf(stderr, "flux-compositor: hardware cursor unavailable; using software cursor\n");
     }
 
+    bool forceRender = true;
+    constexpr int kIdlePollMs = 250;
+
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
-      device->pollEvents(0);
+      ++loopStats.loops;
+      bool const animationFrameNeeded =
+          wayland.hasActiveAnimations() || !surfaceRenderState.closingSurfaces.empty();
+      int const waylandEventFd = wayland.eventFd();
+      std::span<int const> const waylandEventFds(&waylandEventFd, waylandEventFd >= 0 ? 1u : 0u);
+      int const pollTimeoutMs = forceRender || animationFrameNeeded ? 0 : kIdlePollMs;
+      auto timingStart = LoopInstrumentation::Clock::now();
+      bool const pollWoke = device->pollEvents(pollTimeoutMs, waylandEventFds);
+      loopStats.recordPoll(timingStart, pollWoke);
+      timingStart = LoopInstrumentation::Clock::now();
       wayland.dispatch();
+      loopStats.recordDispatch(timingStart);
+      ++loopStats.configChecks;
+      bool configReloaded = false;
       if (configChanged(loadedConfig)) {
         auto const previousOutputSelector = loadedConfig.config.outputSelector;
         loadedConfig = loadConfigWithMetadata();
@@ -189,26 +294,42 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                        "flux-compositor: output selector changed; restart required to move compositor outputs\n");
         }
         applyConfig();
+        configReloaded = true;
       }
       if (!device->isVtForeground()) {
-        device->pollEvents(250);
+        ++loopStats.vtSleeps;
+        timingStart = LoopInstrumentation::Clock::now();
+        bool const vtPollWoke = device->pollEvents(kIdlePollMs, waylandEventFds);
+        loopStats.recordPoll(timingStart, vtPollWoke);
+        timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
+        loopStats.recordDispatch(timingStart);
+        loopStats.maybeLog();
         continue;
       }
 
+      bool const renderNeeded = forceRender || animationFrameNeeded || pollWoke || configReloaded;
+      if (!renderNeeded) {
+        ++loopStats.idleSkips;
+        loopStats.maybeLog();
+        continue;
+      }
+
+      timingStart = LoopInstrumentation::Clock::now();
       output.waitForVblank();
-      device->pollEvents(0);
-      wayland.dispatch();
+      loopStats.recordVblank(timingStart);
       if (!device->isVtForeground()) continue;
       auto const frameTime = std::chrono::steady_clock::now();
       wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
 
+      timingStart = LoopInstrumentation::Clock::now();
       canvas->beginFrame();
       drawCompositorBackground(*canvas,
                                appliedConfig,
                                static_cast<std::uint32_t>(wayland.logicalOutputWidth()),
                                static_cast<std::uint32_t>(wayland.logicalOutputHeight()));
       auto committedSurfaces = wayland.committedSurfaces();
+      loopStats.lastSurfaceCount = committedSurfaces.size();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
       for (auto const& clientSurface : committedSurfaces) {
@@ -246,7 +367,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                            appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
       canvas->present();
+      loopStats.recordRender(timingStart);
       wayland.sendFrameCallbacks(monotonicMilliseconds());
+      forceRender = false;
+      loopStats.maybeLog();
     }
 
     output.hideCursor();
