@@ -316,6 +316,40 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
     }
   };
+  auto parseRadiusValue = [&](toml::table const& radiusTable,
+                              char const* key,
+                              float& field,
+                              float minValue,
+                              float maxValue) {
+    if (!radiusTable.contains(key)) return;
+    if (auto value = configNumber(radiusTable, key); value && *value >= minValue && *value <= maxValue) {
+      field = *value;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.window_corner_radius.%s value in %s\n", key, path);
+    }
+  };
+  auto parseCornerRadiusField = [&](char const* key, CornerRadius& field, float minValue, float maxValue) {
+    if (!table.contains(key)) return;
+    if (auto value = configNumber(table, key); value && *value >= minValue && *value <= maxValue) {
+      field = CornerRadius{*value};
+      return;
+    }
+    if (auto* radiusTable = table[key].as_table()) {
+      CornerRadius next = field;
+      if (auto value = configNumber(*radiusTable, "all"); value && *value >= minValue && *value <= maxValue) {
+        next = CornerRadius{*value};
+      } else if (radiusTable->contains("all")) {
+        std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s.all value in %s\n", key, path);
+      }
+      parseRadiusValue(*radiusTable, "top_left", next.topLeft, minValue, maxValue);
+      parseRadiusValue(*radiusTable, "top_right", next.topRight, minValue, maxValue);
+      parseRadiusValue(*radiusTable, "bottom_right", next.bottomRight, minValue, maxValue);
+      parseRadiusValue(*radiusTable, "bottom_left", next.bottomLeft, minValue, maxValue);
+      field = next;
+      return;
+    }
+    std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+  };
   auto parseColorField = [&](char const* key, Color& field) {
     if (!table.contains(key)) return;
     if (auto value = configString(table, key); value) {
@@ -345,7 +379,8 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseColorField("title_text_color", chrome.titleTextColor);
   parseFloatField("title_text_font_size", chrome.titleTextFontSize, 6.f, 40.f);
   parseFloatField("title_text_font_weight", chrome.titleTextFontWeight, 100.f, 1000.f);
-  parseFloatField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
+  parseCornerRadiusField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
+  parseIntField("resize_grip_size", chrome.resizeGripSize, 1, 24);
   parseColorField("glass_tint", chrome.glassTint);
   parseFloatField("glass_blur_radius", chrome.glassBlurRadius, 0.f, 120.f);
   parseColorField("border_line_color", chrome.borderLineColor);
@@ -441,6 +476,14 @@ title_text_color = "#16203a"
 title_text_font_size = 11.5
 title_text_font_weight = 600
 window_corner_radius = 14
+# window_corner_radius can also be configured per corner:
+# [chrome.window_corner_radius]
+# all = 14
+# top_left = 14
+# top_right = 14
+# bottom_right = 14
+# bottom_left = 14
+resize_grip_size = 4
 glass_tint = "#ffffffcc"
 glass_blur_radius = 32
 border_line_color = "#141e3c14"
