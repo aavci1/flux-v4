@@ -471,7 +471,7 @@ scale = 2.0 # fallback scale for outputs without an override
 animations = true
 hardware_cursor = true
 window_glass = true
-window_glass_opacity = 0.78
+window_glass_opacity = 0.84
 
 [chrome]
 title_bar_height = 28
@@ -499,8 +499,8 @@ window_corner_radius = 14
 # bottom_right = 14
 # bottom_left = 14
 resize_grip_size = 4
-glass_tint = "#eef4ff85"
-glass_blur_radius = 32
+glass_tint = "#eef4ff99"
+glass_blur_radius = 40
 window_border_color = "#d8dee899"
 window_border_width = 1
 border_line_color = "#141e3c14"

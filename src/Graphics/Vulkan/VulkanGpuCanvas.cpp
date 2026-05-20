@@ -65,7 +65,9 @@ class VulkanCanvas;
 namespace {
 
 constexpr std::size_t kMaxFramesInFlight = 2;
-constexpr int kBackdropBlurIterations = 3;
+constexpr int kBackdropBlurIterations = 2;
+constexpr std::uint32_t kBackdropBlurDownsample = 2;
+constexpr float kBackdropBlurRadiusBoost = 1.2f;
 
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
@@ -2663,8 +2665,10 @@ private:
   }
 
   void ensureBackdropSceneTarget() {
-    int const targetW = static_cast<int>(std::max(1u, swapExtent_.width));
-    int const targetH = static_cast<int>(std::max(1u, swapExtent_.height));
+    int const targetW = static_cast<int>(std::max(1u, (swapExtent_.width + kBackdropBlurDownsample - 1u) /
+                                                      kBackdropBlurDownsample));
+    int const targetH = static_cast<int>(std::max(1u, (swapExtent_.height + kBackdropBlurDownsample - 1u) /
+                                                      kBackdropBlurDownsample));
     auto ensure = [&](Texture &texture) {
       if (texture.image && texture.width == targetW && texture.height == targetH) {
         return;
@@ -2797,6 +2801,13 @@ private:
     return radius;
   }
 
+  VkExtent2D backdropTextureExtent() const {
+    return VkExtent2D{
+        static_cast<std::uint32_t>(std::max(1, backdropBlurTexture_.width)),
+        static_cast<std::uint32_t>(std::max(1, backdropBlurTexture_.height)),
+    };
+  }
+
   std::vector<BackdropBlurRun> prepareBackdropBlurRuns() {
     std::vector<BackdropBlurRun> runs;
     std::size_t cursor = 0;
@@ -2806,14 +2817,15 @@ private:
       if (runs.empty()) ensureBackdropSceneTarget();
       std::size_t const end = backdropBlurRunEnd(start);
       float const maxRadius = maxBackdropBlurRadius(start, end);
-      float const blurRadius = maxRadius /
+      float const effectiveRadius = maxRadius * kBackdropBlurRadiusBoost;
+      float const blurRadius = (effectiveRadius / static_cast<float>(kBackdropBlurDownsample)) /
                                std::sqrt(static_cast<float>(kBackdropBlurIterations));
       runs.push_back(BackdropBlurRun{
           .start = start,
           .end = end,
           .horizontalQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f),
           .verticalQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f),
-          .clip = backdropBlurRunClip(start, end, maxRadius),
+          .clip = backdropBlurRunClip(start, end, effectiveRadius),
       });
       cursor = end;
     }
@@ -2913,8 +2925,16 @@ private:
   };
 
   PixelRect pixelRectForLogicalClip(Rect clip) const {
-    float const renderWidth = static_cast<float>(std::max(1, framebufferWidth_));
-    float const renderHeight = static_cast<float>(std::max(1, framebufferHeight_));
+    return pixelRectForLogicalClip(clip,
+                                   VkExtent2D{
+                                       static_cast<std::uint32_t>(std::max(1, framebufferWidth_)),
+                                       static_cast<std::uint32_t>(std::max(1, framebufferHeight_)),
+                                   });
+  }
+
+  PixelRect pixelRectForLogicalClip(Rect clip, VkExtent2D extent) const {
+    float const renderWidth = static_cast<float>(std::max(1u, extent.width));
+    float const renderHeight = static_cast<float>(std::max(1u, extent.height));
     float const scaleX = renderWidth / std::max(1.f, static_cast<float>(width_));
     float const scaleY = renderHeight / std::max(1.f, static_cast<float>(height_));
     float const x0f = std::clamp(std::floor(clip.x * scaleX), 0.f, renderWidth);
@@ -2928,10 +2948,14 @@ private:
     return PixelRect{x0, y0, x1 > x0 ? x1 - x0 : 0u, y1 > y0 ? y1 - y0 : 0u};
   }
 
-  void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, Rect const &clip) {
+  void drawBackdropBlurPass(VkCommandBuffer commandBuffer,
+                            Texture *texture,
+                            std::uint32_t first,
+                            Rect const &clip,
+                            VkExtent2D targetExtent) {
     if (!texture || !texture->descriptor)
       return;
-    setViewportScissor(commandBuffer, clip);
+    setViewportScissor(commandBuffer, clip, targetExtent);
     VulkanDrawPushConstants const push = drawPushConstants();
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
@@ -2952,27 +2976,38 @@ private:
     targetLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-    PixelRect const rect = pixelRectForLogicalClip(clip);
-    if (!rect.valid()) {
+    PixelRect const srcRect = pixelRectForLogicalClip(clip);
+    VkExtent2D const backdropExtent{
+        static_cast<std::uint32_t>(std::max(1, backdropSceneTexture_.width)),
+        static_cast<std::uint32_t>(std::max(1, backdropSceneTexture_.height)),
+    };
+    PixelRect const dstRect = pixelRectForLogicalClip(clip, backdropExtent);
+    if (!srcRect.valid() || !dstRect.valid()) {
       transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropSceneTexture_);
       return;
     }
-    VkImageCopy copy{};
-    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.srcSubresource.layerCount = 1;
-    copy.srcOffset = {static_cast<std::int32_t>(rect.x), static_cast<std::int32_t>(rect.y), 0};
-    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.dstSubresource.layerCount = 1;
-    copy.dstOffset = copy.srcOffset;
-    copy.extent = {rect.width, rect.height, 1};
-    vkCmdCopyImage(commandBuffer,
+    VkImageBlit blit{};
+    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.srcSubresource.layerCount = 1;
+    blit.srcOffsets[0] = {static_cast<std::int32_t>(srcRect.x), static_cast<std::int32_t>(srcRect.y), 0};
+    blit.srcOffsets[1] = {static_cast<std::int32_t>(srcRect.x + srcRect.width),
+                          static_cast<std::int32_t>(srcRect.y + srcRect.height),
+                          1};
+    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.dstSubresource.layerCount = 1;
+    blit.dstOffsets[0] = {static_cast<std::int32_t>(dstRect.x), static_cast<std::int32_t>(dstRect.y), 0};
+    blit.dstOffsets[1] = {static_cast<std::int32_t>(dstRect.x + dstRect.width),
+                          static_cast<std::int32_t>(dstRect.y + dstRect.height),
+                          1};
+    vkCmdBlitImage(commandBuffer,
                    targetImage,
                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                    backdropSceneTexture_.image,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    1,
-                   &copy);
+                   &blit,
+                   VK_FILTER_LINEAR);
 
     transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
     ensureTextureDescriptor(backdropSceneTexture_);
@@ -2980,23 +3015,26 @@ private:
 
   void blurBackdropScene(VkCommandBuffer commandBuffer, BackdropBlurRun const &run, VkClearValue const &clear) {
     Texture *blurSource = &backdropSceneTexture_;
-    PixelRect const renderArea = pixelRectForLogicalClip(run.clip);
+    VkExtent2D const blurExtent = backdropTextureExtent();
+    PixelRect const renderArea = pixelRectForLogicalClip(run.clip, blurExtent);
     if (!renderArea.valid()) {
       return;
     }
-    std::uint64_t const areaPixels = static_cast<std::uint64_t>(renderArea.width) * renderArea.height;
-    debug::perf::recordBackdropBlurRun(areaPixels,
-                                       areaPixels * 2u * static_cast<std::uint64_t>(kBackdropBlurIterations),
+    PixelRect const sourceArea = pixelRectForLogicalClip(run.clip);
+    std::uint64_t const blurPixels = static_cast<std::uint64_t>(renderArea.width) * renderArea.height;
+    std::uint64_t const copyPixels = static_cast<std::uint64_t>(sourceArea.width) * sourceArea.height;
+    debug::perf::recordBackdropBlurRun(copyPixels,
+                                       blurPixels * 2u * static_cast<std::uint64_t>(kBackdropBlurIterations),
                                        2u * static_cast<std::uint64_t>(kBackdropBlurIterations));
     for (int i = 0; i < kBackdropBlurIterations; ++i) {
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
       beginColorRendering(commandBuffer,
                           backdropScratchTexture_.view,
-                          swapExtent_,
+                          blurExtent,
                           clear,
                           VK_ATTACHMENT_LOAD_OP_CLEAR,
                           renderArea);
-      drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad, run.clip);
+      drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropScratchTexture_);
@@ -3004,11 +3042,11 @@ private:
       transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
       beginColorRendering(commandBuffer,
                           backdropBlurTexture_.view,
-                          swapExtent_,
+                          blurExtent,
                           clear,
                           VK_ATTACHMENT_LOAD_OP_CLEAR,
                           renderArea);
-      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad, run.clip);
+      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
       transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropBlurTexture_);
@@ -3135,8 +3173,17 @@ private:
   }
 
   void setViewportScissor(VkCommandBuffer commandBuffer, Rect clip) {
-    float const renderWidth = static_cast<float>(std::max(1, framebufferWidth_));
-    float const renderHeight = static_cast<float>(std::max(1, framebufferHeight_));
+    setViewportScissor(commandBuffer,
+                       clip,
+                       VkExtent2D{
+                           static_cast<std::uint32_t>(std::max(1, framebufferWidth_)),
+                           static_cast<std::uint32_t>(std::max(1, framebufferHeight_)),
+                       });
+  }
+
+  void setViewportScissor(VkCommandBuffer commandBuffer, Rect clip, VkExtent2D extent) {
+    float const renderWidth = static_cast<float>(std::max(1u, extent.width));
+    float const renderHeight = static_cast<float>(std::max(1u, extent.height));
     VkViewport vp{0.f, 0.f, renderWidth, renderHeight, 0.f, 1.f};
     vkCmdSetViewport(commandBuffer, 0, 1, &vp);
 
