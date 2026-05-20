@@ -27,11 +27,13 @@ struct ChromeConfig {
   CornerRadius windowCornerRadius = CornerRadius{14.f};
   std::int32_t resizeGripSize = 4;
   bool windowGlassEnabled = true;
-  float windowGlassOpacity = 0.92f;
-  Color glassTint = Color{1.f, 1.f, 1.f, 0.80f};
+  float windowGlassOpacity = 0.78f;
+  Color glassTint = Color{238.f / 255.f, 244.f / 255.f, 1.f, 0.52f};
   float glassBlurRadius = 32.f;
+  Color windowBorderColor = Color{216.f / 255.f, 222.f / 255.f, 232.f / 255.f, 0.60f};
+  float windowBorderWidth = 1.f;
   Color borderLineColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.08f};
-  Color insetHighlightColor = Color{1.f, 1.f, 1.f, 0.55f};
+  Color insetHighlightColor = Colors::transparent;
   Color focusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.35f};
   Color unfocusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.20f};
 };

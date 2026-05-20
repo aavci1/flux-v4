@@ -790,6 +790,7 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const*
                                      topInsetForSurface(mutableServer, surface));
   if (!preview) return std::nullopt;
   return SnapPreviewSnapshot{
+      .surfaceId = surface->id,
       .x = preview->x,
       .y = 0,
       .width = preview->width,

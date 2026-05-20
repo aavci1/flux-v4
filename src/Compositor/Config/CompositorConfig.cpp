@@ -391,9 +391,11 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseIntField("resize_grip_size", chrome.resizeGripSize, 1, 24);
   parseBoolField("window_glass", chrome.windowGlassEnabled);
   parseBoolField("window_glass_enabled", chrome.windowGlassEnabled);
-  parseFloatField("window_glass_opacity", chrome.windowGlassOpacity, 0.2f, 1.f);
+  parseFloatField("window_glass_opacity", chrome.windowGlassOpacity, 0.f, 1.f);
   parseColorField("glass_tint", chrome.glassTint);
   parseFloatField("glass_blur_radius", chrome.glassBlurRadius, 0.f, 120.f);
+  parseColorField("window_border_color", chrome.windowBorderColor);
+  parseFloatField("window_border_width", chrome.windowBorderWidth, 0.f, 8.f);
   parseColorField("border_line_color", chrome.borderLineColor);
   parseColorField("inset_highlight_color", chrome.insetHighlightColor);
   parseColorField("focused_shadow_color", chrome.focusedShadowColor);
@@ -469,7 +471,7 @@ scale = 2.0 # fallback scale for outputs without an override
 animations = true
 hardware_cursor = true
 window_glass = true
-window_glass_opacity = 0.92
+window_glass_opacity = 0.78
 
 [chrome]
 title_bar_height = 28
@@ -497,8 +499,10 @@ window_corner_radius = 14
 # bottom_right = 14
 # bottom_left = 14
 resize_grip_size = 4
-glass_tint = "#ffffffcc"
+glass_tint = "#eef4ff85"
 glass_blur_radius = 32
+window_border_color = "#d8dee899"
+window_border_width = 1
 border_line_color = "#141e3c14"
 
 [keybindings]
@@ -746,7 +750,7 @@ CompositorConfig loadConfig() {
   }
 
   if (table.contains("window_glass_opacity")) {
-    if (auto opacity = configNumber(table, "window_glass_opacity"); opacity && *opacity >= 0.2f && *opacity <= 1.f) {
+    if (auto opacity = configNumber(table, "window_glass_opacity"); opacity && *opacity >= 0.f && *opacity <= 1.f) {
       config.chrome.windowGlassOpacity = *opacity;
     } else {
       std::fprintf(stderr, "flux-compositor: ignoring invalid window_glass_opacity value in %s\n", path->c_str());

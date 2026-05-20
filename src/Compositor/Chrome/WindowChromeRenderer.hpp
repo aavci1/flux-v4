@@ -12,10 +12,12 @@ void drawWindowChrome(Canvas& canvas,
                       TextSystem& textSystem,
                       CommittedSurfaceSnapshot const& surface,
                       ChromeConfig const& chrome);
-void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview);
+void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome);
+void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeConfig const& chrome);
 void drawCommandLauncher(Canvas& canvas,
                          TextSystem& textSystem,
                          CommandLauncherSnapshot const& launcher,
+                         ChromeConfig const& chrome,
                          std::int32_t outputWidth,
                          std::int32_t outputHeight);
 

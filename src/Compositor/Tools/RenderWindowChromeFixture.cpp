@@ -1,6 +1,7 @@
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
 
 #include "Compositor/Chrome/ChromeMetrics.hpp"
+#include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 
 #include <Flux/Graphics/Image.hpp>
@@ -476,11 +477,19 @@ int main(int argc, char** argv) {
                     flux::CornerRadius{18.f},
                     flux::FillStyle::solid(flux::Color{1.f, 1.f, 1.f, 0.04f}),
                     flux::StrokeStyle::solid(flux::Color{1.f, 1.f, 1.f, 0.12f}, 1.f));
-
     flux::compositor::drawCommittedSurfaceSnapshot(
         canvas, textSystem, foreign, foreignVisual, *foreignImage, frameTime, chrome, false);
     flux::compositor::drawCommittedSurfaceSnapshot(
         canvas, textSystem, ssdFocused, ssdFocusedVisual, *ssdFocusedImage, frameTime, chrome, false);
+    flux::compositor::drawSnapPreview(canvas,
+                                      flux::compositor::SnapPreviewSnapshot{
+                                          .surfaceId = ssdUnfocused.id,
+                                          .x = 690,
+                                          .y = 42,
+                                          .width = 230,
+                                          .height = 220,
+                                      },
+                                      chrome);
     flux::compositor::drawCommittedSurfaceSnapshot(
         canvas, textSystem, ssdUnfocused, ssdUnfocusedVisual, *ssdUnfocusedImage, frameTime, chrome, false);
     flux::compositor::drawCommittedSurfaceSnapshot(
@@ -489,6 +498,16 @@ int main(int argc, char** argv) {
         canvas, textSystem, rejected, rejectedVisual, *rejectedImage, frameTime, chrome, false);
     flux::compositor::drawCommittedSurfaceSnapshot(
         canvas, textSystem, resizing, resizingVisual, *resizingImage, frameTime, chrome, false);
+    flux::compositor::drawCommandLauncher(canvas,
+                                          textSystem,
+                                          flux::compositor::CommandLauncherSnapshot{
+                                              .visible = true,
+                                              .command = "foot",
+                                              .message = "Enter to run, Escape to cancel",
+                                          },
+                                          chrome,
+                                          logicalWidth,
+                                          logicalHeight);
     target.endFrame();
 
     writePng(output, readBgraImage(vk, imageTarget, pixelWidth, pixelHeight), pixelWidth, pixelHeight);

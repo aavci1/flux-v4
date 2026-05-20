@@ -322,11 +322,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                appliedConfig,
                                static_cast<std::uint32_t>(wayland.logicalOutputWidth()),
                                static_cast<std::uint32_t>(wayland.logicalOutputHeight()));
+      auto snapPreview = wayland.snapPreview();
+      bool snapPreviewDrawn = false;
       auto committedSurfaces = wayland.committedSurfaces();
       loopStats.lastSurfaceCount = committedSurfaces.size();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
       for (auto const& clientSurface : committedSurfaces) {
+        if (snapPreview && !snapPreviewDrawn && snapPreview->surfaceId == clientSurface.id) {
+          drawSnapPreview(*canvas, *snapPreview, appliedConfig.config.chrome);
+          snapPreviewDrawn = true;
+        }
         liveSurfaceIds.insert(clientSurface.id);
         auto& visual = surfaceRenderState.surfaceVisuals[clientSurface.id];
         auto& cached = surfaceRenderState.clientImages[clientSurface.id];
@@ -340,17 +346,18 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                              appliedConfig.config.chrome,
                              appliedConfig.config.animationsEnabled);
       }
+      if (snapPreview && !snapPreviewDrawn) {
+        drawSnapPreview(*canvas, *snapPreview, appliedConfig.config.chrome);
+      }
       captureClosingSurfaces(surfaceRenderState,
                              liveSurfaceIds,
                              frameTime,
                              appliedConfig.config.animationsEnabled);
       drawClosingSurfaces(*canvas, surfaceRenderState, frameTime);
-      if (auto snapPreview = wayland.snapPreview()) {
-        drawSnapPreview(*canvas, *snapPreview);
-      }
       drawCommandLauncher(*canvas,
                           textSystem,
                           wayland.commandLauncher(),
+                          appliedConfig.config.chrome,
                           wayland.logicalOutputWidth(),
                           wayland.logicalOutputHeight());
       drawCompositorCursor(wayland,

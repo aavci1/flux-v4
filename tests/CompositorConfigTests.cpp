@@ -186,7 +186,10 @@ TEST_CASE("compositor config parses chrome section") {
   file << "controls_width = 96\n";
   file << "button_radius = 8.5\n";
   file << "resize_grip_size = 3\n";
+  file << "window_glass_opacity = 0.05\n";
   file << "glass_tint = \"#ffffff80\"\n";
+  file << "window_border_color = \"#10203040\"\n";
+  file << "window_border_width = 1.5\n";
   file << "close_hover_background = \"#ff0000\"\n";
   file << "[chrome.window_corner_radius]\n";
   file << "top_left = 6\n";
@@ -204,6 +207,9 @@ TEST_CASE("compositor config parses chrome section") {
   CHECK(chrome.controlsWidth == 96);
   CHECK(chrome.buttonRadius == doctest::Approx(8.5f));
   CHECK(chrome.resizeGripSize == 3);
+  CHECK(chrome.windowGlassOpacity == doctest::Approx(0.05f));
+  CHECK(chrome.windowBorderColor.a == doctest::Approx(64.f / 255.f));
+  CHECK(chrome.windowBorderWidth == doctest::Approx(1.5f));
   CHECK(chrome.windowCornerRadius.topLeft == doctest::Approx(6.f));
   CHECK(chrome.windowCornerRadius.topRight == doctest::Approx(7.f));
   CHECK(chrome.windowCornerRadius.bottomRight == doctest::Approx(8.f));

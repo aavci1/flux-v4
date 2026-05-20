@@ -207,9 +207,6 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
   canvas.clipRect(fullContentRect);
-  if (chrome.windowGlassEnabled && surface.defaultGlassEligible) {
-    canvas.setOpacity(canvas.opacity() * chrome.windowGlassOpacity);
-  }
   drawContentPiece(canvas,
                    clientImage,
                    Rect::sharp(surface.sourceX,
@@ -272,6 +269,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   }
   canvas.restore();
   if (cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
+  drawWindowFrameBorder(canvas, surface, chrome);
   canvas.restore();
 }
 

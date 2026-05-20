@@ -951,7 +951,9 @@ if(FLUX_BUILD_TESTS)
   endif()
   if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
     list(APPEND _flux_test_sources
+      src/Compositor/Chrome/WindowChromeRenderer.cpp
       src/Compositor/Config/CompositorConfig.cpp
+      src/Compositor/Surface/CommittedSurfacePainter.cpp
       src/Compositor/Window/WindowGeometry.cpp
       tests/CompositorConfigTests.cpp
       tests/CompositorDecorationStateTests.cpp

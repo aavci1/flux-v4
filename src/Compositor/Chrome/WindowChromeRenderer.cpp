@@ -15,6 +15,10 @@ Color withOpacity(Color color, float opacity) {
   return color;
 }
 
+StrokeStyle visibleStroke(Color color, float width) {
+  return color.a > 0.f && width > 0.f ? StrokeStyle::solid(color, width) : StrokeStyle::none();
+}
+
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   return ShadowStyle{
       .radius = focused ? 30.f : 18.f,
@@ -88,22 +92,22 @@ void drawDefaultChrome(Canvas& canvas,
   Rect const frameRect = Rect::sharp(windowX, titleTop, windowWidth, windowHeight + titleBarHeight);
   CornerRadius const frameRadius = chrome.windowCornerRadius;
   Color const frameTint = chrome.windowGlassEnabled
-                              ? chrome.glassTint
+                              ? withOpacity(chrome.glassTint, chrome.windowGlassOpacity)
                               : Color{chrome.glassTint.r, chrome.glassTint.g, chrome.glassTint.b, 1.f};
+  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
+    canvas.drawBackdropBlur(frameRect, chrome.glassBlurRadius, Colors::transparent, frameRadius);
+  }
   canvas.drawRect(frameRect,
                   frameRadius,
                   FillStyle::solid(frameTint),
                   StrokeStyle::none(),
                   windowShadow(chrome, surface.focused));
-  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
-    canvas.drawBackdropBlur(frameRect, chrome.glassBlurRadius, chrome.glassTint, frameRadius);
-  }
 
   canvas.drawLine({windowX, windowY}, {windowX + windowWidth, windowY},
                   StrokeStyle::solid(chrome.borderLineColor, 0.5f));
   float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
   float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
-  if (topInsetRight > topInsetLeft) {
+  if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
     canvas.drawLine({topInsetLeft, titleTop + 0.5f},
                     {topInsetRight, titleTop + 0.5f},
                     StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
@@ -160,68 +164,85 @@ void drawWindowChrome(Canvas& canvas,
   drawDefaultChrome(canvas, textSystem, surface, chrome);
 }
 
-void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview) {
+void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  if (!surface.serverSideDecorated) return;
+  StrokeStyle const border = visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth);
+  if (border.isNone()) return;
+
+  bool const cutoutChrome = usesCutoutChrome(surface);
+  float const windowX = static_cast<float>(surface.x);
+  float const windowY = static_cast<float>(surface.y);
+  float const windowWidth = static_cast<float>(surface.width);
+  float const windowHeight = static_cast<float>(surface.height);
+  float const titleBarHeight = cutoutChrome ? 0.f : static_cast<float>(surface.titleBarHeight);
+  Rect const frameRect = Rect::sharp(windowX, windowY - titleBarHeight, windowWidth, windowHeight + titleBarHeight);
+  canvas.drawRect(frameRect,
+                  chrome.windowCornerRadius,
+                  FillStyle::none(),
+                  border,
+                  ShadowStyle::none());
+}
+
+void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeConfig const& chrome) {
   Rect const previewRect = Rect::sharp(static_cast<float>(preview.x),
                                       static_cast<float>(preview.y),
                                       static_cast<float>(preview.width),
                                       static_cast<float>(preview.height));
+  CornerRadius const radius{10.f};
+  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
+    canvas.drawBackdropBlur(previewRect, chrome.glassBlurRadius, Colors::transparent, radius);
+  }
   canvas.drawRect(previewRect,
-                  CornerRadius{0.f},
-                  FillStyle::solid(Color{0.86f, 0.93f, 1.0f, 0.22f}),
-                  StrokeStyle::solid(Color{0.92f, 0.97f, 1.0f, 0.82f}, 2.f),
+                  radius,
+                  FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity * 0.48f)),
+                  StrokeStyle::solid(Color{0.92f, 0.97f, 1.0f, 0.78f}, 1.f),
                   ShadowStyle::none());
 }
 
 void drawCommandLauncher(Canvas& canvas,
                          TextSystem& textSystem,
                          CommandLauncherSnapshot const& launcher,
+                         ChromeConfig const& chrome,
                          std::int32_t outputWidth,
                          std::int32_t outputHeight) {
   if (!launcher.visible) return;
   float const width = std::min(680.f, std::max(280.f, static_cast<float>(outputWidth) - 80.f));
-  float const height = 78.f;
+  float const height = 72.f;
   float const x = (static_cast<float>(outputWidth) - width) * 0.5f;
   float const y = std::max(34.f, static_cast<float>(outputHeight) * 0.18f);
   Rect const panel = Rect::sharp(x, y, width, height);
   CornerRadius const radius{16.f};
 
+  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
+    canvas.drawBackdropBlur(panel, chrome.glassBlurRadius, Colors::transparent, radius);
+  }
   canvas.drawRect(panel,
                   radius,
-                  FillStyle::solid(Color{0.94f, 0.95f, 0.97f, 0.96f}),
-                  StrokeStyle::solid(Color{0.62f, 0.64f, 0.68f, 0.85f}, 1.f),
+                  FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity)),
+                  visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth),
                   ShadowStyle{.radius = 30.f, .offset = {0.f, 18.f}, .color = Color{0.f, 0.f, 0.f, 0.38f}});
 
   Font commandFont{};
   commandFont.size = 24.f;
-  commandFont.weight = 480.f;
+  commandFont.weight = 520.f;
   TextLayoutOptions commandOptions{
       .verticalAlignment = VerticalAlignment::Center,
       .wrapping = TextWrapping::NoWrap,
       .maxLines = 1,
   };
   std::string command = launcher.command.empty() ? std::string{"Run command"} : launcher.command;
-  Color commandColor = launcher.command.empty() ? Color{0.47f, 0.49f, 0.53f, 1.f}
-                                                : Color{0.08f, 0.09f, 0.11f, 1.f};
-  Rect const commandRect = Rect::sharp(x + 26.f, y + 12.f, width - 52.f, 38.f);
+  Color commandColor = launcher.command.empty() ? Color{0.25f, 0.27f, 0.31f, 1.f}
+                                                : Color{0.04f, 0.05f, 0.07f, 1.f};
+  float constexpr panelInset = 22.f;
+  Rect const commandRect = Rect::sharp(x + panelInset,
+                                       y + panelInset,
+                                       width - panelInset * 2.f,
+                                       height - panelInset * 2.f);
   if (auto layout = textSystem.layout(command, commandFont, commandColor, commandRect, commandOptions)) {
     canvas.save();
     canvas.clipRect(commandRect);
     canvas.drawTextLayout(*layout, {0.f, 0.f});
     canvas.restore();
-  }
-
-  Font hintFont{};
-  hintFont.size = 12.f;
-  hintFont.weight = 420.f;
-  TextLayoutOptions hintOptions{
-      .verticalAlignment = VerticalAlignment::Center,
-      .wrapping = TextWrapping::NoWrap,
-      .maxLines = 1,
-  };
-  std::string hint = launcher.message.empty() ? std::string{"Enter to run, Escape to cancel"} : launcher.message;
-  Rect const hintRect = Rect::sharp(x + 28.f, y + 51.f, width - 56.f, 18.f);
-  if (auto layout = textSystem.layout(hint, hintFont, Color{0.40f, 0.42f, 0.46f, 1.f}, hintRect, hintOptions)) {
-    canvas.drawTextLayout(*layout, {0.f, 0.f});
   }
 }
 

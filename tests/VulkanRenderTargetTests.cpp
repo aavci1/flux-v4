@@ -14,6 +14,7 @@
 
 #if FLUX_VULKAN
 
+#include "Compositor/Surface/CommittedSurfacePainter.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
@@ -549,6 +550,151 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   CHECK(pixels[center + 2] > 200);
   CHECK(pixels[center + 1] < 32);
   CHECK(pixels[center + 0] < 32);
+}
+
+TEST_CASE("Vulkan RenderTarget applies backdrop blur to previously rendered pixels") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  constexpr std::uint32_t width = 128;
+  constexpr std::uint32_t height = 64;
+  VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+      .image = targetImage.image,
+      .view = targetImage.view,
+      .format = targetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  },
+                                                                  textSystem);
+  REQUIRE(canvas);
+
+  canvas->resize(static_cast<int>(width), static_cast<int>(height));
+  canvas->updateDpiScale(1.f, 1.f);
+  canvas->beginFrame();
+  canvas->clear(Colors::black);
+  canvas->drawRect(Rect::sharp(0.f, 0.f, 64.f, 64.f),
+                   CornerRadius{},
+                   FillStyle::solid(Colors::black),
+                   StrokeStyle::none());
+  canvas->drawRect(Rect::sharp(64.f, 0.f, 64.f, 64.f),
+                   CornerRadius{},
+                   FillStyle::solid(Colors::white),
+                   StrokeStyle::none());
+  canvas->drawBackdropBlur(Rect::sharp(16.f, 0.f, 96.f, 64.f), 18.f, Colors::transparent);
+  canvas->present();
+
+  VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  VulkanCopyContext copy{vk.device(), vk.queue(), vk.queueFamily()};
+  copy.copyImageToBuffer(targetImage.image, readback.buffer, width, height);
+
+  std::vector<std::uint8_t> pixels(width * height * 4u);
+  void* mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), readback.memory, 0, readback.size, 0, &mapped), "vkMapMemory");
+  std::memcpy(pixels.data(), mapped, pixels.size());
+  vkUnmapMemory(vk.device(), readback.memory);
+
+  CHECK(capturedChannel(pixels, width, 60, 32, 0) > 20);
+  CHECK(capturedChannel(pixels, width, 60, 32, 0) < 235);
+  CHECK(capturedChannel(pixels, width, 68, 32, 0) > 20);
+  CHECK(capturedChannel(pixels, width, 68, 32, 0) < 235);
+}
+
+TEST_CASE("Compositor glass material does not fade client content") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  constexpr std::uint32_t width = 128;
+  constexpr std::uint32_t height = 96;
+  VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+      .image = targetImage.image,
+      .view = targetImage.view,
+      .format = targetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  },
+                                                                  textSystem);
+  REQUIRE(canvas);
+
+  constexpr int clientWidth = 48;
+  constexpr int clientHeight = 32;
+  std::vector<std::uint8_t> rgba(static_cast<std::size_t>(clientWidth) * clientHeight * 4u);
+  for (std::size_t i = 0; i + 3 < rgba.size(); i += 4) {
+    rgba[i + 0] = 0;
+    rgba[i + 1] = 255;
+    rgba[i + 2] = 0;
+    rgba[i + 3] = 255;
+  }
+  std::shared_ptr<Image> clientImage =
+      Image::fromRgbaPixels(clientWidth, clientHeight, rgba, canvas->gpuDevice());
+  REQUIRE(clientImage);
+
+  flux::compositor::ChromeConfig chrome{};
+  chrome.windowGlassEnabled = true;
+  chrome.windowGlassOpacity = 0.2f;
+  chrome.glassTint = Color{1.f, 1.f, 1.f, 0.9f};
+
+  flux::compositor::CommittedSurfaceSnapshot surface{
+      .id = 1,
+      .x = 32,
+      .y = 42,
+      .width = clientWidth,
+      .height = clientHeight,
+      .bufferWidth = clientWidth,
+      .bufferHeight = clientHeight,
+      .sourceX = 0.f,
+      .sourceY = 0.f,
+      .sourceWidth = static_cast<float>(clientWidth),
+      .sourceHeight = static_cast<float>(clientHeight),
+      .destinationWidth = clientWidth,
+      .destinationHeight = clientHeight,
+      .titleBarHeight = chrome.titleBarHeight,
+      .title = "Opaque client",
+      .serverSideDecorated = true,
+      .focused = true,
+      .defaultGlassEligible = true,
+      .serial = 1,
+  };
+  flux::compositor::SurfaceVisualState visual{};
+
+  canvas->resize(static_cast<int>(width), static_cast<int>(height));
+  canvas->updateDpiScale(1.f, 1.f);
+  canvas->beginFrame();
+  canvas->clear(Colors::black);
+  canvas->drawRect(Rect::sharp(0.f, 0.f, static_cast<float>(width), static_cast<float>(height)),
+                   CornerRadius{},
+                   FillStyle::linearGradient(Colors::red, Colors::blue, Point{0.f, 0.f}, Point{1.f, 1.f}),
+                   StrokeStyle::none());
+  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+                                                 textSystem,
+                                                 surface,
+                                                 visual,
+                                                 *clientImage,
+                                                 std::chrono::steady_clock::now(),
+                                                 chrome,
+                                                 false);
+  canvas->present();
+
+  VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  VulkanCopyContext copy{vk.device(), vk.queue(), vk.queueFamily()};
+  copy.copyImageToBuffer(targetImage.image, readback.buffer, width, height);
+
+  std::vector<std::uint8_t> pixels(width * height * 4u);
+  void* mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), readback.memory, 0, readback.size, 0, &mapped), "vkMapMemory");
+  std::memcpy(pixels.data(), mapped, pixels.size());
+  vkUnmapMemory(vk.device(), readback.memory);
+
+  CHECK(capturedChannel(pixels, width, 56, 58, 1) > 230);
+  CHECK(capturedChannel(pixels, width, 56, 58, 0) < 32);
+  CHECK(capturedChannel(pixels, width, 56, 58, 2) < 32);
 }
 
 TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {

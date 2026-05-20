@@ -2708,7 +2708,64 @@ private:
     std::size_t end = 0;
     std::uint32_t horizontalQuad = 0;
     std::uint32_t verticalQuad = 0;
+    Rect clip{};
   };
+
+  Rect intersectRects(Rect a, Rect b) const {
+    float const x0 = std::max(a.x, b.x);
+    float const y0 = std::max(a.y, b.y);
+    float const x1 = std::min(a.x + a.width, b.x + b.width);
+    float const y1 = std::min(a.y + a.height, b.y + b.height);
+    if (x1 <= x0 || y1 <= y0) {
+      return Rect::sharp(0.f, 0.f, 0.f, 0.f);
+    }
+    return Rect::sharp(x0, y0, x1 - x0, y1 - y0);
+  }
+
+  Rect quadBounds(std::uint32_t first, std::uint32_t count) const {
+    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
+    bool hasBounds = false;
+    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(quads_.size()));
+    for (std::uint32_t index = first; index < end; ++index) {
+      QuadInstance const &q = quads_[index];
+      Point const p00{q.axisX[0], q.axisX[1]};
+      Point const p10{q.axisX[0] + q.axisX[2], q.axisX[1] + q.axisX[3]};
+      Point const p01{q.axisX[0] + q.axisY[0], q.axisX[1] + q.axisY[1]};
+      Point const p11{p10.x + q.axisY[0], p10.y + q.axisY[1]};
+      float const x0 = std::min({p00.x, p10.x, p01.x, p11.x});
+      float const y0 = std::min({p00.y, p10.y, p01.y, p11.y});
+      float const x1 = std::max({p00.x, p10.x, p01.x, p11.x});
+      float const y1 = std::max({p00.y, p10.y, p01.y, p11.y});
+      Rect const next = Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
+      bounds = hasBounds ? unionRects(bounds, next) : next;
+      hasBounds = true;
+    }
+    return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
+  }
+
+  Rect backdropBlurRunClip(std::size_t start, std::size_t end, float radiusPx) const {
+    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
+    bool hasBounds = false;
+    std::size_t const opEnd = std::min(end, ops_.size());
+    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
+      DrawOp const &op = ops_[index];
+      if (op.kind != DrawOp::Kind::BackdropBlur) continue;
+      Rect opBounds = intersectRects(quadBounds(op.first, op.count), op.clip);
+      if (opBounds.width <= 0.f || opBounds.height <= 0.f) continue;
+      bounds = hasBounds ? unionRects(bounds, opBounds) : opBounds;
+      hasBounds = true;
+    }
+    if (!hasBounds) {
+      return Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_));
+    }
+    float const scale = std::max(0.001f, std::max(dpiScaleX_, dpiScaleY_));
+    float const pad = std::ceil(radiusPx / scale) + 2.f;
+    Rect const padded = Rect::sharp(bounds.x - pad,
+                                    bounds.y - pad,
+                                    bounds.width + pad * 2.f,
+                                    bounds.height + pad * 2.f);
+    return intersectRects(padded, Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_)));
+  }
 
   std::size_t nextBackdropBlurOp(std::size_t start = 0) const {
     std::size_t const begin = std::min(start, ops_.size());
@@ -2748,13 +2805,15 @@ private:
       if (start >= ops_.size()) break;
       if (runs.empty()) ensureBackdropSceneTarget();
       std::size_t const end = backdropBlurRunEnd(start);
-      float const blurRadius = maxBackdropBlurRadius(start, end) /
+      float const maxRadius = maxBackdropBlurRadius(start, end);
+      float const blurRadius = maxRadius /
                                std::sqrt(static_cast<float>(kBackdropBlurIterations));
       runs.push_back(BackdropBlurRun{
           .start = start,
           .end = end,
           .horizontalQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f),
           .verticalQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f),
+          .clip = backdropBlurRunClip(start, end, maxRadius),
       });
       cursor = end;
     }
@@ -2844,10 +2903,35 @@ private:
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first) {
+  struct PixelRect {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+
+    bool valid() const { return width > 0 && height > 0; }
+  };
+
+  PixelRect pixelRectForLogicalClip(Rect clip) const {
+    float const renderWidth = static_cast<float>(std::max(1, framebufferWidth_));
+    float const renderHeight = static_cast<float>(std::max(1, framebufferHeight_));
+    float const scaleX = renderWidth / std::max(1.f, static_cast<float>(width_));
+    float const scaleY = renderHeight / std::max(1.f, static_cast<float>(height_));
+    float const x0f = std::clamp(std::floor(clip.x * scaleX), 0.f, renderWidth);
+    float const y0f = std::clamp(std::floor(clip.y * scaleY), 0.f, renderHeight);
+    float const x1f = std::clamp(std::ceil((clip.x + clip.width) * scaleX), 0.f, renderWidth);
+    float const y1f = std::clamp(std::ceil((clip.y + clip.height) * scaleY), 0.f, renderHeight);
+    std::uint32_t const x0 = static_cast<std::uint32_t>(x0f);
+    std::uint32_t const y0 = static_cast<std::uint32_t>(y0f);
+    std::uint32_t const x1 = static_cast<std::uint32_t>(x1f);
+    std::uint32_t const y1 = static_cast<std::uint32_t>(y1f);
+    return PixelRect{x0, y0, x1 > x0 ? x1 - x0 : 0u, y1 > y0 ? y1 - y0 : 0u};
+  }
+
+  void drawBackdropBlurPass(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, Rect const &clip) {
     if (!texture || !texture->descriptor)
       return;
-    setViewportScissor(commandBuffer, Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_)));
+    setViewportScissor(commandBuffer, clip);
     VulkanDrawPushConstants const push = drawPushConstants();
     auto const &res = resources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
@@ -2860,17 +2944,28 @@ private:
     vkCmdDraw(commandBuffer, 6, 1, 0, first);
   }
 
-  void copyTargetToBackdropScene(VkCommandBuffer commandBuffer, VkImage targetImage, VkImageLayout &targetLayout) {
+  void copyTargetToBackdropScene(VkCommandBuffer commandBuffer,
+                                 VkImage targetImage,
+                                 VkImageLayout &targetLayout,
+                                 Rect const &clip) {
     transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     targetLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
+    PixelRect const rect = pixelRectForLogicalClip(clip);
+    if (!rect.valid()) {
+      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropSceneTexture_);
+      return;
+    }
     VkImageCopy copy{};
     copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     copy.srcSubresource.layerCount = 1;
+    copy.srcOffset = {static_cast<std::int32_t>(rect.x), static_cast<std::int32_t>(rect.y), 0};
     copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     copy.dstSubresource.layerCount = 1;
-    copy.extent = {swapExtent_.width, swapExtent_.height, 1};
+    copy.dstOffset = copy.srcOffset;
+    copy.extent = {rect.width, rect.height, 1};
     vkCmdCopyImage(commandBuffer,
                    targetImage,
                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -2885,17 +2980,31 @@ private:
 
   void blurBackdropScene(VkCommandBuffer commandBuffer, BackdropBlurRun const &run, VkClearValue const &clear) {
     Texture *blurSource = &backdropSceneTexture_;
+    PixelRect const renderArea = pixelRectForLogicalClip(run.clip);
+    if (!renderArea.valid()) {
+      return;
+    }
     for (int i = 0; i < kBackdropBlurIterations; ++i) {
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, backdropScratchTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad);
+      beginColorRendering(commandBuffer,
+                          backdropScratchTexture_.view,
+                          swapExtent_,
+                          clear,
+                          VK_ATTACHMENT_LOAD_OP_CLEAR,
+                          renderArea);
+      drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad, run.clip);
       vkCmdEndRendering(commandBuffer);
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropScratchTexture_);
 
       transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, backdropBlurTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad);
+      beginColorRendering(commandBuffer,
+                          backdropBlurTexture_.view,
+                          swapExtent_,
+                          clear,
+                          VK_ATTACHMENT_LOAD_OP_CLEAR,
+                          renderArea);
+      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad, run.clip);
       vkCmdEndRendering(commandBuffer);
       transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropBlurTexture_);
@@ -2928,7 +3037,7 @@ private:
       }
 
       vkCmdEndRendering(commandBuffer);
-      copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout);
+      copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout, run.clip);
       blurBackdropScene(commandBuffer, run, clear);
 
       beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -2988,6 +3097,20 @@ private:
 
   void beginColorRendering(VkCommandBuffer commandBuffer, VkImageView view, VkExtent2D extent,
                            VkClearValue const &clear, VkAttachmentLoadOp loadOp) {
+    beginColorRendering(commandBuffer,
+                        view,
+                        extent,
+                        clear,
+                        loadOp,
+                        PixelRect{0u, 0u, extent.width, extent.height});
+  }
+
+  void beginColorRendering(VkCommandBuffer commandBuffer,
+                           VkImageView view,
+                           VkExtent2D extent,
+                           VkClearValue const &clear,
+                           VkAttachmentLoadOp loadOp,
+                           PixelRect renderArea) {
     VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     color.imageView = view;
     color.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
@@ -2995,7 +3118,12 @@ private:
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     color.clearValue = clear;
     VkRenderingInfo rendering{VK_STRUCTURE_TYPE_RENDERING_INFO};
-    rendering.renderArea.extent = extent;
+    std::uint32_t const x0 = std::min(renderArea.x, extent.width);
+    std::uint32_t const y0 = std::min(renderArea.y, extent.height);
+    std::uint32_t const x1 = std::min(renderArea.x + renderArea.width, extent.width);
+    std::uint32_t const y1 = std::min(renderArea.y + renderArea.height, extent.height);
+    rendering.renderArea.offset = {static_cast<std::int32_t>(x0), static_cast<std::int32_t>(y0)};
+    rendering.renderArea.extent = {x1 > x0 ? x1 - x0 : 0u, y1 > y0 ? y1 - y0 : 0u};
     rendering.layerCount = 1;
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &color;

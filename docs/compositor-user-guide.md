@@ -120,7 +120,7 @@ scale = 2.0 # fallback scale for outputs without an override
 animations = true
 hardware_cursor = true
 window_glass = true
-window_glass_opacity = 0.92
+window_glass_opacity = 0.78
 
 [keybindings]
 close = "super+q"
@@ -142,9 +142,11 @@ Wallpaper paths may be absolute, `~/...`, or relative to the config file directo
 the framework image loader supports stb_image formats, including JPEG and PNG.
 
 `window_glass` enables compositor-side blur behind every normal window by default. `window_glass_opacity`
-controls the compositor-applied opacity for client buffers so opaque third-party windows can still reveal
-the blurred stack behind them. Clients that use `ext-background-effect-v1` can still request explicit blur
-regions; set `window_glass = false` to disable only the compositor's default full-window policy.
+controls the opacity of the glass material behind client buffers from `0.0` to `1.0`; client content is
+rendered at the opacity the client submitted. `glass_tint` in `[chrome]` controls the material color and
+alpha, and `window_border_color` / `window_border_width` control the subtle rounded outline around the
+window frame. Clients that use `ext-background-effect-v1` can still request explicit blur regions; set
+`window_glass = false` to disable only the compositor's default full-window policy.
 
 ## Window Management
 

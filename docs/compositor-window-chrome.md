@@ -32,7 +32,7 @@ cmake --build build --target flux-compositor-render-fixture
 
 The fixture renders synthetic Tier 1, Tier 2, and Tier 3 `CommittedSurfaceSnapshot`s through the same `drawCommittedSurfaceSnapshot` path used by the KMS compositor, reads back the offscreen render target, and writes a PNG for visual inspection or pixel checks.
 
-Chrome defaults live under `[chrome]` in the compositor config and match the SADE values. `[chrome.dark]` can override those values for a future dark theme path. The compositor also enables `window_glass` by default, which synthesizes a full-window blur region and applies `window_glass_opacity` to client buffers; set `window_glass = false` to disable that default while still allowing clients to request explicit `ext-background-effect-v1` blur regions.
+Chrome defaults live under `[chrome]` in the compositor config and match the SADE values. `[chrome.dark]` can override those values for a future dark theme path. The compositor also enables `window_glass` by default, which synthesizes a full-window blur region and applies `window_glass_opacity` to the glass material behind client buffers; set `window_glass = false` to disable that default while still allowing clients to request explicit `ext-background-effect-v1` blur regions.
 
 The title bar and frame metrics are configurable from `[chrome]`. The commonly tuned values are:
 
@@ -46,6 +46,8 @@ button_size = 16
 button_gap = 4
 resize_grip_size = 4
 window_corner_radius = 14
+window_border_color = "#d8dee899"
+window_border_width = 1
 ```
 
 `window_corner_radius` can also be configured per corner:

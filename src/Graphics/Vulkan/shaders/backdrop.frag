@@ -38,6 +38,8 @@ void main() {
     discard;
   }
   vec4 c = texture(tex, vUv);
-  vec4 tint = vec4(vColor.rgb * vColor.a, vColor.a);
-  outColor = (tint + c * (1.0 - tint.a)) * mask;
+  float tintAlpha = clamp(vColor.a, 0.0, 1.0);
+  vec3 rgb = mix(c.rgb, vColor.rgb, tintAlpha);
+  float alpha = mix(c.a, 1.0, tintAlpha) * mask;
+  outColor = vec4(rgb, alpha);
 }
