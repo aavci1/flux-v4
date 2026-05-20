@@ -1406,7 +1406,7 @@ public:
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.rects.size());
     target.rects.push_back(inst);
-    target.ops.push_back(makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
+    appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
   }
 
@@ -1540,7 +1540,7 @@ public:
       } else {
         batches_.push_back(ImageBatch{atlas, first, count});
       }
-      target.ops.push_back(makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
+      appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
       debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
     }
   }
@@ -1594,7 +1594,7 @@ public:
     if (!captureTarget_) {
       batches_.push_back(ImageBatch{texture, first, 1});
     }
-    target.ops.push_back(makeDrawOp(DrawOp::Kind::Image, texture, first, 1));
+    appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Image, texture, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }
 
@@ -1652,7 +1652,7 @@ public:
     target.quads.push_back(q);
     DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, 1);
     op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
-    target.ops.push_back(op);
+    appendDrawOp(target.ops, op);
   }
 
   void *gpuDevice() const override { return device_; }
@@ -1736,6 +1736,27 @@ private:
            std::abs(a.y - b.y) <= eps &&
            std::abs(a.width - b.width) <= eps &&
            std::abs(a.height - b.height) <= eps;
+  }
+
+  static bool canMergeDrawOps(DrawOp const &a, DrawOp const &b) {
+    return a.kind == b.kind &&
+           a.texture == b.texture &&
+           a.first + a.count == b.first &&
+           sameRect(a.clip, b.clip) &&
+           a.externalStorageDescriptor == b.externalStorageDescriptor &&
+           a.externalVertexBuffer == b.externalVertexBuffer &&
+           std::abs(a.externalTranslationX - b.externalTranslationX) <= 1e-4f &&
+           std::abs(a.externalTranslationY - b.externalTranslationY) <= 1e-4f;
+  }
+
+  static void appendDrawOp(std::vector<DrawOp> &ops, DrawOp op) {
+    if (!ops.empty() && canMergeDrawOps(ops.back(), op)) {
+      DrawOp &prev = ops.back();
+      prev.count += op.count;
+      prev.blurRadius = std::max(prev.blurRadius, op.blurRadius);
+      return;
+    }
+    ops.push_back(op);
   }
 
   bool recordedOpsContainClipState(VulkanFrameRecorder const &recorded) const {
@@ -2509,8 +2530,11 @@ private:
       std::uint32_t const firstVertex = static_cast<std::uint32_t>(target.pathVerts.size());
       target.pathVerts.insert(target.pathVerts.end(), it->second.vertices.begin(), it->second.vertices.end());
       if (!it->second.vertices.empty()) {
-        target.ops.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex,
-                                        static_cast<std::uint32_t>(it->second.vertices.size())));
+        appendDrawOp(target.ops,
+                     makeDrawOp(DrawOp::Kind::Path,
+                                nullptr,
+                                firstVertex,
+                                static_cast<std::uint32_t>(it->second.vertices.size())));
       }
       return;
     }
@@ -2578,7 +2602,7 @@ private:
         pathCacheLru_.erase(lruIt);
       }
       trimPathCache();
-      target.ops.push_back(makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
+      appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
     }
   }
 
@@ -3110,12 +3134,18 @@ private:
                std::size_t end = std::numeric_limits<std::size_t>::max(),
                Texture *backdropSource = nullptr) {
     std::size_t const opEnd = std::min(end, ops_.size());
+    bool hasScissor = false;
+    Rect currentScissor{};
     for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
       DrawOp const &op = ops_[index];
       if (op.clip.width <= 0.f || op.clip.height <= 0.f) {
         continue;
       }
-      setViewportScissor(commandBuffer, op.clip);
+      if (!hasScissor || !sameRect(currentScissor, op.clip)) {
+        setViewportScissor(commandBuffer, op.clip);
+        currentScissor = op.clip;
+        hasScissor = true;
+      }
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         drawRectRange(commandBuffer, op.first, op.count, op.externalStorageDescriptor,
