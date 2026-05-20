@@ -94,9 +94,14 @@ void drawDefaultChrome(Canvas& canvas,
 
   canvas.drawLine({windowX, windowY}, {windowX + windowWidth, windowY},
                   StrokeStyle::solid(chrome.borderLineColor, 0.5f));
-  canvas.drawLine({windowX + chrome.windowCornerRadius * 0.5f, titleTop + 0.5f},
-                  {windowX + windowWidth - chrome.windowCornerRadius * 0.5f, titleTop + 0.5f},
-                  StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
+  float const topInsetRadius = std::min(chrome.windowCornerRadius, windowWidth * 0.5f);
+  float const topInsetLeft = windowX + topInsetRadius;
+  float const topInsetRight = windowX + windowWidth - topInsetRadius;
+  if (topInsetRight > topInsetLeft) {
+    canvas.drawLine({topInsetLeft, titleTop + 0.5f},
+                    {topInsetRight, titleTop + 0.5f},
+                    StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
+  }
 
   float const controlsWidth = static_cast<float>(chrome.controlsWidth);
   float const titleLeft = windowX + controlsWidth;
