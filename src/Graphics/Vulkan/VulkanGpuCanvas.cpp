@@ -3126,7 +3126,7 @@ private:
                           backdropScratchTexture_.view,
                           blurExtent,
                           clear,
-                          VK_ATTACHMENT_LOAD_OP_CLEAR,
+                          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                           renderArea);
       drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
@@ -3138,7 +3138,7 @@ private:
                           backdropBlurTexture_.view,
                           blurExtent,
                           clear,
-                          VK_ATTACHMENT_LOAD_OP_CLEAR,
+                          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                           renderArea);
       drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
