@@ -24,6 +24,8 @@ struct ChromeConfig {
   float titleTextFontSize = 11.5f;
   float titleTextFontWeight = 600.f;
   float windowCornerRadius = 14.f;
+  bool windowGlassEnabled = true;
+  float windowGlassOpacity = 0.92f;
   Color glassTint = Color{1.f, 1.f, 1.f, 0.80f};
   float glassBlurRadius = 32.f;
   Color borderLineColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.08f};

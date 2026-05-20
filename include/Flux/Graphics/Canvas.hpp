@@ -109,8 +109,9 @@ public:
                  CornerRadius const& corners = {}, float opacity = 1.f);
 
   /// Draw a transparent backdrop-filter region. `radius` is expressed in logical pixels.
-  /// Backends blur the already-rendered base scene once per frame, then draw each backdrop
-  /// region by sampling that blurred texture through this region's bounds and corners.
+  /// Backends sample the scene rendered before this operation, blur it, then draw this
+  /// region from that blurred snapshot through the region's bounds and corners. Consecutive
+  /// backdrop regions may share one snapshot so multi-rect masks stay visually coherent.
   virtual void drawBackdropBlur(Rect const& rect, float radius, Color tint = Colors::transparent,
                                 CornerRadius const& corners = {}) = 0;
 

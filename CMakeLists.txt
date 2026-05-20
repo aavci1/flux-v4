@@ -455,6 +455,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsInput.cpp
     src/Compositor/Protocols/cursor-shape-v1-protocol.c
+    src/Compositor/Protocols/ext-background-effect-v1-protocol.c
     src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
     src/Compositor/Protocols/tablet-v2-protocol.c
     src/Compositor/Protocols/xdg-shell-protocol.c
@@ -635,6 +636,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Surface/CommittedSurfacePainter.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp
     src/Compositor/Wayland/Globals/Activation.cpp
+    src/Compositor/Wayland/Globals/BackgroundEffect.cpp
     src/Compositor/Wayland/Globals/Core.cpp
     src/Compositor/Wayland/Globals/CursorShape.cpp
     src/Compositor/Wayland/Globals/Cutouts.cpp

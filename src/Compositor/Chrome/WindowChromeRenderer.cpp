@@ -83,12 +83,15 @@ void drawDefaultChrome(Canvas& canvas,
   float const titleTop = windowY - titleBarHeight;
   Rect const frameRect = Rect::sharp(windowX, titleTop, windowWidth, windowHeight + titleBarHeight);
   CornerRadius const frameRadius{chrome.windowCornerRadius};
+  Color const frameTint = chrome.windowGlassEnabled
+                              ? chrome.glassTint
+                              : Color{chrome.glassTint.r, chrome.glassTint.g, chrome.glassTint.b, 1.f};
   canvas.drawRect(frameRect,
                   frameRadius,
-                  FillStyle::solid(chrome.glassTint),
+                  FillStyle::solid(frameTint),
                   StrokeStyle::none(),
                   windowShadow(chrome, surface.focused));
-  if (chrome.glassBlurRadius > 0.f) {
+  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
     canvas.drawBackdropBlur(frameRect, chrome.glassBlurRadius, chrome.glassTint, frameRadius);
   }
 

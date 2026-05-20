@@ -20,19 +20,111 @@ void inertDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+using RegionRect = CommittedSurfaceSnapshot::RegionRect;
+
+RegionRect normalizedRegionRect(std::int32_t x, std::int32_t y, std::int32_t width, std::int32_t height) {
+  if (width < 0) {
+    x += width;
+    width = -width;
+  }
+  if (height < 0) {
+    y += height;
+    height = -height;
+  }
+  return {.x = x, .y = y, .width = width, .height = height};
+}
+
+bool emptyRegionRect(RegionRect const& rect) {
+  return rect.width <= 0 || rect.height <= 0;
+}
+
+void appendRegionRect(std::vector<RegionRect>& rects, RegionRect rect) {
+  if (!emptyRegionRect(rect)) rects.push_back(rect);
+}
+
+void subtractRegionRect(std::vector<RegionRect>& rects, RegionRect cut) {
+  if (emptyRegionRect(cut)) return;
+
+  std::vector<RegionRect> result;
+  result.reserve(rects.size() + 4u);
+  std::int64_t const cutLeft = cut.x;
+  std::int64_t const cutTop = cut.y;
+  std::int64_t const cutRight = cutLeft + cut.width;
+  std::int64_t const cutBottom = cutTop + cut.height;
+
+  for (RegionRect const& rect : rects) {
+    std::int64_t const left = rect.x;
+    std::int64_t const top = rect.y;
+    std::int64_t const right = left + rect.width;
+    std::int64_t const bottom = top + rect.height;
+    std::int64_t const overlapLeft = std::max(left, cutLeft);
+    std::int64_t const overlapTop = std::max(top, cutTop);
+    std::int64_t const overlapRight = std::min(right, cutRight);
+    std::int64_t const overlapBottom = std::min(bottom, cutBottom);
+
+    if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) {
+      result.push_back(rect);
+      continue;
+    }
+
+    appendRegionRect(result, RegionRect{rect.x, rect.y, rect.width,
+                                        static_cast<std::int32_t>(overlapTop - top)});
+    appendRegionRect(result, RegionRect{rect.x, static_cast<std::int32_t>(overlapBottom),
+                                        rect.width, static_cast<std::int32_t>(bottom - overlapBottom)});
+    appendRegionRect(result, RegionRect{rect.x, static_cast<std::int32_t>(overlapTop),
+                                        static_cast<std::int32_t>(overlapLeft - left),
+                                        static_cast<std::int32_t>(overlapBottom - overlapTop)});
+    appendRegionRect(result, RegionRect{static_cast<std::int32_t>(overlapRight),
+                                        static_cast<std::int32_t>(overlapTop),
+                                        static_cast<std::int32_t>(right - overlapRight),
+                                        static_cast<std::int32_t>(overlapBottom - overlapTop)});
+  }
+
+  rects = std::move(result);
+}
+
 void compositorCreateSurface(wl_client* client, wl_resource* resource, std::uint32_t id) {
   WaylandServer::Impl* server = serverFrom(resource);
   server->createSurface(client, wl_resource_get_version(resource), id);
 }
 
-void compositorCreateRegion(wl_client* client, wl_resource*, std::uint32_t id) {
+void regionAdd(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
+               std::int32_t width, std::int32_t height) {
+  auto* region = resourceData<WaylandServer::Impl::Region>(resource);
+  if (!region) return;
+  appendRegionRect(region->rects, normalizedRegionRect(x, y, width, height));
+}
+
+void regionSubtract(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
+                    std::int32_t width, std::int32_t height) {
+  auto* region = resourceData<WaylandServer::Impl::Region>(resource);
+  if (!region) return;
+  subtractRegionRect(region->rects, normalizedRegionRect(x, y, width, height));
+}
+
+void compositorCreateRegion(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  WaylandServer::Impl* server = serverFrom(resource);
   static struct wl_region_interface const regionImpl{
       inertDestroy,
-      [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
-      [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
+      regionAdd,
+      regionSubtract,
   };
-  wl_resource* region = wl_resource_create(client, &wl_region_interface, 1, id);
-  wl_resource_set_implementation(region, &regionImpl, nullptr, nullptr);
+  auto region = std::make_unique<WaylandServer::Impl::Region>();
+  region->server = server;
+  wl_resource* regionResource = wl_resource_create(client, &wl_region_interface, 1, id);
+  if (!regionResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  region->resource = regionResource;
+  auto* raw = region.get();
+  server->regions_.push_back(std::move(region));
+  wl_resource_set_implementation(regionResource,
+                                 &regionImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::Region,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyRegion>);
 }
 
 struct wl_compositor_interface const compositorImpl{
@@ -312,6 +404,13 @@ bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Impl::Surface const* 
          surface->pendingSourceY + surface->pendingSourceHeight <= static_cast<float>(surface->height);
 }
 
+bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->backgroundBlurPending) return false;
+  surface->backgroundBlurRects = surface->pendingBackgroundBlurRects;
+  surface->backgroundBlurPending = false;
+  return true;
+}
+
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   bool const hasBufferAttach = surface->pendingBufferAttached;
@@ -330,6 +429,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   }
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
+  bool const backgroundBlurChanged = applyBackgroundBlurState(surface);
 
   if (!hasBufferAttach) {
     if (surface->pendingSourceSet || surface->pendingDestinationSet) {
@@ -340,6 +440,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
+    if (backgroundBlurChanged) ++surface->serial;
     return;
   }
 

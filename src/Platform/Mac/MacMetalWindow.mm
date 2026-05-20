@@ -65,8 +65,9 @@ void postTextInput(FluxMetalView* view, std::string text);
   if (device) {
     metalLayer.device = device;
   }
-  metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+	  metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+	  metalLayer.framebufferOnly = NO;
+	  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
   // Match MetalCanvas in-flight limit; helps avoid main-thread stalls on nextDrawable during live resize.
   metalLayer.maximumDrawableCount = 3;
   metalLayer.allowsNextDrawableTimeout = YES;

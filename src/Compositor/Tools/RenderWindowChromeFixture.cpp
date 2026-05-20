@@ -277,11 +277,12 @@ flux::compositor::CommittedSurfaceSnapshot snapshot(std::uint64_t id, int x, int
       .sourceX = 0.f,
       .sourceY = 0.f,
       .sourceWidth = static_cast<float>(width),
-      .sourceHeight = static_cast<float>(height),
-      .destinationWidth = width,
-      .destinationHeight = height,
-      .serial = id,
-  };
+	      .sourceHeight = static_cast<float>(height),
+	      .destinationWidth = width,
+	      .destinationHeight = height,
+	      .defaultGlassEligible = true,
+	      .serial = id,
+	  };
 }
 
 void writeBigEndian(std::vector<std::uint8_t>& out, std::uint32_t value) {

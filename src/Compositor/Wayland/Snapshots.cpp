@@ -114,14 +114,16 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .closeButtonPressed = server->closePressSurface_ == surface,
       .minimizeButtonHovered = hovered == ChromeButton::Minimize,
       .minimizeButtonPressed = server->minimizePressSurface_ == surface,
-      .focused = server->keyboardFocus_ == surface,
-      .activeSizing = server->resizeSurface_ == surface ||
-                      surface->geometryAnimationActive ||
-                      surface->awaitingConfigureCommit,
-      .serial = surface->serial,
-      .rgbaPixels = surface->rgbaPixels,
-      .dmabufFormat = 0,
-      .dmabufPlanes = {},
+	      .focused = server->keyboardFocus_ == surface,
+	      .activeSizing = server->resizeSurface_ == surface ||
+	                      surface->geometryAnimationActive ||
+	                      surface->awaitingConfigureCommit,
+	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface),
+	      .serial = surface->serial,
+	      .backgroundBlurRects = surface->backgroundBlurRects,
+	      .rgbaPixels = surface->rgbaPixels,
+	      .dmabufFormat = 0,
+	      .dmabufPlanes = {},
   };
   if (surface->dmabufBuffer) {
     snapshot.dmabufFormat = surface->dmabufBuffer->format;
@@ -192,12 +194,14 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
       .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
       .titleBarHeight = 0,
       .title = {},
-      .focused = false,
-      .activeSizing = false,
-      .serial = surface->serial,
-      .rgbaPixels = surface->rgbaPixels,
-      .dmabufFormat = 0,
-      .dmabufPlanes = {},
+	      .focused = false,
+	      .activeSizing = false,
+	      .defaultGlassEligible = false,
+	      .serial = surface->serial,
+	      .backgroundBlurRects = {},
+	      .rgbaPixels = surface->rgbaPixels,
+	      .dmabufFormat = 0,
+	      .dmabufPlanes = {},
   };
   if (surface->dmabufBuffer) {
     snapshot.dmabufFormat = surface->dmabufBuffer->format;

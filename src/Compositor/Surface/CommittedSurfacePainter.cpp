@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
 
 namespace flux::compositor {
 namespace {
@@ -51,6 +52,22 @@ CornerRadius cornerRadiusForPiece(Rect const& full, Rect const& piece, CornerRad
   };
 }
 
+Rect intersectRect(Rect const& a, Rect const& b) {
+  float const left = std::max(a.x, b.x);
+  float const top = std::max(a.y, b.y);
+  float const right = std::min(a.x + a.width, b.x + b.width);
+  float const bottom = std::min(a.y + a.height, b.y + b.height);
+  if (right <= left || bottom <= top) return Rect::sharp(0.f, 0.f, 0.f, 0.f);
+  return Rect::sharp(left, top, right - left, bottom - top);
+}
+
+bool sameRect(Rect const& a, Rect const& b) {
+  return reachesEdge(a.x, b.x) &&
+         reachesEdge(a.y, b.y) &&
+         reachesEdge(a.x + a.width, b.x + b.width) &&
+         reachesEdge(a.y + a.height, b.y + b.height);
+}
+
 void drawContentPiece(Canvas& canvas,
                       Image& image,
                       Rect const& source,
@@ -60,7 +77,43 @@ void drawContentPiece(Canvas& canvas,
   canvas.drawImage(image,
                    source,
                    destination,
-                   cornerRadiusForPiece(fullDestination, destination, outerCorners));
+	                   cornerRadiusForPiece(fullDestination, destination, outerCorners));
+}
+
+void drawSurfaceBackgroundBlur(Canvas& canvas,
+                               CommittedSurfaceSnapshot const& surface,
+                               ChromeConfig const& chrome,
+                               Rect const& fullContentRect,
+                               CornerRadius const& contentCorners) {
+  if (chrome.glassBlurRadius <= 0.f) return;
+
+  CommittedSurfaceSnapshot::RegionRect defaultRegion{
+      .x = 0,
+      .y = 0,
+      .width = surface.width,
+      .height = surface.height,
+  };
+  std::span<CommittedSurfaceSnapshot::RegionRect const> regions;
+  if (!surface.backgroundBlurRects.empty()) {
+    regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(surface.backgroundBlurRects);
+  } else if (chrome.windowGlassEnabled && surface.defaultGlassEligible) {
+    regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(&defaultRegion, 1);
+  } else {
+    return;
+  }
+
+  for (auto const& region : regions) {
+    Rect const requested = Rect::sharp(static_cast<float>(surface.x + region.x),
+                                      static_cast<float>(surface.y + region.y),
+                                      static_cast<float>(region.width),
+                                      static_cast<float>(region.height));
+    Rect const rect = intersectRect(requested, fullContentRect);
+    if (rect.width <= 0.f || rect.height <= 0.f) continue;
+    CornerRadius const corners = sameRect(rect, fullContentRect)
+                                     ? contentCorners
+                                     : cornerRadiusForPiece(fullContentRect, rect, contentCorners);
+    canvas.drawBackdropBlur(rect, chrome.glassBlurRadius, Colors::transparent, corners);
+  }
 }
 
 } // namespace
@@ -131,7 +184,6 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
     canvas.scale(openScale);
     canvas.translate(-pivot.x, -pivot.y);
   }
-  if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   float const sourceWidth = surface.sourceWidth > 0.f
                                 ? surface.sourceWidth
                                 : static_cast<float>(clientImage.size().width);
@@ -148,10 +200,15 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                  : windowWidth;
   float const contentHeight = clientContentSmallerThanFrame
                                   ? static_cast<float>(surface.destinationHeight)
-                                  : windowHeight;
+	                                  : windowHeight;
   Rect const fullContentRect = Rect::sharp(windowX, windowY, windowWidth, windowHeight);
+  drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners);
+  if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
   canvas.clipRect(fullContentRect);
+  if (chrome.windowGlassEnabled && surface.defaultGlassEligible) {
+    canvas.setOpacity(canvas.opacity() * chrome.windowGlassOpacity);
+  }
   drawContentPiece(canvas,
                    clientImage,
                    Rect::sharp(surface.sourceX,

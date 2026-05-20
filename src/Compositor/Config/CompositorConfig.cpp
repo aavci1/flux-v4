@@ -316,6 +316,14 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
     }
   };
+  auto parseBoolField = [&](char const* key, bool& field) {
+    if (!table.contains(key)) return;
+    if (auto value = configBool(table, key)) {
+      field = *value;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+    }
+  };
   auto parseColorField = [&](char const* key, Color& field) {
     if (!table.contains(key)) return;
     if (auto value = configString(table, key); value) {
@@ -346,6 +354,9 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseFloatField("title_text_font_size", chrome.titleTextFontSize, 6.f, 40.f);
   parseFloatField("title_text_font_weight", chrome.titleTextFontWeight, 100.f, 1000.f);
   parseFloatField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
+  parseBoolField("window_glass", chrome.windowGlassEnabled);
+  parseBoolField("window_glass_enabled", chrome.windowGlassEnabled);
+  parseFloatField("window_glass_opacity", chrome.windowGlassOpacity, 0.2f, 1.f);
   parseColorField("glass_tint", chrome.glassTint);
   parseFloatField("glass_blur_radius", chrome.glassBlurRadius, 0.f, 120.f);
   parseColorField("border_line_color", chrome.borderLineColor);
@@ -422,6 +433,8 @@ scale = 2.0 # fallback scale for outputs without an override
 
 animations = true
 hardware_cursor = true
+window_glass = true
+window_glass_opacity = 0.92
 
 [chrome]
 title_bar_height = 28
@@ -678,6 +691,22 @@ CompositorConfig loadConfig() {
       config.hardwareCursorEnabled = *enabled;
     } else {
       std::fprintf(stderr, "flux-compositor: ignoring invalid hardware_cursor value in %s\n", path->c_str());
+    }
+  }
+
+  if (table.contains("window_glass")) {
+    if (auto enabled = configBool(table, "window_glass")) {
+      config.chrome.windowGlassEnabled = *enabled;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid window_glass value in %s\n", path->c_str());
+    }
+  }
+
+  if (table.contains("window_glass_opacity")) {
+    if (auto opacity = configNumber(table, "window_glass_opacity"); opacity && *opacity >= 0.2f && *opacity <= 1.f) {
+      config.chrome.windowGlassOpacity = *opacity;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid window_glass_opacity value in %s\n", path->c_str());
     }
   }
 

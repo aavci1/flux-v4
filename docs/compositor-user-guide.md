@@ -119,6 +119,8 @@ scale = 2.0 # fallback scale for outputs without an override
 
 animations = true
 hardware_cursor = true
+window_glass = true
+window_glass_opacity = 0.92
 
 [keybindings]
 close = "super+q"
@@ -138,6 +140,11 @@ terminate = "ctrl+alt+backspace"
 `wallpaper_mode` accepts `cover`, `contain`, `stretch`, `center`, and `tile`.
 Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
 the framework image loader supports stb_image formats, including JPEG and PNG.
+
+`window_glass` enables compositor-side blur behind every normal window by default. `window_glass_opacity`
+controls the compositor-applied opacity for client buffers so opaque third-party windows can still reveal
+the blurred stack behind them. Clients that use `ext-background-effect-v1` can still request explicit blur
+regions; set `window_glass = false` to disable only the compositor's default full-window policy.
 
 ## Window Management
 

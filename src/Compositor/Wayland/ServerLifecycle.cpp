@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include "Compositor/Wayland/Globals/Activation.hpp"
+#include "Compositor/Wayland/Globals/BackgroundEffect.hpp"
 #include "Compositor/Wayland/Globals/Core.hpp"
 #include "Compositor/Wayland/Globals/CursorShape.hpp"
 #include "Compositor/Wayland/Globals/Cutouts.hpp"
@@ -18,6 +19,7 @@
 #include "Compositor/Wayland/Globals/XdgOutput.hpp"
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
 #include "cursor-shape-v1-server-protocol.h"
+#include "ext-background-effect-v1-server-protocol.h"
 #include "fractional-scale-v1-server-protocol.h"
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
@@ -129,12 +131,14 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
   activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
   cutoutsManagerGlobal_ = wl_global_create(display_, &xx_cutouts_manager_v1_interface, 1, this, bindCutoutsManager);
+  backgroundEffectManagerGlobal_ =
+      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 1, this, bindBackgroundEffectManager);
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
       !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
       !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ ||
-      !activationGlobal_ || !cutoutsManagerGlobal_) {
+      !activationGlobal_ || !cutoutsManagerGlobal_ || !backgroundEffectManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 

@@ -1169,18 +1169,7 @@ public:
     VkSemaphore const renderFinished = imageRenderFinished_[imageIndex];
 
     uploadAtlasIfNeeded();
-    bool const backdropFrame = hasBackdropBlurOps();
-    std::uint32_t sceneCopyQuad = 0;
-    std::uint32_t horizontalBlurQuad = 0;
-    std::uint32_t verticalBlurQuad = 0;
-    if (backdropFrame) {
-      ensureBackdropSceneTarget();
-      float const blurRadius = maxBackdropBlurRadius() /
-                               std::sqrt(static_cast<float>(kBackdropBlurIterations));
-      sceneCopyQuad = appendSceneCopyQuad();
-      horizontalBlurQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f);
-      verticalBlurQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f);
-    }
+    auto backdropRuns = prepareBackdropBlurRuns();
     uploadFrameBuffers();
 
     vkResetCommandBuffer(commandBuffer, 0);
@@ -1191,41 +1180,14 @@ public:
     clear.color.float32[1] = clearColor_.g;
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
-    if (backdropFrame && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
-      std::size_t const firstBlur = firstBackdropBlurOp();
-      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, backdropSceneTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawOps(commandBuffer, 0, firstBlur);
-      vkCmdEndRendering(commandBuffer);
-      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropSceneTexture_);
-
-      Texture *blurSource = &backdropSceneTexture_;
-      for (int i = 0; i < kBackdropBlurIterations; ++i) {
-        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-        beginColorRendering(commandBuffer, backdropScratchTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-        drawBackdropBlurPass(commandBuffer, blurSource, horizontalBlurQuad);
-        vkCmdEndRendering(commandBuffer);
-        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-        ensureTextureDescriptor(backdropScratchTexture_);
-
-        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-        beginColorRendering(commandBuffer, backdropBlurTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-        drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
-        vkCmdEndRendering(commandBuffer);
-        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-        ensureTextureDescriptor(backdropBlurTexture_);
-        blurSource = &backdropBlurTexture_;
-      }
-
-      VkClearValue finalClear{};
-      transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
-                 VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, swapchainViews_[imageIndex], swapExtent_, finalClear,
-                          VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawBackdropRange(commandBuffer, &backdropSceneTexture_, sceneCopyQuad, 1);
-      drawOps(commandBuffer, firstBlur, ops_.size(), &backdropBlurTexture_);
-      vkCmdEndRendering(commandBuffer);
+    if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
+      VkImageLayout targetLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      drawOpsWithStackedBackdropBlur(commandBuffer,
+                                     swapchainImages_[imageIndex],
+                                     swapchainViews_[imageIndex],
+                                     targetLayout,
+                                     clear,
+                                     backdropRuns);
     } else {
       transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
                  VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
@@ -1286,18 +1248,7 @@ public:
                                   VkImageView targetView, VkImageLayout initialLayout,
                                   VkImageLayout finalLayout) {
     uploadAtlasIfNeeded();
-    bool const backdropFrame = hasBackdropBlurOps();
-    std::uint32_t sceneCopyQuad = 0;
-    std::uint32_t horizontalBlurQuad = 0;
-    std::uint32_t verticalBlurQuad = 0;
-    if (backdropFrame) {
-      ensureBackdropSceneTarget();
-      float const blurRadius = maxBackdropBlurRadius() /
-                               std::sqrt(static_cast<float>(kBackdropBlurIterations));
-      sceneCopyQuad = appendSceneCopyQuad();
-      horizontalBlurQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f);
-      verticalBlurQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f);
-    }
+    auto backdropRuns = prepareBackdropBlurRuns();
     uploadFrameBuffers();
 
     VkClearValue clear{};
@@ -1305,46 +1256,22 @@ public:
     clear.color.float32[1] = clearColor_.g;
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
-    if (backdropFrame && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
-      std::size_t const firstBlur = firstBackdropBlurOp();
-      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, backdropSceneTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawOps(commandBuffer, 0, firstBlur);
-      vkCmdEndRendering(commandBuffer);
-      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropSceneTexture_);
-
-      Texture *blurSource = &backdropSceneTexture_;
-      for (int i = 0; i < kBackdropBlurIterations; ++i) {
-        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-        beginColorRendering(commandBuffer, backdropScratchTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-        drawBackdropBlurPass(commandBuffer, blurSource, horizontalBlurQuad);
-        vkCmdEndRendering(commandBuffer);
-        transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-        ensureTextureDescriptor(backdropScratchTexture_);
-
-        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-        beginColorRendering(commandBuffer, backdropBlurTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-        drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, verticalBlurQuad);
-        vkCmdEndRendering(commandBuffer);
-        transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-        ensureTextureDescriptor(backdropBlurTexture_);
-        blurSource = &backdropBlurTexture_;
-      }
-
-      VkClearValue finalClear{};
-      transition(commandBuffer, targetImage, initialLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, targetView, swapExtent_, finalClear, VK_ATTACHMENT_LOAD_OP_CLEAR);
-      drawBackdropRange(commandBuffer, &backdropSceneTexture_, sceneCopyQuad, 1);
-      drawOps(commandBuffer, firstBlur, ops_.size(), &backdropBlurTexture_);
-      vkCmdEndRendering(commandBuffer);
+    VkImageLayout targetLayout = initialLayout;
+    if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
+      drawOpsWithStackedBackdropBlur(commandBuffer,
+                                     targetImage,
+                                     targetView,
+                                     targetLayout,
+                                     clear,
+                                     backdropRuns);
     } else {
-      transition(commandBuffer, targetImage, initialLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
       beginColorRendering(commandBuffer, targetView, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
       drawOps(commandBuffer);
       vkCmdEndRendering(commandBuffer);
     }
-    transition(commandBuffer, targetImage, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, finalLayout);
+    transition(commandBuffer, targetImage, targetLayout, finalLayout);
   }
 
   void presentRenderTarget() {
@@ -2750,29 +2677,6 @@ private:
     ensure(backdropBlurTexture_);
   }
 
-  std::uint32_t appendSceneCopyQuad() {
-    QuadInstance q{};
-    q.rect[0] = 0.f;
-    q.rect[1] = 0.f;
-    q.rect[2] = static_cast<float>(width_);
-    q.rect[3] = static_cast<float>(height_);
-    q.axisX[0] = 0.f;
-    q.axisX[1] = 0.f;
-    q.axisX[2] = static_cast<float>(width_);
-    q.axisX[3] = 0.f;
-    q.axisY[0] = 0.f;
-    q.axisY[1] = static_cast<float>(height_);
-    q.uv[0] = 0.f;
-    q.uv[1] = 0.f;
-    q.uv[2] = 1.f;
-    q.uv[3] = 1.f;
-    q.color[0] = q.color[1] = q.color[2] = q.color[3] = 0.f;
-    q.radii[0] = 0.f;
-    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
-    quads_.push_back(q);
-    return first;
-  }
-
   std::uint32_t appendBackdropBlurQuad(float radiusPx, float axisX, float axisY) {
     QuadInstance q{};
     q.rect[0] = 0.f;
@@ -2799,14 +2703,62 @@ private:
     return first;
   }
 
-  float maxBackdropBlurRadius() const {
+  struct BackdropBlurRun {
+    std::size_t start = 0;
+    std::size_t end = 0;
+    std::uint32_t horizontalQuad = 0;
+    std::uint32_t verticalQuad = 0;
+  };
+
+  std::size_t nextBackdropBlurOp(std::size_t start = 0) const {
+    std::size_t const begin = std::min(start, ops_.size());
+    auto const it = std::find_if(ops_.begin() + static_cast<std::ptrdiff_t>(begin),
+                                 ops_.end(),
+                                 [](DrawOp const &op) {
+      return op.kind == DrawOp::Kind::BackdropBlur;
+    });
+    return it == ops_.end() ? ops_.size() : static_cast<std::size_t>(std::distance(ops_.begin(), it));
+  }
+
+  std::size_t backdropBlurRunEnd(std::size_t start) const {
+    std::size_t end = start;
+    while (end < ops_.size() && ops_[end].kind == DrawOp::Kind::BackdropBlur) {
+      ++end;
+    }
+    return end;
+  }
+
+  float maxBackdropBlurRadius(std::size_t start, std::size_t end) const {
     float radius = 0.f;
-    for (DrawOp const &op : ops_) {
+    std::size_t const opEnd = std::min(end, ops_.size());
+    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
+      DrawOp const &op = ops_[index];
       if (op.kind == DrawOp::Kind::BackdropBlur) {
         radius = std::max(radius, op.blurRadius);
       }
     }
     return radius;
+  }
+
+  std::vector<BackdropBlurRun> prepareBackdropBlurRuns() {
+    std::vector<BackdropBlurRun> runs;
+    std::size_t cursor = 0;
+    while (cursor < ops_.size()) {
+      std::size_t const start = nextBackdropBlurOp(cursor);
+      if (start >= ops_.size()) break;
+      if (runs.empty()) ensureBackdropSceneTarget();
+      std::size_t const end = backdropBlurRunEnd(start);
+      float const blurRadius = maxBackdropBlurRadius(start, end) /
+                               std::sqrt(static_cast<float>(kBackdropBlurIterations));
+      runs.push_back(BackdropBlurRun{
+          .start = start,
+          .end = end,
+          .horizontalQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f),
+          .verticalQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f),
+      });
+      cursor = end;
+    }
+    return runs;
   }
 
   VulkanDrawPushConstants drawPushConstants(float translationX = 0.f,
@@ -2906,6 +2858,88 @@ private:
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
                             &texture->descriptor, 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, first);
+  }
+
+  void copyTargetToBackdropScene(VkCommandBuffer commandBuffer, VkImage targetImage, VkImageLayout &targetLayout) {
+    transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    targetLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkImageCopy copy{};
+    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.srcSubresource.layerCount = 1;
+    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.dstSubresource.layerCount = 1;
+    copy.extent = {swapExtent_.width, swapExtent_.height, 1};
+    vkCmdCopyImage(commandBuffer,
+                   targetImage,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   backdropSceneTexture_.image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1,
+                   &copy);
+
+    transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    ensureTextureDescriptor(backdropSceneTexture_);
+  }
+
+  void blurBackdropScene(VkCommandBuffer commandBuffer, BackdropBlurRun const &run, VkClearValue const &clear) {
+    Texture *blurSource = &backdropSceneTexture_;
+    for (int i = 0; i < kBackdropBlurIterations; ++i) {
+      transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, backdropScratchTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+      drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad);
+      vkCmdEndRendering(commandBuffer);
+      transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropScratchTexture_);
+
+      transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      beginColorRendering(commandBuffer, backdropBlurTexture_.view, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad);
+      vkCmdEndRendering(commandBuffer);
+      transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(backdropBlurTexture_);
+      blurSource = &backdropBlurTexture_;
+    }
+  }
+
+  void beginTargetRendering(VkCommandBuffer commandBuffer,
+                            VkImage targetImage,
+                            VkImageView targetView,
+                            VkImageLayout &targetLayout,
+                            VkClearValue const &clear,
+                            VkAttachmentLoadOp loadOp) {
+    transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    beginColorRendering(commandBuffer, targetView, swapExtent_, clear, loadOp);
+  }
+
+  void drawOpsWithStackedBackdropBlur(VkCommandBuffer commandBuffer,
+                                      VkImage targetImage,
+                                      VkImageView targetView,
+                                      VkImageLayout &targetLayout,
+                                      VkClearValue const &clear,
+                                      std::vector<BackdropBlurRun> const &runs) {
+    beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+    std::size_t cursor = 0;
+    for (BackdropBlurRun const &run : runs) {
+      if (run.start > cursor) {
+        drawOps(commandBuffer, cursor, run.start);
+      }
+
+      vkCmdEndRendering(commandBuffer);
+      copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout);
+      blurBackdropScene(commandBuffer, run, clear);
+
+      beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_LOAD);
+      drawOps(commandBuffer, run.start, run.end, &backdropBlurTexture_);
+      cursor = run.end;
+    }
+
+    if (cursor < ops_.size()) {
+      drawOps(commandBuffer, cursor, ops_.size());
+    }
+    vkCmdEndRendering(commandBuffer);
   }
 
   bool hasBackdropBlurOps() const {
@@ -3215,7 +3249,10 @@ private:
     image.arrayLayers = 1;
     image.samples = VK_SAMPLE_COUNT_1_BIT;
     image.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                  VK_IMAGE_USAGE_SAMPLED_BIT;
     image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VmaAllocationCreateInfo allocation{};

@@ -45,6 +45,8 @@ struct WaylandServer::Impl {
   struct DmabufBuffer;
   struct ToplevelDecoration;
   struct XxCutouts;
+  struct Region;
+  struct BackgroundEffect;
   struct Viewport;
   struct FractionalScale;
   struct CursorShapeDevice;
@@ -104,6 +106,8 @@ struct WaylandServer::Impl {
   void destroyDmabufBuffer(DmabufBuffer* buffer);
   void destroyToplevelDecoration(ToplevelDecoration* decoration);
   void destroyXxCutouts(XxCutouts* cutouts);
+  void destroyRegion(Region* region);
+  void destroyBackgroundEffect(BackgroundEffect* effect);
   void destroyViewport(Viewport* viewport);
   void destroyFractionalScale(FractionalScale* fractionalScale);
   void destroyCursorShapeDevice(CursorShapeDevice* device);
@@ -145,6 +149,7 @@ struct WaylandServer::Impl {
   wl_global* dataDeviceManagerGlobal_ = nullptr;
   wl_global* activationGlobal_ = nullptr;
   wl_global* cutoutsManagerGlobal_ = nullptr;
+  wl_global* backgroundEffectManagerGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
   WaylandOutputInfo output_;
@@ -161,6 +166,8 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<XxCutouts>> cutouts_;
+  std::vector<std::unique_ptr<Region>> regions_;
+  std::vector<std::unique_ptr<BackgroundEffect>> backgroundEffects_;
   std::vector<std::unique_ptr<Viewport>> viewports_;
   std::vector<std::unique_ptr<FractionalScale>> fractionalScales_;
   std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
@@ -296,6 +303,10 @@ struct WaylandServer::Impl::Surface {
   std::int32_t restoreWidth = 0;
   std::int32_t restoreHeight = 0;
   DmabufBuffer* dmabufBuffer = nullptr;
+  BackgroundEffect* backgroundEffect = nullptr;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> backgroundBlurRects;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBackgroundBlurRects;
+  bool backgroundBlurPending = false;
   Viewport* viewport = nullptr;
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;
@@ -304,6 +315,18 @@ struct WaylandServer::Impl::Surface {
   std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
   std::vector<PresentationFeedback*> presentationFeedbacks;
   std::vector<wl_resource*> frameCallbacks;
+};
+
+struct WaylandServer::Impl::Region {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> rects;
+};
+
+struct WaylandServer::Impl::BackgroundEffect {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
 };
 
 inline bool surfaceHasNoRole(WaylandServer::Impl::Surface const* surface) {

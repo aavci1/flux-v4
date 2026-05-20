@@ -35,6 +35,13 @@ struct CommittedSurfaceSnapshot {
     std::uint64_t modifier = 0;
   };
 
+  struct RegionRect {
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    std::int32_t width = 0;
+    std::int32_t height = 0;
+  };
+
   std::uint64_t id = 0;
   std::int32_t x = 0;
   std::int32_t y = 0;
@@ -59,7 +66,9 @@ struct CommittedSurfaceSnapshot {
   bool minimizeButtonPressed = false;
   bool focused = false;
   bool activeSizing = false;
+  bool defaultGlassEligible = false;
   std::uint64_t serial = 0;
+  std::vector<RegionRect> backgroundBlurRects;
   std::vector<std::uint8_t> rgbaPixels;
   std::uint32_t dmabufFormat = 0;
   std::vector<DmabufPlane> dmabufPlanes;

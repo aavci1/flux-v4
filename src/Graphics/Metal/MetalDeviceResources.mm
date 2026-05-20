@@ -387,6 +387,7 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
   device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
   layer_.device = device_;
   layer_.pixelFormat = MTLPixelFormatBGRA8Unorm;
+  layer_.framebufferOnly = NO;
   pixelFormat_ = layer_.pixelFormat;
   queue_ = [device_ newCommandQueue];
 

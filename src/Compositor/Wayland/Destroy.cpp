@@ -61,6 +61,10 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (surface->fractionalScale) wl_resource_destroy(surface->fractionalScale->resource);
   if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
   if (surface->xdgPopup) wl_resource_destroy(surface->xdgPopup->resource);
+  if (surface->backgroundEffect && surface->backgroundEffect->surface == surface) {
+    surface->backgroundEffect->surface = nullptr;
+    surface->backgroundEffect = nullptr;
+  }
   for (auto it = pointerConstraints_.begin(); it != pointerConstraints_.end();) {
     if ((*it)->surface == surface) {
       wl_resource_destroy((*it)->resource);
@@ -197,6 +201,17 @@ void WaylandServer::Impl::destroyXxCutouts(XxCutouts* cutouts) {
     cutouts->toplevel->cutoutsRejected = false;
   }
   eraseResource(cutouts_, cutouts);
+}
+
+void WaylandServer::Impl::destroyRegion(Region* region) {
+  eraseResource(regions_, region);
+}
+
+void WaylandServer::Impl::destroyBackgroundEffect(BackgroundEffect* effect) {
+  if (effect && effect->surface && effect->surface->backgroundEffect == effect) {
+    effect->surface->backgroundEffect = nullptr;
+  }
+  eraseResource(backgroundEffects_, effect);
 }
 
 void WaylandServer::Impl::destroyViewport(Viewport* viewport) {
