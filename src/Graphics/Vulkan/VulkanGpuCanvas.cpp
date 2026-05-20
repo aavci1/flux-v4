@@ -926,6 +926,7 @@ public:
     destroyTexture(backdropSceneTexture_);
     destroyTexture(backdropScratchTexture_);
     destroyTexture(backdropBlurTexture_);
+    clearBackdropBlurCache();
     for (auto &kv : imageTextures_) {
       if (kv.second) {
         destroyTexture(*kv.second);
@@ -1286,6 +1287,21 @@ public:
       swapExtent_ = VkExtent2D{targetSpec_.width, targetSpec_.height};
 
       bool const externalCommandBuffer = targetSpec_.commandBuffer != VK_NULL_HANDLE;
+      bool const canReuseCompletedFrame =
+          targetMode_ &&
+          !externalCommandBuffer &&
+          !targetSpec_.waitSemaphore &&
+          !targetSpec_.signalSemaphore &&
+          !resources().atlasDirty;
+      std::uint64_t const requestedFrameSignature =
+          canReuseCompletedFrame ? renderTargetFrameSignature() : 0;
+      if (canReuseCompletedFrame &&
+          renderTargetFrameCacheValid_ &&
+          renderTargetFrameSignature_ == requestedFrameSignature) {
+        destroyDeferredTextures(false);
+        debug::perf::recordPresentedFrame();
+        return;
+      }
       VkCommandBuffer commandBuffer = targetSpec_.commandBuffer;
       VkFence frameFence = VK_NULL_HANDLE;
       if (!externalCommandBuffer) {
@@ -1334,10 +1350,17 @@ public:
       if (!targetSpec_.signalSemaphore) {
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
       }
+      if (canReuseCompletedFrame) {
+        renderTargetFrameSignature_ = renderTargetFrameSignature();
+        renderTargetFrameCacheValid_ = true;
+      } else {
+        renderTargetFrameCacheValid_ = false;
+      }
       currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
       debug::perf::recordPresentedFrame();
     } catch (std::exception const &e) {
       recoverResetFrameFence();
+      renderTargetFrameCacheValid_ = false;
       std::fprintf(stderr, "Flux Vulkan: render target present failed: %s\n", e.what());
     }
   }
@@ -1670,6 +1693,12 @@ private:
   struct PendingTextureDestroy {
     std::unique_ptr<Texture> texture;
     std::uint32_t framesRemaining = 0;
+  };
+
+  struct CachedBackdropBlur {
+    std::uint64_t signature = 0;
+    Texture texture;
+    bool valid = false;
   };
 
   struct DrawState {
@@ -2707,10 +2736,18 @@ private:
       }
       destroyTexture(texture);
       createRenderTargetTexture(texture, targetW, targetH);
+      clearBackdropBlurCache();
     };
     ensure(backdropSceneTexture_);
     ensure(backdropScratchTexture_);
     ensure(backdropBlurTexture_);
+  }
+
+  void clearBackdropBlurCache() {
+    for (CachedBackdropBlur &entry : backdropBlurCache_) {
+      destroyTexture(entry.texture);
+    }
+    backdropBlurCache_.clear();
   }
 
   std::uint32_t appendBackdropBlurQuad(float radiusPx, float axisX, float axisY) {
@@ -2838,6 +2875,124 @@ private:
         static_cast<std::uint32_t>(std::max(1, backdropBlurTexture_.width)),
         static_cast<std::uint32_t>(std::max(1, backdropBlurTexture_.height)),
     };
+  }
+
+  void hashTextureReference(std::uint64_t &h, Texture const *texture) const {
+    auto image = reinterpret_cast<std::uintptr_t>(texture ? texture->image : VK_NULL_HANDLE);
+    auto view = reinterpret_cast<std::uintptr_t>(texture ? texture->view : VK_NULL_HANDLE);
+    auto descriptor = reinterpret_cast<std::uintptr_t>(texture ? texture->descriptor : VK_NULL_HANDLE);
+    hashValue(h, image);
+    hashValue(h, view);
+    hashValue(h, descriptor);
+    if (texture) {
+      hashValue(h, texture->format);
+      hashValue(h, texture->layout);
+      hashValue(h, texture->width);
+      hashValue(h, texture->height);
+    }
+  }
+
+  void hashDrawOpGeometry(std::uint64_t &h, DrawOp const &op) const {
+    hashValue(h, op.kind);
+    hashValue(h, op.first);
+    hashValue(h, op.count);
+    hashValue(h, op.clip);
+    hashValue(h, op.blurRadius);
+    hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalStorageDescriptor));
+    hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalVertexBuffer));
+    hashValue(h, op.externalTranslationX);
+    hashValue(h, op.externalTranslationY);
+    hashTextureReference(h, op.texture);
+
+    std::uint32_t const end = op.first + op.count;
+    switch (op.kind) {
+    case DrawOp::Kind::Rect:
+      for (std::uint32_t index = op.first; index < end && index < rects_.size(); ++index) {
+        hashValue(h, rects_[index]);
+      }
+      break;
+    case DrawOp::Kind::Path:
+      for (std::uint32_t index = op.first; index < end && index < pathVerts_.size(); ++index) {
+        hashValue(h, pathVerts_[index]);
+      }
+      break;
+    case DrawOp::Kind::Image:
+    case DrawOp::Kind::BackdropBlur:
+      for (std::uint32_t index = op.first; index < end && index < quads_.size(); ++index) {
+        hashValue(h, quads_[index]);
+      }
+      break;
+    }
+  }
+
+  std::uint64_t backdropBlurSignature(BackdropBlurRun const &run, std::size_t runIndex) const {
+    std::uint64_t h = 14695981039346656037ULL;
+    hashValue(h, runIndex);
+    hashValue(h, width_);
+    hashValue(h, height_);
+    hashValue(h, framebufferWidth_);
+    hashValue(h, framebufferHeight_);
+    hashValue(h, swapExtent_.width);
+    hashValue(h, swapExtent_.height);
+    hashValue(h, clearColor_);
+    hashValue(h, run.clip);
+    hashValue(h, kBackdropBlurIterations);
+    hashValue(h, kBackdropBlurDownsample);
+    hashValue(h, kBackdropBlurRadiusBoost);
+    if (run.horizontalQuad < quads_.size()) {
+      hashValue(h, quads_[run.horizontalQuad]);
+    }
+    if (run.verticalQuad < quads_.size()) {
+      hashValue(h, quads_[run.verticalQuad]);
+    }
+    std::size_t const opEnd = std::min(run.start, ops_.size());
+    hashValue(h, opEnd);
+    for (std::size_t index = 0; index < opEnd; ++index) {
+      hashDrawOpGeometry(h, ops_[index]);
+    }
+    return h;
+  }
+
+  std::uint64_t renderTargetFrameSignature() const {
+    std::uint64_t h = 14695981039346656037ULL;
+    hashValue(h, reinterpret_cast<std::uintptr_t>(targetSpec_.image));
+    hashValue(h, reinterpret_cast<std::uintptr_t>(targetSpec_.view));
+    hashValue(h, targetSpec_.format);
+    hashValue(h, targetSpec_.width);
+    hashValue(h, targetSpec_.height);
+    hashValue(h, targetSpec_.initialLayout);
+    hashValue(h, targetSpec_.finalLayout);
+    hashValue(h, width_);
+    hashValue(h, height_);
+    hashValue(h, framebufferWidth_);
+    hashValue(h, framebufferHeight_);
+    hashValue(h, dpiScaleX_);
+    hashValue(h, dpiScaleY_);
+    hashValue(h, clearColor_);
+    hashValue(h, resources().atlasGeneration);
+    hashValue(h, resources().atlasDirty);
+    hashValue(h, ops_.size());
+    for (DrawOp const &op : ops_) {
+      hashDrawOpGeometry(h, op);
+    }
+    return h;
+  }
+
+  CachedBackdropBlur &ensureBackdropBlurCacheEntry(std::size_t index) {
+    if (backdropBlurCache_.size() <= index) {
+      backdropBlurCache_.resize(index + 1);
+    }
+    CachedBackdropBlur &entry = backdropBlurCache_[index];
+    VkExtent2D const extent = backdropTextureExtent();
+    if (!entry.texture.image ||
+        entry.texture.width != static_cast<int>(extent.width) ||
+        entry.texture.height != static_cast<int>(extent.height)) {
+      destroyTexture(entry.texture);
+      createRenderTargetTexture(entry.texture, static_cast<int>(extent.width), static_cast<int>(extent.height));
+      entry.valid = false;
+      entry.signature = 0;
+    }
+    return entry;
   }
 
   std::vector<BackdropBlurRun> prepareBackdropBlurRuns() {
@@ -3104,12 +3259,18 @@ private:
     ensureTextureDescriptor(backdropSceneTexture_);
   }
 
-  void blurBackdropScene(VkCommandBuffer commandBuffer, BackdropBlurRun const &run, VkClearValue const &clear) {
+  Texture *blurBackdropScene(VkCommandBuffer commandBuffer,
+                             BackdropBlurRun const &run,
+                             VkClearValue const &clear,
+                             CachedBackdropBlur &cacheEntry,
+                             std::uint64_t signature) {
     Texture *blurSource = &backdropSceneTexture_;
+    Texture *blurDestination = &cacheEntry.texture;
     VkExtent2D const blurExtent = backdropTextureExtent();
     PixelRect const renderArea = pixelRectForLogicalClip(run.clip, blurExtent);
     if (!renderArea.valid()) {
-      return;
+      cacheEntry.valid = false;
+      return nullptr;
     }
     PixelRect const sourceArea = pixelRectForLogicalClip(run.clip);
     std::uint64_t const blurPixels = static_cast<std::uint64_t>(renderArea.width) * renderArea.height;
@@ -3131,19 +3292,22 @@ private:
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropScratchTexture_);
 
-      transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+      transition(commandBuffer, *blurDestination, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
       beginColorRendering(commandBuffer,
-                          backdropBlurTexture_.view,
+                          blurDestination->view,
                           blurExtent,
                           clear,
                           VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                           renderArea);
       drawBackdropBlurPass(commandBuffer, blurState, &backdropScratchTexture_, run.verticalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
-      transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropBlurTexture_);
-      blurSource = &backdropBlurTexture_;
+      transition(commandBuffer, *blurDestination, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ensureTextureDescriptor(*blurDestination);
+      blurSource = blurDestination;
     }
+    cacheEntry.signature = signature;
+    cacheEntry.valid = true;
+    return blurDestination;
   }
 
   void beginTargetRendering(VkCommandBuffer commandBuffer,
@@ -3165,17 +3329,24 @@ private:
                                       std::vector<BackdropBlurRun> const &runs) {
     beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
     std::size_t cursor = 0;
-    for (BackdropBlurRun const &run : runs) {
+    for (std::size_t runIndex = 0; runIndex < runs.size(); ++runIndex) {
+      BackdropBlurRun const &run = runs[runIndex];
       if (run.start > cursor) {
         drawOps(commandBuffer, cursor, run.start);
       }
 
-      vkCmdEndRendering(commandBuffer);
-      copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout, run.clip);
-      blurBackdropScene(commandBuffer, run, clear);
-
-      beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_LOAD);
-      drawOps(commandBuffer, run.start, run.end, &backdropBlurTexture_);
+      CachedBackdropBlur &cacheEntry = ensureBackdropBlurCacheEntry(runIndex);
+      std::uint64_t const signature = backdropBlurSignature(run, runIndex);
+      Texture *blurTexture = cacheEntry.valid && cacheEntry.signature == signature
+                                 ? &cacheEntry.texture
+                                 : nullptr;
+      if (!blurTexture) {
+        vkCmdEndRendering(commandBuffer);
+        copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout, run.clip);
+        blurTexture = blurBackdropScene(commandBuffer, run, clear, cacheEntry, signature);
+        beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_LOAD);
+      }
+      drawOps(commandBuffer, run.start, run.end, blurTexture);
       cursor = run.end;
     }
 
@@ -3785,6 +3956,7 @@ private:
   Texture backdropSceneTexture_;
   Texture backdropScratchTexture_;
   Texture backdropBlurTexture_;
+  std::vector<CachedBackdropBlur> backdropBlurCache_;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;
@@ -3797,6 +3969,8 @@ private:
   bool swapchainDirty_ = true;
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
+  std::uint64_t renderTargetFrameSignature_ = 0;
+  bool renderTargetFrameCacheValid_ = false;
   bool ownsSharedVulkanCore_ = false;
   bool targetMode_ = false;
 };
