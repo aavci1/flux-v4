@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include "Compositor/Window/WindowGeometry.hpp"
+#include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
 
 #include <wayland-server-core.h>
@@ -178,14 +179,21 @@ void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationT
 }
 
 void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
+  std::uint64_t callbackCount = 0;
   for (auto const& surface : surfaces_) {
     std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);
     surface->frameCallbacks.clear();
+    callbackCount += callbacks.size();
     for (wl_resource* callback : callbacks) {
       wl_callback_send_done(callback, timeMs);
       wl_resource_destroy(callback);
     }
   }
+  flux::detail::resizeTrace("compositor",
+                            "frame-callbacks time=%u callbacks=%llu pendingPresentationBatches=%zu\n",
+                            timeMs,
+                            static_cast<unsigned long long>(callbackCount),
+                            pendingPresentationBatches_.size());
   flushClients();
 }
 

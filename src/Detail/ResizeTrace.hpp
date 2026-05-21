@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 
 namespace flux::detail {
 
@@ -15,12 +17,20 @@ inline bool resizeTraceEnabled() {
   return enabled;
 }
 
+inline std::uint64_t resizeTraceTimestampNanoseconds() {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
+         static_cast<std::uint64_t>(now.tv_nsec);
+}
+
 inline void resizeTrace(char const* prefix, char const* format, ...) {
   if (!resizeTraceEnabled()) return;
   if (!prefix || !*prefix) prefix = "resize";
+  std::uint64_t const now = resizeTraceTimestampNanoseconds();
 
   auto write = [&](FILE* file, va_list args) {
-    std::fprintf(file, "resize-trace: %s: ", prefix);
+    std::fprintf(file, "resize-trace: %.3fms %s: ", static_cast<double>(now) / 1'000'000.0, prefix);
     std::vfprintf(file, format, args);
   };
 

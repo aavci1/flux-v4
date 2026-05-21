@@ -67,6 +67,7 @@ public:
   int inputFd() const noexcept;
   int wakeFd() const noexcept { return wakePipe_[0]; }
   void wakeEventLoop();
+  platform::KmsPollResult pollInputAndWakeDetailed(int timeoutMs, std::span<int const> extraFds = {});
   bool pollInputAndWake(int timeoutMs, std::span<int const> extraFds = {});
   void dispatchPendingInput();
   bool isVtForeground() const noexcept { return vtForeground_; }

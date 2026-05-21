@@ -1211,7 +1211,7 @@ void KmsApplication::pollActiveVt() {
   handleActiveVt(readActiveVt());
 }
 
-bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraFds) {
+platform::KmsPollResult KmsApplication::pollInputAndWakeDetailed(int timeoutMs, std::span<int const> extraFds) {
   handlePendingVtSignal();
   pollActiveVt();
   std::vector<pollfd> fds;
@@ -1219,9 +1219,11 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
   if (isVtForeground() && udevMonitorFd_ >= 0) fds.push_back({udevMonitorFd_, POLLIN, 0});
   if (activeVtNotifyFd_ >= 0) fds.push_back({activeVtNotifyFd_, POLLIN, 0});
   if (wakePipe_[0] >= 0) fds.push_back({wakePipe_[0], POLLIN, 0});
+  std::size_t const firstExtraFd = fds.size();
   for (int fd : extraFds) {
     if (fd >= 0) fds.push_back({fd, POLLIN, 0});
   }
+  std::size_t const onePastExtraFd = fds.size();
   for (KmsWindow const* window : windows_) {
     if (!isVtForeground()) break;
     int const timerFd = window ? window->frameTimerFd() : -1;
@@ -1243,17 +1245,28 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
       handlePendingVtSignal();
       pollActiveVt();
       handlePendingTerminateSignal();
-      return true;
+      return platform::KmsPollResult{.woke = true, .inputOrSystem = true};
     }
-    return false;
+    return {};
   }
   if (rc == 0) {
     handlePendingVtSignal();
     pollActiveVt();
     handlePendingTerminateSignal();
-    return false;
+    return {};
   }
-  for (auto const& fd : fds) {
+  platform::KmsPollResult result{.woke = true};
+  for (std::size_t index = 0; index < fds.size(); ++index) {
+    auto const& fd = fds[index];
+    bool const readable = (fd.revents & (POLLIN | POLLERR | POLLHUP)) != 0;
+    if (readable) {
+      if (index >= firstExtraFd && index < onePastExtraFd) {
+        std::size_t const extraIndex = index - firstExtraFd;
+        if (extraIndex < 64) result.extraReadableMask |= (std::uint64_t{1} << extraIndex);
+      } else {
+        result.inputOrSystem = true;
+      }
+    }
     if (fd.fd == wakePipe_[0] && (fd.revents & POLLIN)) drainWakePipe();
     if (fd.fd == activeVtNotifyFd_ && (fd.revents & (POLLIN | POLLERR | POLLHUP))) {
       drainActiveVtWatch();
@@ -1266,7 +1279,11 @@ bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraF
   pollActiveVt();
   handlePendingTerminateSignal();
   if (isVtForeground()) dispatchPendingInput();
-  return true;
+  return result;
+}
+
+bool KmsApplication::pollInputAndWake(int timeoutMs, std::span<int const> extraFds) {
+  return pollInputAndWakeDetailed(timeoutMs, extraFds).woke;
 }
 
 void KmsApplication::registerWindow(KmsWindow* window) {

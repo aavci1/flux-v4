@@ -86,6 +86,7 @@ struct CommittedSurfaceSnapshot {
   std::uint64_t serial = 0;
   std::vector<RegionRect> backgroundBlurRects;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
+  std::uint64_t dmabufBufferId = 0;
   std::uint32_t dmabufFormat = 0;
   std::vector<DmabufPlane> dmabufPlanes;
 };

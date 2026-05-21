@@ -13,14 +13,24 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace flux::compositor {
 
 struct CachedClientImage {
+  struct DmabufEntry {
+    std::uint64_t bufferId = 0;
+    std::shared_ptr<Image> image;
+    bool imported = false;
+  };
+
   std::uint64_t id = 0;
   std::uint64_t serial = 0;
+  std::uint64_t dmabufBufferId = 0;
   std::shared_ptr<Image> image;
   bool logged = false;
+  bool dmabufImported = false;
+  std::vector<DmabufEntry> dmabufImages;
 };
 
 struct ClosingSurfaceVisual {

@@ -206,8 +206,17 @@ git diff --check
 ## Useful Logs
 
 - `compositor.log`: stderr from the compositor session.
-- `compositor-sizes.log`: physical output size, logical output size, and scale after config load or reload.
-- `FLUX_RESIZE_TRACE=1`: enables resize tracing across the compositor and framework resize paths.
+- `FLUX_RESIZE_TRACE=1`: enables resize tracing across the compositor and framework resize paths. By default it also writes `/tmp/flux-resize-trace.log`; override with `FLUX_RESIZE_TRACE_LOG=/path/to/log`.
+- `FLUX_COMPOSITOR_PACING_TRACE=1`: logs atomic page-flip scheduling and completion cadence. By default it writes `/tmp/flux-compositor-pacing.log`; override with `FLUX_COMPOSITOR_PACING_TRACE_LOG=/path/to/log`.
+
+For resize/vblank investigation, launch the compositor like this:
+
+```sh
+rm -f /tmp/flux-resize-trace.log /tmp/flux-compositor-pacing.log
+FLUX_RESIZE_TRACE=1 FLUX_COMPOSITOR_PACING_TRACE=1 ./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
+```
+
+Expected trace shape while resizing: `configure` lines should be followed by client `commit-match-*` lines within one or two refresh intervals, and `flip-complete` intervals should stay close to the output refresh period with low error.
 
 ## Known Bad Signs
 

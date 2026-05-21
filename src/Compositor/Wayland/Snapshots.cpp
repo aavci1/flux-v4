@@ -130,6 +130,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	      .serial = surface->serial,
 	      .backgroundBlurRects = surface->backgroundBlurRects,
 	      .rgbaPixels = surface->rgbaPixels,
+	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
 	      .dmabufFormat = 0,
 	      .dmabufPlanes = {},
   };
@@ -208,6 +209,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
 	      .serial = surface->serial,
 	      .backgroundBlurRects = {},
 	      .rgbaPixels = surface->rgbaPixels,
+	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
 	      .dmabufFormat = 0,
 	      .dmabufPlanes = {},
   };

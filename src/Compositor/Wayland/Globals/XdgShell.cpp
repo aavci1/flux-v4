@@ -61,14 +61,22 @@ void sendToplevelConfigureInternal(WaylandServer::Impl* server,
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
   wl_array_release(&states);
   sendCutoutsConfigureIfNeeded(server, toplevel, width, height);
+  std::uint32_t const serial = server->nextConfigureSerial_;
+  if (auto* surface = toplevel->xdgSurface->surface) {
+    surface->lastConfigureSerial = serial;
+    surface->lastConfigureSentNsec = flux::detail::resizeTraceTimestampNanoseconds();
+    surface->lastConfigureWidth = width;
+    surface->lastConfigureHeight = height;
+  }
   flux::detail::resizeTrace("compositor",
-                            "configure surface=%llu size=%dx%d serial=%u\n",
+                            "configure surface=%llu size=%dx%d serial=%u awaiting=%d\n",
                             static_cast<unsigned long long>(toplevel->xdgSurface->surface
                                                                 ? toplevel->xdgSurface->surface->id
                                                                 : 0),
                             width,
                             height,
-                            server->nextConfigureSerial_);
+                            serial,
+                            awaitSizedCommit ? 1 : 0);
   xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
 }
 

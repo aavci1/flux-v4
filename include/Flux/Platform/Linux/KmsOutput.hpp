@@ -27,6 +27,12 @@ namespace platform {
 
 class KmsOutput;
 
+struct KmsPollResult {
+  bool woke = false;
+  bool inputOrSystem = false;
+  std::uint64_t extraReadableMask = 0;
+};
+
 class KmsAtomicPresenter {
 public:
   struct PageFlipTiming {
@@ -34,6 +40,7 @@ public:
     std::uint32_t presentId = 0;
     std::uint64_t sequence = 0;
     std::uint64_t monotonicNsec = 0;
+    std::uint64_t scheduledMonotonicNsec = 0;
   };
 
   ~KmsAtomicPresenter();
@@ -106,6 +113,7 @@ public:
 
   /// Services signal, VT-switch, input, wake, and hotplug events owned by the KMS device.
   bool pollEvents(int timeoutMs = 0, std::span<int const> extraFds = {});
+  KmsPollResult pollEventDetails(int timeoutMs = 0, std::span<int const> extraFds = {});
 
 private:
   explicit KmsDevice(std::shared_ptr<Impl> impl);

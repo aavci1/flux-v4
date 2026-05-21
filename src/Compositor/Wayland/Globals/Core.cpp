@@ -309,6 +309,38 @@ void clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   surface->awaitingConfigureHeight = 0;
 }
 
+void traceConfigureCommitLag(char const* event, WaylandServer::Impl::Surface const* surface) {
+  if (!surface || !flux::detail::resizeTraceEnabled() || surface->lastConfigureSerial == 0) return;
+  std::int32_t const committedWidth = committedDisplayWidth(surface);
+  std::int32_t const committedHeight = committedDisplayHeight(surface);
+  if (!surface->awaitingConfigureCommit && committedWidth == surface->lastConfigureWidth &&
+      committedHeight == surface->lastConfigureHeight) {
+    return;
+  }
+  std::uint64_t const now = flux::detail::resizeTraceTimestampNanoseconds();
+  double const lagMs = surface->lastConfigureSentNsec > 0
+                           ? static_cast<double>(now - surface->lastConfigureSentNsec) / 1'000'000.0
+                           : 0.0;
+  flux::detail::resizeTrace("compositor",
+                            "%s surface=%llu configureSerial=%u configure=%dx%d committed=%dx%d "
+                            "frame=%dx%d buffer=%dx%d lag=%.3fms delta=%dx%d serial=%llu\n",
+                            event,
+                            static_cast<unsigned long long>(surface->id),
+                            surface->lastConfigureSerial,
+                            surface->lastConfigureWidth,
+                            surface->lastConfigureHeight,
+                            committedWidth,
+                            committedHeight,
+                            surface->frameWidth,
+                            surface->frameHeight,
+                            surface->width,
+                            surface->height,
+                            lagMs,
+                            committedWidth - surface->lastConfigureWidth,
+                            committedHeight - surface->lastConfigureHeight,
+                            static_cast<unsigned long long>(surface->serial));
+}
+
 bool applyViewportState(WaylandServer::Impl::Surface* surface) {
   surface->sourceSet = surface->pendingSourceSet;
   surface->sourceX = surface->pendingSourceX;
@@ -462,6 +494,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
         if (!applyViewportState(surface)) return;
+        traceConfigureCommitLag("commit-match-shm", surface);
         clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
@@ -476,6 +509,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
         if (!applyViewportState(surface)) return;
+        traceConfigureCommitLag("commit-match-dmabuf", surface);
         clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);

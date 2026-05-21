@@ -89,6 +89,7 @@ wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::Impl::DmabufPa
                                 std::uint32_t flags) {
   auto buffer = std::make_unique<WaylandServer::Impl::DmabufBuffer>();
   buffer->server = params->server;
+  buffer->id = params->server->nextDmabufBufferId_++;
   buffer->width = width;
   buffer->height = height;
   buffer->format = format;

@@ -169,6 +169,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
+  std::uint64_t nextDmabufBufferId_ = 1;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<XxCutouts>> cutouts_;
   std::vector<std::unique_ptr<Region>> regions_;
@@ -305,6 +306,10 @@ struct WaylandServer::Impl::Surface {
   bool awaitingConfigureCommit = false;
   std::int32_t awaitingConfigureWidth = 0;
   std::int32_t awaitingConfigureHeight = 0;
+  std::uint32_t lastConfigureSerial = 0;
+  std::uint64_t lastConfigureSentNsec = 0;
+  std::int32_t lastConfigureWidth = 0;
+  std::int32_t lastConfigureHeight = 0;
   std::int32_t restoreX = 96;
   std::int32_t restoreY = 96;
   std::int32_t restoreWidth = 0;
@@ -547,6 +552,7 @@ void updateDndTarget(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
 struct WaylandServer::Impl::XdgPositioner {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
+  std::uint64_t id = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
   std::int32_t anchorRectX = 0;
@@ -630,6 +636,7 @@ struct WaylandServer::Impl::DmabufParams {
 struct WaylandServer::Impl::DmabufBuffer {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
+  std::uint64_t id = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
   std::uint32_t format = 0;

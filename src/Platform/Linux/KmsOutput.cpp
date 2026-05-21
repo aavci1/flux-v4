@@ -34,6 +34,13 @@
 namespace flux::platform {
 namespace {
 
+std::uint64_t monotonicNanoseconds() {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
+         static_cast<std::uint64_t>(now.tv_nsec);
+}
+
 std::uint32_t refreshRateMilliHz(drmModeModeInfo const& mode) {
   if (mode.vrefresh > 0) return static_cast<std::uint32_t>(mode.vrefresh) * 1000u;
   if (mode.clock > 0 && mode.htotal > 0 && mode.vtotal > 0) {
@@ -258,6 +265,7 @@ public:
     if (canvas_) canvas_.reset();
     VkDevice device = flux::VulkanContext::instance().device();
     for (auto& buffer : buffers_) {
+      if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
       if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
       if (buffer.image) vkDestroyImage(device, buffer.image, nullptr);
       if (buffer.memory) vkFreeMemory(device, buffer.memory, nullptr);
@@ -293,9 +301,18 @@ public:
     if (pageFlipPending_) throw std::runtime_error("KMS atomic page flip is already pending");
     if (renderBuffer_ < 0) prepareFrame();
     Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    int inFenceFd = -1;
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
+      if (planeInFenceFd_ != 0 && buffer.renderFinished != VK_NULL_HANDLE) {
+        inFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
+        addAtomicProperty(request,
+                          planeId_,
+                          planeInFenceFd_,
+                          static_cast<std::uint64_t>(inFenceFd),
+                          "plane.IN_FENCE_FD");
+      }
       if (!modesetDone_) {
         addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
         addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
@@ -321,10 +338,17 @@ public:
       addAtomicProperty(request, planeId_, planeCrtcH_, connector_.mode.vdisplay, "plane.CRTC_H");
       std::uint32_t flags = DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT;
       if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
-      pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{.presentId = nextPresentId_++};
+      pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
+          .presentId = nextPresentId_++,
+          .scheduledMonotonicNsec = monotonicNanoseconds(),
+      };
       int const rc = drmModeAtomicCommit(fd_, request, flags, &pendingTiming_);
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
+      }
+      if (inFenceFd >= 0) {
+        close(inFenceFd);
+        inFenceFd = -1;
       }
       drmModeAtomicFree(request);
       request = nullptr;
@@ -334,6 +358,7 @@ public:
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
+      if (inFenceFd >= 0) close(inFenceFd);
       if (request) drmModeAtomicFree(request);
       throw;
     }
@@ -378,6 +403,7 @@ private:
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
+    VkSemaphore renderFinished = VK_NULL_HANDLE;
     VulkanRenderTargetSpec spec{};
   };
 
@@ -395,6 +421,11 @@ private:
     planeCrtcY_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_Y");
     planeCrtcW_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_W");
     planeCrtcH_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_H");
+    planeInFenceFd_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "IN_FENCE_FD");
+    if (planeInFenceFd_ == 0) {
+      std::fprintf(stderr,
+                   "flux-compositor: KMS primary plane has no IN_FENCE_FD; atomic presenter will use CPU GPU waits\n");
+    }
   }
 
   void createModeBlob() {
@@ -431,6 +462,7 @@ private:
     try {
       buffer.fbId = createFramebuffer(buffer.bo);
       importBufferToVulkan(buffer);
+      if (planeInFenceFd_ != 0) buffer.renderFinished = createExportableSemaphore();
       buffer.spec = VulkanRenderTargetSpec{
           .image = buffer.image,
           .view = buffer.view,
@@ -439,12 +471,39 @@ private:
           .height = connector_.mode.vdisplay,
           .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
           .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
+          .signalSemaphore = buffer.renderFinished,
       };
     } catch (...) {
       destroyPartialBuffer(buffer);
       throw;
     }
     return buffer;
+  }
+
+  VkSemaphore createExportableSemaphore() {
+    VkDevice device = flux::VulkanContext::instance().device();
+    VkExportSemaphoreCreateInfo exportInfo{VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO};
+    exportInfo.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+    VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    semaphoreInfo.pNext = &exportInfo;
+    VkSemaphore semaphore = VK_NULL_HANDLE;
+    vkCheck(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore),
+            "vkCreateSemaphore atomic KMS render fence");
+    return semaphore;
+  }
+
+  int exportRenderSemaphoreFd(VkSemaphore semaphore) {
+    auto getSemaphoreFd =
+        reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(vkGetDeviceProcAddr(flux::VulkanContext::instance().device(),
+                                                                       "vkGetSemaphoreFdKHR"));
+    if (!getSemaphoreFd) throw std::runtime_error("vkGetSemaphoreFdKHR is unavailable");
+    VkSemaphoreGetFdInfoKHR fdInfo{VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR};
+    fdInfo.semaphore = semaphore;
+    fdInfo.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+    int fd = -1;
+    vkCheck(getSemaphoreFd(flux::VulkanContext::instance().device(), &fdInfo, &fd),
+            "vkGetSemaphoreFdKHR atomic KMS render fence");
+    return fd;
   }
 
   std::uint32_t createFramebuffer(gbm_bo* bo) {
@@ -584,6 +643,7 @@ private:
   void destroyPartialBuffer(Buffer& buffer) {
     VkDevice device = flux::VulkanContext::instance().device();
     if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
+    if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
     if (buffer.image) vkDestroyImage(device, buffer.image, nullptr);
     if (buffer.memory) vkFreeMemory(device, buffer.memory, nullptr);
     if (buffer.fbId) drmModeRmFB(fd_, buffer.fbId);
@@ -612,6 +672,7 @@ private:
   std::uint32_t planeCrtcY_ = 0;
   std::uint32_t planeCrtcW_ = 0;
   std::uint32_t planeCrtcH_ = 0;
+  std::uint32_t planeInFenceFd_ = 0;
   bool modesetDone_ = false;
   bool pageFlipPending_ = false;
   int displayedBuffer_ = -1;
@@ -877,6 +938,10 @@ void KmsDevice::acknowledgeVtAcquire() {
 
 bool KmsDevice::pollEvents(int timeoutMs, std::span<int const> extraFds) {
   return impl_ && impl_->app_ ? impl_->app_->pollInputAndWake(timeoutMs, extraFds) : false;
+}
+
+KmsPollResult KmsDevice::pollEventDetails(int timeoutMs, std::span<int const> extraFds) {
+  return impl_ && impl_->app_ ? impl_->app_->pollInputAndWakeDetailed(timeoutMs, extraFds) : KmsPollResult{};
 }
 
 } // namespace flux::platform

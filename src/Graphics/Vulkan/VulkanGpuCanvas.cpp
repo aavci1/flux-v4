@@ -64,7 +64,7 @@ class VulkanCanvas;
 
 namespace {
 
-constexpr std::size_t kMaxFramesInFlight = 2;
+constexpr std::size_t kMaxFramesInFlight = 6;
 constexpr int kBackdropBlurIterations = 2;
 constexpr std::uint32_t kBackdropBlurDownsample = 2;
 constexpr float kBackdropBlurRadiusBoost = 1.2f;
@@ -992,6 +992,7 @@ public:
       }
     }
     destroyDeferredTextures(true);
+    destroyDeferredBuffers(true);
     destroyBuffer(pathBuffer_);
     destroyBuffer(rectBuffer_);
     destroyBuffer(quadBuffer_);
@@ -1239,8 +1240,12 @@ public:
     auto start = phaseStart();
     vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
     double const frameFenceMs = phaseMs(start);
+    for (VkFence& imageFence : imageInFlightFences_) {
+      if (imageFence == frameFence) imageFence = VK_NULL_HANDLE;
+    }
     start = phaseStart();
     destroyDeferredTextures(false);
+    destroyDeferredBuffers(false);
     double const deferredDestroyMs = phaseMs(start);
     std::uint32_t imageIndex = 0;
     start = phaseStart();
@@ -1286,6 +1291,7 @@ public:
     clear.color.float32[1] = clearColor_.g;
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
+    recordPendingTextureUploads(commandBuffer);
     if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
       VkImageLayout targetLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       drawOpsWithStackedBackdropBlur(commandBuffer,
@@ -1405,6 +1411,7 @@ public:
     uploadAtlasIfNeeded();
     auto backdropRuns = prepareBackdropBlurRuns();
     uploadFrameBuffers();
+    recordPendingTextureUploads(commandBuffer);
 
     VkClearValue clear{};
     clear.color.float32[0] = clearColor_.r;
@@ -1460,6 +1467,7 @@ public:
         commandBuffer = commandBuffers_[currentFrame_];
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
         destroyDeferredTextures(false);
+        destroyDeferredBuffers(false);
         vkResetCommandBuffer(commandBuffer, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1843,6 +1851,16 @@ public:
 private:
   struct PendingTextureDestroy {
     std::unique_ptr<Texture> texture;
+    std::uint32_t framesRemaining = 0;
+  };
+
+  struct PendingTextureUpload {
+    Texture* texture = nullptr;
+    Buffer staging;
+  };
+
+  struct PendingBufferDestroy {
+    Buffer buffer;
     std::uint32_t framesRemaining = 0;
   };
 
@@ -2614,8 +2632,11 @@ private:
           std::clamp(requestedH, caps.minImageExtent.height, caps.maxImageExtent.height),
       };
     }
-    std::uint32_t imageCount = std::clamp(caps.minImageCount + 1, caps.minImageCount,
-                                          caps.maxImageCount ? caps.maxImageCount : caps.minImageCount + 1);
+    std::uint32_t const preferredImageCount =
+        std::max<std::uint32_t>(caps.minImageCount + 2u, static_cast<std::uint32_t>(kMaxFramesInFlight));
+    std::uint32_t imageCount = std::clamp(preferredImageCount,
+                                          caps.minImageCount,
+                                          caps.maxImageCount ? caps.maxImageCount : preferredImageCount);
     VkSwapchainCreateInfoKHR info{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
     info.surface = surface_;
     info.minImageCount = imageCount;
@@ -2856,6 +2877,12 @@ private:
     if (buffer.buffer)
       vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
     buffer = {};
+  }
+
+  static Buffer takeBuffer(Buffer& buffer) {
+    Buffer out = buffer;
+    buffer = {};
+    return out;
   }
 
   void ensureStorageDescriptor(VkDescriptorSet &set, VkDescriptorSetLayout layout, Buffer const &buffer) {
@@ -3790,7 +3817,8 @@ private:
           transitionImmediate(*tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
         }
       } else {
-        createTexture(*tex, image.width, image.height, image.pixels.data(), true);
+        createTexture(*tex, image.width, image.height, image.pixels.data(), false);
+        queueTextureUpload(*tex, image.pixels.data());
       }
       ensureTextureDescriptor(*tex);
     } catch (...) {
@@ -3812,6 +3840,20 @@ private:
           destroyTexture(*it->texture);
         }
         it = pendingTextureDestroys_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  void destroyDeferredBuffers(bool force) {
+    for (auto it = pendingBufferDestroys_.begin(); it != pendingBufferDestroys_.end();) {
+      if (!force && it->framesRemaining > 0) {
+        --it->framesRemaining;
+      }
+      if (force || it->framesRemaining == 0) {
+        destroyBuffer(it->buffer);
+        it = pendingBufferDestroys_.erase(it);
       } else {
         ++it;
       }
@@ -3844,9 +3886,42 @@ private:
     view.subresourceRange.levelCount = 1;
     view.subresourceRange.layerCount = 1;
     vkCheck(vkCreateImageView(device_, &view, nullptr, &tex.view), "vkCreateImageView");
-    transitionImmediate(tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
     if (uploadNow)
       uploadTexture(tex, pixels);
+  }
+
+  void queueTextureUpload(Texture& tex, Rgba const* pixels) {
+    if (!pixels || tex.width <= 0 || tex.height <= 0)
+      return;
+    PendingTextureUpload uploadJob{};
+    uploadJob.texture = &tex;
+    VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * sizeof(Rgba);
+    ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
+    pendingTextureUploads_.push_back(std::move(uploadJob));
+  }
+
+  void recordTextureUpload(VkCommandBuffer cmd, Texture& tex, Buffer& staging) {
+    if (!staging.buffer || tex.width <= 0 || tex.height <= 0)
+      return;
+    transition(cmd, tex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkBufferImageCopy copy{};
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.layerCount = 1;
+    copy.imageExtent = {static_cast<std::uint32_t>(tex.width), static_cast<std::uint32_t>(tex.height), 1};
+    vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    transition(cmd, tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+  }
+
+  void recordPendingTextureUploads(VkCommandBuffer cmd) {
+    for (auto& uploadJob : pendingTextureUploads_) {
+      if (uploadJob.texture) {
+        recordTextureUpload(cmd, *uploadJob.texture, uploadJob.staging);
+      }
+      pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(uploadJob.staging),
+                                                            kMaxFramesInFlight + 1u});
+    }
+    pendingTextureUploads_.clear();
   }
 
   void createRenderTargetTexture(Texture &tex, int width, int height) {
@@ -4137,6 +4212,8 @@ private:
   bool swapchainDirty_ = true;
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
+  std::vector<PendingTextureUpload> pendingTextureUploads_;
+  std::vector<PendingBufferDestroy> pendingBufferDestroys_;
   std::uint64_t renderTargetFrameSignature_ = 0;
   bool renderTargetFrameCacheValid_ = false;
   bool ownsSharedVulkanCore_ = false;
