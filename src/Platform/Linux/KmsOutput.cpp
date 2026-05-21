@@ -258,10 +258,14 @@ public:
       planeId_ = primaryPlaneForCrtc(fd_, connector_.crtcId);
       loadProperties();
       useRenderInFence_ = useKmsRenderInFence() && planeInFenceFd_ != 0;
+      useAsyncRenderFence_ = true;
       if (planeInFenceFd_ != 0) {
         std::fprintf(stderr,
                      "flux-compositor: atomic KMS render fence mode: %s\n",
-                     useRenderInFence_ ? "kms-in-fence" : "wait-before-commit");
+                     useRenderInFence_ ? "kms-in-fence" : "async wait-before-commit");
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: atomic KMS render fence mode: async CPU wait-before-commit\n");
       }
       createModeBlob();
       gbm_ = gbm_create_device(fd_);
@@ -577,7 +581,7 @@ private:
     try {
       buffer.fbId = createFramebuffer(buffer.bo);
       importBufferToVulkan(buffer);
-      if (useRenderInFence_) buffer.renderFinished = createExportableSemaphore();
+      if (useAsyncRenderFence_) buffer.renderFinished = createExportableSemaphore();
       buffer.spec = VulkanRenderTargetSpec{
           .image = buffer.image,
           .view = buffer.view,
@@ -797,6 +801,7 @@ private:
   std::uint32_t planeCrtcH_ = 0;
   std::uint32_t planeInFenceFd_ = 0;
   bool useRenderInFence_ = false;
+  bool useAsyncRenderFence_ = false;
   bool modesetDone_ = false;
   bool pageFlipPending_ = false;
   int displayedBuffer_ = -1;
