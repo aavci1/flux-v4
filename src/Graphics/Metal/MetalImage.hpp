@@ -13,6 +13,10 @@ public:
   MetalImage(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height);
 
   Size size() const override;
+  bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void* gpuDevice = nullptr) override;
+  bool updatePixels(std::span<std::uint8_t const> pixels,
+                    PixelFormat format,
+                    void* gpuDevice = nullptr) override;
 
   id<MTLTexture> texture() const { return texture_; }
 

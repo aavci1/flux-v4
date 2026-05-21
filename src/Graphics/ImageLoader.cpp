@@ -25,6 +25,14 @@
 
 namespace flux {
 
+bool Image::updateRgbaPixels(std::span<std::uint8_t const>, void*) {
+  return false;
+}
+
+bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void* gpuDevice) {
+  return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
+}
+
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
   std::filesystem::path const imagePath{std::string(path)};
   std::ifstream in(imagePath, std::ios::binary);

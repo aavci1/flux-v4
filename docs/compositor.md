@@ -774,6 +774,9 @@ Updated each time a Flux change lands in service of compositor work:
 
 | Date | Flux commit | Description | Mac parity status |
 |------|-------------|-------------|-------------------|
+| 2026-05-21 | local working tree | Added explicit `Image::PixelFormat` upload/update APIs and changed Wayland SHM snapshots to preserve BGRA/XRGB byte order for direct Vulkan/Metal texture uploads, avoiding per-pixel CPU channel swizzles for browser-sized SHM surfaces. | Implemented for Vulkan and Metal; existing RGBA image APIs remain as compatibility wrappers. |
+| 2026-05-21 | local working tree | Hardened the Linux atomic-KMS presenter by rotating exportable render-completion semaphores per rendered buffer and reporting concrete Vulkan result codes on failures. | Linux/KMS-only presentation path; no Metal equivalent required. |
+| 2026-05-21 | local working tree | Added `Image::updateRgbaPixels(...)` so same-size RGBA images can update in place; the compositor uses this to reuse SHM client textures instead of creating a new GPU image for every commit. | Implemented for Vulkan texture-upload reuse and Metal `replaceRegion`; immutable external/imported images return false. |
 | 2026-05-16 | local working tree | Added Linux KMS `KmsDevice` / `KmsOutput` API for compositor-owned display selection and Vulkan display-surface creation. | No Metal API required; Linux-only KMS surface. |
 | 2026-05-16 | local working tree | Added initial compositor-side Wayland server scaffold and checked-in xdg-shell server bindings. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Added checked-in linux-dmabuf server bindings and a compositor-side buffer-parameter lifetime scaffold. | Linux compositor-only protocol integration; no Metal API involved. |

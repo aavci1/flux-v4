@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <Flux/Graphics/Image.hpp>
 #include <memory>
 #include <string>
 #include <vector>
@@ -94,6 +95,7 @@ struct CommittedSurfaceSnapshot {
   std::uint64_t lastCommitNsec = 0;
   std::vector<RegionRect> backgroundBlurRects;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
+  Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
   std::uint64_t dmabufBufferId = 0;
   std::uint32_t dmabufFormat = 0;
   std::vector<DmabufPlane> dmabufPlanes;

@@ -64,9 +64,35 @@ std::uint64_t monotonicNowNsec() {
          static_cast<std::uint64_t>(now.tv_nsec);
 }
 
+char const* vkResultName(VkResult result) {
+  switch (result) {
+  case VK_SUCCESS: return "VK_SUCCESS";
+  case VK_NOT_READY: return "VK_NOT_READY";
+  case VK_TIMEOUT: return "VK_TIMEOUT";
+  case VK_EVENT_SET: return "VK_EVENT_SET";
+  case VK_EVENT_RESET: return "VK_EVENT_RESET";
+  case VK_INCOMPLETE: return "VK_INCOMPLETE";
+  case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+  case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+  case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
+  case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
+  case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
+  case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
+  case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
+  case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
+  case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+  case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
+  case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+  case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
+  case VK_ERROR_UNKNOWN: return "VK_ERROR_UNKNOWN";
+  default: return "VK_ERROR";
+  }
+}
+
 void vkCheck(VkResult result, char const* what) {
   if (result != VK_SUCCESS) {
-    throw std::runtime_error(std::string(what) + " failed");
+    throw std::runtime_error(std::string(what) + " failed: " + vkResultName(result) +
+                             " (" + std::to_string(static_cast<int>(result)) + ")");
   }
 }
 
@@ -327,6 +353,9 @@ public:
     }
     renderBuffer_ = static_cast<int>(next);
     closeRenderFence(buffers_[next]);
+    if (useAsyncRenderFence_) {
+      resetRenderSemaphore(buffers_[next]);
+    }
     buffers_[next].renderComplete = bufferHasNoAsyncRenderFence(buffers_[next]);
     buffers_[next].renderSubmittedNsec = 0;
     buffers_[next].renderReadyNsec = 0;
@@ -510,6 +539,15 @@ private:
     return useRenderInFence_ && buffer.renderFenceFd >= 0;
   }
 
+  void resetRenderSemaphore(Buffer& buffer) {
+    VkDevice device = flux::VulkanContext::instance().device();
+    if (buffer.renderFinished) {
+      vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+      buffer.renderFinished = VK_NULL_HANDLE;
+    }
+    buffer.renderFinished = createExportableSemaphore();
+  }
+
   void closeRenderFence(Buffer& buffer) noexcept {
     if (buffer.renderFenceFd >= 0) {
       close(buffer.renderFenceFd);
@@ -607,7 +645,6 @@ private:
       importBufferToVulkan(buffer);
       createOffscreenTarget(buffer);
       allocateCommandBuffer(buffer);
-      if (useAsyncRenderFence_) buffer.renderFinished = createExportableSemaphore();
       buffer.spec = VulkanRenderTargetSpec{
           .image = buffer.offscreenImage,
           .view = buffer.offscreenView,
@@ -926,6 +963,7 @@ private:
 
   void destroyPartialBuffer(Buffer& buffer) {
     VkDevice device = flux::VulkanContext::instance().device();
+    closeRenderFence(buffer);
     if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
     if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
     if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);

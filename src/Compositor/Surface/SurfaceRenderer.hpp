@@ -27,6 +27,8 @@ struct CachedClientImage {
   std::uint64_t id = 0;
   std::uint64_t serial = 0;
   std::uint64_t dmabufBufferId = 0;
+  std::int32_t shmBufferWidth = 0;
+  std::int32_t shmBufferHeight = 0;
   std::shared_ptr<Image> image;
   bool logged = false;
   bool dmabufImported = false;

@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 
+#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
@@ -113,6 +114,14 @@ wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::Impl::DmabufPa
                                  destroyResourceCallback<WaylandServer::Impl::DmabufBuffer,
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyDmabufBuffer>);
+  diagnostics::crashLog("dmabuf-create id=%llu size=%dx%d format=0x%08x flags=0x%08x stride=%u modifier=0x%016llx",
+                        static_cast<unsigned long long>(raw->id),
+                        width,
+                        height,
+                        format,
+                        flags,
+                        raw->planes.empty() ? 0u : raw->planes.front().stride,
+                        static_cast<unsigned long long>(raw->planes.empty() ? 0ull : raw->planes.front().modifier));
   return bufferResource;
 }
 

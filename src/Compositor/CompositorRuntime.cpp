@@ -7,6 +7,8 @@
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Compositor/Config/AppliedCompositorConfig.hpp"
 #include "Compositor/Config/CompositorConfig.hpp"
+#include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Input/KmsInputBridge.hpp"
 #include "Compositor/Surface/SurfaceRenderer.hpp"
 #include "Compositor/WaylandServer.hpp"
@@ -185,12 +187,16 @@ struct LoopInstrumentation {
   void recordPoll(Clock::time_point begin, bool woke) {
     ++polls;
     if (woke) ++pollWakeups;
-    pollMs += milliseconds(begin, Clock::now());
+    double const elapsed = milliseconds(begin, Clock::now());
+    pollMs += elapsed;
+    diagnostics::recordCpuPoll(elapsed, woke);
   }
 
   void recordDispatch(Clock::time_point begin) {
     ++dispatches;
-    dispatchMs += milliseconds(begin, Clock::now());
+    double const elapsed = milliseconds(begin, Clock::now());
+    dispatchMs += elapsed;
+    diagnostics::recordCpuDispatch(elapsed);
   }
 
   void recordVblank(Clock::time_point begin) {
@@ -354,10 +360,17 @@ std::optional<std::size_t> selectOutputIndex(std::vector<flux::platform::KmsOutp
 
 int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
   try {
+    diagnostics::crashLog("runtime-start listOutputs=%d", options.listOutputs ? 1 : 0);
+    if (diagnostics::cpuTraceEnabled()) {
+      std::fprintf(stderr,
+                   "flux-compositor: CPU trace logging to %s (set FLUX_COMPOSITOR_CPU_TRACE=0 to disable)\n",
+                   diagnostics::cpuTracePath());
+    }
     auto device = flux::platform::KmsDevice::open();
     auto outputs = device->outputs();
     if (outputs.empty()) {
       std::fprintf(stderr, "flux-compositor: no connected KMS outputs\n");
+      diagnostics::crashLog("runtime-abort no-connected-outputs");
       return 1;
     }
     printOutputs(outputs);
@@ -369,11 +382,19 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::fprintf(stderr,
                    "flux-compositor: output selector \"%s\" did not match any connected output\n",
                    loadedConfig.config.outputSelector ? loadedConfig.config.outputSelector->c_str() : "");
+      diagnostics::crashLog("runtime-abort output-selector-miss selector=%s",
+                            loadedConfig.config.outputSelector ? loadedConfig.config.outputSelector->c_str() : "");
       printOutputs(outputs);
       return 1;
     }
 
     flux::platform::KmsOutput const& output = outputs[*outputIndex];
+    diagnostics::crashLog("runtime-output name=%s physical=%ux%u refresh_millihz=%u scale=%.3f",
+                          output.name().c_str(),
+                          output.width(),
+                          output.height(),
+                          output.refreshRateMilliHz(),
+                          scaleForOutput(loadedConfig.config, output.name()));
     WaylandServer wayland({
         .name = output.name(),
         .width = static_cast<std::int32_t>(output.width()),
@@ -420,6 +441,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         vulkanDisplayCanvas.reset();
         canvas = &atomicPresenter->canvas();
         std::fprintf(stderr, "flux-compositor: using GBM/atomic-KMS presenter\n");
+        diagnostics::crashLog("presenter atomic-kms");
       } else {
         auto const surfaceStart = SteadyClock::now();
         VkSurfaceKHR surface = output.createVulkanSurface(instance);
@@ -427,6 +449,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         vulkanDisplayCanvas = flux::createVulkanCanvas(surface, 1u, textSystem);
         canvas = vulkanDisplayCanvas.get();
         std::fprintf(stderr, "flux-compositor: using Vulkan display presenter\n");
+        diagnostics::crashLog("presenter vulkan-display");
       }
       canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
       canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
@@ -440,6 +463,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                  output.width(),
                  output.height(),
                  output.name().c_str());
+    diagnostics::crashLog("runtime-presenting output=%s socket=%s logical=%dx%d scale=%.3f",
+                          output.name().c_str(),
+                          wayland.socketName(),
+                          wayland.logicalOutputWidth(),
+                          wayland.logicalOutputHeight(),
+                          wayland.preferredScale());
 
     AppliedCompositorConfig appliedConfig{};
     auto applyOutputScale = [&](bool force) {
@@ -455,6 +484,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                      wayland.logicalOutputWidth(),
                      wayland.logicalOutputHeight(),
                      wayland.preferredScale());
+        diagnostics::crashLog("output-scale physical=%ux%u logical=%dx%d scale=%.3f force=%d",
+                              output.width(),
+                              output.height(),
+                              wayland.logicalOutputWidth(),
+                              wayland.logicalOutputHeight(),
+                              wayland.preferredScale(),
+                              force ? 1 : 0);
       }
     };
 
@@ -525,6 +561,26 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::uint64_t lastKnownContentSerial = wayland.contentSerial();
     AtomicFrameProfile lastAtomicScheduledProfile{};
     std::uint64_t atomicRenderAheadLeadEstimateNsec = initialRenderAheadLeadNsec(output.refreshRateMilliHz());
+    auto lastCrashHeartbeat = SteadyClock::now();
+    auto maybeCrashHeartbeat = [&](char const* reason) {
+      if (!diagnostics::crashLogEnabled()) return;
+      auto const now = SteadyClock::now();
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCrashHeartbeat).count() < 2000) return;
+      lastCrashHeartbeat = now;
+      diagnostics::crashLog("heartbeat reason=%s loops=%llu surfaces=%llu toplevels=%zu serial=%llu "
+                            "dirty=%d ready=%d pendingFlip=%d vt=%d idleBlanked=%d forceRender=%d",
+                            reason ? reason : "loop",
+                            static_cast<unsigned long long>(loopStats.loops),
+                            static_cast<unsigned long long>(loopStats.lastSurfaceCount),
+                            wayland.toplevelCount(),
+                            static_cast<unsigned long long>(wayland.contentSerial()),
+                            atomicFrameDirty ? 1 : 0,
+                            atomicReadyFrame.ready ? 1 : 0,
+                            atomicPresenter && atomicPresenter->hasPendingPageFlip() ? 1 : 0,
+                            device->isVtForeground() ? 1 : 0,
+                            idleBlanked ? 1 : 0,
+                            forceRender ? 1 : 0);
+    };
     constexpr int kIdlePollMs = 250;
     auto atomicRenderAheadDeadlineNsec = [&]() -> std::uint64_t {
       if (!atomicPresenter || !atomicPresenter->hasPendingPageFlip()) return 0;
@@ -589,12 +645,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto handleVtResume = [&] {
       auto const resumeStart = SteadyClock::now();
+      diagnostics::crashLog("vt-resume begin");
       applyOutputScale(true);
       traceTiming("vt-resume-total", resumeStart);
       vtAcquireFramePending = true;
       forceRender = true;
       skipNextVblank = true;
       atomicFrameDirty = true;
+      diagnostics::crashLog("vt-resume end logical=%dx%d serial=%llu",
+                            wayland.logicalOutputWidth(),
+                            wayland.logicalOutputHeight(),
+                            static_cast<unsigned long long>(wayland.contentSerial()));
     };
     auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
       if (!atomicPresenter || !frame.ready || !atomicPresenter->canSchedulePresent()) return false;
@@ -645,6 +706,19 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   frame.profile.cursorMs,
                   frame.profile.presentMs,
                   frame.profile.totalMs);
+      if (frame.profile.totalMs > 100.0 || frame.profile.presentMs > 50.0) {
+        diagnostics::crashLog("slow-frame-scheduled presentId=%u surfaces=%zu total=%.3fms present=%.3fms "
+                              "surface=%.3fms maxBuffer=%dx%d maxFrame=%dx%d",
+                              presentId,
+                              frame.surfaceCount,
+                              frame.profile.totalMs,
+                              frame.profile.presentMs,
+                              frame.profile.surfaceMs,
+                              frame.profile.maxBufferWidth,
+                              frame.profile.maxBufferHeight,
+                              frame.profile.maxFrameWidth,
+                              frame.profile.maxFrameHeight);
+      }
       lastAtomicScheduledNsec = scheduledNsec;
       lastAtomicScheduledRenderMs = frame.renderMs;
       lastAtomicScheduledProfile = frame.profile;
@@ -757,6 +831,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   commitToFlipMs,
                   inputToFlipMs,
                   configureToFlipMs);
+      if (queueNsec > 100'000'000ull || flip->commitDurationNsec > 50'000'000ull ||
+          flipEventDispatchDelayMs > 100.0) {
+        diagnostics::crashLog("slow-flip-complete id=%u seq=%llu queue=%.3fms commit=%.3fms "
+                              "eventDelay=%.3fms interval=%.3fms",
+                              flip->presentId,
+                              static_cast<unsigned long long>(flip->sequence),
+                              static_cast<double>(queueNsec) / 1'000'000.0,
+                              static_cast<double>(flip->commitDurationNsec) / 1'000'000.0,
+                              flipEventDispatchDelayMs,
+                              static_cast<double>(intervalNsec) / 1'000'000.0);
+      }
       return true;
     };
     auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
@@ -782,6 +867,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frameProfile.presentMs += atomicFrameProfile.presentMs;
         ++frameProfile.frames;
         frameProfile.totalMs += atomicFrameProfile.totalMs;
+        diagnostics::recordCpuFrame({
+            .surfaces = committedSurfaceCount,
+            .backgroundMs = atomicFrameProfile.backgroundMs,
+            .snapshotMs = atomicFrameProfile.snapshotMs,
+            .surfaceMs = atomicFrameProfile.surfaceMs,
+            .closingMs = atomicFrameProfile.closingMs,
+            .launcherMs = atomicFrameProfile.launcherMs,
+            .cursorMs = atomicFrameProfile.cursorMs,
+            .presentMs = atomicFrameProfile.presentMs,
+            .totalMs = atomicFrameProfile.totalMs,
+        });
         frameProfile.maybeLog();
         loopStats.recordRender(renderStart);
         if (atomicPresenter) {
@@ -977,6 +1073,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       frameProfile.presentMs += atomicFrameProfile.presentMs;
       ++frameProfile.frames;
       frameProfile.totalMs += atomicFrameProfile.totalMs;
+      diagnostics::recordCpuFrame({
+          .surfaces = committedSurfaceCount,
+          .backgroundMs = atomicFrameProfile.backgroundMs,
+          .snapshotMs = atomicFrameProfile.snapshotMs,
+          .surfaceMs = atomicFrameProfile.surfaceMs,
+          .closingMs = atomicFrameProfile.closingMs,
+          .launcherMs = atomicFrameProfile.launcherMs,
+          .cursorMs = atomicFrameProfile.cursorMs,
+          .presentMs = atomicFrameProfile.presentMs,
+          .totalMs = atomicFrameProfile.totalMs,
+      });
       frameProfile.maybeLog();
       loopStats.recordRender(renderStart);
       if (!atomicPresenter) {
@@ -996,7 +1103,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       device->acknowledgeVtAcquire();
     };
     auto renderAtomicFrame = [&](bool renderAheadFrame) {
-      auto timingStart = LoopInstrumentation::Clock::now();
       PresentationTiming presentationTiming{
           .monotonicNsec = monotonicNanoseconds(),
           .sequence = softwarePresentationSequence,
@@ -1005,11 +1111,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       };
       auto const frameTime = std::chrono::steady_clock::now();
       wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
-      timingStart = LoopInstrumentation::Clock::now();
-      wayland.dispatch();
-      loopStats.recordDispatch(timingStart);
-      noteContentSerialChange();
-      timingStart = LoopInstrumentation::Clock::now();
+      auto timingStart = LoopInstrumentation::Clock::now();
       renderCompositorFrame(frameTime, timingStart, presentationTiming, renderAheadFrame);
       acknowledgeVtAcquireAfterFrame();
       forceRender = false;
@@ -1017,6 +1119,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       ++loopStats.loops;
+      diagnostics::recordCpuLoop();
       auto const animationCheckTime = std::chrono::steady_clock::now();
       bool const animationFrameNeeded =
           wayland.hasActiveAnimations() ||
@@ -1059,10 +1162,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool renderReadyUpdated =
           renderReadyWoke && atomicPresenter ? atomicPresenter->updateRenderReady() : false;
       bool const pageFlipCompleted = dispatchAtomicPageFlip();
-      timingStart = LoopInstrumentation::Clock::now();
-      wayland.dispatch();
-      loopStats.recordDispatch(timingStart);
-      noteContentSerialChange();
+      if (waylandWoke) {
+        timingStart = LoopInstrumentation::Clock::now();
+        wayland.dispatch();
+        loopStats.recordDispatch(timingStart);
+        noteContentSerialChange();
+      }
+      maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       if (hadInputActivity) {
         lastInputActivity = SteadyClock::now();
@@ -1081,13 +1187,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         configReloaded = true;
       }
       bool const vtForeground = device->isVtForeground();
-      if (vtForeground && !wasVtForeground) {
+      bool const wasForegroundBeforeCheck = wasVtForeground;
+      if (vtForeground && !wasForegroundBeforeCheck) {
+        diagnostics::crashLog("vt-state foreground=1");
         atomicReadyFrame = {};
         atomicFrameDirty = true;
         handleVtResume();
       }
       wasVtForeground = vtForeground;
       if (!vtForeground) {
+        if (wasForegroundBeforeCheck) diagnostics::crashLog("vt-state foreground=0");
         ++loopStats.vtSleeps;
         std::array<int, 3> vtEventFdStorage{};
         std::span<int const> const vtEventFds = pollFds(vtEventFdStorage);
@@ -1203,10 +1312,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         if (atomicFrameDirty && device->isVtForeground()) {
           renderAtomicFrame(false);
           if (atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip()) {
-            timingStart = LoopInstrumentation::Clock::now();
-            wayland.dispatch();
-            loopStats.recordDispatch(timingStart);
-            noteContentSerialChange();
             scheduleAtomicFrame(atomicReadyFrame);
           }
           loopStats.maybeLog();
@@ -1214,12 +1319,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         }
 
         ++loopStats.idleSkips;
+        diagnostics::recordCpuIdleSkip();
         loopStats.maybeLog();
         continue;
       }
 
       if (!renderNeeded) {
         ++loopStats.idleSkips;
+        diagnostics::recordCpuIdleSkip();
         loopStats.maybeLog();
         continue;
       }
@@ -1272,9 +1379,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
 
     output.hideCursor();
+    diagnostics::crashLog("runtime-stop shouldTerminate=%d running=%d",
+                          device->shouldTerminate() ? 1 : 0,
+                          running.load(std::memory_order_relaxed) ? 1 : 0);
     return 0;
   } catch (std::exception const& e) {
     std::fprintf(stderr, "flux-compositor: %s\n", e.what());
+    diagnostics::crashLog("runtime-exception what=%s", e.what());
+    return 1;
+  } catch (...) {
+    diagnostics::crashLog("runtime-exception unknown");
     return 1;
   }
 }

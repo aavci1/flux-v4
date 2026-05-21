@@ -87,6 +87,7 @@ bool vulkanPresentFencesDisabled() {
 
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
+void updateImageTexturesFor(VulkanImage const* image);
 struct SharedVulkanCore;
 SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface);
 void releaseSharedVulkanCore();
@@ -95,10 +96,20 @@ struct Rgba {
   std::uint8_t r = 0, g = 0, b = 0, a = 255;
 };
 
+VkFormat vkFormatForImagePixelFormat(Image::PixelFormat format) {
+  switch (format) {
+  case Image::PixelFormat::Bgra8888:
+    return VK_FORMAT_B8G8R8A8_UNORM;
+  case Image::PixelFormat::Rgba8888:
+  default:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  }
+}
+
 struct VulkanImage final : Image {
   int width = 0;
   int height = 0;
-  std::vector<Rgba> pixels;
+  std::vector<std::uint8_t> pixels;
   VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
   mutable VkImage image = VK_NULL_HANDLE;
   mutable VmaAllocation allocation = VK_NULL_HANDLE;
@@ -113,7 +124,11 @@ struct VulkanImage final : Image {
   VkDevice owningDevice = VK_NULL_HANDLE;
   VmaAllocator owningAllocator = VK_NULL_HANDLE;
 
-  VulkanImage(int w, int h, std::vector<Rgba> p) : width(w), height(h), pixels(std::move(p)) {}
+  VulkanImage(int w, int h, std::vector<std::uint8_t> p, VkFormat pixelFormat)
+      : width(w),
+        height(h),
+        pixels(std::move(p)),
+        format(pixelFormat == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : pixelFormat) {}
   VulkanImage(VkImage externalImage, VkImageView externalView, VkFormat externalFormat,
               std::uint32_t w, std::uint32_t h)
       : width(static_cast<int>(w)), height(static_cast<int>(h)),
@@ -161,6 +176,27 @@ struct VulkanImage final : Image {
     }
   }
   Size size() const override { return {static_cast<float>(width), static_cast<float>(height)}; }
+  bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void*) override {
+    return updatePixels(rgbaPixels, PixelFormat::Rgba8888, nullptr);
+  }
+  bool updatePixels(std::span<std::uint8_t const> newPixels, PixelFormat pixelFormat, void*) override {
+    if (external || ownsGpuResource || width <= 0 || height <= 0) {
+      return false;
+    }
+    if (format != vkFormatForImagePixelFormat(pixelFormat)) {
+      return false;
+    }
+    std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
+    if (newPixels.size() != expectedSize) {
+      return false;
+    }
+    if (pixels.size() != expectedSize) {
+      pixels.resize(expectedSize);
+    }
+    std::memcpy(pixels.data(), newPixels.data(), expectedSize);
+    updateImageTexturesFor(this);
+    return true;
+  }
 };
 
 struct Buffer {
@@ -1614,6 +1650,11 @@ public:
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
         beginMs = phaseMs(start);
+      } else {
+        auto start = phaseStart();
+        destroyDeferredTextures(false);
+        destroyDeferredBuffers(false);
+        deferredDestroyMs = phaseMs(start);
       }
 
       RenderTargetRecordStats recordStats{};
@@ -2021,6 +2062,23 @@ public:
       return;
     pendingTextureDestroys_.push_back(PendingTextureDestroy{std::move(it->second), kMaxFramesInFlight + 1u});
     imageTextures_.erase(it);
+  }
+
+  void updateImageTexture(VulkanImage const* image) {
+    if (!image || image->external || image->ownsGpuResource) {
+      return;
+    }
+    auto it = imageTextures_.find(image);
+    if (it == imageTextures_.end() || !it->second) {
+      return;
+    }
+    Texture& texture = *it->second;
+    if (texture.width != image->width || texture.height != image->height) {
+      evictImageTexture(image);
+      return;
+    }
+    renderTargetFrameCacheValid_ = false;
+    queueTextureUpload(texture, image->pixels.data());
   }
 
 private:
@@ -2959,7 +3017,12 @@ private:
     res.atlas.width = 2048;
     res.atlas.height = 2048;
     res.atlasPixels.assign(static_cast<std::size_t>(res.atlas.width) * res.atlas.height, Rgba{255, 255, 255, 0});
-    createTexture(res.atlas, res.atlas.width, res.atlas.height, res.atlasPixels.data(), false);
+    createTexture(res.atlas,
+                  res.atlas.width,
+                  res.atlas.height,
+                  VK_FORMAT_R8G8B8A8_UNORM,
+                  res.atlasPixels.data(),
+                  false);
     ensureTextureDescriptor(res.atlas);
   }
 
@@ -4064,7 +4127,7 @@ private:
           transitionImmediate(*tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
         }
       } else {
-        createTexture(*tex, image.width, image.height, image.pixels.data(), false);
+        createTexture(*tex, image.width, image.height, image.format, image.pixels.data(), false);
         queueTextureUpload(*tex, image.pixels.data());
       }
       ensureTextureDescriptor(*tex);
@@ -4107,13 +4170,18 @@ private:
     }
   }
 
-  void createTexture(Texture &tex, int width, int height, Rgba const *pixels, bool uploadNow) {
+  void createTexture(Texture& tex,
+                     int width,
+                     int height,
+                     VkFormat format,
+                     void const* pixels,
+                     bool uploadNow) {
     tex.width = width;
     tex.height = height;
-    tex.format = VK_FORMAT_R8G8B8A8_UNORM;
+    tex.format = format == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : format;
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image.imageType = VK_IMAGE_TYPE_2D;
-    image.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image.format = tex.format;
     image.extent = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
     image.mipLevels = 1;
     image.arrayLayers = 1;
@@ -4128,7 +4196,7 @@ private:
     VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view.image = tex.image;
     view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view.format = VK_FORMAT_R8G8B8A8_UNORM;
+    view.format = tex.format;
     view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     view.subresourceRange.levelCount = 1;
     view.subresourceRange.layerCount = 1;
@@ -4137,12 +4205,19 @@ private:
       uploadTexture(tex, pixels);
   }
 
-  void queueTextureUpload(Texture& tex, Rgba const* pixels) {
+  void queueTextureUpload(Texture& tex, void const* pixels) {
     if (!pixels || tex.width <= 0 || tex.height <= 0)
       return;
+    VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * 4u;
+    for (auto& uploadJob : pendingTextureUploads_) {
+      if (uploadJob.texture == &tex) {
+        ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
+        return;
+      }
+    }
     PendingTextureUpload uploadJob{};
     uploadJob.texture = &tex;
-    VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * sizeof(Rgba);
     ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
     pendingTextureUploads_.push_back(std::move(uploadJob));
@@ -4204,11 +4279,11 @@ private:
     tex.layout = VK_IMAGE_LAYOUT_UNDEFINED;
   }
 
-  void uploadTexture(Texture &tex, Rgba const *pixels) {
+  void uploadTexture(Texture& tex, void const* pixels) {
     if (!pixels || tex.width <= 0 || tex.height <= 0)
       return;
     Buffer staging{};
-    VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * sizeof(Rgba);
+    VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * 4u;
     ensureBuffer(staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     upload(staging, pixels, static_cast<std::size_t>(size));
     VkCommandBuffer cmd = beginImmediate();
@@ -4481,6 +4556,16 @@ void evictImageTexturesFor(VulkanImage const *image) {
   }
 }
 
+void updateImageTexturesFor(VulkanImage const* image) {
+  if (!image)
+    return;
+  std::lock_guard lock(gCanvasRegistryMutex);
+  for (::flux::VulkanCanvas* canvas : gCanvases) {
+    if (canvas)
+      canvas->updateImageTexture(image);
+  }
+}
+
 } // namespace
 
 void configureVulkanCanvasRuntime(std::span<char const* const> requiredInstanceExtensions,
@@ -4701,14 +4786,25 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
 
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t height,
                                              std::span<std::uint8_t const> rgbaPixels, void*) {
-  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * sizeof(Rgba);
-  if (width == 0 || height == 0 || rgbaPixels.size() != expectedSize) {
+  return fromPixels(width, height, rgbaPixels, PixelFormat::Rgba8888, nullptr);
+}
+
+std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
+                                         std::uint32_t height,
+                                         std::span<std::uint8_t const> pixels,
+                                         PixelFormat pixelFormat,
+                                         void*) {
+  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
+  if (width == 0 || height == 0 || pixels.size() != expectedSize) {
     return nullptr;
   }
 
-  std::vector<Rgba> pixels(static_cast<std::size_t>(width) * height);
-  std::memcpy(pixels.data(), rgbaPixels.data(), expectedSize);
-  return std::make_shared<VulkanImage>(static_cast<int>(width), static_cast<int>(height), std::move(pixels));
+  std::vector<std::uint8_t> copy(expectedSize);
+  std::memcpy(copy.data(), pixels.data(), expectedSize);
+  return std::make_shared<VulkanImage>(static_cast<int>(width),
+                                       static_cast<int>(height),
+                                       std::move(copy),
+                                       vkFormatForImagePixelFormat(pixelFormat));
 }
 
 std::shared_ptr<Image> rasterizeToImage(Canvas &canvas, Size logicalSize, RasterizeDrawCallback draw, float dpiScale) {

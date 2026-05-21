@@ -206,8 +206,10 @@ git diff --check
 ## Useful Logs
 
 - `compositor.log`: stderr from the compositor session.
+- `~/.local/state/flux-compositor/crash.log`: durable compositor crash breadcrumbs. The compositor opens this automatically, appends low-volume lifecycle/surface/DMABUF/frame-stall events, and fsyncs each entry so the last events should survive a compositor crash or hard reset. Override with `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`.
 - `FLUX_RESIZE_TRACE=1`: enables resize tracing across the compositor and framework resize paths. By default it also writes `/tmp/flux-resize-trace.log`; override with `FLUX_RESIZE_TRACE_LOG=/path/to/log`.
 - `FLUX_COMPOSITOR_PACING_TRACE=1`: logs atomic page-flip scheduling and completion cadence. By default it writes `/tmp/flux-compositor-pacing.log`; override with `FLUX_COMPOSITOR_PACING_TRACE_LOG=/path/to/log`.
+- CPU trace: enabled by default while compositor CPU work is under investigation. It writes one summary line per second to `~/.local/state/flux-compositor/cpu.log`, including process CPU percent, compositor frame phases, SHM copy bandwidth/time, image upload/create time, and DMABUF import/fallback counts. Disable with `FLUX_COMPOSITOR_CPU_TRACE=0`; override the path with `FLUX_COMPOSITOR_CPU_TRACE_LOG=/path/to/log`.
 
 For resize/vblank investigation, launch the compositor like this:
 
@@ -217,6 +219,15 @@ FLUX_RESIZE_TRACE=1 FLUX_COMPOSITOR_PACING_TRACE=1 ./build-kms-compositor/flux-c
 ```
 
 Expected trace shape while resizing: `configure` lines should be followed by client `commit-match-*` lines within one or two refresh intervals, and `flip-complete` intervals should stay close to the output refresh period with low error.
+
+For compositor CPU attribution, launch with:
+
+```sh
+rm -f ~/.local/state/flux-compositor/cpu.log
+./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
+```
+
+Expected trace shape under load: the `cpu=` value should track the compositor CPU seen in `top`, while `phase_avg_ms`, `shm`, `image`, and `dmabuf` fields identify whether the work is in frame rendering/presentation, SHM copies, texture uploads, or DMABUF import/fallback.
 
 ## Known Bad Signs
 

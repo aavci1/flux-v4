@@ -21,6 +21,11 @@ namespace flux {
 /// Abstract image reference; pixel dimensions drive UV normalization in `Canvas::drawImage`.
 class Image {
 public:
+  enum class PixelFormat : std::uint8_t {
+    Rgba8888,
+    Bgra8888,
+  };
+
   virtual ~Image() = default;
 
   Image(Image const&) = delete;
@@ -28,12 +33,31 @@ public:
 
   virtual Size size() const = 0;
 
+  /// Replace this image with same-size tightly packed 8-bit RGBA pixels.
+  /// Returns false when the backend image is immutable or the size does not match.
+  virtual bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void* gpuDevice = nullptr);
+
+  /// Replace this image with same-size tightly packed 8-bit pixels in `format`.
+  /// Returns false when the backend image is immutable, the format is incompatible,
+  /// or the size does not match.
+  virtual bool updatePixels(std::span<std::uint8_t const> pixels,
+                            PixelFormat format,
+                            void* gpuDevice = nullptr);
+
   /// Create an image from tightly packed 8-bit RGBA pixels.
   /// `rgbaPixels` must contain exactly width * height * 4 bytes.
   /// Metal uses `gpuDevice` as an optional id<MTLDevice>; other backends ignore it.
   static std::shared_ptr<Image> fromRgbaPixels(std::uint32_t width, std::uint32_t height,
                                                std::span<std::uint8_t const> rgbaPixels,
                                                void* gpuDevice = nullptr);
+
+  /// Create an image from tightly packed 8-bit pixels in `format`.
+  /// `pixels` must contain exactly width * height * 4 bytes.
+  static std::shared_ptr<Image> fromPixels(std::uint32_t width,
+                                           std::uint32_t height,
+                                           std::span<std::uint8_t const> pixels,
+                                           PixelFormat format,
+                                           void* gpuDevice = nullptr);
 
 #if FLUX_VULKAN
   struct DmabufPlane {

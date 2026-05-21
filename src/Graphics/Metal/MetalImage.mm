@@ -20,6 +20,31 @@ Size MetalImage::size() const {
   return Size{static_cast<float>(texture_.width), static_cast<float>(texture_.height)};
 }
 
+bool MetalImage::updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void*) {
+  return updatePixels(rgbaPixels, PixelFormat::Rgba8888, nullptr);
+}
+
+bool MetalImage::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void*) {
+  if (!texture_) {
+    return false;
+  }
+  MTLPixelFormat const expectedFormat =
+      format == PixelFormat::Bgra8888 ? MTLPixelFormatBGRA8Unorm : MTLPixelFormatRGBA8Unorm;
+  if (texture_.pixelFormat != expectedFormat) {
+    return false;
+  }
+  Size const imageSize = size();
+  auto const width = static_cast<std::uint32_t>(imageSize.width);
+  auto const height = static_cast<std::uint32_t>(imageSize.height);
+  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
+  if (width == 0 || height == 0 || pixels.size() != expectedSize) {
+    return false;
+  }
+  MTLRegion region = MTLRegionMake2D(0, 0, width, height);
+  [texture_ replaceRegion:region mipmapLevel:0 withBytes:pixels.data() bytesPerRow:width * 4u];
+  return true;
+}
+
 MetalImage const* tryMetalImage(Image const& image) {
   return dynamic_cast<MetalImage const*>(&image);
 }
@@ -34,8 +59,16 @@ std::shared_ptr<Image> Image::fromExternalMetal(void* texture, std::uint32_t wid
 
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t height,
                                              std::span<std::uint8_t const> rgbaPixels, void* gpuDevice) {
+  return fromPixels(width, height, rgbaPixels, PixelFormat::Rgba8888, gpuDevice);
+}
+
+std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
+                                         std::uint32_t height,
+                                         std::span<std::uint8_t const> pixels,
+                                         PixelFormat format,
+                                         void* gpuDevice) {
   std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
-  if (width == 0 || height == 0 || rgbaPixels.size() != expectedSize) {
+  if (width == 0 || height == 0 || pixels.size() != expectedSize) {
     return nullptr;
   }
 
@@ -46,7 +79,9 @@ std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t 
   }
 
   MTLTextureDescriptor* desc =
-      [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+      [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(format == PixelFormat::Bgra8888
+                                                                   ? MTLPixelFormatBGRA8Unorm
+                                                                   : MTLPixelFormatRGBA8Unorm)
                                                          width:width
                                                         height:height
                                                      mipmapped:NO];
@@ -57,7 +92,7 @@ std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t 
   }
 
   MTLRegion region = MTLRegionMake2D(0, 0, width, height);
-  [tex replaceRegion:region mipmapLevel:0 withBytes:rgbaPixels.data() bytesPerRow:width * 4u];
+  [tex replaceRegion:region mipmapLevel:0 withBytes:pixels.data() bytesPerRow:width * 4u];
   return std::make_shared<MetalImage>(tex);
 }
 

@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
 
 #include "Compositor/Chrome/ChromeMetrics.hpp"
+#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
@@ -476,6 +477,11 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyXdgToplevel>);
   focusSurface(xdgSurface->server, xdgSurface->surface, monotonicMilliseconds());
+  diagnostics::crashLog("xdg-toplevel-create surface=%llu total=%zu window=%d,%d",
+                        static_cast<unsigned long long>(xdgSurface->surface->id),
+                        xdgSurface->server->toplevels_.size(),
+                        xdgSurface->surface->windowX,
+                        xdgSurface->surface->windowY);
   sendToplevelConfigureInternal(xdgSurface->server, raw, 0, 0, false);
 }
 
@@ -565,6 +571,11 @@ void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t
                                                    ? popup->xdgSurface->surface->id
                                                    : 0),
                static_cast<unsigned long long>(popup->parentSurface ? popup->parentSurface->id : 0));
+  diagnostics::crashLog("xdg-popup-grab surface=%llu parent=%llu",
+                        static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                            ? popup->xdgSurface->surface->id
+                                                            : 0),
+                        static_cast<unsigned long long>(popup->parentSurface ? popup->parentSurface->id : 0));
 }
 
 void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* positionerResource, std::uint32_t token) {
@@ -630,6 +641,13 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
                raw->configuredY,
                raw->configuredWidth,
                raw->configuredHeight);
+  diagnostics::crashLog("xdg-popup-create surface=%llu parent=%llu geometry=%d,%d %dx%d",
+                        static_cast<unsigned long long>(xdgSurface->surface->id),
+                        static_cast<unsigned long long>(raw->parentSurface ? raw->parentSurface->id : 0),
+                        raw->configuredX,
+                        raw->configuredY,
+                        raw->configuredWidth,
+                        raw->configuredHeight);
   sendPopupConfigure(raw);
 }
 
@@ -684,11 +702,23 @@ void xdgToplevelDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
-  resourceData<WaylandServer::Impl::XdgToplevel>(resource)->title = title ? title : "";
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  toplevel->title = title ? title : "";
+  diagnostics::crashLog("xdg-toplevel-title surface=%llu title=%s",
+                        static_cast<unsigned long long>(toplevel->xdgSurface && toplevel->xdgSurface->surface
+                                                            ? toplevel->xdgSurface->surface->id
+                                                            : 0),
+                        toplevel->title.c_str());
 }
 
 void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
-  resourceData<WaylandServer::Impl::XdgToplevel>(resource)->appId = appId ? appId : "";
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  toplevel->appId = appId ? appId : "";
+  diagnostics::crashLog("xdg-toplevel-appid surface=%llu appId=%s",
+                        static_cast<unsigned long long>(toplevel->xdgSurface && toplevel->xdgSurface->surface
+                                                            ? toplevel->xdgSurface->surface->id
+                                                            : 0),
+                        toplevel->appId.c_str());
 }
 
 void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t serial, std::uint32_t edges) {

@@ -315,9 +315,13 @@ std::vector<std::uint32_t> clientCursorPixelsForHardware(CommittedSurfaceSnapsho
 
   std::vector<std::uint32_t> pixels(count);
   for (std::size_t i = 0; i < count; ++i) {
-    auto const r = rgbaPixels[i * 4u + 0u];
+    auto const r = cursorSurface.pixelFormat == Image::PixelFormat::Bgra8888
+                       ? rgbaPixels[i * 4u + 2u]
+                       : rgbaPixels[i * 4u + 0u];
     auto const g = rgbaPixels[i * 4u + 1u];
-    auto const b = rgbaPixels[i * 4u + 2u];
+    auto const b = cursorSurface.pixelFormat == Image::PixelFormat::Bgra8888
+                       ? rgbaPixels[i * 4u + 0u]
+                       : rgbaPixels[i * 4u + 2u];
     auto const a = rgbaPixels[i * 4u + 3u];
     pixels[i] = premulArgb(a, r, g, b);
   }

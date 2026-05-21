@@ -1,5 +1,7 @@
 #include "Compositor/Surface/SurfaceRenderer.hpp"
 
+#include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Detail/ResizeTrace.hpp"
 
 #include <Flux/Core/Geometry.hpp>
@@ -89,18 +91,43 @@ void updateCachedImage(WaylandServer& wayland,
   cached.id = surface.id;
   cached.serial = surface.serial;
   cached.dmabufBufferId = surface.dmabufBufferId;
-  cached.image.reset();
-  cached.dmabufImported = false;
   std::int32_t const bufferWidth = surface.bufferWidth > 0 ? surface.bufferWidth : surface.width;
   std::int32_t const bufferHeight = surface.bufferHeight > 0 ? surface.bufferHeight : surface.height;
   if (surface.rgbaPixels && !surface.rgbaPixels->empty()) {
+    cached.dmabufBufferId = 0;
+    cached.dmabufImported = false;
+    std::size_t const uploadBytes = surface.rgbaPixels->size();
+    if (cached.image && cached.shmBufferWidth == bufferWidth && cached.shmBufferHeight == bufferHeight &&
+        [&] {
+          auto const updateStart = diagnostics::cpuTraceNow();
+          bool const updated = cached.image->updatePixels(*surface.rgbaPixels,
+                                                          surface.pixelFormat,
+                                                          canvas.gpuDevice());
+          diagnostics::recordSurfaceImageUpload(uploadBytes,
+                                                diagnostics::cpuTraceElapsedMilliseconds(updateStart),
+                                                false);
+          return updated;
+        }()) {
+      return;
+    }
     cached.dmabufImages.clear();
     cached.logged = false;
-    cached.image = Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
-                                         static_cast<std::uint32_t>(bufferHeight),
-                                         *surface.rgbaPixels,
-                                         canvas.gpuDevice());
+    auto const createStart = diagnostics::cpuTraceNow();
+    cached.image = Image::fromPixels(static_cast<std::uint32_t>(bufferWidth),
+                                     static_cast<std::uint32_t>(bufferHeight),
+                                     *surface.rgbaPixels,
+                                     surface.pixelFormat,
+                                     canvas.gpuDevice());
+    diagnostics::recordSurfaceImageUpload(uploadBytes,
+                                          diagnostics::cpuTraceElapsedMilliseconds(createStart),
+                                          true);
+    cached.shmBufferWidth = bufferWidth;
+    cached.shmBufferHeight = bufferHeight;
   } else if (!surface.dmabufPlanes.empty()) {
+    cached.image.reset();
+    cached.dmabufImported = false;
+    cached.shmBufferWidth = 0;
+    cached.shmBufferHeight = 0;
     auto cachedDmabuf = std::find_if(cached.dmabufImages.begin(),
                                      cached.dmabufImages.end(),
                                      [&](CachedClientImage::DmabufEntry const& entry) {
@@ -137,6 +164,7 @@ void updateCachedImage(WaylandServer& wayland,
             .planes = planes,
         });
         cached.dmabufImported = cached.image != nullptr;
+        diagnostics::recordDmabufImport(elapsedMilliseconds(importStart), cached.dmabufImported);
         if (cached.image) {
           detail::resizeTrace("compositor-render",
                               "dmabuf-cache-import surface=%llu buffer=%llu imported=1 elapsed=%.3fms\n",
@@ -145,7 +173,15 @@ void updateCachedImage(WaylandServer& wayland,
                               elapsedMilliseconds(importStart));
         }
       } catch (std::exception const& error) {
+        diagnostics::recordDmabufImport(elapsedMilliseconds(importStart), false);
         std::fprintf(stderr, "flux-compositor: dmabuf Vulkan import failed: %s\n", error.what());
+        diagnostics::crashLog("dmabuf-import-failed surface=%llu buffer=%llu size=%dx%d format=0x%08x error=%s",
+                              static_cast<unsigned long long>(surface.id),
+                              static_cast<unsigned long long>(surface.dmabufBufferId),
+                              bufferWidth,
+                              bufferHeight,
+                              surface.dmabufFormat,
+                              error.what());
       }
     }
     for (int fd : fds) {
@@ -168,11 +204,16 @@ void updateCachedImage(WaylandServer& wayland,
     }
 
     std::vector<std::uint8_t> fallbackPixels;
+    auto const fallbackStart = diagnostics::cpuTraceNow();
     if (wayland.copyDmabufToRgba(surface.id, fallbackPixels)) {
+      std::size_t const fallbackBytes = fallbackPixels.size();
       cached.image = Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
                                            static_cast<std::uint32_t>(bufferHeight),
                                            fallbackPixels,
                                            canvas.gpuDevice());
+      diagnostics::recordDmabufFallbackCopy(fallbackBytes,
+                                            diagnostics::cpuTraceElapsedMilliseconds(fallbackStart),
+                                            cached.image != nullptr);
       if (cached.image && !cached.logged) {
         std::fprintf(stderr, "flux-compositor: displaying readable DMABUF contents\n");
         cached.logged = true;
@@ -192,7 +233,24 @@ void updateCachedImage(WaylandServer& wayland,
           cached.dmabufImages.erase(cached.dmabufImages.begin());
         }
       }
+    } else {
+      diagnostics::recordDmabufFallbackCopy(0,
+                                            diagnostics::cpuTraceElapsedMilliseconds(fallbackStart),
+                                            false);
+      diagnostics::crashLog("dmabuf-fallback-failed surface=%llu buffer=%llu size=%dx%d format=0x%08x",
+                            static_cast<unsigned long long>(surface.id),
+                            static_cast<unsigned long long>(surface.dmabufBufferId),
+                            bufferWidth,
+                            bufferHeight,
+                            surface.dmabufFormat);
     }
+  } else {
+    cached.image.reset();
+    cached.dmabufImages.clear();
+    cached.dmabufBufferId = 0;
+    cached.shmBufferWidth = 0;
+    cached.shmBufferHeight = 0;
+    cached.dmabufImported = false;
   }
 }
 

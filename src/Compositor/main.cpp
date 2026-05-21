@@ -1,4 +1,5 @@
 #include "Compositor/CompositorRuntime.hpp"
+#include "Compositor/Diagnostics/CrashLog.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -22,6 +23,10 @@ void printUsage(char const* argv0) {
 } // namespace
 
 int main(int argc, char** argv) {
+  flux::compositor::diagnostics::initializeCrashLog();
+  flux::compositor::diagnostics::installCrashHandlers();
+  flux::compositor::diagnostics::crashLog("main argc=%d", argc);
+
   flux::compositor::KmsCompositorOptions options{};
   for (int i = 1; i < argc; ++i) {
     std::string_view const arg(argv[i] ? argv[i] : "");
@@ -58,5 +63,7 @@ int main(int argc, char** argv) {
   // Ctrl+C belongs to the focused Wayland client. The compositor exits via
   // SIGTERM or its configured terminate shortcut.
   std::signal(SIGINT, SIG_IGN);
-  return flux::compositor::runKmsCompositor(gRunning, options);
+  int const status = flux::compositor::runKmsCompositor(gRunning, options);
+  flux::compositor::diagnostics::crashLog("main exit status=%d", status);
+  return status;
 }

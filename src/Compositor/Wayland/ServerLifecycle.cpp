@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/Globals/Activation.hpp"
 #include "Compositor/Wayland/Globals/BackgroundEffect.hpp"
 #include "Compositor/Wayland/Globals/Core.hpp"
@@ -152,9 +153,15 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
     file << socketName_ << '\n';
   }
   std::fprintf(stderr, "flux-compositor: Wayland display %s\n", socketName_.c_str());
+  diagnostics::crashLog("wayland-start socket=%s globals=ready", socketName_.c_str());
 }
 
 WaylandServer::Impl::~Impl() {
+  diagnostics::crashLog("wayland-stop socket=%s surfaces=%zu toplevels=%zu dmabufs=%zu",
+                        socketName_.c_str(),
+                        surfaces_.size(),
+                        toplevels_.size(),
+                        dmabufBuffers_.size());
   if (!displayNameFile_.empty()) unlink(displayNameFile_.c_str());
   if (display_) {
     wl_display_destroy_clients(display_);

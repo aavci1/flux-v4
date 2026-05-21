@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
@@ -16,6 +17,16 @@
 namespace flux::compositor {
 
 void WaylandServer::Impl::destroySurface(Surface* surface) {
+  if (surface) {
+    diagnostics::crashLog("surface-destroy surface=%llu role=%u commits=%llu buffer=%dx%d frame=%dx%d",
+                          static_cast<unsigned long long>(surface->id),
+                          static_cast<unsigned int>(surface->role),
+                          static_cast<unsigned long long>(surface->commitCount),
+                          surface->width,
+                          surface->height,
+                          surface->frameWidth,
+                          surface->frameHeight);
+  }
   bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
   removeSurfaceFromFocusOrder(this, surface);
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
@@ -168,6 +179,20 @@ void WaylandServer::Impl::destroyShmPool(ShmPool* pool) {
 }
 
 void WaylandServer::Impl::destroyShmBuffer(ShmBuffer* buffer) {
+  if (buffer && buffer->resource) {
+    for (auto const& surface : surfaces_) {
+      if (!surface) continue;
+      if (surface->pendingBuffer == buffer->resource) {
+        surface->pendingBuffer = nullptr;
+        surface->pendingBufferAttached = false;
+      }
+      if (surface->currentBuffer == buffer->resource) {
+        surface->currentBuffer = nullptr;
+      }
+      auto& releases = surface->pendingBufferReleases;
+      releases.erase(std::remove(releases.begin(), releases.end(), buffer->resource), releases.end());
+    }
+  }
   if (buffer->data) munmap(buffer->data, static_cast<std::size_t>(buffer->size));
   if (buffer->fd >= 0) close(buffer->fd);
   eraseResource(shmBuffers_, buffer);
@@ -182,7 +207,27 @@ void WaylandServer::Impl::destroyDmabufParams(DmabufParams* params) {
 }
 
 void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
+  if (buffer) {
+    diagnostics::crashLog("dmabuf-destroy id=%llu size=%dx%d format=0x%08x",
+                          static_cast<unsigned long long>(buffer->id),
+                          buffer->width,
+                          buffer->height,
+                          buffer->format);
+  }
+  wl_resource* const bufferResource = buffer ? buffer->resource : nullptr;
   for (auto const& surface : surfaces_) {
+    if (!surface) continue;
+    if (bufferResource) {
+      if (surface->pendingBuffer == bufferResource) {
+        surface->pendingBuffer = nullptr;
+        surface->pendingBufferAttached = false;
+      }
+      if (surface->currentBuffer == bufferResource) {
+        surface->currentBuffer = nullptr;
+      }
+      auto& releases = surface->pendingBufferReleases;
+      releases.erase(std::remove(releases.begin(), releases.end(), bufferResource), releases.end());
+    }
     if (surface->dmabufBuffer == buffer) {
       surface->dmabufBuffer = nullptr;
       surface->width = 0;

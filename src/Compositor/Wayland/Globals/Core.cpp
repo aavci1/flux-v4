@@ -1,5 +1,7 @@
 #include "Compositor/Wayland/Globals/Core.hpp"
 
+#include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -240,9 +242,10 @@ WaylandServer::Impl::DmabufBuffer* dmabufBufferFor(WaylandServer::Impl* server, 
   return found == server->dmabufBuffers_.end() ? nullptr : found->get();
 }
 
-bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer,
-                         std::vector<std::uint8_t>& out,
-                         bool& fullyOpaque) {
+bool copyShmBufferToPixels(WaylandServer::Impl::ShmBuffer const& buffer,
+                           std::vector<std::uint8_t>& out,
+                           Image::PixelFormat& pixelFormat,
+                           bool& fullyOpaque) {
   if (!buffer.data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) {
     return false;
   }
@@ -261,20 +264,20 @@ bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer,
   }
 
   out.resize(static_cast<std::size_t>(buffer.width) * static_cast<std::size_t>(buffer.height) * 4u);
+  pixelFormat = Image::PixelFormat::Bgra8888;
+  bool const scanAlpha = buffer.format == WL_SHM_FORMAT_ARGB8888;
   fullyOpaque = true;
   auto const* base = static_cast<std::uint8_t const*>(buffer.data) + buffer.offset;
   for (std::int32_t y = 0; y < buffer.height; ++y) {
     auto const* src = base + static_cast<std::size_t>(y) * static_cast<std::size_t>(buffer.stride);
     auto* dst = out.data() + static_cast<std::size_t>(y) * rowBytes;
-    for (std::int32_t x = 0; x < buffer.width; ++x) {
-      // wl_shm ARGB/XRGB are little-endian words, so memory order is B, G, R, A/X.
-      dst[static_cast<std::size_t>(x) * 4u + 0u] = src[static_cast<std::size_t>(x) * 4u + 2u];
-      dst[static_cast<std::size_t>(x) * 4u + 1u] = src[static_cast<std::size_t>(x) * 4u + 1u];
-      dst[static_cast<std::size_t>(x) * 4u + 2u] = src[static_cast<std::size_t>(x) * 4u + 0u];
-      std::uint8_t const alpha =
-          buffer.format == WL_SHM_FORMAT_XRGB8888 ? 255u : src[static_cast<std::size_t>(x) * 4u + 3u];
-      dst[static_cast<std::size_t>(x) * 4u + 3u] = alpha;
-      fullyOpaque = fullyOpaque && alpha == 255u;
+    // wl_shm ARGB/XRGB are little-endian words, so memory order is B, G, R, A/X.
+    std::memcpy(dst, src, rowBytes);
+    if (scanAlpha && fullyOpaque) {
+      for (std::int32_t x = 0; x < buffer.width; ++x) {
+        fullyOpaque = src[static_cast<std::size_t>(x) * 4u + 3u] == 255u;
+        if (!fullyOpaque) break;
+      }
     }
   }
   return true;
@@ -448,6 +451,49 @@ bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
   return true;
 }
 
+bool pendingViewportStateChanged(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return false;
+  return surface->pendingSourceSet != surface->sourceSet ||
+         surface->pendingSourceX != surface->sourceX ||
+         surface->pendingSourceY != surface->sourceY ||
+         surface->pendingSourceWidth != surface->sourceWidth ||
+         surface->pendingSourceHeight != surface->sourceHeight ||
+         surface->pendingDestinationSet != surface->destinationSet ||
+         surface->pendingDestinationWidth != surface->destinationWidth ||
+         surface->pendingDestinationHeight != surface->destinationHeight;
+}
+
+void traceCrashSurfaceCommit(WaylandServer::Impl::Surface* surface,
+                             char const* kindName,
+                             std::uint32_t kind,
+                             std::uint32_t format) {
+  if (!surface) return;
+  ++surface->commitCount;
+  bool const isStateOnlyCommit = kind == 0u;
+  bool const changed = surface->width != surface->lastLoggedCommitWidth ||
+                       surface->height != surface->lastLoggedCommitHeight ||
+                       (!isStateOnlyCommit && format != surface->lastLoggedCommitFormat);
+  std::uint64_t const sampleInterval = isStateOnlyCommit ? 3000u : 300u;
+  if (!changed && surface->commitCount > 3 && surface->commitCount % sampleInterval != 0) return;
+  surface->lastLoggedCommitWidth = surface->width;
+  surface->lastLoggedCommitHeight = surface->height;
+  surface->lastLoggedCommitKind = kind;
+  if (!isStateOnlyCommit) surface->lastLoggedCommitFormat = format;
+  diagnostics::crashLog("surface-commit surface=%llu role=%u kind=%s commits=%llu buffer=%dx%d "
+                        "frame=%dx%d scale=%d serial=%llu format=0x%08x",
+                        static_cast<unsigned long long>(surface->id),
+                        static_cast<unsigned int>(surface->role),
+                        kindName ? kindName : "unknown",
+                        static_cast<unsigned long long>(surface->commitCount),
+                        surface->width,
+                        surface->height,
+                        surface->frameWidth,
+                        surface->frameHeight,
+                        surface->scale,
+                        static_cast<unsigned long long>(surface->serial),
+                        format);
+}
+
 void bumpSurfaceSerial(WaylandServer::Impl::Surface* surface) {
   if (!surface) return;
   ++surface->serial;
@@ -477,6 +523,11 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   bool const backgroundBlurChanged = applyBackgroundBlurState(surface);
 
   if (!hasBufferAttach) {
+    bool const viewportChanged = pendingViewportStateChanged(surface);
+    if (!viewportChanged && !backgroundBlurChanged && surface->presentationFeedbacks.empty()) {
+      traceCrashSurfaceCommit(surface, "state", 0u, 0u);
+      return;
+    }
     if (surface->pendingSourceSet || surface->pendingDestinationSet) {
       traceResizeSurface("commit-state-defer-viewport", surface);
     } else if (pendingViewportSourceFitsCurrentBuffer(surface)) {
@@ -486,6 +537,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       traceResizeSurface("commit-state", surface);
     }
     if (backgroundBlurChanged) bumpSurfaceSerial(surface);
+    traceCrashSurfaceCommit(surface, "state", 0u, 0u);
     return;
   }
 
@@ -501,9 +553,14 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
       std::vector<std::uint8_t> pixels;
+      Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
       bool fullyOpaque = false;
-      if (copyShmBufferToRgba(*shmBuffer, pixels, fullyOpaque)) {
+      auto const copyStart = diagnostics::cpuTraceNow();
+      if (copyShmBufferToPixels(*shmBuffer, pixels, pixelFormat, fullyOpaque)) {
+        diagnostics::recordShmCopy(pixels.size(),
+                                   diagnostics::cpuTraceElapsedMilliseconds(copyStart));
         surface->rgbaPixels = std::make_shared<std::vector<std::uint8_t> const>(std::move(pixels));
+        surface->pixelFormat = pixelFormat;
         surface->rgbaFullyOpaque = fullyOpaque;
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
@@ -516,11 +573,13 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-shm", surface);
+        traceCrashSurfaceCommit(surface, "shm", 1u, static_cast<std::uint32_t>(shmBuffer->format));
         releaseCurrentBufferImmediately = true;
       }
     } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
       if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
         surface->rgbaPixels.reset();
+        surface->pixelFormat = Image::PixelFormat::Rgba8888;
         surface->rgbaFullyOpaque = false;
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
@@ -533,13 +592,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-dmabuf", surface);
-        std::fprintf(stderr,
-                     "flux-compositor: received %dx%d DMABUF buffer format=0x%08x stride=%u modifier=0x%016llx\n",
-                     dmabufBuffer->width,
-                     dmabufBuffer->height,
-                     dmabufBuffer->format,
-                     dmabufBuffer->planes.front().stride,
-                     static_cast<unsigned long long>(dmabufBuffer->planes.front().modifier));
+        traceCrashSurfaceCommit(surface, "dmabuf", 2u, dmabufBuffer->format);
       }
     } else {
       releaseCurrentBufferImmediately = true;
@@ -547,6 +600,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->currentBuffer);
   } else {
     surface->rgbaPixels.reset();
+    surface->pixelFormat = Image::PixelFormat::Rgba8888;
     surface->rgbaFullyOpaque = false;
     surface->width = 0;
     surface->height = 0;
@@ -557,6 +611,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->dmabufBuffer = nullptr;
     bumpSurfaceSerial(surface);
     traceResizeSurface("commit-empty", surface);
+    traceCrashSurfaceCommit(surface, "empty", 0u, 0u);
   }
 }
 
@@ -668,6 +723,10 @@ wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t
       wl_surface_send_enter(resource, output);
     }
   }
+  diagnostics::crashLog("surface-create surface=%llu version=%u total=%zu",
+                        static_cast<unsigned long long>(raw->id),
+                        std::min(version, 5u),
+                        surfaces_.size());
   return resource;
 }
 

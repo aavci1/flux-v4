@@ -633,6 +633,8 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/CompositorRuntime.cpp
     src/Compositor/Config/AppliedCompositorConfig.cpp
     src/Compositor/Config/CompositorConfig.cpp
+    src/Compositor/Diagnostics/CrashLog.cpp
+    src/Compositor/Diagnostics/CpuTrace.cpp
     src/Compositor/Input/KmsInputBridge.cpp
     src/Compositor/Surface/CommittedSurfacePainter.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp
