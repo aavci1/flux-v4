@@ -52,6 +52,12 @@ void sendToplevelConfigureInternal(WaylandServer::Impl* server,
   wl_array states;
   wl_array_init(&states);
   fillToplevelStates(server, toplevel, &states);
+  if (server &&
+      wl_resource_get_version(toplevel->resource) >= XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION) {
+    std::int32_t const boundsWidth = std::max(1, server->logicalOutputWidth());
+    std::int32_t const boundsHeight = std::max(1, server->logicalOutputHeight());
+    xdg_toplevel_send_configure_bounds(toplevel->resource, boundsWidth, boundsHeight);
+  }
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
   wl_array_release(&states);
   sendCutoutsConfigureIfNeeded(server, toplevel, width, height);

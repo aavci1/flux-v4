@@ -358,6 +358,7 @@ public:
     VkInstance instance = ensureSharedVulkanInstance();
     VkSurfaceKHR surface = Application::instance().platformApp().createVulkanSurface(instance, &nativeSurface_);
     auto canvas = createVulkanCanvas(surface, handle_, Application::instance().textSystem());
+    setVulkanCanvasResizeBoundsHint(canvas.get(), configureBoundsWidth_, configureBoundsHeight_);
     canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
     canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
     canvas_ = canvas.get();
@@ -654,7 +655,16 @@ private:
     auto* self = static_cast<WaylandWindow*>(data);
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, self->handle_});
   }
-  static void topConfigureBounds(void*, xdg_toplevel*, std::int32_t, std::int32_t) {}
+  static void topConfigureBounds(void* data, xdg_toplevel*, std::int32_t width, std::int32_t height) {
+    auto* self = static_cast<WaylandWindow*>(data);
+    self->configureBoundsWidth_ = std::max(0, width);
+    self->configureBoundsHeight_ = std::max(0, height);
+    setVulkanCanvasResizeBoundsHint(self->canvas_, self->configureBoundsWidth_, self->configureBoundsHeight_);
+    if (detail::resizeTraceEnabled()) {
+      detail::resizeTrace("wayland-window", "configure-bounds window=%u size=%dx%d\n",
+                          self->handle_, self->configureBoundsWidth_, self->configureBoundsHeight_);
+    }
+  }
   static void topCapabilities(void*, xdg_toplevel*, wl_array*) {}
 
   static void decorationConfigure(void* data, zxdg_toplevel_decoration_v1*, std::uint32_t mode) {
@@ -1075,6 +1085,8 @@ private:
   std::uint32_t pendingCutoutId_ = 0;
   int pendingWidth_ = 0;
   int pendingHeight_ = 0;
+  int configureBoundsWidth_ = 0;
+  int configureBoundsHeight_ = 0;
   Point pointerPos_{};
   std::uint32_t pointerEnterSerial_ = 0;
   std::uint32_t lastPointerButtonSerial_ = 0;
@@ -1116,7 +1128,7 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
     shared->shm = static_cast<wl_shm*>(wl_registry_bind(registry, name, &wl_shm_interface, 1));
   } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
     shared->wmBase = static_cast<xdg_wm_base*>(
-        wl_registry_bind(registry, name, &xdg_wm_base_interface, 1));
+        wl_registry_bind(registry, name, &xdg_wm_base_interface, std::min(version, 6u)));
     xdg_wm_base_add_listener(shared->wmBase, &sharedWmBaseListener, shared);
   } else if (std::strcmp(interface, wl_seat_interface.name) == 0) {
     shared->seat = static_cast<wl_seat*>(

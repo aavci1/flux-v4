@@ -25,5 +25,6 @@ bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, VulkanFrameRecorder* targe
 void endRecordedOpsCaptureForCanvas(Canvas* canvas);
 bool replayRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 bool replayRecordedLocalOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
+void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight);
 
 } // namespace flux

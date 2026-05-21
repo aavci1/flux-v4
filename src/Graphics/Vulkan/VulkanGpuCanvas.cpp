@@ -970,20 +970,31 @@ public:
     if (targetMode_) {
       return;
     }
+    int const hintedFbW = resizeBoundsHintWidth_ > 0
+                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintWidth_) * dpiScaleX_))
+                              : 0;
+    int const hintedFbH = resizeBoundsHintHeight_ > 0
+                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintHeight_) * dpiScaleY_))
+                              : 0;
+    bool const hasResizeBoundsHint = hintedFbW > fbW || hintedFbH > fbH;
     bool const needsLargerSwapchain =
         !swapchain_ || swapExtent_.width == 0 || swapExtent_.height == 0 ||
         fbW > static_cast<int>(swapExtent_.width) || fbH > static_cast<int>(swapExtent_.height);
     if (needsLargerSwapchain) {
       bool const addHeadroom = swapchain_ != VK_NULL_HANDLE;
-      swapchainTargetWidth_ = fbW + (addHeadroom ? std::max(512, fbW / 2) : 0);
-      swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(512, fbH / 2) : 0);
+      swapchainTargetWidth_ = std::max(fbW + (addHeadroom ? std::max(512, fbW / 2) : 0),
+                                       hintedFbW);
+      swapchainTargetHeight_ = std::max(fbH + (addHeadroom ? std::max(512, fbH / 2) : 0),
+                                        hintedFbH);
       swapchainDirty_ = true;
       if (detail::resizeTraceEnabled()) {
         detail::resizeTrace(
           "vulkan-resize",
-          "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d dirty=1\n",
+          "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d boundsHint=%dx%d dirty=1\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
-                     swapchainTargetWidth_, swapchainTargetHeight_);
+                     swapchainTargetWidth_, swapchainTargetHeight_,
+                     hasResizeBoundsHint ? resizeBoundsHintWidth_ : 0,
+                     hasResizeBoundsHint ? resizeBoundsHintHeight_ : 0);
       }
     } else if (framebufferChanged && detail::resizeTraceEnabled()) {
       detail::resizeTrace(
@@ -1001,6 +1012,11 @@ public:
   }
 
   float dpiScale() const noexcept override { return std::max(dpiScaleX_, dpiScaleY_); }
+
+  void setResizeBoundsHint(int logicalWidth, int logicalHeight) {
+    resizeBoundsHintWidth_ = std::max(0, logicalWidth);
+    resizeBoundsHintHeight_ = std::max(0, logicalHeight);
+  }
 
   void beginRecordedOpsCapture(VulkanFrameRecorder *target) {
     if (!target || captureTarget_) {
@@ -3988,6 +4004,8 @@ private:
   int framebufferHeight_ = 1;
   int swapchainTargetWidth_ = 1;
   int swapchainTargetHeight_ = 1;
+  int resizeBoundsHintWidth_ = 0;
+  int resizeBoundsHintHeight_ = 0;
   float dpiScaleX_ = 1.f;
   float dpiScaleY_ = 1.f;
   Color clearColor_ = Colors::transparent;
@@ -4127,6 +4145,15 @@ bool replayRecordedLocalOpsForCanvas(Canvas *canvas, VulkanFrameRecorder const &
     return vulkan->replayRecordedLocalOps(recorded);
   }
   return false;
+}
+
+void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight) {
+  if (!canvas) {
+    return;
+  }
+  if (auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas)) {
+    vulkan->setResizeBoundsHint(logicalWidth, logicalHeight);
+  }
 }
 
 std::shared_ptr<Image> Image::fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
