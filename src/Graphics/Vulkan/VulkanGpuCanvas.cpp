@@ -387,6 +387,8 @@ struct SharedVulkanCore {
   } resources;
   std::uint32_t refs = 0;
   bool googleDisplayTiming = false;
+  bool swapchainMaintenance1 = false;
+  std::string swapchainMaintenance1Extension;
 };
 
 std::mutex gVulkanCoreMutex;
@@ -590,6 +592,29 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
       if (needsPresent && extensionAvailable(availableExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME)) {
         appendUniqueExtension(deviceExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
       }
+      char const *swapchainMaintenanceExtension = nullptr;
+      bool swapchainMaintenanceFeature = false;
+      if (needsPresent) {
+        if (extensionAvailable(availableExtensions, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)) {
+          swapchainMaintenanceExtension = VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+        } else if (extensionAvailable(availableExtensions, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)) {
+          swapchainMaintenanceExtension = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+        }
+        if (swapchainMaintenanceExtension) {
+          VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchainMaintenance{
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
+          VkPhysicalDeviceVulkan13Features maintenanceVk13{
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+          maintenanceVk13.pNext = &swapchainMaintenance;
+          VkPhysicalDeviceFeatures2 maintenanceFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+          maintenanceFeatures.pNext = &maintenanceVk13;
+          vkGetPhysicalDeviceFeatures2(d, &maintenanceFeatures);
+          swapchainMaintenanceFeature = swapchainMaintenance.swapchainMaintenance1 == VK_TRUE;
+          if (swapchainMaintenanceFeature) {
+            appendUniqueExtension(deviceExtensions, swapchainMaintenanceExtension);
+          }
+        }
+      }
       if (!deviceExtensions.empty()) {
         std::vector<std::string> missingExtensions;
         for (std::string const &extension : deviceExtensions) {
@@ -633,6 +658,12 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
           enabled13.synchronization2 = VK_TRUE;
           enabled13.dynamicRendering = VK_TRUE;
+          VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR enabledSwapchainMaintenance{
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
+          if (swapchainMaintenanceFeature) {
+            enabledSwapchainMaintenance.swapchainMaintenance1 = VK_TRUE;
+            enabled13.pNext = &enabledSwapchainMaintenance;
+          }
           std::vector<char const *> deviceExtensionNames = extensionNamePointers(deviceExtensions);
           VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
           info.pNext = &enabled13;
@@ -643,6 +674,19 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
           gVulkanCore.googleDisplayTiming =
               containsExtension(deviceExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
+          gVulkanCore.swapchainMaintenance1 =
+              swapchainMaintenanceFeature && swapchainMaintenanceExtension != nullptr &&
+              containsExtension(deviceExtensions, swapchainMaintenanceExtension);
+          gVulkanCore.swapchainMaintenance1Extension =
+              gVulkanCore.swapchainMaintenance1 ? swapchainMaintenanceExtension : "";
+          if (needsPresent) {
+            std::fprintf(stderr, "Flux Vulkan: swapchain maintenance1 %s%s%s\n",
+                         gVulkanCore.swapchainMaintenance1 ? "enabled" : "unavailable",
+                         gVulkanCore.swapchainMaintenance1 ? " via " : "",
+                         gVulkanCore.swapchainMaintenance1
+                             ? gVulkanCore.swapchainMaintenance1Extension.c_str()
+                             : "");
+          }
           VmaAllocatorCreateInfo allocatorInfo{};
           allocatorInfo.physicalDevice = gVulkanCore.physical;
           allocatorInfo.device = gVulkanCore.device;
