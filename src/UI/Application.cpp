@@ -9,6 +9,7 @@
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
 #include "UI/MenuRoleDefaults.hpp"
+#include "Detail/ResizeTrace.hpp"
 #include "Debug/PerfCounters.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 
@@ -527,6 +528,13 @@ void Application::requestWindowRedraw(unsigned int handle) {
   }
   bool const alreadyRequested = stateIt->second.redrawRequested;
   stateIt->second.redrawRequested = true;
+  if (detail::resizeTraceEnabled()) {
+    detail::resizeTrace("app-render",
+                        "request window=%u already=%d frameReady=%d\n",
+                        handle,
+                        alreadyRequested ? 1 : 0,
+                        stateIt->second.frameReady ? 1 : 0);
+  }
   if (!alreadyRequested) {
     windowIt->second->platformWindow()->requestAnimationFrame();
   }
@@ -559,6 +567,11 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
       continue;
     }
     if (requireFrameReady && state.redrawRequested && !hasFrameReady) {
+      if (detail::resizeTraceEnabled()) {
+        detail::resizeTrace("app-render",
+                            "defer window=%u requireFrameReady=1 redraw=1 frameReady=0\n",
+                            w->handle());
+      }
       continue;
     }
     bool rendered = false;
@@ -568,11 +581,24 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
         state.frameReady = false;
       }
       try {
+        bool const traceResize = detail::resizeTraceEnabled();
+        auto const renderStart = traceResize ? std::chrono::steady_clock::now()
+                                             : std::chrono::steady_clock::time_point{};
         Canvas& canvas = w->canvas();
         canvas.beginFrame();
         w->render(canvas);
         canvas.present();
         rendered = true;
+        if (traceResize) {
+          auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - renderStart).count();
+          detail::resizeTrace("app-render",
+                              "present window=%u requireFrameReady=%d frameReady=%d elapsed=%.3fms\n",
+                              w->handle(),
+                              requireFrameReady ? 1 : 0,
+                              hasFrameReady ? 1 : 0,
+                              static_cast<double>(elapsed) / 1000.0);
+        }
       } catch (std::exception const& e) {
         std::fprintf(stderr, "Flux Linux render error on window %u: %s\n", w->handle(), e.what());
         d->pendingCloseHandles_.push_back(w->handle());

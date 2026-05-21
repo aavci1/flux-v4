@@ -9,6 +9,9 @@
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 
+#include "Detail/ResizeTrace.hpp"
+
+#include <chrono>
 #include <utility>
 
 namespace flux {
@@ -76,18 +79,47 @@ void MountRoot::unmount(scenegraph::SceneGraph& sceneGraph) {
 }
 
 void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
+  bool const traceResize = detail::resizeTraceEnabled();
+  auto const resizeStart = traceResize ? std::chrono::steady_clock::now()
+                                       : std::chrono::steady_clock::time_point{};
   viewportSize_ = viewportSize;
   layoutDebugAttachSceneGraph(&sceneGraph);
   if (!mounted_) {
     mount(sceneGraph);
+    if (traceResize) {
+      auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - resizeStart).count();
+      detail::resizeTrace("mount-root",
+                          "resize-mounted size=%.0fx%.0f elapsed=%.3fms\n",
+                          viewportSize_.width,
+                          viewportSize_.height,
+                          static_cast<double>(elapsed) / 1000.0);
+    }
     return;
   }
   layoutDebugBeginPass();
+  auto const relayoutStart = traceResize ? std::chrono::steady_clock::now()
+                                         : std::chrono::steady_clock::time_point{};
   if (!sceneGraph.root().relayout(rootConstraints(viewportSize_))) {
     sceneGraph.root().setSize(viewportSize_);
   }
+  std::int64_t relayoutElapsed = 0;
+  if (traceResize) {
+    relayoutElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - relayoutStart).count();
+  }
   layoutDebugDumpRetained(sceneGraph);
   layoutDebugEndPass();
+  if (traceResize) {
+    auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - resizeStart).count();
+    detail::resizeTrace("mount-root",
+                        "resize size=%.0fx%.0f relayout=%.3fms elapsed=%.3fms\n",
+                        viewportSize_.width,
+                        viewportSize_.height,
+                        static_cast<double>(relayoutElapsed) / 1000.0,
+                        static_cast<double>(elapsed) / 1000.0);
+  }
 }
 
 } // namespace flux

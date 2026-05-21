@@ -12,7 +12,10 @@
 #include <Flux/UI/MountRoot.hpp>
 #include <Flux/UI/Overlay.hpp>
 
+#include "Detail/ResizeTrace.hpp"
+
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <vector>
@@ -845,6 +848,9 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
   switch (event.kind) {
   case WindowEvent::Kind::Resize:
     if (d->root && d->window.hasSceneGraph()) {
+      bool const traceResize = detail::resizeTraceEnabled();
+      auto const resizeStart = traceResize ? std::chrono::steady_clock::now()
+                                           : std::chrono::steady_clock::time_point{};
       resetTransientTargets(d->input, d->window);
       Runtime* previous = current_;
       current_ = this;
@@ -852,6 +858,16 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
       current_ = previous;
       d->window.overlayManager().rebuild(event.size, *this);
       d->window.requestRedraw();
+      if (traceResize) {
+        auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - resizeStart).count();
+        detail::resizeTrace("runtime",
+                            "resize window=%u size=%.0fx%.0f elapsed=%.3fms\n",
+                            d->window.handle(),
+                            event.size.width,
+                            event.size.height,
+                            static_cast<double>(elapsed) / 1000.0);
+      }
     }
     break;
   case WindowEvent::Kind::FocusLost:

@@ -883,6 +883,41 @@ TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
   CHECK(sceneGraph.root().size() == flux::Size{320.f, 180.f});
 }
 
+TEST_CASE("MountRoot repeated resize applies each viewport synchronously without remount") {
+  int bodyCalls = 0;
+
+  struct Root {
+    int* bodyCalls = nullptr;
+
+    flux::Element body() const {
+      ++*bodyCalls;
+      return flux::VStack{
+          .children = flux::children(flux::Rectangle{}, flux::Rectangle{}),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  for (int i = 0; i < 64; ++i) {
+    flux::Size const next{200.f + static_cast<float>(i * 3),
+                          100.f + static_cast<float>(i * 2)};
+    root.resize(next, sceneGraph);
+    CHECK(sceneGraph.root().size() == next);
+  }
+
+  CHECK(bodyCalls == 1);
+}
+
 TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   struct Root {
     flux::Element body() const {

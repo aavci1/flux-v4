@@ -22,6 +22,8 @@
 #include "UI/Platform/Window.hpp"
 #include "UI/Platform/WindowFactory.hpp"
 #include "UI/WindowRender.hpp"
+#include "Detail/ResizeTrace.hpp"
+#include <chrono>
 #include <optional>
 
 namespace flux {
@@ -330,6 +332,9 @@ EnvironmentBinding& Window::environmentBindingMut() {
 }
 
 void Window::render(Canvas& canvas) {
+  bool const traceResize = detail::resizeTraceEnabled();
+  auto const renderStart = traceResize ? std::chrono::steady_clock::now()
+                                       : std::chrono::steady_clock::time_point{};
   if (!d->sceneRenderer_) {
     d->sceneRenderer_ = std::make_unique<scenegraph::SceneRenderer>(canvas);
   }
@@ -339,6 +344,16 @@ void Window::render(Canvas& canvas) {
   }
   renderWindowFrame(*d->sceneRenderer_, canvas, d->sceneGraph_, windowSize, d->overlayMgr_, d->runtime_.get(),
                     d->clearColor_, d->textCacheRing_);
+  if (traceResize) {
+    auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - renderStart).count();
+    detail::resizeTrace("window-render",
+                        "window=%u size=%.0fx%.0f elapsed=%.3fms\n",
+                        handle(),
+                        windowSize.width,
+                        windowSize.height,
+                        static_cast<double>(elapsed) / 1000.0);
+  }
 }
 
 } // namespace flux

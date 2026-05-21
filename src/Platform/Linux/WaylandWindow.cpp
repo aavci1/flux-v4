@@ -979,19 +979,23 @@ private:
   void flushDeferredRedraw() {
     if (!resizeRedrawPending_ && !pendingResizeEvent_) return;
     auto const start = std::chrono::steady_clock::now();
+    bool const shouldFlushRedraw = resizeRedrawPending_ || pendingResizeEvent_;
     resizeRedrawPending_ = false;
     if (pendingResizeEvent_) {
       pendingResizeEvent_ = false;
       Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, pendingResizeSize_});
     }
     Application::instance().eventQueue().dispatch();
+    if (shouldFlushRedraw) {
+      Application::instance().flushRedraw();
+    }
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count();
       detail::resizeTrace("wayland-window", 
-          "flush-deferred window=%u size=%.0fx%.0f framePending=%d elapsed=%.3fms\n",
+          "flush-deferred window=%u size=%.0fx%.0f framePending=%d immediate=%d elapsed=%.3fms\n",
           handle_, pendingResizeSize_.width, pendingResizeSize_.height, framePending_ ? 1 : 0,
-          static_cast<double>(elapsed) / 1000.0);
+          shouldFlushRedraw ? 1 : 0, static_cast<double>(elapsed) / 1000.0);
     }
   }
 
