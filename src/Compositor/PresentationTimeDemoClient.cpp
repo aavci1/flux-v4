@@ -29,6 +29,7 @@ struct DemoClient {
   wl_registry* registry = nullptr;
   wl_compositor* compositor = nullptr;
   wl_shm* shm = nullptr;
+  wl_output* output = nullptr;
   wp_presentation* presentation = nullptr;
   struct wp_presentation_feedback* feedback = nullptr;
   wl_surface* surface = nullptr;
@@ -41,6 +42,7 @@ struct DemoClient {
   std::uint32_t clockId = 0;
   bool configured = false;
   bool gotClockId = false;
+  bool gotSyncOutput = false;
   bool gotFeedback = false;
 };
 
@@ -113,7 +115,11 @@ wp_presentation_listener const kPresentationListener{
     .clock_id = presentationClockId,
 };
 
-void feedbackSyncOutput(void*, struct wp_presentation_feedback*, wl_output*) {}
+void feedbackSyncOutput(void* data, struct wp_presentation_feedback*, wl_output*) {
+  auto* client = static_cast<DemoClient*>(data);
+  client->gotSyncOutput = true;
+  std::fprintf(stderr, "flux-compositor-presentation-time-demo: sync_output\n");
+}
 
 void feedbackPresented(void* data,
                        struct wp_presentation_feedback*,
@@ -161,6 +167,9 @@ void registryGlobal(void* data, wl_registry* registry, std::uint32_t name, char 
         wl_registry_bind(registry, name, &wl_compositor_interface, std::min(version, 4u)));
   } else if (std::strcmp(interface, wl_shm_interface.name) == 0) {
     client->shm = static_cast<wl_shm*>(wl_registry_bind(registry, name, &wl_shm_interface, 1));
+  } else if (std::strcmp(interface, wl_output_interface.name) == 0 && !client->output) {
+    client->output = static_cast<wl_output*>(
+        wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 4u)));
   } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
     client->wmBase = static_cast<xdg_wm_base*>(
         wl_registry_bind(registry, name, &xdg_wm_base_interface, std::min(version, 6u)));
@@ -197,6 +206,7 @@ void destroyClient(DemoClient& client) {
   if (client.xdgSurface) xdg_surface_destroy(client.xdgSurface);
   if (client.surface) wl_surface_destroy(client.surface);
   if (client.presentation) wp_presentation_destroy(client.presentation);
+  if (client.output) wl_output_destroy(client.output);
   if (client.wmBase) xdg_wm_base_destroy(client.wmBase);
   if (client.shm) wl_shm_destroy(client.shm);
   if (client.compositor) wl_compositor_destroy(client.compositor);
@@ -225,8 +235,9 @@ int main() {
     if (!flux::compositor::demo::roundtripWithTimeout(client.display, 3000)) {
       throw std::runtime_error("registry roundtrip timed out");
     }
-    if (!client.compositor || !client.shm || !client.wmBase || !client.presentation) {
-      throw std::runtime_error("compositor is missing wl_compositor, wl_shm, xdg_wm_base, or wp_presentation");
+    if (!client.compositor || !client.shm || !client.output || !client.wmBase || !client.presentation) {
+      throw std::runtime_error(
+          "compositor is missing wl_compositor, wl_shm, wl_output, xdg_wm_base, or wp_presentation");
     }
     if (!client.gotClockId && !flux::compositor::demo::roundtripWithTimeout(client.display, 3000)) {
       throw std::runtime_error("presentation clock_id timed out");
@@ -258,6 +269,7 @@ int main() {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
     }
     if (!client.gotFeedback) throw std::runtime_error("presentation feedback timed out");
+    if (!client.gotSyncOutput) throw std::runtime_error("presentation sync_output missing");
 
     destroyClient(client);
     return 0;

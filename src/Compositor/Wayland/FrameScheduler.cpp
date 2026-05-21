@@ -42,6 +42,14 @@ std::uint32_t refreshIntervalMs(std::uint32_t refreshMilliHz) {
   return static_cast<std::uint32_t>(std::clamp<std::uint64_t>(interval, 1ull, 33ull));
 }
 
+wl_resource* outputResourceForClient(WaylandServer::Impl const& server, wl_client* client) {
+  if (!client) return nullptr;
+  auto const found = std::find_if(server.outputResources_.begin(), server.outputResources_.end(), [client](wl_resource* resource) {
+    return resource && wl_resource_get_client(resource) == client;
+  });
+  return found == server.outputResources_.end() ? nullptr : *found;
+}
+
 } // namespace
 
 void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
@@ -147,6 +155,9 @@ void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationT
     surface->presentationFeedbacks.clear();
     for (auto* feedback : feedbacks) {
       if (!feedback || !feedback->resource) continue;
+      if (wl_resource* output = outputResourceForClient(*this, wl_resource_get_client(feedback->resource))) {
+        wp_presentation_feedback_send_sync_output(feedback->resource, output);
+      }
       wp_presentation_feedback_send_presented(feedback->resource,
                                               tvSecHi,
                                               tvSecLo,
