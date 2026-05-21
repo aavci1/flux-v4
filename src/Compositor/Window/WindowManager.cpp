@@ -816,6 +816,7 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationLastConfigureWidth = displayWidth(surface);
   surface->geometryAnimationLastConfigureHeight = displayHeight(surface);
   surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
+  surface->lastResizeInputNsec = flux::detail::resizeTraceTimestampNanoseconds();
   surface->geometryAnimationActive = true;
   if (surface->geometryAnimationStartX == targetX && surface->geometryAnimationStartY == targetY &&
       surface->geometryAnimationStartWidth == targetWidth &&
@@ -1157,6 +1158,7 @@ void updateResize(WaylandServer::Impl* server) {
   if (left) surface->windowX = next.x;
   if (top) surface->windowY = next.y;
   if (next.width == server->resizeLastWidth_ && next.height == server->resizeLastHeight_) return;
+  surface->lastResizeInputNsec = flux::detail::resizeTraceTimestampNanoseconds();
   server->resizeLastWidth_ = next.width;
   server->resizeLastHeight_ = next.height;
   setConfiguredFrameSize(surface, next.width, next.height);

@@ -31,6 +31,7 @@ public:
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
   [[nodiscard]] CommandLauncherSnapshot commandLauncher() const;
+  [[nodiscard]] std::uint64_t contentSerial() const noexcept;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 

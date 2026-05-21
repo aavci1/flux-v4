@@ -82,8 +82,16 @@ struct CommittedSurfaceSnapshot {
   bool minimizeButtonPressed = false;
   bool focused = false;
   bool activeSizing = false;
+  bool pacingSizing = false;
   bool defaultGlassEligible = false;
   std::uint64_t serial = 0;
+  std::uint32_t lastConfigureSerial = 0;
+  std::int32_t lastConfigureWidth = 0;
+  std::int32_t lastConfigureHeight = 0;
+  std::uint64_t lastResizeInputNsec = 0;
+  std::uint64_t lastConfigureSentNsec = 0;
+  std::uint64_t lastConfigureAckNsec = 0;
+  std::uint64_t lastCommitNsec = 0;
   std::vector<RegionRect> backgroundBlurRects;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
   std::uint64_t dmabufBufferId = 0;

@@ -41,8 +41,12 @@ public:
     std::uint64_t sequence = 0;
     std::uint64_t monotonicNsec = 0;
     std::uint64_t scheduledMonotonicNsec = 0;
+    std::uint64_t commitStartMonotonicNsec = 0;
+    std::uint64_t commitReturnMonotonicNsec = 0;
     std::uint64_t renderSubmittedMonotonicNsec = 0;
     std::uint64_t renderReadyMonotonicNsec = 0;
+    std::uint64_t eventDispatchStartMonotonicNsec = 0;
+    std::uint64_t eventDispatchEndMonotonicNsec = 0;
     std::uint64_t commitDurationNsec = 0;
     bool usedRenderFence = false;
   };

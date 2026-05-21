@@ -20,6 +20,7 @@ constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kFallbackConfigureLeadMs = 16;
+constexpr std::uint32_t kGeometryAnimationConfigureLeadFrames = 2;
 constexpr std::uint32_t kPresentationCompletionFallbackMs = 500;
 
 float clamp01(float value) {
@@ -95,7 +96,8 @@ void sendPresentationFeedback(WaylandServer::Impl& server,
 
 void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
   bool sentConfigure = false;
-  std::uint32_t const configureLeadMs = refreshIntervalMs(output_.refreshMilliHz);
+  std::uint32_t const configureLeadMs =
+      refreshIntervalMs(output_.refreshMilliHz) * kGeometryAnimationConfigureLeadFrames;
   for (auto const& surface : surfaces_) {
     if (!surface->geometryAnimationActive) continue;
 

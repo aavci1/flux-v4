@@ -126,8 +126,17 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	      .activeSizing = server->resizeSurface_ == surface ||
 	                      surface->geometryAnimationActive ||
 	                      surface->awaitingConfigureCommit,
+	      .pacingSizing = server->resizeSurface_ == surface ||
+	                      surface->geometryAnimationActive,
 	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !surfaceContentFullyOpaque(surface),
 	      .serial = surface->serial,
+	      .lastConfigureSerial = surface->lastConfigureSerial,
+	      .lastConfigureWidth = surface->lastConfigureWidth,
+	      .lastConfigureHeight = surface->lastConfigureHeight,
+	      .lastResizeInputNsec = surface->lastResizeInputNsec,
+	      .lastConfigureSentNsec = surface->lastConfigureSentNsec,
+	      .lastConfigureAckNsec = surface->lastConfigureAckNsec,
+	      .lastCommitNsec = surface->lastCommitNsec,
 	      .backgroundBlurRects = surface->backgroundBlurRects,
 	      .rgbaPixels = surface->rgbaPixels,
 	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,

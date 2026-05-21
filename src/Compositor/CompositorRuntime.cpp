@@ -468,6 +468,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::int32_t maxFrameWidth = 0;
       std::int32_t maxFrameHeight = 0;
       std::uint32_t maxDmabufFormat = 0;
+      std::uint64_t maxAgeSurfaceId = 0;
+      double maxInputToRenderMs = 0.0;
+      double maxConfigureToRenderMs = 0.0;
+      double maxAckToRenderMs = 0.0;
+      double maxCommitToRenderMs = 0.0;
+      double maxConfigureToCommitMs = 0.0;
     };
     struct AtomicReadyFrame {
       bool ready = false;
@@ -476,10 +482,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::chrono::steady_clock::time_point frameTime{};
       double renderMs = 0.0;
       bool renderedAhead = false;
+      std::uint64_t contentSerial = 0;
       AtomicFrameProfile profile{};
     };
     AtomicReadyFrame atomicReadyFrame{};
     bool atomicReplacementRenderedForPendingFlip = false;
+    AtomicFrameProfile lastAtomicScheduledProfile{};
     constexpr int kIdlePollMs = 250;
     auto pollFds = [&](std::array<int, 3>& storage) {
       std::size_t count = 0;
@@ -520,7 +528,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
               : 0.0;
       tracePacing("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
                   "maxFrame=%dx%d maxDmabuf=0x%08x snapshotFrameTime=%.3fms renderAhead=%d "
-                  "sinceLastFlip=%.3fms gpuWait=%.3fms "
+                  "contentSerial=%llu sinceLastFlip=%.3fms gpuWait=%.3fms "
+                  "ageSurface=%llu inputToRender=%.3fms configureToRender=%.3fms ackToRender=%.3fms "
+                  "commitToRender=%.3fms configureToCommit=%.3fms "
                   "phaseBg=%.3fms phaseSnapshot=%.3fms phaseSurface=%.3fms "
                   "phaseClosing=%.3fms phaseLauncher=%.3fms phaseCursor=%.3fms "
                   "phasePresent=%.3fms phaseTotal=%.3fms\n",
@@ -535,8 +545,15 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame.frameTime)
                       .count(),
                   frame.renderedAhead ? 1 : 0,
+                  static_cast<unsigned long long>(frame.contentSerial),
                   sinceLastFlipMs,
                   gpuWaitMs,
+                  static_cast<unsigned long long>(frame.profile.maxAgeSurfaceId),
+                  frame.profile.maxInputToRenderMs,
+                  frame.profile.maxConfigureToRenderMs,
+                  frame.profile.maxAckToRenderMs,
+                  frame.profile.maxCommitToRenderMs,
+                  frame.profile.maxConfigureToCommitMs,
                   frame.profile.backgroundMs,
                   frame.profile.snapshotMs,
                   frame.profile.surfaceMs,
@@ -547,6 +564,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   frame.profile.totalMs);
       lastAtomicScheduledNsec = scheduledNsec;
       lastAtomicScheduledRenderMs = frame.renderMs;
+      lastAtomicScheduledProfile = frame.profile;
       frame.timing.backendPresentId = presentId;
       frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                        WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
@@ -576,6 +594,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                                1'000'000.0
                                          : 0.0;
       double const completedRenderMs = lastAtomicScheduledRenderMs;
+      AtomicFrameProfile const completedProfile = lastAtomicScheduledProfile;
       std::uint64_t const completedScheduledNsec = lastAtomicScheduledNsec;
       lastAtomicFlipNsec = completionNsec;
       PresentationCompletion completion{
@@ -588,9 +607,40 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                        : 0u,
       };
       wayland.completePresentationFeedbacks({completion}, monotonicMilliseconds());
+      double const renderSubmitToFlipMs =
+          flip->renderSubmittedMonotonicNsec > 0 && completionNsec >= flip->renderSubmittedMonotonicNsec
+              ? static_cast<double>(completionNsec - flip->renderSubmittedMonotonicNsec) / 1'000'000.0
+              : 0.0;
+      double const commitToFlipMs =
+          completedProfile.maxAgeSurfaceId != 0 ? completedProfile.maxCommitToRenderMs + renderSubmitToFlipMs : 0.0;
+      double const inputToFlipMs =
+          completedProfile.maxAgeSurfaceId != 0 ? completedProfile.maxInputToRenderMs + renderSubmitToFlipMs : 0.0;
+      double const configureToFlipMs =
+          completedProfile.maxAgeSurfaceId != 0 ? completedProfile.maxConfigureToRenderMs + renderSubmitToFlipMs
+                                                : 0.0;
+      double const scheduledToCommitStartMs =
+          flip->scheduledMonotonicNsec > 0 && flip->commitStartMonotonicNsec >= flip->scheduledMonotonicNsec
+              ? static_cast<double>(flip->commitStartMonotonicNsec - flip->scheduledMonotonicNsec) / 1'000'000.0
+              : 0.0;
+      double const commitReturnToFlipMs =
+          flip->commitReturnMonotonicNsec > 0 && completionNsec >= flip->commitReturnMonotonicNsec
+              ? static_cast<double>(completionNsec - flip->commitReturnMonotonicNsec) / 1'000'000.0
+              : 0.0;
+      double const flipEventDispatchDelayMs =
+          flip->eventDispatchStartMonotonicNsec > 0 && flip->eventDispatchStartMonotonicNsec >= completionNsec
+              ? static_cast<double>(flip->eventDispatchStartMonotonicNsec - completionNsec) / 1'000'000.0
+              : 0.0;
+      double const flipEventHandleMs =
+          flip->eventDispatchEndMonotonicNsec > 0 &&
+                  flip->eventDispatchEndMonotonicNsec >= flip->eventDispatchStartMonotonicNsec
+              ? static_cast<double>(flip->eventDispatchEndMonotonicNsec - flip->eventDispatchStartMonotonicNsec) /
+                    1'000'000.0
+              : 0.0;
       tracePacing("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
-                  "commit=%.3fms scheduledDelta=%.3fms renderFence=%d\n",
+                  "commit=%.3fms scheduledToCommit=%.3fms commitReturnToFlip=%.3fms "
+                  "eventDelay=%.3fms eventHandle=%.3fms scheduledDelta=%.3fms renderFence=%d "
+                  "ageSurface=%llu commitToFlip=%.3fms inputToFlip=%.3fms configureToFlip=%.3fms\n",
                   flip->presentId,
                   flip->hardware ? 1 : 0,
                   static_cast<unsigned long long>(flip->sequence),
@@ -611,10 +661,18 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                             1'000'000.0
                       : 0.0,
                   static_cast<double>(flip->commitDurationNsec) / 1'000'000.0,
+                  scheduledToCommitStartMs,
+                  commitReturnToFlipMs,
+                  flipEventDispatchDelayMs,
+                  flipEventHandleMs,
                   completedScheduledNsec > 0 && flip->scheduledMonotonicNsec >= completedScheduledNsec
                       ? static_cast<double>(flip->scheduledMonotonicNsec - completedScheduledNsec) / 1'000'000.0
                       : 0.0,
-                  flip->usedRenderFence ? 1 : 0);
+                  flip->usedRenderFence ? 1 : 0,
+                  static_cast<unsigned long long>(completedProfile.maxAgeSurfaceId),
+                  commitToFlipMs,
+                  inputToFlipMs,
+                  configureToFlipMs);
       return true;
     };
     auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
@@ -651,6 +709,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
               .frameTime = frameTime,
               .renderMs = renderMs,
               .renderedAhead = renderAheadFrame,
+              .contentSerial = wayland.contentSerial(),
               .profile = atomicFrameProfile,
           };
         }
@@ -667,8 +726,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool snapPreviewDrawn = false;
       auto committedSurfaces = wayland.committedSurfaces();
       committedSurfaceCount = committedSurfaces.size();
+      std::uint64_t const renderSnapshotNsec = monotonicNanoseconds();
+      auto ageMs = [renderSnapshotNsec](std::uint64_t thenNsec) {
+        return thenNsec > 0 && renderSnapshotNsec >= thenNsec
+                   ? static_cast<double>(renderSnapshotNsec - thenNsec) / 1'000'000.0
+                   : 0.0;
+      };
       for (auto const& surface : committedSurfaces) {
-        if (surface.activeSizing) ++atomicFrameProfile.activeSizingSurfaces;
+        if (surface.pacingSizing) ++atomicFrameProfile.activeSizingSurfaces;
         if (surface.bufferWidth * surface.bufferHeight >
             atomicFrameProfile.maxBufferWidth * atomicFrameProfile.maxBufferHeight) {
           atomicFrameProfile.maxBufferWidth = surface.bufferWidth;
@@ -679,6 +744,50 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             atomicFrameProfile.maxFrameWidth * atomicFrameProfile.maxFrameHeight) {
           atomicFrameProfile.maxFrameWidth = surface.width;
           atomicFrameProfile.maxFrameHeight = surface.height;
+        }
+        if (surface.pacingSizing) {
+          double const commitToRenderMs = ageMs(surface.lastCommitNsec);
+          double const inputToRenderMs = ageMs(surface.lastResizeInputNsec);
+          double const configureToRenderMs = ageMs(surface.lastConfigureSentNsec);
+          double const ackToRenderMs = ageMs(surface.lastConfigureAckNsec);
+          double const configureToCommitMs =
+              surface.lastConfigureSentNsec > 0 && surface.lastCommitNsec >= surface.lastConfigureSentNsec
+                  ? static_cast<double>(surface.lastCommitNsec - surface.lastConfigureSentNsec) / 1'000'000.0
+                  : 0.0;
+          if (commitToRenderMs >= atomicFrameProfile.maxCommitToRenderMs) {
+            atomicFrameProfile.maxAgeSurfaceId = surface.id;
+            atomicFrameProfile.maxCommitToRenderMs = commitToRenderMs;
+          }
+          atomicFrameProfile.maxInputToRenderMs =
+              std::max(atomicFrameProfile.maxInputToRenderMs, inputToRenderMs);
+          atomicFrameProfile.maxConfigureToRenderMs =
+              std::max(atomicFrameProfile.maxConfigureToRenderMs, configureToRenderMs);
+          atomicFrameProfile.maxAckToRenderMs =
+              std::max(atomicFrameProfile.maxAckToRenderMs, ackToRenderMs);
+          atomicFrameProfile.maxConfigureToCommitMs =
+              std::max(atomicFrameProfile.maxConfigureToCommitMs, configureToCommitMs);
+          if (pacingTraceEnabled()) {
+            tracePacing("surface-age surface=%llu frame=%dx%d buffer=%dx%d serial=%llu "
+                        "configureSerial=%u configure=%dx%d inputToRender=%.3fms "
+                        "configureToRender=%.3fms ackToRender=%.3fms commitToRender=%.3fms "
+                        "configureToCommit=%.3fms activeSizing=%d pacingSizing=%d\n",
+                        static_cast<unsigned long long>(surface.id),
+                        surface.width,
+                        surface.height,
+                        surface.bufferWidth,
+                        surface.bufferHeight,
+                        static_cast<unsigned long long>(surface.serial),
+                        surface.lastConfigureSerial,
+                        surface.lastConfigureWidth,
+                        surface.lastConfigureHeight,
+                        inputToRenderMs,
+                        configureToRenderMs,
+                        ackToRenderMs,
+                        commitToRenderMs,
+                        configureToCommitMs,
+                        surface.activeSizing ? 1 : 0,
+                        surface.pacingSizing ? 1 : 0);
+          }
         }
       }
       loopStats.lastSurfaceCount = committedSurfaces.size();
@@ -754,6 +863,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             .frameTime = frameTime,
             .renderMs = renderMs,
             .renderedAhead = renderAheadFrame,
+            .contentSerial = wayland.contentSerial(),
             .profile = atomicFrameProfile,
         };
       } else {
@@ -906,18 +1016,35 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const renderAheadNeeded =
           animationFrameNeeded && atomicPageFlipPending && !atomicReadyFrame.ready;
       bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameBlocked;
+      bool const contentChangedSinceReady =
+          atomicPresenter && atomicReadyFrame.ready && wayland.contentSerial() != atomicReadyFrame.contentSerial;
+      std::uint64_t const replaceCheckNsec = monotonicNanoseconds();
+      std::uint64_t const pendingFlipAgeNsec =
+          atomicPresenter && atomicPageFlipPending && lastAtomicScheduledNsec > 0 &&
+                  replaceCheckNsec >= lastAtomicScheduledNsec
+              ? replaceCheckNsec - lastAtomicScheduledNsec
+              : 0;
+      std::uint64_t const expectedRefreshNsec = refreshNsec(output.refreshRateMilliHz());
+      bool const replacementEarlyEnough =
+          expectedRefreshNsec == 0 || pendingFlipAgeNsec < (expectedRefreshNsec * 2u) / 3u;
+      bool const replaceReadyForPendingCommit =
+          contentChangedSinceReady && waylandWoke && atomicReadyFrame.profile.activeSizingSurfaces > 0 &&
+          replacementEarlyEnough && !atomicReplacementRenderedForPendingFlip;
       bool const replaceAtomicReadyFrame =
           atomicPresenter && atomicPageFlipPending && atomicReadyFrame.ready &&
-          !atomicReadyFrameRenderComplete &&
           !atomicReplacementRenderedForPendingFlip &&
-          (forceRender || nonPageFlipWake || hadInputActivity || configReloaded);
-      bool const renderNeeded = forceRender || animationCanRenderNow || renderAheadNeeded || nonPageFlipWake ||
-                                hadInputActivity || configReloaded;
+          ((!atomicReadyFrameRenderComplete &&
+            (forceRender || nonPageFlipWake || hadInputActivity || configReloaded)) ||
+           replaceReadyForPendingCommit);
+      bool const renderNeeded =
+          forceRender || animationCanRenderNow || renderAheadNeeded || nonPageFlipWake ||
+          hadInputActivity || configReloaded;
       if (pollWoke || renderNeeded) {
         tracePacing("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "
                     "pageFlipDone=%d input=%d nonFlipWake=%d force=%d anim=%d config=%d render=%d "
                     "ready=%d pendingFlip=%d renderReadyFd=%d renderReadyWake=%d renderAheadNeed=%d "
-                    "replaceReady=%d renderReadyNow=%d\n",
+                    "replaceReady=%d replaceCommit=%d replaceAge=%.3fms activeSizing=%zu "
+                    "contentSerial=%llu readySerial=%llu renderReadyNow=%d\n",
                     pollWoke ? 1 : 0,
                     pollResult.inputOrSystem ? 1 : 0,
                     static_cast<unsigned long long>(pollResult.extraReadableMask),
@@ -936,6 +1063,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                     renderReadyWoke ? 1 : 0,
                     renderAheadNeeded ? 1 : 0,
                     replaceAtomicReadyFrame ? 1 : 0,
+                    replaceReadyForPendingCommit ? 1 : 0,
+                    static_cast<double>(pendingFlipAgeNsec) / 1'000'000.0,
+                    atomicReadyFrame.profile.activeSizingSurfaces,
+                    static_cast<unsigned long long>(wayland.contentSerial()),
+                    static_cast<unsigned long long>(atomicReadyFrame.contentSerial),
                     renderReadyUpdated ? 1 : 0);
       }
       if (!renderNeeded) {

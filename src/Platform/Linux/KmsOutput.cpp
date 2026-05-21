@@ -104,7 +104,7 @@ bool forceLinearScanout() {
 
 bool useKmsRenderInFence() {
   char const* value = std::getenv("FLUX_COMPOSITOR_USE_KMS_IN_FENCE");
-  return !value || !*value || std::strcmp(value, "0") != 0;
+  return value && *value && std::strcmp(value, "0") != 0;
 }
 
 std::uint32_t propertyId(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
@@ -409,8 +409,10 @@ public:
           .usedRenderFence = useRenderFence,
       };
       std::uint64_t const commitStartNsec = monotonicNanoseconds();
+      pendingTiming_.commitStartMonotonicNsec = commitStartNsec;
       int const rc = drmModeAtomicCommit(fd_, request, flags, &pendingTiming_);
-      pendingTiming_.commitDurationNsec = monotonicNanoseconds() - commitStartNsec;
+      pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
+      pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
       }
@@ -449,9 +451,11 @@ public:
     drmEventContext eventContext{};
     eventContext.version = DRM_EVENT_CONTEXT_VERSION;
     eventContext.page_flip_handler = pageFlipHandler;
+    pendingTiming_.eventDispatchStartMonotonicNsec = monotonicNanoseconds();
     if (drmHandleEvent(fd_, &eventContext) != 0) {
       throw std::system_error(errno, std::generic_category(), "drmHandleEvent");
     }
+    pendingTiming_.eventDispatchEndMonotonicNsec = monotonicNanoseconds();
     if (!pendingTiming_.hardware) return std::nullopt;
     displayedBuffer_ = pendingBuffer_;
     pendingBuffer_ = -1;
@@ -746,9 +750,11 @@ private:
       drmEventContext eventContext{};
       eventContext.version = DRM_EVENT_CONTEXT_VERSION;
       eventContext.page_flip_handler = pageFlipHandler;
+      pendingTiming_.eventDispatchStartMonotonicNsec = monotonicNanoseconds();
       if (drmHandleEvent(fd_, &eventContext) != 0) {
         throw std::system_error(errno, std::generic_category(), "drmHandleEvent");
       }
+      pendingTiming_.eventDispatchEndMonotonicNsec = monotonicNanoseconds();
       if (pendingTiming_.hardware) {
         displayedBuffer_ = pendingBuffer_;
         pendingBuffer_ = -1;

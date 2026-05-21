@@ -245,6 +245,7 @@ struct WaylandServer::Impl {
   float pointerX_ = 32.f;
   float pointerY_ = 32.f;
   std::uint64_t nextSurfaceId_ = 1;
+  std::uint64_t contentSerial_ = 1;
   std::uint64_t nextActivationTokenId_ = 1;
   std::uint32_t nextConfigureSerial_ = 1;
   std::uint32_t nextInputSerial_ = 1;
@@ -309,6 +310,9 @@ struct WaylandServer::Impl::Surface {
   std::int32_t awaitingConfigureHeight = 0;
   std::uint32_t lastConfigureSerial = 0;
   std::uint64_t lastConfigureSentNsec = 0;
+  std::uint64_t lastConfigureAckNsec = 0;
+  std::uint64_t lastResizeInputNsec = 0;
+  std::uint64_t lastCommitNsec = 0;
   std::int32_t lastConfigureWidth = 0;
   std::int32_t lastConfigureHeight = 0;
   std::int32_t restoreX = 96;

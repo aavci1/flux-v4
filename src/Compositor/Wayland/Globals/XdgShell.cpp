@@ -65,6 +65,7 @@ void sendToplevelConfigureInternal(WaylandServer::Impl* server,
   if (auto* surface = toplevel->xdgSurface->surface) {
     surface->lastConfigureSerial = serial;
     surface->lastConfigureSentNsec = flux::detail::resizeTraceTimestampNanoseconds();
+    surface->lastConfigureAckNsec = 0;
     surface->lastConfigureWidth = width;
     surface->lastConfigureHeight = height;
   }
@@ -632,10 +633,27 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
   sendPopupConfigure(raw);
 }
 
-void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
+void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t serial) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
   if (!xdgSurface) return;
   xdgSurface->configured = true;
+  if (auto* surface = xdgSurface->surface) {
+    std::uint64_t const now = flux::detail::resizeTraceTimestampNanoseconds();
+    if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
+    double const configureToAckMs =
+        surface->lastConfigureSentNsec > 0 && now >= surface->lastConfigureSentNsec
+            ? static_cast<double>(now - surface->lastConfigureSentNsec) / 1'000'000.0
+            : 0.0;
+    flux::detail::resizeTrace("compositor",
+                              "ack-configure surface=%llu serial=%u lastSerial=%u configure=%dx%d "
+                              "configureToAck=%.3fms\n",
+                              static_cast<unsigned long long>(surface->id),
+                              serial,
+                              surface->lastConfigureSerial,
+                              surface->lastConfigureWidth,
+                              surface->lastConfigureHeight,
+                              configureToAckMs);
+  }
 
   auto* toplevel = toplevelForSurface(xdgSurface->server, xdgSurface->surface);
   if (!toplevel || !toplevel->cutouts || !toplevel->cutouts->pendingControlsUnhandled) return;

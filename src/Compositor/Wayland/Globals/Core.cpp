@@ -448,6 +448,14 @@ bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
   return true;
 }
 
+void bumpSurfaceSerial(WaylandServer::Impl::Surface* surface) {
+  if (!surface) return;
+  ++surface->serial;
+  if (surface->server && (surfaceIsTopLevelRenderable(surface) || surfaceIsSubsurface(surface))) {
+    ++surface->server->contentSerial_;
+  }
+}
+
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   bool const hasBufferAttach = surface->pendingBufferAttached;
@@ -477,7 +485,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
-    if (backgroundBlurChanged) ++surface->serial;
+    if (backgroundBlurChanged) bumpSurfaceSerial(surface);
     return;
   }
 
@@ -505,7 +513,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = nullptr;
-        ++surface->serial;
+        bumpSurfaceSerial(surface);
+        surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-shm", surface);
         releaseCurrentBufferImmediately = true;
       }
@@ -521,7 +530,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = dmabufBuffer;
-        ++surface->serial;
+        bumpSurfaceSerial(surface);
+        surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-dmabuf", surface);
         std::fprintf(stderr,
                      "flux-compositor: received %dx%d DMABUF buffer format=0x%08x stride=%u modifier=0x%016llx\n",
@@ -545,7 +555,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->awaitingConfigureWidth = 0;
     surface->awaitingConfigureHeight = 0;
     surface->dmabufBuffer = nullptr;
-    ++surface->serial;
+    bumpSurfaceSerial(surface);
     traceResizeSurface("commit-empty", surface);
   }
 }
@@ -591,7 +601,8 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
   flux::detail::resizeTrace(
       "compositor",
       "%s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d awaiting=%d %dx%d buffer=%dx%d scale=%d "
-      "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu snapped=%d maximized=%d anim=%d\n",
+      "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu configureSerial=%u configure=%dx%d "
+      "snapped=%d maximized=%d anim=%d\n",
       event,
       static_cast<unsigned long long>(surface->id),
       surface->windowX,
@@ -616,6 +627,9 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
       surface->destinationWidth,
       surface->destinationHeight,
       static_cast<unsigned long long>(surface->serial),
+      surface->lastConfigureSerial,
+      surface->lastConfigureWidth,
+      surface->lastConfigureHeight,
       surface->snapped ? 1 : 0,
       surface->maximized ? 1 : 0,
       surface->geometryAnimationActive ? 1 : 0);
