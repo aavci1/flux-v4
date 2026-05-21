@@ -796,7 +796,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::span<int const> const eventFds = pollFds(eventFdStorage);
       bool const atomicFrameAlreadyQueued =
           atomicPresenter && atomicPresenter->hasPendingPageFlip() && atomicReadyFrame.ready;
-      int const pollTimeoutMs = forceRender || (animationFrameNeeded && !atomicFrameAlreadyQueued) ? 0 : kIdlePollMs;
+      bool const atomicFrameAwaitingRender =
+          atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip() &&
+          atomicPresenter->renderReadyFd() >= 0;
+      int const pollTimeoutMs =
+          forceRender || (animationFrameNeeded && !atomicFrameAlreadyQueued && !atomicFrameAwaitingRender)
+              ? 0
+              : kIdlePollMs;
       auto timingStart = LoopInstrumentation::Clock::now();
       auto const pollResult = device->pollEventDetails(pollTimeoutMs, eventFds);
       bool const pollWoke = pollResult.woke;
