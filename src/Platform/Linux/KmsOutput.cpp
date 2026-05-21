@@ -707,7 +707,7 @@ private:
     buffer = {};
   }
 
-  static constexpr std::size_t kBufferCount = 3;
+  static constexpr std::size_t kBufferCount = 4;
 
   int fd_ = -1;
   KmsConnector connector_{};
