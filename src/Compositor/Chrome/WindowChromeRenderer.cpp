@@ -21,7 +21,7 @@ StrokeStyle visibleStroke(Color color, float width) {
 }
 
 Color glassBorderColor() {
-  return Color{0.34f, 0.39f, 0.50f, 0.22f};
+  return Color{1.f, 1.f, 1.f, 0.34f};
 }
 
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {

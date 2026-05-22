@@ -7,10 +7,17 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Graphics/VulkanContext.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/SceneGraph/SceneRenderer.hpp>
+#include <Flux/UI/Detail/RootHolder.hpp>
+#include <Flux/UI/IconName.hpp>
+#include <Flux/UI/MountRoot.hpp>
+#include <Flux/UI/Views/Views.hpp>
 
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Compositor/Protocols/ext-background-effect-v1-client-protocol.h"
+#include "Compositor/Protocols/viewporter-client-protocol.h"
 #include "Compositor/Protocols/wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #include <linux/input-event-codes.h>
@@ -49,6 +56,7 @@ constexpr int kDockCell = 48;
 constexpr int kDockPaddingX = 10;
 constexpr int kDockPaddingY = 8;
 constexpr int kDockGap = 6;
+constexpr int kDockSeparatorWidth = 1;
 std::atomic<bool> gRunning{true};
 
 enum class SurfaceKind { TopBar, Dock, Launcher };
@@ -70,10 +78,12 @@ struct ShellSurface {
   wl_surface* surface = nullptr;
   zwlr_layer_surface_v1* layer = nullptr;
   ext_background_effect_surface_v1* backgroundEffect = nullptr;
+  wp_viewport* viewport = nullptr;
   VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
   std::unique_ptr<flux::Canvas> canvas;
   int width = 1;
   int height = 1;
+  float dpiScale = 1.f;
   bool configured = false;
 };
 
@@ -86,6 +96,7 @@ struct ShellClient {
   wl_keyboard* keyboard = nullptr;
   zwlr_layer_shell_v1* layerShell = nullptr;
   ext_background_effect_manager_v1* backgroundEffectManager = nullptr;
+  wp_viewporter* viewporter = nullptr;
   xkb_context* xkbContext = nullptr;
   xkb_keymap* xkbKeymap = nullptr;
   xkb_state* xkbState = nullptr;
@@ -96,8 +107,18 @@ struct ShellClient {
   bool launcherOpen = false;
   bool launcherCreated = false;
   bool launcherModalClaimed = false;
+  bool redrawTopbar = true;
+  bool redrawDock = true;
+  bool redrawLauncher = true;
   std::string query;
   int highlighted = 0;
+  std::string activeTitle;
+  std::string network = "unknown";
+  std::string wifi = "unknown";
+  std::string bluetooth = "unknown";
+  std::string volume = "unknown";
+  std::string battery = "unknown";
+  float outputScale = 1.f;
   SurfaceKind pointerSurface = SurfaceKind::TopBar;
   double pointerX = -1.0;
   double pointerY = -1.0;
@@ -154,6 +175,78 @@ std::string escapeJson(std::string_view text) {
   return out;
 }
 
+std::string utf8(char32_t codepoint) {
+  std::string out;
+  if (codepoint <= 0x7Fu) {
+    out.push_back(static_cast<char>(codepoint));
+  } else if (codepoint <= 0x7FFu) {
+    out.push_back(static_cast<char>(0xC0u | (codepoint >> 6u)));
+    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+  } else if (codepoint <= 0xFFFFu) {
+    out.push_back(static_cast<char>(0xE0u | (codepoint >> 12u)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+  } else {
+    out.push_back(static_cast<char>(0xF0u | (codepoint >> 18u)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 12u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+  }
+  return out;
+}
+
+std::string icon(flux::IconName name) {
+  return utf8(static_cast<char32_t>(name));
+}
+
+std::string jsonStringField(std::string_view line, std::string_view name, std::size_t start = 0) {
+  std::string const key = "\"" + std::string(name) + "\"";
+  std::size_t pos = line.find(key, start);
+  if (pos == std::string_view::npos) return {};
+  pos = line.find(':', pos + key.size());
+  if (pos == std::string_view::npos) return {};
+  pos = line.find('"', pos + 1u);
+  if (pos == std::string_view::npos) return {};
+  std::string out;
+  bool escaping = false;
+  for (++pos; pos < line.size(); ++pos) {
+    char const c = line[pos];
+    if (escaping) {
+      out.push_back(c);
+      escaping = false;
+    } else if (c == '\\') {
+      escaping = true;
+    } else if (c == '"') {
+      break;
+    } else {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+float jsonFloatField(std::string_view line, std::string_view name, float fallback) {
+  std::string const key = "\"" + std::string(name) + "\"";
+  std::size_t pos = line.find(key);
+  if (pos == std::string_view::npos) return fallback;
+  pos = line.find(':', pos + key.size());
+  if (pos == std::string_view::npos) return fallback;
+  ++pos;
+  while (pos < line.size() && std::isspace(static_cast<unsigned char>(line[pos]))) ++pos;
+  std::size_t end = pos;
+  while (end < line.size() &&
+         (std::isdigit(static_cast<unsigned char>(line[end])) || line[end] == '.' ||
+          line[end] == '-' || line[end] == '+')) {
+    ++end;
+  }
+  if (end == pos) return fallback;
+  std::string value{line.substr(pos, end - pos)};
+  char* parseEnd = nullptr;
+  float parsed = std::strtof(value.c_str(), &parseEnd);
+  if (parseEnd == value.c_str()) return fallback;
+  return std::clamp(parsed, 0.5f, 4.f);
+}
+
 void setupVulkanRuntime() {
   static bool initialized = false;
   if (initialized) return;
@@ -167,9 +260,29 @@ void setupVulkanRuntime() {
   initialized = true;
 }
 
+void updateViewportDestination(ShellClient& client, ShellSurface& surface) {
+  if (!client.viewporter || !surface.surface || surface.width <= 0 || surface.height <= 0) return;
+  if (!surface.viewport) surface.viewport = wp_viewporter_get_viewport(client.viewporter, surface.surface);
+  int const logicalWidth = std::max(1, surface.width);
+  int const logicalHeight = std::max(1, surface.height);
+  int const sourceWidth = std::max(1, static_cast<int>(std::lround(static_cast<float>(logicalWidth) * client.outputScale)));
+  int const sourceHeight = std::max(1, static_cast<int>(std::lround(static_cast<float>(logicalHeight) * client.outputScale)));
+  wp_viewport_set_source(surface.viewport,
+                         wl_fixed_from_int(0),
+                         wl_fixed_from_int(0),
+                         wl_fixed_from_int(sourceWidth),
+                         wl_fixed_from_int(sourceHeight));
+  wp_viewport_set_destination(surface.viewport, logicalWidth, logicalHeight);
+}
+
 void ensureCanvas(ShellClient& client, ShellSurface& surface) {
   if (surface.canvas) {
+    if (std::abs(surface.dpiScale - client.outputScale) > 0.001f) {
+      surface.dpiScale = client.outputScale;
+      surface.canvas->updateDpiScale(surface.dpiScale, surface.dpiScale);
+    }
     surface.canvas->resize(surface.width, surface.height);
+    updateViewportDestination(client, surface);
     return;
   }
   setupVulkanRuntime();
@@ -181,8 +294,10 @@ void ensureCanvas(ShellClient& client, ShellSurface& surface) {
   surface.canvas = flux::createVulkanCanvas(surface.vkSurface,
                                             static_cast<unsigned int>(static_cast<int>(surface.kind) + 100u),
                                             client.textSystem);
-  surface.canvas->updateDpiScale(1.f, 1.f);
+  surface.dpiScale = client.outputScale;
+  surface.canvas->updateDpiScale(surface.dpiScale, surface.dpiScale);
   surface.canvas->resize(surface.width, surface.height);
+  updateViewportDestination(client, surface);
 }
 
 void updateBackgroundEffect(ShellClient& client, ShellSurface& surface) {
@@ -201,6 +316,22 @@ flux::Color rgba(float r, float g, float b, float a) {
   return flux::Color{r, g, b, a};
 }
 
+flux::FillStyle gradient(flux::Color from, flux::Color to) {
+  return flux::FillStyle::linearGradient(from, to, {0.f, 0.f}, {1.f, 1.f});
+}
+
+void requestRender(ShellClient& client, SurfaceKind surface) {
+  if (surface == SurfaceKind::TopBar) client.redrawTopbar = true;
+  else if (surface == SurfaceKind::Dock) client.redrawDock = true;
+  else client.redrawLauncher = true;
+}
+
+void requestRenderAll(ShellClient& client) {
+  client.redrawTopbar = true;
+  client.redrawDock = true;
+  client.redrawLauncher = true;
+}
+
 void drawText(ShellClient& client,
               flux::Canvas& canvas,
               std::string_view value,
@@ -217,38 +348,144 @@ void drawText(ShellClient& client,
   }
 }
 
+flux::TextLayoutOptions centeredText() {
+  return flux::TextLayoutOptions{.horizontalAlignment = flux::HorizontalAlignment::Center,
+                                 .verticalAlignment = flux::VerticalAlignment::Center,
+                                 .wrapping = flux::TextWrapping::NoWrap};
+}
+
+struct TopBarContent {
+  std::string title;
+  std::string timeText;
+
+  flux::Element body() const {
+    flux::Color const text = rgba(1.f, 1.f, 1.f, 1.f);
+    std::vector<flux::Element> statusItems;
+    statusItems.reserve(4);
+    for (flux::IconName name : {flux::IconName::NetworkWifi,
+                                flux::IconName::Bluetooth,
+                                flux::IconName::VolumeUp,
+                                flux::IconName::BatteryFull}) {
+      statusItems.push_back(flux::Text{
+          .text = icon(name),
+          .font = flux::Font{.family = "Material Symbols Rounded", .size = 22.f, .weight = 900.f},
+          .color = text,
+          .horizontalAlignment = flux::HorizontalAlignment::Center,
+          .verticalAlignment = flux::VerticalAlignment::Center,
+      }.size(23.f, 23.f));
+    }
+
+    return flux::HStack{
+        .spacing = 10.f,
+        .alignment = flux::Alignment::Center,
+        .children = flux::children(
+            flux::Text{
+                .text = "λ",
+                .font = flux::Font{.size = 20.f, .weight = 980.f},
+                .color = text,
+                .horizontalAlignment = flux::HorizontalAlignment::Center,
+                .verticalAlignment = flux::VerticalAlignment::Center,
+            }.size(22.f, static_cast<float>(kTopBarHeight)),
+            flux::Text{
+                .text = title,
+                .font = flux::Font{.size = 13.5f, .weight = 920.f},
+                .color = text,
+                .verticalAlignment = flux::VerticalAlignment::Center,
+            }.flex(1.f, 1.f, 0.f),
+            flux::HStack{
+                .spacing = 6.f,
+                .alignment = flux::Alignment::Center,
+                .children = std::move(statusItems),
+            },
+            flux::Text{
+                .text = timeText,
+                .font = flux::Font{.size = 13.5f, .weight = 920.f},
+                .color = text,
+                .horizontalAlignment = flux::HorizontalAlignment::Trailing,
+                .verticalAlignment = flux::VerticalAlignment::Center,
+            }.width(176.f)),
+    }.padding(0.f, 12.f, 0.f, 14.f)
+     .height(static_cast<float>(kTopBarHeight));
+  }
+};
+
 void drawTopbar(ShellClient& client) {
   auto& s = client.topbar;
-  if (!s.configured) return;
+  if (!s.configured || !client.redrawTopbar) return;
+  client.redrawTopbar = false;
   ensureCanvas(client, s);
   updateBackgroundEffect(client, s);
   auto& canvas = *s.canvas;
   canvas.beginFrame();
   canvas.clear(flux::Colors::transparent);
-  flux::Font brand{.size = 18.f, .weight = 700.f};
-  flux::Font menu{.size = 12.5f, .weight = 540.f};
-  drawText(client, canvas, "lambda", brand, rgba(0.06f, 0.16f, 0.42f, 1.f),
-           flux::Rect::sharp(14, 5, 64, 26));
-  float x = 96.f;
-  for (std::string const& item : {"File", "Edit", "View", "Window", "Help"}) {
-    drawText(client, canvas, item, menu, rgba(0.10f, 0.13f, 0.18f, 1.f),
-             flux::Rect::sharp(x, 9, 72, 18));
-    x += static_cast<float>(item.size()) * 8.f + 18.f;
-  }
   char timeText[64]{};
   std::time_t now = std::time(nullptr);
   std::tm local{};
   localtime_r(&now, &local);
   std::strftime(timeText, sizeof(timeText), "%a %d %b, %H:%M", &local);
-  std::string right = std::string("Wi-Fi  Bluetooth  Vol  Battery  ") + timeText;
-  drawText(client, canvas, right, menu, rgba(0.10f, 0.13f, 0.18f, 1.f),
-           flux::Rect::sharp(std::max(220.f, static_cast<float>(s.width) - 350.f), 9, 340, 18));
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<TopBarContent>>(std::in_place,
+                                                             TopBarContent{client.activeTitle, timeText}),
+      client.textSystem,
+      flux::EnvironmentBinding{},
+      flux::Size{static_cast<float>(s.width), static_cast<float>(s.height)},
+      [&client] { requestRender(client, SurfaceKind::TopBar); },
+  };
+  root.mount(sceneGraph);
+  flux::scenegraph::SceneRenderer renderer{canvas};
+  renderer.render(sceneGraph);
   canvas.present();
 }
 
 int dockWidth(ShellClient const& client) {
-  int const count = static_cast<int>(client.dockItems.size());
-  return kDockPaddingX * 2 + count * kDockCell + std::max(0, count - 1) * kDockGap;
+  int width = kDockPaddingX * 2;
+  for (std::size_t i = 0; i < client.dockItems.size(); ++i) {
+    width += client.dockItems[i].kind == "separator" ? kDockSeparatorWidth : kDockCell;
+    if (i + 1 < client.dockItems.size()) width += kDockGap;
+  }
+  return width;
+}
+
+int dockItemWidth(DockItem const& item) {
+  return item.kind == "separator" ? kDockSeparatorWidth : kDockCell;
+}
+
+struct IconPalette {
+  flux::Color from;
+  flux::Color to;
+  flux::Color ink;
+};
+
+IconPalette iconPalette(DockItem const& item) {
+  if (item.kind == "launcher") return {rgba(0.96f, 0.97f, 0.99f, 1.f), rgba(0.80f, 0.84f, 0.92f, 1.f), rgba(0.13f, 0.20f, 0.33f, 1.f)};
+  if (item.appId == "files") return {rgba(0.43f, 0.65f, 1.f, 1.f), rgba(0.16f, 0.50f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
+  if (item.appId == "browser") return {rgba(0.37f, 0.72f, 1.f, 1.f), rgba(0.16f, 0.53f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
+  if (item.appId == "terminal") return {rgba(0.16f, 0.18f, 0.27f, 1.f), rgba(0.05f, 0.07f, 0.14f, 1.f), rgba(0.75f, 0.90f, 1.f, 1.f)};
+  if (item.appId == "settings") return {rgba(0.58f, 0.63f, 0.72f, 1.f), rgba(0.31f, 0.35f, 0.45f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
+  if (item.appId == "calendar") return {rgba(1.f, 1.f, 1.f, 1.f), rgba(0.92f, 0.94f, 0.98f, 1.f), rgba(0.90f, 0.29f, 0.24f, 1.f)};
+  if (item.appId == "mail") return {rgba(0.44f, 0.71f, 1.f, 1.f), rgba(0.16f, 0.53f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
+  if (item.appId == "music") return {rgba(0.79f, 0.50f, 0.90f, 1.f), rgba(0.48f, 0.25f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
+  if (item.kind == "trash") return {rgba(0.80f, 0.84f, 0.89f, 1.f), rgba(0.58f, 0.64f, 0.74f, 1.f), rgba(0.10f, 0.15f, 0.25f, 1.f)};
+  return {rgba(0.96f, 0.97f, 0.99f, 1.f), rgba(0.82f, 0.86f, 0.93f, 1.f), rgba(0.10f, 0.15f, 0.25f, 1.f)};
+}
+
+flux::IconName dockIconName(DockItem const& item) {
+  if (item.kind == "launcher") return flux::IconName::Dashboard;
+  if (item.appId == "files") return flux::IconName::FolderOpen;
+  if (item.appId == "browser") return flux::IconName::Globe;
+  if (item.appId == "terminal") return flux::IconName::Terminal;
+  if (item.appId == "settings") return flux::IconName::Tune;
+  if (item.appId == "calendar") return flux::IconName::CalendarToday;
+  if (item.appId == "mail") return flux::IconName::Mail;
+  if (item.appId == "music") return flux::IconName::LibraryMusic;
+  if (item.kind == "trash") return flux::IconName::DeleteForever;
+  return flux::IconName::Apps;
+}
+
+void drawDockIconGlyph(ShellClient& client, flux::Canvas& canvas, DockItem const& item, flux::Rect iconRect, flux::Color ink) {
+  flux::Font font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f};
+  drawText(client, canvas, icon(dockIconName(item)), font, ink, iconRect, centeredText());
 }
 
 void drawDock(ShellClient& client) {
@@ -256,20 +493,20 @@ void drawDock(ShellClient& client) {
   s.width = dockWidth(client);
   s.height = kDockPaddingY * 2 + kDockCell + 8;
   if (s.layer) zwlr_layer_surface_v1_set_size(s.layer, static_cast<std::uint32_t>(s.width), static_cast<std::uint32_t>(s.height));
-  if (!s.configured) return;
+  if (!s.configured || !client.redrawDock) return;
+  client.redrawDock = false;
   ensureCanvas(client, s);
   updateBackgroundEffect(client, s);
   auto& canvas = *s.canvas;
   canvas.beginFrame();
   canvas.clear(flux::Colors::transparent);
   int x = kDockPaddingX;
-  flux::Font glyph{.size = 18.f, .weight = 700.f};
-  flux::Font labelFont{.size = 10.5f, .weight = 540.f};
+  flux::Font labelFont{.size = 13.f, .weight = 620.f};
   for (auto const& item : client.dockItems) {
     if (item.kind == "separator") {
-      canvas.drawRect(flux::Rect::sharp(static_cast<float>(x + kDockCell / 2), 13, 1, 34),
+      canvas.drawRect(flux::Rect::sharp(static_cast<float>(x), 15, kDockSeparatorWidth, 30),
                       flux::CornerRadius{},
-                      flux::FillStyle::solid(rgba(0.18f, 0.22f, 0.30f, 0.18f)),
+                      flux::FillStyle::solid(rgba(1.f, 1.f, 1.f, 0.30f)),
                       flux::StrokeStyle::none());
     } else {
       bool const hover = client.pointerSurface == SurfaceKind::Dock &&
@@ -277,37 +514,39 @@ void drawDock(ShellClient& client) {
                          client.pointerY >= kDockPaddingY && client.pointerY < kDockPaddingY + kDockCell;
       float const lift = hover ? -5.f : 0.f;
       flux::Rect icon = flux::Rect::sharp(static_cast<float>(x + 4), static_cast<float>(kDockPaddingY + 4) + lift, 40, 40);
+      IconPalette const palette = iconPalette(item);
       canvas.drawRect(icon,
-                      flux::CornerRadius{10.f},
-                      flux::FillStyle::solid(item.focused ? rgba(0.16f, 0.42f, 0.92f, 0.82f)
-                                                          : rgba(0.98f, 0.99f, 1.f, 0.82f)),
-                      flux::StrokeStyle::none());
-      std::string glyphText = item.kind == "launcher" ? "λ" : item.label.substr(0, 1);
-      drawText(client, canvas, glyphText, glyph, item.focused ? rgba(1, 1, 1, 1) : rgba(0.08f, 0.12f, 0.22f, 1),
-               flux::Rect::sharp(static_cast<float>(x + 16), static_cast<float>(kDockPaddingY + 12) + lift, 24, 24));
+                      flux::CornerRadius{11.f},
+                      gradient(palette.from, palette.to),
+                      flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f),
+                      flux::ShadowStyle::none());
+      drawDockIconGlyph(client, canvas, item, icon, palette.ink);
       if (item.running) {
-        canvas.drawCircle({static_cast<float>(x + 24), static_cast<float>(s.height - 8)},
+        canvas.drawCircle({static_cast<float>(x + kDockCell / 2), static_cast<float>(s.height - 7)},
                           2.f,
                           flux::FillStyle::solid(rgba(0.08f, 0.12f, 0.22f, item.focused ? 0.95f : 0.40f)),
                           flux::StrokeStyle::none());
       }
       if (hover) {
-        float const labelW = static_cast<float>(item.label.size()) * 7.f + 14.f;
+        float const labelW = static_cast<float>(item.label.size()) * 8.f + 24.f;
         float const tx = std::clamp(static_cast<float>(x + 24) - labelW * 0.5f, 0.f, static_cast<float>(s.width) - labelW);
-        canvas.drawRect(flux::Rect::sharp(tx, 0, labelW, 20),
-                        flux::CornerRadius{7.f},
+        canvas.drawRect(flux::Rect::sharp(tx, 0, labelW, 27),
+                        flux::CornerRadius{9.f},
                         flux::FillStyle::solid(rgba(0.10f, 0.13f, 0.18f, 0.84f)),
                         flux::StrokeStyle::none());
-        drawText(client, canvas, item.label, labelFont, rgba(1, 1, 1, 1), flux::Rect::sharp(tx + 7, 3, labelW - 14, 14));
+        flux::Path arrow;
+        arrow.moveTo({static_cast<float>(x + 18), 27.f});
+        arrow.lineTo({static_cast<float>(x + 30), 27.f});
+        arrow.lineTo({static_cast<float>(x + 24), 34.f});
+        arrow.close();
+        canvas.drawPath(arrow, flux::FillStyle::solid(rgba(0.10f, 0.13f, 0.18f, 0.84f)), flux::StrokeStyle::none());
+        drawText(client, canvas, item.label, labelFont, rgba(1, 1, 1, 1),
+                 flux::Rect::sharp(tx + 10, 4, labelW - 20, 18), centeredText());
       }
     }
-    x += kDockCell + kDockGap;
+    x += dockItemWidth(item) + kDockGap;
   }
   canvas.present();
-  if (!client.launcherModalClaimed) {
-    client.launcherModalClaimed = true;
-    sendIpc(client, "{\"type\":\"lambda.windowManager.claimCommandLauncherModal\"}");
-  }
 }
 
 std::vector<DockItem> launcherResults(ShellClient const& client) {
@@ -372,7 +611,12 @@ bool launcherPointerInsideContent(ShellClient const& client, std::vector<DockIte
 
 void drawLauncher(ShellClient& client) {
   auto& s = client.launcher;
-  if (!client.launcherOpen || !s.configured) return;
+  if (!client.launcherOpen || !s.configured || !client.redrawLauncher) return;
+  client.redrawLauncher = false;
+  if (!client.launcherModalClaimed) {
+    client.launcherModalClaimed = true;
+    sendIpc(client, "{\"type\":\"lambda.windowManager.claimCommandLauncherModal\"}");
+  }
   ensureCanvas(client, s);
   updateBackgroundEffect(client, s);
   auto& canvas = *s.canvas;
@@ -386,7 +630,7 @@ void drawLauncher(ShellClient& client) {
   canvas.drawRect(flux::Rect::sharp(layout.fieldX, layout.fieldY, layout.fieldW, 48),
                   flux::CornerRadius{14.f},
                   flux::FillStyle::solid(rgba(1, 1, 1, 0.72f)),
-                  flux::StrokeStyle::solid(rgba(1, 1, 1, 0.55f), 1.f),
+                  flux::StrokeStyle::solid(rgba(1, 1, 1, 0.72f), 1.f),
                   flux::ShadowStyle::none());
   flux::Font inputFont{.size = 18.f, .weight = 540.f};
   drawText(client,
@@ -397,7 +641,6 @@ void drawLauncher(ShellClient& client) {
            flux::Rect::sharp(layout.fieldX + 18, layout.fieldY + 12, layout.fieldW - 36, 24));
   auto results = launcherResults(client);
   client.highlighted = results.empty() ? 0 : std::clamp(client.highlighted, 0, static_cast<int>(results.size()) - 1);
-  flux::Font iconFont{.size = 24.f, .weight = 700.f};
   flux::Font tileFont{.size = 12.5f, .weight = 620.f};
   for (std::size_t i = 0; i < results.size(); ++i) {
     int const col = static_cast<int>(i) % layout.columns;
@@ -409,12 +652,17 @@ void drawLauncher(ShellClient& client) {
                     flux::CornerRadius{14.f},
                     flux::FillStyle::solid(active ? rgba(0.18f, 0.40f, 0.86f, 0.82f) : rgba(1, 1, 1, 0.54f)),
                     flux::StrokeStyle::none());
-    drawText(client, canvas, results[i].label.substr(0, 1), iconFont,
-             active ? rgba(1, 1, 1, 1) : rgba(0.08f, 0.12f, 0.22f, 1),
-             flux::Rect::sharp(x + 52, y + 18, 28, 28));
+    flux::Rect icon = flux::Rect::sharp(x + 43, y + 14, 40, 40);
+    IconPalette const palette = iconPalette(results[i]);
+    canvas.drawRect(icon,
+                    flux::CornerRadius{11.f},
+                    active ? gradient(rgba(0.35f, 0.64f, 1.f, 1.f), rgba(0.13f, 0.40f, 0.93f, 1.f))
+                           : gradient(palette.from, palette.to),
+                    flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f));
+    drawDockIconGlyph(client, canvas, results[i], icon, active ? rgba(1.f, 1.f, 1.f, 1.f) : palette.ink);
     drawText(client, canvas, results[i].label, tileFont,
              active ? rgba(1, 1, 1, 1) : rgba(0.08f, 0.12f, 0.22f, 1),
-             flux::Rect::sharp(x + 14, y + 62, layout.tileW - 28, 18));
+             flux::Rect::sharp(x + 14, y + 62, layout.tileW - 28, 18), centeredText());
   }
   canvas.present();
 }
@@ -429,22 +677,26 @@ void renderAll(ShellClient& client) {
 void destroySurface(ShellSurface& surface) {
   SurfaceKind const kind = surface.kind;
   surface.canvas.reset();
+  if (surface.viewport) wp_viewport_destroy(surface.viewport);
   if (surface.backgroundEffect) ext_background_effect_surface_v1_destroy(surface.backgroundEffect);
   if (surface.layer) zwlr_layer_surface_v1_destroy(surface.layer);
-  if (surface.vkSurface != VK_NULL_HANDLE) vkDestroySurfaceKHR(flux::ensureSharedVulkanInstance(), surface.vkSurface, nullptr);
   if (surface.surface) wl_surface_destroy(surface.surface);
   surface = ShellSurface{.kind = kind};
 }
 
 void closeLauncher(ShellClient& client) {
   if (!client.launcherOpen) return;
-  sendIpc(client, "{\"type\":\"lambda.windowManager.releaseCommandLauncherModal\"}");
+  if (client.launcherModalClaimed) sendIpc(client, "{\"type\":\"lambda.windowManager.releaseCommandLauncherModal\"}");
   client.launcherOpen = false;
   client.launcherModalClaimed = false;
   client.query.clear();
   client.highlighted = 0;
-  destroySurface(client.launcher);
-  client.launcher.kind = SurfaceKind::Launcher;
+  if (client.launcher.layer && client.launcher.surface) {
+    zwlr_layer_surface_v1_set_keyboard_interactivity(client.launcher.layer, 0);
+    zwlr_layer_surface_v1_set_size(client.launcher.layer, 1, 1);
+    wl_surface_commit(client.launcher.surface);
+  }
+  requestRender(client, SurfaceKind::Dock);
   wl_display_flush(client.display);
 }
 
@@ -461,6 +713,8 @@ zwlr_layer_surface_v1_listener const kLayerListener{layerConfigure, layerClosed}
 
 void createLayer(ShellClient& client, ShellSurface& surface, std::uint32_t layer, char const* ns) {
   surface.surface = wl_compositor_create_surface(client.compositor);
+  wl_surface_set_buffer_scale(surface.surface, 1);
+  if (client.viewporter) surface.viewport = wp_viewporter_get_viewport(client.viewporter, surface.surface);
   surface.layer = zwlr_layer_shell_v1_get_layer_surface(client.layerShell, surface.surface, nullptr, layer, ns);
   zwlr_layer_surface_v1_add_listener(surface.layer, &kLayerListener, &surface);
 }
@@ -469,10 +723,14 @@ void openLauncher(ShellClient& client) {
   if (client.launcherOpen) return;
   client.launcherOpen = true;
   client.launcherModalClaimed = false;
+  client.redrawLauncher = true;
   client.query.clear();
   client.highlighted = 0;
-  client.launcher = ShellSurface{.kind = SurfaceKind::Launcher};
-  createLayer(client, client.launcher, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "lambda.command-launcher");
+  if (!client.launcherCreated) {
+    client.launcher = ShellSurface{.kind = SurfaceKind::Launcher};
+    createLayer(client, client.launcher, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "lambda.command-launcher");
+    client.launcherCreated = true;
+  }
   zwlr_layer_surface_v1_set_anchor(client.launcher.layer,
                                    ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
                                        ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
@@ -496,12 +754,13 @@ void activateResult(ShellClient& client, DockItem const& item) {
 void handleDockClick(ShellClient& client) {
   int x = kDockPaddingX;
   for (auto const& item : client.dockItems) {
-    if (client.pointerX >= x && client.pointerX < x + kDockCell) {
+    int const width = dockItemWidth(item);
+    if (item.kind != "separator" && client.pointerX >= x && client.pointerX < x + width) {
       if (item.kind == "launcher") openLauncher(client);
       else if (item.kind == "app") activateResult(client, item);
       return;
     }
-    x += kDockCell + kDockGap;
+    x += width + kDockGap;
   }
 }
 
@@ -512,14 +771,16 @@ void pointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface* surface, w
   else client->pointerSurface = SurfaceKind::TopBar;
   client->pointerX = wl_fixed_to_double(sx);
   client->pointerY = wl_fixed_to_double(sy);
-  renderAll(*client);
+  requestRender(*client, client->pointerSurface);
+  if (client->pointerSurface == SurfaceKind::Dock) requestRender(*client, SurfaceKind::Launcher);
 }
 
 void pointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface*) {
   auto* client = static_cast<ShellClient*>(data);
+  SurfaceKind const previous = client->pointerSurface;
   client->pointerX = -1;
   client->pointerY = -1;
-  renderAll(*client);
+  requestRender(*client, previous);
 }
 
 void pointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
@@ -530,9 +791,11 @@ void pointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t sx, wl_fix
     auto results = launcherResults(*client);
     if (auto index = launcherResultAt(*client, results)) {
       client->highlighted = static_cast<int>(*index);
+      requestRender(*client, SurfaceKind::Launcher);
     }
+  } else if (client->pointerSurface == SurfaceKind::Dock) {
+    requestRender(*client, SurfaceKind::Dock);
   }
-  renderAll(*client);
 }
 
 void pointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::uint32_t button, std::uint32_t state) {
@@ -548,7 +811,7 @@ void pointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::u
       closeLauncher(*client);
     }
   }
-  renderAll(*client);
+  requestRender(*client, client->pointerSurface);
 }
 
 void pointerAxis(void*, wl_pointer*, std::uint32_t, std::uint32_t, wl_fixed_t) {}
@@ -588,23 +851,22 @@ void keyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::ui
   }
   if (key == KEY_BACKSPACE) {
     if (!client->query.empty()) client->query.pop_back();
-    renderAll(*client);
+    requestRender(*client, SurfaceKind::Launcher);
     return;
   }
   auto results = launcherResults(*client);
   if (key == KEY_DOWN) {
     if (!results.empty()) client->highlighted = std::min<int>(client->highlighted + 1, static_cast<int>(results.size()) - 1);
-    renderAll(*client);
+    requestRender(*client, SurfaceKind::Launcher);
     return;
   }
   if (key == KEY_UP) {
     client->highlighted = std::max(0, client->highlighted - 1);
-    renderAll(*client);
+    requestRender(*client, SurfaceKind::Launcher);
     return;
   }
   if (key == KEY_ENTER || key == KEY_KPENTER) {
     if (!results.empty()) activateResult(*client, results[std::clamp(client->highlighted, 0, static_cast<int>(results.size()) - 1)]);
-    renderAll(*client);
     return;
   }
   if (!client->xkbState) return;
@@ -614,7 +876,7 @@ void keyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::ui
   if (written > 0 && client->query.size() < 128u) {
     client->query.append(utf8, static_cast<std::size_t>(written));
     client->highlighted = 0;
-    renderAll(*client);
+    requestRender(*client, SurfaceKind::Launcher);
   }
 }
 
@@ -654,6 +916,8 @@ void registryGlobal(void* data, wl_registry* registry, std::uint32_t name, char 
   } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
     client->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
         wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, 1));
+  } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
+    client->viewporter = static_cast<wp_viewporter*>(wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
   }
 }
 
@@ -681,6 +945,7 @@ void applySnapshot(ShellClient& client, std::string_view json) {
     item.running = false;
     item.focused = false;
   }
+  client.activeTitle.clear();
   for (auto& item : client.dockItems) {
     if (item.appId.empty()) continue;
     std::size_t search = 0;
@@ -696,11 +961,28 @@ void applySnapshot(ShellClient& client, std::string_view json) {
         std::size_t const objectEnd = json.find('}', valueEnd);
         item.focused = objectEnd != std::string_view::npos &&
                        json.substr(valueEnd, objectEnd - valueEnd).find("\"focused\":true") != std::string_view::npos;
+        if (item.focused) {
+          client.activeTitle = jsonStringField(json, "title", pos);
+          if (client.activeTitle.empty()) client.activeTitle = item.label;
+        }
         break;
       }
       search = valueEnd + 1u;
     }
   }
+  client.network = jsonStringField(json, "network");
+  client.wifi = jsonStringField(json, "wifi");
+  client.bluetooth = jsonStringField(json, "bluetooth");
+  client.volume = jsonStringField(json, "volume");
+  client.battery = jsonStringField(json, "battery");
+  float const nextScale = jsonFloatField(json, "scale", client.outputScale);
+  if (std::abs(nextScale - client.outputScale) > 0.001f) {
+    client.outputScale = nextScale;
+    for (ShellSurface* surface : {&client.topbar, &client.dock, &client.launcher}) {
+      updateViewportDestination(client, *surface);
+    }
+  }
+  requestRenderAll(client);
 }
 
 void handleIpcLine(ShellClient& client, std::string_view line) {
@@ -792,19 +1074,23 @@ int main() {
           {.fd = wl_display_get_fd(client.display), .events = POLLIN, .revents = 0},
           {.fd = client.ipcFd, .events = POLLIN, .revents = 0},
       };
-      int const timeout = client.launcherOpen ? 33 : 500;
+      int const timeout = 500;
       int const ready = poll(fds, 2, timeout);
       if (ready < 0 && errno == EINTR) continue;
       if (ready < 0) break;
+      if (ready == 0) requestRender(client, SurfaceKind::TopBar);
       if (fds[0].revents) {
         if (wl_display_dispatch(client.display) < 0) break;
       } else {
         wl_display_dispatch_pending(client.display);
       }
       if (fds[1].revents) dispatchIpc(client);
-      if (client.launcherOpen) renderAll(client);
+      renderAll(client);
     }
     closeLauncher(client);
+    destroySurface(client.launcher);
+    destroySurface(client.dock);
+    destroySurface(client.topbar);
     return 0;
   } catch (std::exception const& e) {
     std::fprintf(stderr, "lambda-shell: %s\n", e.what());

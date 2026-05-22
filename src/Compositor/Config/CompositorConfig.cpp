@@ -501,9 +501,9 @@ window_corner_radius = 14
 resize_grip_size = 4
 glass_tint = "#eef4ff99"
 glass_blur_radius = 40
-window_border_color = "#d8dee899"
+window_border_color = "#f8fbffb8"
 window_border_width = 1
-border_line_color = "#141e3c14"
+border_line_color = "#ffffff4d"
 
 [keybindings]
 close = "super+q"

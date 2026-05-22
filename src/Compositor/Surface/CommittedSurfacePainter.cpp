@@ -20,7 +20,7 @@ Color withOpacity(Color color, float opacity) {
 }
 
 Color glassBorderColor() {
-  return Color{0.34f, 0.39f, 0.50f, 0.22f};
+  return Color{1.f, 1.f, 1.f, 0.34f};
 }
 
 float easeOutCubic(float value) {

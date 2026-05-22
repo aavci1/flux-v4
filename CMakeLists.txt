@@ -742,6 +742,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
   add_executable(lambda-shell
     src/Shell/LambdaShell.cpp
     src/Compositor/Protocols/ext-background-effect-v1-protocol.c
+    src/Compositor/Protocols/viewporter-protocol.c
   )
   target_include_directories(lambda-shell PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

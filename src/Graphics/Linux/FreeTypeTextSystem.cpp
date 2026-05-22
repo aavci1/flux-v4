@@ -135,6 +135,7 @@ std::string findFontPath(std::string_view family, float weight, bool italic,
         exeDir / "fonts/MaterialSymbolsRounded.ttf",
         exeDir / "../share" / appName / "fonts/MaterialSymbolsRounded.ttf",
         exeDir / "../share/flux/fonts/MaterialSymbolsRounded.ttf",
+        std::filesystem::current_path() / "resources/fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
     });
