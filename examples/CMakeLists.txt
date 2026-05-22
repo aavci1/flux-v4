@@ -51,6 +51,9 @@ elseif(FLUX_BUILD_LAMBDA_STUDIO)
   message(WARNING "Skipping lambda-studio: vendor/llama.cpp is not available.")
 endif()
 
+flux_add_example(lambda-shell-preview lambda-shell-preview/main.cpp)
+target_link_libraries(lambda-shell-preview PRIVATE lambda-shell-ui)
+
 flux_add_example(layout-demo layout-demo/main.cpp)
 flux_add_example(markdown-formatter-demo markdown-formatter-demo/main.cpp)
 flux_add_example(output-demo output-demo/main.cpp)

@@ -10,15 +10,17 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/UI/IconName.hpp>
 #include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Views/Views.hpp>
 
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Compositor/Protocols/ext-background-effect-v1-client-protocol.h"
 #include "Compositor/Protocols/viewporter-client-protocol.h"
 #include "Compositor/Protocols/wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "Shell/UI/LambdaCommandLauncher.hpp"
+#include "Shell/UI/LambdaDock.hpp"
+#include "Shell/UI/LambdaShellTypes.hpp"
+#include "Shell/UI/LambdaTopBar.hpp"
 
 #include <linux/input-event-codes.h>
 #include <poll.h>
@@ -50,26 +52,11 @@
 
 namespace {
 
-constexpr int kTopBarHeight = 36;
-constexpr int kDockBottom = 12;
-constexpr int kDockCell = 48;
-constexpr int kDockPaddingX = 10;
-constexpr int kDockPaddingY = 8;
-constexpr int kDockGap = 6;
-constexpr int kDockSeparatorWidth = 1;
 std::atomic<bool> gRunning{true};
 
 enum class SurfaceKind { TopBar, Dock, Launcher };
 
-struct DockItem {
-  std::string id;
-  std::string kind;
-  std::string label;
-  std::string appId;
-  bool running = false;
-  bool focused = false;
-  bool disabled = false;
-};
+using DockItem = lambda_shell::DockItem;
 
 struct ShellClient;
 
@@ -173,30 +160,6 @@ std::string escapeJson(std::string_view text) {
     if (static_cast<unsigned char>(c) >= 0x20u) out.push_back(c);
   }
   return out;
-}
-
-std::string utf8(char32_t codepoint) {
-  std::string out;
-  if (codepoint <= 0x7Fu) {
-    out.push_back(static_cast<char>(codepoint));
-  } else if (codepoint <= 0x7FFu) {
-    out.push_back(static_cast<char>(0xC0u | (codepoint >> 6u)));
-    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
-  } else if (codepoint <= 0xFFFFu) {
-    out.push_back(static_cast<char>(0xE0u | (codepoint >> 12u)));
-    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
-    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
-  } else {
-    out.push_back(static_cast<char>(0xF0u | (codepoint >> 18u)));
-    out.push_back(static_cast<char>(0x80u | ((codepoint >> 12u) & 0x3Fu)));
-    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
-    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
-  }
-  return out;
-}
-
-std::string icon(flux::IconName name) {
-  return utf8(static_cast<char32_t>(name));
 }
 
 std::string jsonStringField(std::string_view line, std::string_view name, std::size_t start = 0) {
@@ -312,14 +275,6 @@ void updateBackgroundEffect(ShellClient& client, ShellSurface& surface) {
   wl_region_destroy(region);
 }
 
-flux::Color rgba(float r, float g, float b, float a) {
-  return flux::Color{r, g, b, a};
-}
-
-flux::FillStyle gradient(flux::Color from, flux::Color to) {
-  return flux::FillStyle::linearGradient(from, to, {0.f, 0.f}, {1.f, 1.f});
-}
-
 void requestRender(ShellClient& client, SurfaceKind surface) {
   if (surface == SurfaceKind::TopBar) client.redrawTopbar = true;
   else if (surface == SurfaceKind::Dock) client.redrawDock = true;
@@ -332,75 +287,28 @@ void requestRenderAll(ShellClient& client) {
   client.redrawLauncher = true;
 }
 
-void drawText(ShellClient& client,
-              flux::Canvas& canvas,
-              std::string_view value,
-              flux::Font font,
-              flux::Color color,
-              flux::Rect rect,
-              flux::TextLayoutOptions options = {}) {
-  flux::TextSystem& textSystem = client.textSystem;
-  if (auto layout = textSystem.layout(value, font, color, rect, options)) {
-    canvas.save();
-    canvas.clipRect(rect);
-    canvas.drawTextLayout(*layout, {0.f, 0.f});
-    canvas.restore();
-  }
+void openLauncher(ShellClient& client);
+void closeLauncher(ShellClient& client);
+void activateResult(ShellClient& client, DockItem const& item);
+
+template<typename Component>
+void renderComponent(ShellClient& client,
+                     ShellSurface& surface,
+                     flux::Canvas& canvas,
+                     Component component,
+                     std::function<void()> requestRedraw) {
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Component>>(std::in_place, std::move(component)),
+      client.textSystem,
+      flux::EnvironmentBinding{},
+      flux::Size{static_cast<float>(surface.width), static_cast<float>(surface.height)},
+      std::move(requestRedraw),
+  };
+  root.mount(sceneGraph);
+  flux::scenegraph::SceneRenderer renderer{canvas};
+  renderer.render(sceneGraph);
 }
-
-flux::TextLayoutOptions centeredText() {
-  return flux::TextLayoutOptions{.horizontalAlignment = flux::HorizontalAlignment::Center,
-                                 .verticalAlignment = flux::VerticalAlignment::Center,
-                                 .wrapping = flux::TextWrapping::NoWrap};
-}
-
-struct TopBarContent {
-  std::string title;
-  std::string timeText;
-
-  flux::Element body() const {
-    flux::Color const text = rgba(1.f, 1.f, 1.f, 1.f);
-    std::vector<flux::Element> statusItems;
-    statusItems.reserve(4);
-    for (flux::IconName name : {flux::IconName::NetworkWifi,
-                                flux::IconName::Bluetooth,
-                                flux::IconName::VolumeUp,
-                                flux::IconName::BatteryFull}) {
-      statusItems.push_back(flux::Icon {
-	.name = name,
-	.size = 16.f,
-	.weight = 900.f,
-	.color = text
-      });
-    }
-
-    return flux::HStack{
-        .spacing = 10.f,
-        .alignment = flux::Alignment::Center,
-        .children = flux::children(
-            flux::Text{
-                .text = "λ",
-                .font = flux::Font{.size = 16.f, .weight = 900.f},
-                .color = text,
-                .horizontalAlignment = flux::HorizontalAlignment::Center,
-                .verticalAlignment = flux::VerticalAlignment::Center,
-            }.size(22.f, static_cast<float>(kTopBarHeight)),
-	    flux::Spacer {},
-            flux::HStack{
-                .spacing = 6.f,
-                .alignment = flux::Alignment::Center,
-                .children = std::move(statusItems),
-            },
-            flux::Text{
-                .text = timeText,
-                .font = flux::Font{.size = 16.f, .weight = 900.f},
-                .color = text,
-                .verticalAlignment = flux::VerticalAlignment::Center,
-            }),
-    }.padding(0.f, 12.f, 0.f, 14.f)
-     .height(static_cast<float>(kTopBarHeight));
-  }
-};
 
 void drawTopbar(ShellClient& client) {
   auto& s = client.topbar;
@@ -416,75 +324,26 @@ void drawTopbar(ShellClient& client) {
   std::tm local{};
   localtime_r(&now, &local);
   std::strftime(timeText, sizeof(timeText), "%a %d %b, %H:%M", &local);
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<TopBarContent>>(std::in_place,
-                                                             TopBarContent{client.activeTitle, timeText}),
-      client.textSystem,
-      flux::EnvironmentBinding{},
-      flux::Size{static_cast<float>(s.width), static_cast<float>(s.height)},
-      [&client] { requestRender(client, SurfaceKind::TopBar); },
-  };
-  root.mount(sceneGraph);
-  flux::scenegraph::SceneRenderer renderer{canvas};
-  renderer.render(sceneGraph);
+  renderComponent(client,
+                  s,
+                  canvas,
+                  lambda_shell::LambdaTopBar{lambda_shell::TopBarProps{
+                      .title = client.activeTitle,
+                      .timeText = timeText,
+                      .onOpenLauncher = [&client] { openLauncher(client); },
+                  }},
+                  [&client] { requestRender(client, SurfaceKind::TopBar); });
   canvas.present();
 }
 
 int dockWidth(ShellClient const& client) {
-  int width = kDockPaddingX * 2;
-  for (std::size_t i = 0; i < client.dockItems.size(); ++i) {
-    width += client.dockItems[i].kind == "separator" ? kDockSeparatorWidth : kDockCell;
-    if (i + 1 < client.dockItems.size()) width += kDockGap;
-  }
-  return width;
-}
-
-int dockItemWidth(DockItem const& item) {
-  return item.kind == "separator" ? kDockSeparatorWidth : kDockCell;
-}
-
-struct IconPalette {
-  flux::Color from;
-  flux::Color to;
-  flux::Color ink;
-};
-
-IconPalette iconPalette(DockItem const& item) {
-  if (item.kind == "launcher") return {rgba(0.96f, 0.97f, 0.99f, 1.f), rgba(0.80f, 0.84f, 0.92f, 1.f), rgba(0.13f, 0.20f, 0.33f, 1.f)};
-  if (item.appId == "files") return {rgba(0.43f, 0.65f, 1.f, 1.f), rgba(0.16f, 0.50f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "browser") return {rgba(0.37f, 0.72f, 1.f, 1.f), rgba(0.16f, 0.53f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "terminal") return {rgba(0.16f, 0.18f, 0.27f, 1.f), rgba(0.05f, 0.07f, 0.14f, 1.f), rgba(0.75f, 0.90f, 1.f, 1.f)};
-  if (item.appId == "settings") return {rgba(0.58f, 0.63f, 0.72f, 1.f), rgba(0.31f, 0.35f, 0.45f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "calendar") return {rgba(1.f, 1.f, 1.f, 1.f), rgba(0.92f, 0.94f, 0.98f, 1.f), rgba(0.90f, 0.29f, 0.24f, 1.f)};
-  if (item.appId == "mail") return {rgba(0.44f, 0.71f, 1.f, 1.f), rgba(0.16f, 0.53f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "music") return {rgba(0.79f, 0.50f, 0.90f, 1.f), rgba(0.48f, 0.25f, 1.f, 1.f), rgba(1.f, 1.f, 1.f, 1.f)};
-  if (item.kind == "trash") return {rgba(0.80f, 0.84f, 0.89f, 1.f), rgba(0.58f, 0.64f, 0.74f, 1.f), rgba(0.10f, 0.15f, 0.25f, 1.f)};
-  return {rgba(0.96f, 0.97f, 0.99f, 1.f), rgba(0.82f, 0.86f, 0.93f, 1.f), rgba(0.10f, 0.15f, 0.25f, 1.f)};
-}
-
-flux::IconName dockIconName(DockItem const& item) {
-  if (item.kind == "launcher") return flux::IconName::Dashboard;
-  if (item.appId == "files") return flux::IconName::FolderOpen;
-  if (item.appId == "browser") return flux::IconName::Globe;
-  if (item.appId == "terminal") return flux::IconName::Terminal;
-  if (item.appId == "settings") return flux::IconName::Tune;
-  if (item.appId == "calendar") return flux::IconName::CalendarToday;
-  if (item.appId == "mail") return flux::IconName::Mail;
-  if (item.appId == "music") return flux::IconName::LibraryMusic;
-  if (item.kind == "trash") return flux::IconName::DeleteForever;
-  return flux::IconName::Apps;
-}
-
-void drawDockIconGlyph(ShellClient& client, flux::Canvas& canvas, DockItem const& item, flux::Rect iconRect, flux::Color ink) {
-  flux::Font font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f};
-  drawText(client, canvas, icon(dockIconName(item)), font, ink, iconRect, centeredText());
+  return lambda_shell::dockWidth(client.dockItems);
 }
 
 void drawDock(ShellClient& client) {
   auto& s = client.dock;
   s.width = dockWidth(client);
-  s.height = kDockPaddingY * 2 + kDockCell + 8;
+  s.height = lambda_shell::dockHeight();
   if (s.layer) zwlr_layer_surface_v1_set_size(s.layer, static_cast<std::uint32_t>(s.width), static_cast<std::uint32_t>(s.height));
   if (!s.configured || !client.redrawDock) return;
   client.redrawDock = false;
@@ -493,113 +352,44 @@ void drawDock(ShellClient& client) {
   auto& canvas = *s.canvas;
   canvas.beginFrame();
   canvas.clear(flux::Colors::transparent);
-  int x = kDockPaddingX;
-  flux::Font labelFont{.size = 13.f, .weight = 620.f};
-  for (auto const& item : client.dockItems) {
-    if (item.kind == "separator") {
-      canvas.drawRect(flux::Rect::sharp(static_cast<float>(x), 15, kDockSeparatorWidth, 30),
-                      flux::CornerRadius{},
-                      flux::FillStyle::solid(rgba(1.f, 1.f, 1.f, 0.30f)),
-                      flux::StrokeStyle::none());
-    } else {
-      bool const hover = client.pointerSurface == SurfaceKind::Dock &&
-                         client.pointerX >= x && client.pointerX < x + kDockCell &&
-                         client.pointerY >= kDockPaddingY && client.pointerY < kDockPaddingY + kDockCell;
-      float const lift = hover ? -5.f : 0.f;
-      flux::Rect icon = flux::Rect::sharp(static_cast<float>(x + 4), static_cast<float>(kDockPaddingY + 4) + lift, 40, 40);
-      IconPalette const palette = iconPalette(item);
-      canvas.drawRect(icon,
-                      flux::CornerRadius{11.f},
-                      gradient(palette.from, palette.to),
-                      flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f),
-                      flux::ShadowStyle::none());
-      drawDockIconGlyph(client, canvas, item, icon, palette.ink);
-      if (item.running) {
-        canvas.drawCircle({static_cast<float>(x + kDockCell / 2), static_cast<float>(s.height - 7)},
-                          2.f,
-                          flux::FillStyle::solid(rgba(0.08f, 0.12f, 0.22f, item.focused ? 0.95f : 0.40f)),
-                          flux::StrokeStyle::none());
-      }
-      if (hover) {
-        float const labelW = static_cast<float>(item.label.size()) * 8.f + 24.f;
-        float const tx = std::clamp(static_cast<float>(x + 24) - labelW * 0.5f, 0.f, static_cast<float>(s.width) - labelW);
-        canvas.drawRect(flux::Rect::sharp(tx, 0, labelW, 27),
-                        flux::CornerRadius{9.f},
-                        flux::FillStyle::solid(rgba(0.10f, 0.13f, 0.18f, 0.84f)),
-                        flux::StrokeStyle::none());
-        flux::Path arrow;
-        arrow.moveTo({static_cast<float>(x + 18), 27.f});
-        arrow.lineTo({static_cast<float>(x + 30), 27.f});
-        arrow.lineTo({static_cast<float>(x + 24), 34.f});
-        arrow.close();
-        canvas.drawPath(arrow, flux::FillStyle::solid(rgba(0.10f, 0.13f, 0.18f, 0.84f)), flux::StrokeStyle::none());
-        drawText(client, canvas, item.label, labelFont, rgba(1, 1, 1, 1),
-                 flux::Rect::sharp(tx + 10, 4, labelW - 20, 18), centeredText());
-      }
+  int hoverIndex = -1;
+  if (client.pointerSurface == SurfaceKind::Dock) {
+    if (auto index = lambda_shell::dockItemIndexAt(client.dockItems, client.pointerX, client.pointerY)) {
+      hoverIndex = static_cast<int>(*index);
     }
-    x += dockItemWidth(item) + kDockGap;
   }
+  renderComponent(client,
+                  s,
+                  canvas,
+                  lambda_shell::LambdaDock{lambda_shell::DockProps{
+                      .items = client.dockItems,
+                      .hoverIndex = hoverIndex,
+                      .width = s.width,
+                      .onOpenLauncher = [&client] { openLauncher(client); },
+                      .onActivateItem = [&client](DockItem const& item) { activateResult(client, item); },
+                  }},
+                  [&client] { requestRender(client, SurfaceKind::Dock); });
   canvas.present();
 }
 
 std::vector<DockItem> launcherResults(ShellClient const& client) {
-  std::vector<DockItem> results;
-  std::string q = client.query;
-  std::transform(q.begin(), q.end(), q.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  for (auto const& item : client.dockItems) {
-    if (item.kind != "app") continue;
-    std::string label = item.label;
-    std::transform(label.begin(), label.end(), label.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (q.empty() || label.find(q) != std::string::npos || item.appId.find(q) != std::string::npos) results.push_back(item);
-  }
-  return results;
-}
-
-struct LauncherLayout {
-  float fieldX = 0.f;
-  float fieldY = 80.f;
-  float fieldW = 0.f;
-  int tileW = 126;
-  int tileH = 96;
-  int gap = 12;
-  int columns = 1;
-  int gridW = 0;
-  int startX = 0;
-};
-
-LauncherLayout launcherLayout(ShellSurface const& surface) {
-  LauncherLayout layout;
-  layout.fieldW = std::min(420.f, static_cast<float>(surface.width) - 48.f);
-  layout.fieldX = (static_cast<float>(surface.width) - layout.fieldW) * 0.5f;
-  layout.columns = std::max(1, std::min(4, (surface.width - 80) / (layout.tileW + layout.gap)));
-  layout.gridW = layout.columns * layout.tileW + (layout.columns - 1) * layout.gap;
-  layout.startX = (surface.width - layout.gridW) / 2;
-  return layout;
+  return lambda_shell::launcherResults(client.dockItems, client.query);
 }
 
 std::optional<std::size_t> launcherResultAt(ShellClient const& client, std::vector<DockItem> const& results) {
-  if (!client.launcherOpen || results.empty()) return std::nullopt;
-  LauncherLayout const layout = launcherLayout(client.launcher);
-  double const y = client.pointerY - (layout.fieldY + 76.0);
-  if (y < 0.0) return std::nullopt;
-  int const row = static_cast<int>(y) / (layout.tileH + layout.gap);
-  int const col = (static_cast<int>(client.pointerX) - layout.startX) / (layout.tileW + layout.gap);
-  if (col < 0 || col >= layout.columns) return std::nullopt;
-  int const localX = static_cast<int>(client.pointerX) - layout.startX - col * (layout.tileW + layout.gap);
-  int const localY = static_cast<int>(y) - row * (layout.tileH + layout.gap);
-  if (localX < 0 || localX >= layout.tileW || localY < 0 || localY >= layout.tileH) return std::nullopt;
-  std::size_t const index = static_cast<std::size_t>(row * layout.columns + col);
-  if (index >= results.size()) return std::nullopt;
-  return index;
+  return lambda_shell::launcherResultAt(client.launcher.width,
+                                        client.launcherOpen,
+                                        results,
+                                        client.pointerX,
+                                        client.pointerY);
 }
 
 bool launcherPointerInsideContent(ShellClient const& client, std::vector<DockItem> const& results) {
-  LauncherLayout const layout = launcherLayout(client.launcher);
-  bool const inField = client.pointerX >= layout.fieldX &&
-                       client.pointerX < layout.fieldX + layout.fieldW &&
-                       client.pointerY >= layout.fieldY &&
-                       client.pointerY < layout.fieldY + 48.f;
-  return inField || launcherResultAt(client, results).has_value();
+  return lambda_shell::launcherPointerInsideContent(client.launcher.width,
+                                                    client.launcherOpen,
+                                                    results,
+                                                    client.pointerX,
+                                                    client.pointerY);
 }
 
 void drawLauncher(ShellClient& client) {
@@ -615,48 +405,22 @@ void drawLauncher(ShellClient& client) {
   auto& canvas = *s.canvas;
   canvas.beginFrame();
   canvas.clear(flux::Colors::transparent);
-  canvas.drawRect(flux::Rect::sharp(0, 0, static_cast<float>(s.width), static_cast<float>(s.height)),
-                  flux::CornerRadius{},
-                  flux::FillStyle::solid(rgba(0.03f, 0.05f, 0.10f, 0.26f)),
-                  flux::StrokeStyle::none());
-  LauncherLayout const layout = launcherLayout(s);
-  canvas.drawRect(flux::Rect::sharp(layout.fieldX, layout.fieldY, layout.fieldW, 48),
-                  flux::CornerRadius{14.f},
-                  flux::FillStyle::solid(rgba(1, 1, 1, 0.72f)),
-                  flux::StrokeStyle::solid(rgba(1, 1, 1, 0.72f), 1.f),
-                  flux::ShadowStyle::none());
-  flux::Font inputFont{.size = 18.f, .weight = 540.f};
-  drawText(client,
-           canvas,
-           client.query.empty() ? "Command" : client.query,
-           inputFont,
-           client.query.empty() ? rgba(0.32f, 0.34f, 0.40f, 1) : rgba(0.05f, 0.08f, 0.14f, 1),
-           flux::Rect::sharp(layout.fieldX + 18, layout.fieldY + 12, layout.fieldW - 36, 24));
   auto results = launcherResults(client);
   client.highlighted = results.empty() ? 0 : std::clamp(client.highlighted, 0, static_cast<int>(results.size()) - 1);
-  flux::Font tileFont{.size = 12.5f, .weight = 620.f};
-  for (std::size_t i = 0; i < results.size(); ++i) {
-    int const col = static_cast<int>(i) % layout.columns;
-    int const row = static_cast<int>(i) / layout.columns;
-    float const x = static_cast<float>(layout.startX + col * (layout.tileW + layout.gap));
-    float const y = layout.fieldY + 76.f + static_cast<float>(row * (layout.tileH + layout.gap));
-    bool const active = i == static_cast<std::size_t>(client.highlighted);
-    canvas.drawRect(flux::Rect::sharp(x, y, layout.tileW, layout.tileH),
-                    flux::CornerRadius{14.f},
-                    flux::FillStyle::solid(active ? rgba(0.18f, 0.40f, 0.86f, 0.82f) : rgba(1, 1, 1, 0.54f)),
-                    flux::StrokeStyle::none());
-    flux::Rect icon = flux::Rect::sharp(x + 43, y + 14, 40, 40);
-    IconPalette const palette = iconPalette(results[i]);
-    canvas.drawRect(icon,
-                    flux::CornerRadius{11.f},
-                    active ? gradient(rgba(0.35f, 0.64f, 1.f, 1.f), rgba(0.13f, 0.40f, 0.93f, 1.f))
-                           : gradient(palette.from, palette.to),
-                    flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f));
-    drawDockIconGlyph(client, canvas, results[i], icon, active ? rgba(1.f, 1.f, 1.f, 1.f) : palette.ink);
-    drawText(client, canvas, results[i].label, tileFont,
-             active ? rgba(1, 1, 1, 1) : rgba(0.08f, 0.12f, 0.22f, 1),
-             flux::Rect::sharp(x + 14, y + 62, layout.tileW - 28, 18), centeredText());
-  }
+  renderComponent(client,
+                  s,
+                  canvas,
+                  lambda_shell::LambdaCommandLauncher{lambda_shell::CommandLauncherProps{
+                      .items = client.dockItems,
+                      .query = client.query,
+                      .highlighted = client.highlighted,
+                      .width = s.width,
+                      .height = s.height,
+                      .open = client.launcherOpen,
+                      .onActivateResult = [&client](DockItem const& item) { activateResult(client, item); },
+                      .onDismiss = [&client] { closeLauncher(client); },
+                  }},
+                  [&client] { requestRender(client, SurfaceKind::Launcher); });
   canvas.present();
 }
 
@@ -745,15 +509,15 @@ void activateResult(ShellClient& client, DockItem const& item) {
 }
 
 void handleDockClick(ShellClient& client) {
-  int x = kDockPaddingX;
+  int x = lambda_shell::kDockPaddingX;
   for (auto const& item : client.dockItems) {
-    int const width = dockItemWidth(item);
+    int const width = lambda_shell::dockItemWidth(item);
     if (item.kind != "separator" && client.pointerX >= x && client.pointerX < x + width) {
       if (item.kind == "launcher") openLauncher(client);
       else if (item.kind == "app") activateResult(client, item);
       return;
     }
-    x += width + kDockGap;
+    x += width + lambda_shell::kDockGap;
   }
 }
 
@@ -1041,22 +805,22 @@ int main() {
     sendIpc(client, "{\"type\":\"lambda.shell.hello\",\"protocolVersion\":1,\"shellVersion\":\"0.1.0\",\"capabilities\":[\"topbar\",\"dock\",\"command-launcher\"]}");
 
     createLayer(client, client.topbar, ZWLR_LAYER_SHELL_V1_LAYER_TOP, "lambda.topbar");
-    zwlr_layer_surface_v1_set_size(client.topbar.layer, 0, kTopBarHeight);
+    zwlr_layer_surface_v1_set_size(client.topbar.layer, 0, lambda_shell::kTopBarHeight);
     zwlr_layer_surface_v1_set_anchor(client.topbar.layer,
                                      ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
                                          ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
                                          ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-    zwlr_layer_surface_v1_set_exclusive_zone(client.topbar.layer, kTopBarHeight);
+    zwlr_layer_surface_v1_set_exclusive_zone(client.topbar.layer, lambda_shell::kTopBarHeight);
     wl_surface_commit(client.topbar.surface);
 
     client.dock.width = dockWidth(client);
-    client.dock.height = kDockPaddingY * 2 + kDockCell + 8;
+    client.dock.height = lambda_shell::dockHeight();
     createLayer(client, client.dock, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "lambda.dock");
     zwlr_layer_surface_v1_set_size(client.dock.layer,
                                    static_cast<std::uint32_t>(client.dock.width),
                                    static_cast<std::uint32_t>(client.dock.height));
     zwlr_layer_surface_v1_set_anchor(client.dock.layer, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM);
-    zwlr_layer_surface_v1_set_margin(client.dock.layer, 0, 0, kDockBottom, 0);
+    zwlr_layer_surface_v1_set_margin(client.dock.layer, 0, 0, lambda_shell::kDockBottom, 0);
     wl_surface_commit(client.dock.surface);
 
     wl_display_roundtrip(client.display);

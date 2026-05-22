@@ -197,8 +197,8 @@ void applyBoxOptions(TextLayout &layout, Rect const &box, TextLayoutOptions cons
     recomputeTextLayoutMetrics(layout);
 }
 
-bool hasNotdefGlyph(std::span<std::uint16_t const> gids) noexcept {
-    for (std::uint16_t g : gids) {
+bool hasNotdefGlyph(std::span<std::uint32_t const> gids) noexcept {
+    for (std::uint32_t g : gids) {
         if (g == 0) {
             return true;
         }
@@ -206,7 +206,7 @@ bool hasNotdefGlyph(std::span<std::uint16_t const> gids) noexcept {
     return false;
 }
 
-void collectDrawableGlyphIndices(std::span<std::uint16_t const> gids, std::vector<std::size_t>& out) {
+void collectDrawableGlyphIndices(std::span<std::uint32_t const> gids, std::vector<std::size_t>& out) {
     out.clear();
     out.reserve(gids.size());
     for (std::size_t i = 0; i < gids.size(); ++i) {
@@ -220,9 +220,9 @@ void collectDrawableGlyphIndices(std::span<std::uint16_t const> gids, std::vecto
 
 namespace {
 
-std::size_t countDrawableGlyphs(std::span<std::uint16_t const> gids) noexcept {
+std::size_t countDrawableGlyphs(std::span<std::uint32_t const> gids) noexcept {
     std::size_t total = 0;
-    for (std::uint16_t g : gids) {
+    for (std::uint32_t g : gids) {
         if (g != 0) {
             ++total;
         }
@@ -241,7 +241,7 @@ std::size_t cloneTextLayoutOutputGlyphCount(TextLayout const &src) noexcept {
         if (n == 0) {
             continue;
         }
-        std::span<std::uint16_t const> const gids {pr.run.glyphIds.data(), n};
+        std::span<std::uint32_t const> const gids {pr.run.glyphIds.data(), n};
         total += detail::hasNotdefGlyph(gids) ? countDrawableGlyphs(gids) : n;
     }
     return total;
@@ -369,7 +369,7 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const &src) {
             continue;
         }
 
-        std::span<std::uint16_t const> const gids {pr.run.glyphIds.data(), n};
+        std::span<std::uint32_t const> const gids {pr.run.glyphIds.data(), n};
         if (!detail::hasNotdefGlyph(gids)) {
             std::size_t const gGlyphStart = storage->glyphArena.size();
             std::size_t const gPosStart = storage->positionArena.size();
@@ -378,7 +378,7 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const &src) {
             storage->positionArena.insert(storage->positionArena.end(), pr.run.positions.begin(),
                                           pr.run.positions.begin() + static_cast<std::ptrdiff_t>(n));
             copy.run.glyphIds =
-                std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, n);
+                std::span<std::uint32_t const>(storage->glyphArena.data() + gGlyphStart, n);
             copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, n);
             out->runs.push_back(std::move(copy));
             continue;
@@ -405,7 +405,7 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const &src) {
             storage->positionArena.push_back(Point {dx, dy});
         }
         copy.run.glyphIds =
-            std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, newN);
+            std::span<std::uint32_t const>(storage->glyphArena.data() + gGlyphStart, newN);
         copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, newN);
         out->runs.push_back(std::move(copy));
     }

@@ -18,7 +18,7 @@ namespace flux {
 /// Owning glyph arenas for layouts produced on the slow path or by `cloneTextLayout`. Spans in `runs`
 /// point into these vectors.
 struct TextLayoutStorage {
-  std::vector<std::uint16_t> glyphArena;
+  std::vector<std::uint32_t> glyphArena;
   std::vector<Point> positionArena;
 };
 

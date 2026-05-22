@@ -22,7 +22,7 @@ struct TextRun {
     float fontSize = 0.f;
     Color color = Colors::black;
     std::optional<Color> backgroundColor;
-    std::span<std::uint16_t const> glyphIds;
+    std::span<std::uint32_t const> glyphIds;
     std::span<Point const> positions;
     float ascent = 0.f;
     float descent = 0.f;

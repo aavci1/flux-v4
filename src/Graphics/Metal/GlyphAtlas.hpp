@@ -16,7 +16,7 @@ namespace flux {
 
 struct GlyphKey {
   std::uint32_t fontId = 0;
-  std::uint16_t glyphId = 0;
+  std::uint32_t glyphId = 0;
   std::uint16_t sizeQ8 = 0; // fontSize * 4, quantized to 0.25pt steps
 
   bool operator==(GlyphKey const& o) const noexcept {

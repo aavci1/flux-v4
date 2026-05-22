@@ -243,15 +243,17 @@ struct CachedPath {
 
 struct GlyphKey {
   std::uint32_t fontId = 0;
-  std::uint16_t glyphId = 0;
+  std::uint32_t glyphId = 0;
   std::uint16_t size = 0;
   bool operator==(GlyphKey const &) const = default;
 };
 
 struct GlyphKeyHash {
   std::size_t operator()(GlyphKey const &k) const noexcept {
-    return (static_cast<std::size_t>(k.fontId) << 32u) ^
-           (static_cast<std::size_t>(k.glyphId) << 16u) ^ k.size;
+    std::size_t h = std::hash<std::uint32_t>{}(k.fontId);
+    h ^= std::hash<std::uint32_t>{}(k.glyphId) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
+    h ^= std::hash<std::uint16_t>{}(k.size) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
+    return h;
   }
 };
 
@@ -1894,7 +1896,8 @@ public:
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
     for (TextLayout::PlacedRun const &placed : layout.runs) {
-      for (std::size_t i = 0; i < placed.run.glyphIds.size(); ++i) {
+      std::size_t const glyphCount = std::min(placed.run.glyphIds.size(), placed.run.positions.size());
+      for (std::size_t i = 0; i < glyphCount; ++i) {
         GlyphSlot const *slot = nullptr;
         try {
           slot = glyphSlot(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
@@ -2369,6 +2372,9 @@ private:
           return op.kind == DrawOp::Kind::BackdropBlur;
         });
     bool const canUsePreparedGeometry =
+        // RADV can crash while recording draws that bind prepared replay descriptors for cached composite
+        // content. Copy recorded geometry into this canvas' frame buffers until descriptor replay is fixed.
+        false &&
         (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
         !hasTranslatedBackdropBlur &&
         (recorded.rects.empty() ||
@@ -4085,7 +4091,7 @@ private:
     return atlasHasSpace(res, width, height);
   }
 
-  GlyphSlot const *glyphSlot(std::uint32_t fontId, std::uint16_t glyphId, float fontSize) {
+  GlyphSlot const *glyphSlot(std::uint32_t fontId, std::uint32_t glyphId, float fontSize) {
     auto &res = resources();
     std::uint16_t size = static_cast<std::uint16_t>(std::clamp(std::round(fontSize * dpiScaleY_), 1.f, 512.f));
     GlyphKey key{fontId, glyphId, size};

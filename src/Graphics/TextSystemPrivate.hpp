@@ -25,7 +25,7 @@ bool paragraphCacheLayoutsStructurallyEqual(TextLayout const& a, TextLayout cons
 
 /// OpenType glyph id 0 is `.notdef`. \c CTRunGetGlyphs may still return it while \c CTLineDraw skips it
 /// visually; probe for that cheaply, then let callers collect indices only when they need to re-anchor.
-bool hasNotdefGlyph(std::span<std::uint16_t const> gids) noexcept;
-void collectDrawableGlyphIndices(std::span<std::uint16_t const> gids, std::vector<std::size_t>& out);
+bool hasNotdefGlyph(std::span<std::uint32_t const> gids) noexcept;
+void collectDrawableGlyphIndices(std::span<std::uint32_t const> gids, std::vector<std::size_t>& out);
 
 } // namespace flux::detail

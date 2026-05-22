@@ -554,6 +554,22 @@ endif()
 
 target_link_libraries(flux PRIVATE libtess2)
 
+add_library(lambda-shell-ui STATIC
+  src/Shell/UI/LambdaCommandLauncher.cpp
+  src/Shell/UI/LambdaDock.cpp
+  src/Shell/UI/LambdaShellTypes.cpp
+  src/Shell/UI/LambdaTopBar.cpp
+)
+target_include_directories(lambda-shell-ui PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_compile_options(lambda-shell-ui PRIVATE
+  -Wall
+  -Wextra
+  -Wpedantic
+)
+target_link_libraries(lambda-shell-ui PUBLIC flux)
+
 if(FLUX_PLATFORM_MACOS)
   target_compile_definitions(flux
     PUBLIC FLUX_METAL=1 FLUX_VULKAN=0
@@ -754,11 +770,16 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     -Wpedantic
   )
   target_link_libraries(lambda-shell PRIVATE
-    flux
+    lambda-shell-ui
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     ${CMAKE_DL_LIBS})
+  add_custom_command(TARGET lambda-shell POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:lambda-shell>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/MaterialSymbolsRounded.ttf"
+      "$<TARGET_FILE_DIR:lambda-shell>/fonts/MaterialSymbolsRounded.ttf")
 
   add_executable(lambda-window-manager-shm-demo
     src/Compositor/ShmDemoClient.cpp

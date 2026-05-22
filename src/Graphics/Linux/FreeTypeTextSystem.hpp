@@ -23,7 +23,7 @@ public:
   Size measure(std::string_view utf8, Font const& font, Color const& color, float maxWidth = 0.f,
                TextLayoutOptions const& options = {}) override;
   std::uint32_t resolveFontId(std::string_view fontFamily, float weight, bool italic) override;
-  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId, float size,
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t fontId, std::uint32_t glyphId, float size,
                                            std::uint32_t& outWidth, std::uint32_t& outHeight,
                                            Point& outBearing) override;
 

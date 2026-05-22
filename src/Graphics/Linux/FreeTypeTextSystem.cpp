@@ -158,7 +158,7 @@ struct FreeTypeTextSystem::Impl {
     float ascent = 0.f;
     float descent = 0.f;
     float lineHeight = 0.f;
-    std::uint16_t glyphId = 0;
+    std::uint32_t glyphId = 0;
     float advance = 0.f;
     float offsetX = 0.f;
     float offsetY = 0.f;
@@ -535,7 +535,7 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
         std::uint32_t nextCluster = byteEnd;
         if (i + 1 < glyphCount) nextCluster = std::max(cluster, infos[i + 1].cluster);
         out.push_back(Impl::ShapedGlyph{rr.fontId, rr.font.size, rr.source.color, rr.ascent, rr.descent,
-                                        rr.lineHeight, static_cast<std::uint16_t>(infos[i].codepoint),
+                                        rr.lineHeight, infos[i].codepoint,
                                         static_cast<float>(positions[i].x_advance) / 64.f,
                                         static_cast<float>(positions[i].x_offset) / 64.f,
                                         -static_cast<float>(positions[i].y_offset) / 64.f,
@@ -625,7 +625,7 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
     placed.run.fontId = builder.fontId;
     placed.run.fontSize = builder.fontSize;
     placed.run.color = builder.color;
-    placed.run.glyphIds = std::span<std::uint16_t const>(result->ownedStorage->glyphArena.data() + builder.glyphStart,
+    placed.run.glyphIds = std::span<std::uint32_t const>(result->ownedStorage->glyphArena.data() + builder.glyphStart,
                                                          glyphCount);
     placed.run.positions = std::span<Point const>(result->ownedStorage->positionArena.data() + builder.positionStart,
                                                   glyphCount);
@@ -757,7 +757,7 @@ Size FreeTypeTextSystem::measure(AttributedString const& text, float maxWidth, T
   return layout(text, maxWidth, options)->measuredSize;
 }
 
-std::vector<std::uint8_t> FreeTypeTextSystem::rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId,
+std::vector<std::uint8_t> FreeTypeTextSystem::rasterizeGlyph(std::uint32_t fontId, std::uint32_t glyphId,
                                                              float size, std::uint32_t& outWidth,
                                                              std::uint32_t& outHeight, Point& outBearing) {
   FT_Face face = d->face(fontId);
@@ -766,7 +766,7 @@ std::vector<std::uint8_t> FreeTypeTextSystem::rasterizeGlyph(std::uint32_t fontI
     return {};
   }
   FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(std::max(1.f, size)));
-  if (FT_Load_Glyph(face, glyphId, FT_LOAD_RENDER) != 0) {
+  if (FT_Load_Glyph(face, static_cast<FT_UInt>(glyphId), FT_LOAD_RENDER) != 0) {
     outWidth = outHeight = 0;
     return {};
   }

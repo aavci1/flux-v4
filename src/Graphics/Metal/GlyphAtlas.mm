@@ -10,8 +10,8 @@ namespace flux {
 
 std::size_t GlyphKeyHash::operator()(GlyphKey const& k) const noexcept {
   std::size_t h = std::hash<std::uint32_t>{}(k.fontId);
-  h ^= std::hash<std::uint32_t>{}((static_cast<std::uint32_t>(k.glyphId) << 16) | k.sizeQ8) + 0x9e3779b9 +
-       (h << 6) + (h >> 2);
+  h ^= std::hash<std::uint32_t>{}(k.glyphId) + 0x9e3779b9 + (h << 6) + (h >> 2);
+  h ^= std::hash<std::uint16_t>{}(k.sizeQ8) + 0x9e3779b9 + (h << 6) + (h >> 2);
   return h;
 }
 
