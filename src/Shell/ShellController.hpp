@@ -7,11 +7,10 @@
 #include <Flux/UI/Window.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 
 namespace lambda_shell {
-
-enum class ShellSurfaceRole { TopBar, Dock, Launcher };
 
 class ShellController {
 public:
@@ -21,14 +20,24 @@ public:
   void createProductionWindows();
   void setupPreviewWindow(flux::Window& window, float width, float height);
 
+  void openLauncher();
+  void closeLauncher();
+
   ShellModel& model() noexcept { return model_; }
   ShellIpc& ipc() noexcept { return ipc_; }
 
 private:
-  void requestShellRedraw();
+  void remountTopBarView();
+  void remountDockView();
+  void remountLauncherView();
+  void remountPreviewView();
+  void remountAllViews();
+  void requestRedraws();
   void handleIpcLine(std::string_view line);
   void syncLauncherWindow();
   void handleLauncherKey(flux::InputEvent const& event);
+
+  std::function<void(DockItem const&)> makeActivateCallback();
 
   flux::Application& app_;
   ShellModel& model_;
@@ -40,7 +49,10 @@ private:
   flux::Window* topBarWindow_ = nullptr;
   flux::Window* dockWindow_ = nullptr;
   flux::Window* launcherWindow_ = nullptr;
+  float previewWidth_ = 960.f;
+  float previewHeight_ = 620.f;
   bool launcherModalClaimed_ = false;
+  bool lastLauncherOpen_ = false;
   std::uint64_t ipcPollId_ = 0;
   std::uint64_t clockTimerId_ = 0;
 };

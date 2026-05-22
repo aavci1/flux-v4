@@ -92,11 +92,12 @@ flux::Element dockIcon(DockItem item, bool hover, std::function<void()> onTap) {
       .verticalAlignment = flux::VerticalAlignment::Center,
   }.size(40.f, 40.f).position(4.f, 4.f + lift));
   if (item.running) {
+    float const dotY = 48.f + lift;
     layers.push_back(flux::Rectangle{}
-        .size(4.f, 4.f)
-        .position(22.f, 57.f)
-        .fill(rgba(0.08f, 0.12f, 0.22f, item.focused ? 0.95f : 0.40f))
-        .cornerRadius(2.f));
+        .size(item.focused ? 6.f : 5.f, item.focused ? 6.f : 5.f)
+        .position(21.f, dotY)
+        .fill(item.focused ? rgba(0.35f, 0.72f, 1.f, 1.f) : rgba(1.f, 1.f, 1.f, 0.72f))
+        .cornerRadius(3.f));
   }
   auto element = flux::ZStack{
       .children = std::move(layers),

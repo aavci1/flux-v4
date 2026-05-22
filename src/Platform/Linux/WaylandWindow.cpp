@@ -410,10 +410,15 @@ public:
                                      static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
                                      static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
       commitSurface();
+      if (size_.width <= 0.f || size_.height <= 0.f) {
+        return;
+      }
     }
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
-    if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
-                                 static_cast<int>(std::lround(size_.height)));
+    if (canvas_) {
+      canvas_->resize(static_cast<int>(std::max(1, static_cast<int>(std::lround(size_.width)))),
+                      static_cast<int>(std::max(1, static_cast<int>(std::lround(size_.height)))));
+    }
     updateViewportDestination();
     updateBackgroundEffectRegion();
     queueResizeEvent();

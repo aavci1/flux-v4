@@ -10,6 +10,7 @@
 #include <Flux/UI/KeyCodes.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
+#include <algorithm>
 #include <functional>
 
 namespace lambda_shell {
@@ -19,12 +20,14 @@ struct ShellTopBarView {
   std::function<void()> onOpenLauncher;
 
   flux::Element body() const {
+    flux::Rect const bounds = flux::useBounds();
+    float const width = std::max(1.f, bounds.width);
     return flux::Element{LambdaTopBar{TopBarProps{
         .title = model.activeTitle(),
         .timeText = model.timeText(),
         .system = model.systemStatus(),
         .onOpenLauncher = onOpenLauncher,
-    }}};
+    }}}.size(width, static_cast<float>(kTopBarHeight));
   }
 };
 

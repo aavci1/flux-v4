@@ -103,7 +103,6 @@ void ShellModel::openLauncher() {
   launcherOpen_ = true;
   query_.clear();
   highlighted_ = 0;
-  notifyChanged();
 }
 
 void ShellModel::closeLauncher() {
@@ -111,37 +110,31 @@ void ShellModel::closeLauncher() {
   launcherOpen_ = false;
   query_.clear();
   highlighted_ = 0;
-  notifyChanged();
 }
 
 void ShellModel::setQuery(std::string query) {
   query_ = std::move(query);
   highlighted_ = 0;
-  notifyChanged();
 }
 
 void ShellModel::setHighlighted(int index) {
   highlighted_ = index;
-  notifyChanged();
 }
 
 void ShellModel::moveHighlight(int delta) {
   auto results = launcherResults();
   if (results.empty()) return;
   highlighted_ = std::clamp(highlighted_ + delta, 0, static_cast<int>(results.size()) - 1);
-  notifyChanged();
 }
 
 void ShellModel::appendQueryText(std::string_view text) {
   if (query_.size() >= 128u) return;
   query_.append(text);
   highlighted_ = 0;
-  notifyChanged();
 }
 
 void ShellModel::backspaceQuery() {
   if (!query_.empty()) query_.pop_back();
-  notifyChanged();
 }
 
 std::vector<DockItem> ShellModel::launcherResults() const {
@@ -155,7 +148,6 @@ void ShellModel::activateItem(DockItem const& item, std::function<void(std::stri
   } else if (item.kind == "app") {
     sendIpc("{\"type\":\"lambda.windowManager.launchApp\",\"appId\":\"" + escapeJson(item.appId) + "\"}");
   }
-  closeLauncher();
 }
 
 } // namespace lambda_shell

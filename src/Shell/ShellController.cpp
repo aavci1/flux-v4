@@ -39,7 +39,7 @@ flux::WindowConfig topBarWindowConfig() {
   layer.anchorRight = true;
   layer.exclusiveZone = kTopBarHeight;
   return WindowConfig{
-      .size = {1280.f, static_cast<float>(kTopBarHeight)},
+      .size = {0.f, static_cast<float>(kTopBarHeight)},
       .title = "Lambda Top Bar",
       .resizable = false,
       .layerShell = layer,
@@ -74,7 +74,19 @@ flux::WindowConfig launcherWindowConfig() {
 
 ShellController::ShellController(flux::Application& app, ShellModel& model) : app_(app), model_(model) {
   model_.resetDockItems();
-  model_.setOnChanged([this] { requestShellRedraw(); });
+  model_.setOnChanged([this] {
+    if (previewHandle_) {
+      remountPreviewView();
+      requestRedraws();
+      return;
+    }
+    remountTopBarView();
+    remountDockView();
+    if (model_.launcherOpen()) {
+      remountLauncherView();
+    }
+    requestRedraws();
+  });
 
   app_.eventQueue().on<flux::InputEvent>([this](flux::InputEvent const& event) {
     bool const forLauncher =
@@ -86,7 +98,22 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
 
   app_.eventQueue().on<flux::TimerEvent>([this](flux::TimerEvent const& event) {
     if (event.timerId == clockTimerId_) {
-      requestShellRedraw();
+      if (previewHandle_) {
+        remountPreviewView();
+      } else {
+        remountTopBarView();
+      }
+      requestRedraws();
+    }
+  });
+
+  app_.eventQueue().on<flux::WindowEvent>([this](flux::WindowEvent const& event) {
+    if (event.kind != flux::WindowEvent::Kind::Resize) {
+      return;
+    }
+    if (launcherHandle_ && event.handle == *launcherHandle_ && model_.launcherOpen()) {
+      remountLauncherView();
+      launcherWindow_->requestRedraw();
     }
   });
 
@@ -98,6 +125,15 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
       handleIpcLine(*line);
     }
   });
+}
+
+std::function<void(DockItem const&)> ShellController::makeActivateCallback() {
+  return [this](DockItem const& item) {
+    model_.activateItem(item, [this](std::string const& line) { ipc_.sendLine(line); });
+    if (model_.launcherOpen()) {
+      closeLauncher();
+    }
+  };
 }
 
 bool ShellController::connectIpc() {
@@ -117,74 +153,108 @@ bool ShellController::connectIpc() {
 }
 
 void ShellController::createProductionWindows() {
-  auto sendIpc = [this](std::string const& line) { ipc_.sendLine(line); };
-  auto openLauncher = [this] { model_.openLauncher(); syncLauncherWindow(); };
-  auto activate = [this, sendIpc](DockItem const& item) { model_.activateItem(item, sendIpc); };
-
   auto& topBar = app_.createWindow<flux::Window>(topBarWindowConfig());
   topBar.setClearColor(flux::Colors::transparent);
-  topBar.setView(ShellTopBarView{model_, openLauncher});
   topBarWindow_ = &topBar;
   topBarHandle_ = topBar.handle();
 
   int const dockWidthPx = dockWidth(model_.dockItems());
   auto& dock = app_.createWindow<flux::Window>(dockWindowConfig(dockWidthPx));
   dock.setClearColor(flux::Colors::transparent);
-  dock.setView(ShellDockView{model_, openLauncher, activate});
   dockWindow_ = &dock;
   dockHandle_ = dock.handle();
 
   auto& launcher = app_.createWindow<flux::Window>(launcherWindowConfig());
   launcher.setClearColor(flux::Colors::transparent);
-  launcher.setView(ShellLauncherView{model_, activate, [this] { model_.closeLauncher(); syncLauncherWindow(); }, {}});
   launcherWindow_ = &launcher;
   launcherHandle_ = launcher.handle();
 
+  remountAllViews();
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds(30), topBarHandle_.value_or(0));
   syncLauncherWindow();
 }
 
 void ShellController::setupPreviewWindow(flux::Window& window, float width, float height) {
   launcherWindow_ = &window;
+  previewWidth_ = width;
+  previewHeight_ = height;
   previewHandle_ = window.handle();
-
-  auto sendIpc = [this](std::string const& line) {
-    if (ipc_.connected()) ipc_.sendLine(line);
-  };
-  auto openLauncher = [this] {
-    model_.openLauncher();
-    requestShellRedraw();
-  };
-  auto activate = [this, sendIpc](DockItem const& item) { model_.activateItem(item, sendIpc); };
-
-  window.setClearColor(flux::Colors::transparent);
-  window.setView(ShellDesktopView{
-      model_,
-      openLauncher,
-      activate,
-      activate,
-      [this] {
-        model_.closeLauncher();
-        requestShellRedraw();
-      },
-      {},
-      width,
-      height,
-  });
-
+  remountPreviewView();
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds(30), previewHandle_.value_or(0));
 }
 
-void ShellController::requestShellRedraw() {
+void ShellController::remountTopBarView() {
+  if (!topBarWindow_) return;
+  topBarWindow_->setView(ShellTopBarView{model_, [this] { openLauncher(); }});
+}
+
+void ShellController::remountDockView() {
+  if (!dockWindow_) return;
+  dockWindow_->setView(ShellDockView{model_, [this] { openLauncher(); }, makeActivateCallback()});
+}
+
+void ShellController::remountLauncherView() {
+  if (!launcherWindow_ || previewHandle_) return;
+  launcherWindow_->setView(ShellLauncherView{
+      model_,
+      makeActivateCallback(),
+      [this] { closeLauncher(); },
+      {},
+  });
+}
+
+void ShellController::remountPreviewView() {
+  if (!launcherWindow_ || !previewHandle_) return;
+  launcherWindow_->setView(ShellDesktopView{
+      model_,
+      [this] { openLauncher(); },
+      makeActivateCallback(),
+      makeActivateCallback(),
+      [this] { closeLauncher(); },
+      {},
+      previewWidth_,
+      previewHeight_,
+  });
+}
+
+void ShellController::remountAllViews() {
+  remountTopBarView();
+  remountDockView();
+  remountLauncherView();
+}
+
+void ShellController::requestRedraws() {
   if (topBarWindow_) topBarWindow_->requestRedraw();
   if (dockWindow_) dockWindow_->requestRedraw();
   if (launcherWindow_) launcherWindow_->requestRedraw();
+}
+
+void ShellController::openLauncher() {
+  if (model_.launcherOpen()) return;
+  model_.openLauncher();
   syncLauncherWindow();
+  remountLauncherView();
+  launcherWindow_->requestRedraw();
+}
+
+void ShellController::closeLauncher() {
+  if (!model_.launcherOpen()) return;
+  model_.closeLauncher();
+  syncLauncherWindow();
+  remountLauncherView();
+  launcherWindow_->requestRedraw();
 }
 
 void ShellController::syncLauncherWindow() {
   if (!launcherWindow_ || previewHandle_) return;
-  if (model_.launcherOpen()) {
+
+  bool const wantOpen = model_.launcherOpen();
+  if (wantOpen == lastLauncherOpen_) {
+    return;
+  }
+  lastLauncherOpen_ = wantOpen;
+
+  if (wantOpen) {
     launcherWindow_->resize({0.f, 0.f});
     launcherWindow_->setLayerShellKeyboardInteractive(true);
     if (ipc_.connected() && !launcherModalClaimed_) {
@@ -203,34 +273,40 @@ void ShellController::syncLauncherWindow() {
 
 void ShellController::handleIpcLine(std::string_view line) {
   if (lineContains(line, "\"lambda.shell.openCommandLauncher\"")) {
-    model_.openLauncher();
-  } else if (lineContains(line, "\"lambda.windowManager.snapshot\"")) {
+    openLauncher();
+    return;
+  }
+  if (lineContains(line, "\"lambda.windowManager.snapshot\"")) {
     model_.applySnapshot(line);
     if (dockWindow_) {
       int const width = dockWidth(model_.dockItems());
       dockWindow_->resize({static_cast<float>(width), static_cast<float>(dockHeight())});
     }
   }
-  syncLauncherWindow();
 }
 
 void ShellController::handleLauncherKey(flux::InputEvent const& event) {
   if (event.kind == flux::InputEvent::Kind::KeyDown) {
     if (event.key == Escape) {
-      model_.closeLauncher();
-      syncLauncherWindow();
+      closeLauncher();
       return;
     }
     if (event.key == Delete) {
       model_.backspaceQuery();
+      remountLauncherView();
+      launcherWindow_->requestRedraw();
       return;
     }
     if (event.key == DownArrow) {
       model_.moveHighlight(1);
+      remountLauncherView();
+      launcherWindow_->requestRedraw();
       return;
     }
     if (event.key == UpArrow) {
       model_.moveHighlight(-1);
+      remountLauncherView();
+      launcherWindow_->requestRedraw();
       return;
     }
     if (event.key == Return) {
@@ -239,13 +315,15 @@ void ShellController::handleLauncherKey(flux::InputEvent const& event) {
         int const index = std::clamp(model_.highlighted(), 0, static_cast<int>(results.size()) - 1);
         model_.activateItem(results[static_cast<std::size_t>(index)],
                             [this](std::string const& line) { ipc_.sendLine(line); });
+        closeLauncher();
       }
-      syncLauncherWindow();
       return;
     }
   }
   if (event.kind == flux::InputEvent::Kind::TextInput && !event.text.empty()) {
     model_.appendQueryText(event.text);
+    remountLauncherView();
+    launcherWindow_->requestRedraw();
   }
 }
 
