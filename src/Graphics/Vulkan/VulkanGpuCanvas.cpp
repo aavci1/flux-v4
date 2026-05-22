@@ -463,6 +463,16 @@ void appendUniqueExtension(std::vector<std::string> &extensions, char const *nam
   extensions.emplace_back(name);
 }
 
+bool allExtensionsConfigured(std::vector<std::string> const &extensions,
+                             std::span<char const* const> required) {
+  for (char const *extension : required) {
+    if (!containsExtension(extensions, extension)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::vector<char const *> extensionNamePointers(std::vector<std::string> const &extensions) {
   std::vector<char const *> names;
   names.reserve(extensions.size());
@@ -4618,6 +4628,9 @@ void configureVulkanCanvasRuntime(std::span<char const* const> requiredInstanceE
                                   std::filesystem::path cacheDir) {
   std::lock_guard lock(gVulkanCoreMutex);
   if (gVulkanCore.instance) {
+    if (allExtensionsConfigured(gRequiredInstanceExtensions, requiredInstanceExtensions)) {
+      return;
+    }
     throw std::runtime_error("Cannot configure Vulkan instance extensions after instance creation");
   }
   for (char const *extension : requiredInstanceExtensions) {
