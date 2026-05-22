@@ -142,6 +142,15 @@ bool surfaceOpenAnimationComplete(SurfaceVisualState const &visual, std::chrono:
   return frameTime - visual.firstSeen >= kSurfaceOpenAnimationDuration;
 }
 
+bool hasTransientChromeState(CommittedSurfaceSnapshot const &surface) {
+  return surface.closeButtonHovered ||
+         surface.closeButtonPressed ||
+         surface.maximizeButtonHovered ||
+         surface.maximizeButtonPressed ||
+         surface.minimizeButtonHovered ||
+         surface.minimizeButtonPressed;
+}
+
 } // namespace
 
 void drawSurfaceImage(Canvas &canvas, CommittedSurfaceSnapshot const &surface, Image &image, float opacity,
@@ -339,7 +348,9 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     visual.firstSeen = frameTime;
   }
   bool const canRecordSurface =
-      canvas.backend() == Backend::Vulkan && surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
+      canvas.backend() == Backend::Vulkan &&
+      !hasTransientChromeState(surface) &&
+      surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
   std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(surface, cached, *cached.image, chrome) : 0;
   if (canRecordSurface && cached.recordedOps && cached.recordedSignature == signature &&
       replayRecordedOpsForCanvas(&canvas, *cached.recordedOps)) {

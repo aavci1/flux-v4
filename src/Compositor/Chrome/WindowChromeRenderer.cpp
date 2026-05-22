@@ -44,11 +44,6 @@ void drawControls(Canvas& canvas,
   float const buttonSize = metrics.buttonSize;
   float const groupOpacity = surface.focused ? 1.f : 0.6f;
   float const glyphInset = std::max(3.f, buttonSize * 0.28f);
-  Rect const titleClip = Rect::sharp(windowX, titleTop, windowWidth, titleBarHeight);
-  CornerRadius const titleClipRadius{chrome.windowCornerRadius.topLeft,
-                                     chrome.windowCornerRadius.topRight,
-                                     0.f,
-                                     0.f};
 
   auto glyphRect = [&](Rect const& rect) {
     return Rect::sharp(rect.x + (rect.width - buttonSize) * 0.5f,
@@ -108,12 +103,9 @@ void drawControls(Canvas& canvas,
     }
   };
 
-  canvas.save();
-  canvas.clipRect(titleClip, titleClipRadius, true);
   drawButton(rects.minimizeButton, surface.minimizeButtonHovered, surface.minimizeButtonPressed, ControlKind::Minimize);
   drawButton(rects.maximizeButton, surface.maximizeButtonHovered, surface.maximizeButtonPressed, ControlKind::Maximize);
   drawButton(rects.closeButton, surface.closeButtonHovered, surface.closeButtonPressed, ControlKind::Close);
-  canvas.restore();
 }
 
 void drawDefaultChrome(Canvas& canvas,
