@@ -26,8 +26,8 @@ In cutout mode, pointer events inside the controls reservation are compositor-ow
 The window painter can be exercised without running a compositor. On macOS the fixture uses Metal; on Linux it uses the same Vulkan render-target path as the compositor:
 
 ```sh
-cmake --build build --target flux-compositor-render-fixture
-./build/flux-compositor-render-fixture build/compositor-window-chrome-fixture.png
+cmake --build build --target lambda-window-manager-render-fixture
+./build/lambda-window-manager-render-fixture build/compositor-window-chrome-fixture.png
 ```
 
 The fixture renders synthetic Tier 1, Tier 2, and Tier 3 `CommittedSurfaceSnapshot`s through the same `drawCommittedSurfaceSnapshot` path used by the KMS compositor, reads back the offscreen render target, and writes a PNG for visual inspection or pixel checks.

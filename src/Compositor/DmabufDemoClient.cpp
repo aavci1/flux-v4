@@ -154,7 +154,7 @@ void createDmabufBuffer(DemoClient& client) {
 
   std::uint64_t const modifier = gbm_bo_get_modifier(client.bo);
   std::fprintf(stderr,
-               "flux-compositor-dmabuf-demo: GBM buffer stride=%u modifier=0x%016llx\n",
+               "lambda-window-manager-dmabuf-demo: GBM buffer stride=%u modifier=0x%016llx\n",
                gbm_bo_get_stride_for_plane(client.bo, 0),
                static_cast<unsigned long long>(modifier));
   zwp_linux_buffer_params_v1* params = zwp_linux_dmabuf_v1_create_params(client.dmabuf);
@@ -211,7 +211,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-dmabuf-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-dmabuf-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -229,7 +229,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux DMABUF demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-dmabuf-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-dmabuf-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -242,7 +242,7 @@ int main() {
                              static_cast<std::int32_t>(kHeight));
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-dmabuf-demo: committed %ux%u DMABUF buffer\n", kWidth, kHeight);
+    std::fprintf(stderr, "lambda-window-manager-dmabuf-demo: committed %ux%u DMABUF buffer\n", kWidth, kHeight);
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -251,7 +251,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-dmabuf-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-dmabuf-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

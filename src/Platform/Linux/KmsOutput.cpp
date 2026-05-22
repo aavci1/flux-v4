@@ -288,11 +288,11 @@ public:
       useAsyncRenderFence_ = true;
       if (planeInFenceFd_ != 0) {
         std::fprintf(stderr,
-                     "flux-compositor: atomic KMS render fence mode: %s\n",
+                     "lambda-window-manager: atomic KMS render fence mode: %s\n",
                      useRenderInFence_ ? "kms-in-fence" : "async wait-before-commit");
       } else {
         std::fprintf(stderr,
-                     "flux-compositor: atomic KMS render fence mode: async CPU wait-before-commit\n");
+                     "lambda-window-manager: atomic KMS render fence mode: async CPU wait-before-commit\n");
       }
       createModeBlob();
       gbm_ = gbm_create_device(fd_);
@@ -303,7 +303,7 @@ public:
       canvas_ = flux::createVulkanRenderTargetCanvas(buffers_[0].spec, textSystem_);
       if (!canvas_) throw std::runtime_error("Failed to create atomic KMS render-target canvas");
       std::fprintf(stderr,
-                   "flux-compositor: atomic KMS presenter uses optimal offscreen render targets with copy to scanout\n");
+                   "lambda-window-manager: atomic KMS presenter uses optimal offscreen render targets with copy to scanout\n");
     } catch (...) {
       cleanup();
       throw;
@@ -591,7 +591,7 @@ private:
     planeInFenceFd_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "IN_FENCE_FD");
     if (planeInFenceFd_ == 0) {
       std::fprintf(stderr,
-                   "flux-compositor: KMS primary plane has no IN_FENCE_FD; atomic presenter will use CPU GPU waits\n");
+                   "lambda-window-manager: KMS primary plane has no IN_FENCE_FD; atomic presenter will use CPU GPU waits\n");
     }
   }
 
@@ -659,7 +659,7 @@ private:
           .commandBuffer = buffer.commandBuffer,
       };
       std::fprintf(stderr,
-                   "flux-compositor: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",
+                   "lambda-window-manager: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",
                    gbm_bo_get_width(buffer.bo),
                    gbm_bo_get_height(buffer.bo),
                    static_cast<unsigned long long>(gbmModifier(buffer.bo)),
@@ -1227,7 +1227,7 @@ KmsDevice::Impl::Impl(char const* devicePath) {
     throw std::runtime_error("KmsDevice::open(devicePath) is not implemented yet; pass nullptr");
   }
   app_ = std::make_unique<flux::KmsApplication>();
-  app_->setApplicationName("flux-compositor");
+  app_->setApplicationName("lambda-window-manager");
   app_->initialize();
 }
 

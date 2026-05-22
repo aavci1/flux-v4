@@ -48,7 +48,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-viewport-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-viewport-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -187,7 +187,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-viewport-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-viewport-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -205,7 +205,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Viewporter demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-viewport-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-viewport-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -225,7 +225,7 @@ int main() {
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
     std::fprintf(stderr,
-                 "flux-compositor-viewport-demo: committed %dx%d buffer scaled to %dx%d\n",
+                 "lambda-window-manager-viewport-demo: committed %dx%d buffer scaled to %dx%d\n",
                  kSourceWidth,
                  kSourceHeight,
                  kDestinationWidth,
@@ -238,7 +238,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-viewport-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-viewport-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

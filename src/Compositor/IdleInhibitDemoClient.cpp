@@ -42,7 +42,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-idle-inhibit-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-idle-inhibit-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -177,7 +177,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-idle-inhibit-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-idle-inhibit-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -195,7 +195,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Idle Inhibit demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-idle-inhibit-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-idle-inhibit-demo");
     client.idleInhibitor = zwp_idle_inhibit_manager_v1_create_inhibitor(client.idleInhibitManager,
                                                                         client.surface);
     wl_surface_commit(client.surface);
@@ -209,7 +209,7 @@ int main() {
     wl_surface_damage_buffer(client.surface, 0, 0, kWidth, kHeight);
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-idle-inhibit-demo: active inhibitor with %dx%d SHM buffer\n", kWidth, kHeight);
+    std::fprintf(stderr, "lambda-window-manager-idle-inhibit-demo: active inhibitor with %dx%d SHM buffer\n", kWidth, kHeight);
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -218,7 +218,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-idle-inhibit-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-idle-inhibit-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

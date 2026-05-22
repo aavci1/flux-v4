@@ -43,7 +43,7 @@ int createKeymapFd(WaylandServer::Impl* server, std::uint32_t& size) {
   if (!keymapString) return -1;
 
   std::size_t const length = std::strlen(keymapString) + 1u;
-  int fd = memfd_create("flux-compositor-keymap", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-keymap", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd >= 0 && ftruncate(fd, static_cast<off_t>(length)) == 0) {
     std::size_t written = 0;
     while (written < length) {

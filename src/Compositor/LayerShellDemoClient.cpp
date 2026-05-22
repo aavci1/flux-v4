@@ -37,7 +37,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-layer-shell-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-layer-shell-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -130,7 +130,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-layer-shell-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-layer-shell-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -165,14 +165,14 @@ int main() {
     wl_surface_damage_buffer(client.surface, 0, 0, client.width, client.height);
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-layer-shell-demo: committed top layer %dx%d\n", client.width, client.height);
+    std::fprintf(stderr, "lambda-window-manager-layer-shell-demo: committed top layer %dx%d\n", client.width, client.height);
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
     }
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-layer-shell-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-layer-shell-demo: %s\n", e.what());
     return 1;
   }
 }

@@ -87,6 +87,8 @@ struct CommittedSurfaceSnapshot {
   bool activeSizing = false;
   bool pacingSizing = false;
   bool defaultGlassEligible = false;
+  bool squareContentCorners = false;
+  bool shellGlassSurface = false;
   std::uint64_t serial = 0;
   std::uint32_t lastConfigureSerial = 0;
   std::int32_t lastConfigureWidth = 0;
@@ -117,12 +119,6 @@ struct SnapPreviewSnapshot {
   std::int32_t cacheY = 0;
   std::int32_t cacheWidth = 0;
   std::int32_t cacheHeight = 0;
-};
-
-struct CommandLauncherSnapshot {
-  bool visible = false;
-  std::string command;
-  std::string message;
 };
 
 enum class ShortcutAction : std::uint8_t {

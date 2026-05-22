@@ -305,7 +305,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
     if (auto value = configInt(table, key); value && *value >= minValue && *value <= maxValue) {
       field = *value;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s value in %s\n", key, path);
     }
   };
   auto parseFloatField = [&](char const* key, float& field, float minValue, float maxValue) {
@@ -313,7 +313,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
     if (auto value = configNumber(table, key); value && *value >= minValue && *value <= maxValue) {
       field = *value;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s value in %s\n", key, path);
     }
   };
   auto parseBoolField = [&](char const* key, bool& field) {
@@ -321,7 +321,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
     if (auto value = configBool(table, key)) {
       field = *value;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s value in %s\n", key, path);
     }
   };
   auto parseRadiusValue = [&](toml::table const& radiusTable,
@@ -333,7 +333,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
     if (auto value = configNumber(radiusTable, key); value && *value >= minValue && *value <= maxValue) {
       field = *value;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.window_corner_radius.%s value in %s\n", key, path);
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.window_corner_radius.%s value in %s\n", key, path);
     }
   };
   auto parseCornerRadiusField = [&](char const* key, CornerRadius& field, float minValue, float maxValue) {
@@ -347,7 +347,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       if (auto value = configNumber(*radiusTable, "all"); value && *value >= minValue && *value <= maxValue) {
         next = CornerRadius{*value};
       } else if (radiusTable->contains("all")) {
-        std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s.all value in %s\n", key, path);
+        std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s.all value in %s\n", key, path);
       }
       parseRadiusValue(*radiusTable, "top_left", next.topLeft, minValue, maxValue);
       parseRadiusValue(*radiusTable, "top_right", next.topRight, minValue, maxValue);
@@ -356,7 +356,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       field = next;
       return;
     }
-    std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+    std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s value in %s\n", key, path);
   };
   auto parseColorField = [&](char const* key, Color& field) {
     if (!table.contains(key)) return;
@@ -364,10 +364,10 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       if (auto color = parseHexColor(*value)) {
         field = *color;
       } else {
-        std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s color in %s\n", key, path);
+        std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s color in %s\n", key, path);
       }
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring non-string chrome.%s color in %s\n", key, path);
+      std::fprintf(stderr, "lambda-window-manager: ignoring non-string chrome.%s color in %s\n", key, path);
     }
   };
 
@@ -403,20 +403,20 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
 }
 
 std::optional<std::string> configPath() {
-  if (char const* explicitPath = std::getenv("FLUX_COMPOSITOR_CONFIG"); explicitPath && *explicitPath) {
+  if (char const* explicitPath = std::getenv("LAMBDA_WINDOW_MANAGER_CONFIG"); explicitPath && *explicitPath) {
     return std::string(explicitPath);
   }
   if (char const* configHome = std::getenv("XDG_CONFIG_HOME"); configHome && *configHome) {
-    return std::string(configHome) + "/flux-compositor/config.toml";
+    return std::string(configHome) + "/lambda-window-manager/config.toml";
   }
   if (char const* home = std::getenv("HOME"); home && *home) {
-    return std::string(home) + "/.config/flux-compositor/config.toml";
+    return std::string(home) + "/.config/lambda-window-manager/config.toml";
   }
   return std::nullopt;
 }
 
 void applyEnvironmentOverrides(CompositorConfig& config) {
-  if (char const* outputEnv = std::getenv("FLUX_COMPOSITOR_OUTPUT"); outputEnv && *outputEnv) {
+  if (char const* outputEnv = std::getenv("LAMBDA_WINDOW_MANAGER_OUTPUT"); outputEnv && *outputEnv) {
     config.outputSelector = trim(outputEnv);
   }
 }
@@ -521,7 +521,7 @@ void ensureDefaultConfigFile(std::string const& path) {
   std::error_code error;
   if (std::filesystem::exists(path, error)) return;
   if (error) {
-    std::fprintf(stderr, "flux-compositor: cannot check config %s: %s\n", path.c_str(), error.message().c_str());
+    std::fprintf(stderr, "lambda-window-manager: cannot check config %s: %s\n", path.c_str(), error.message().c_str());
     return;
   }
 
@@ -531,7 +531,7 @@ void ensureDefaultConfigFile(std::string const& path) {
     std::filesystem::create_directories(parent, error);
     if (error) {
       std::fprintf(stderr,
-                   "flux-compositor: cannot create config directory %s: %s\n",
+                   "lambda-window-manager: cannot create config directory %s: %s\n",
                    parent.string().c_str(),
                    error.message().c_str());
       return;
@@ -540,16 +540,16 @@ void ensureDefaultConfigFile(std::string const& path) {
 
   std::ofstream file(path);
   if (!file) {
-    std::fprintf(stderr, "flux-compositor: cannot create config %s\n", path.c_str());
+    std::fprintf(stderr, "lambda-window-manager: cannot create config %s\n", path.c_str());
     return;
   }
   file << defaultConfigToml();
   file.close();
   if (!file) {
-    std::fprintf(stderr, "flux-compositor: failed while writing config %s\n", path.c_str());
+    std::fprintf(stderr, "lambda-window-manager: failed while writing config %s\n", path.c_str());
     return;
   }
-  std::fprintf(stderr, "flux-compositor: created default config %s\n", path.c_str());
+  std::fprintf(stderr, "lambda-window-manager: created default config %s\n", path.c_str());
 }
 
 CompositorConfig loadConfig() {
@@ -567,7 +567,7 @@ CompositorConfig loadConfig() {
   } catch (toml::parse_error const& error) {
     auto const message = std::string(error.description());
     std::fprintf(stderr,
-                 "flux-compositor: ignoring invalid config %s: %s\n",
+                 "lambda-window-manager: ignoring invalid config %s: %s\n",
                  path->c_str(),
                  message.c_str());
     applyEnvironmentOverrides(config);
@@ -583,13 +583,13 @@ CompositorConfig loadConfig() {
             replaceShortcutBinding(config.shortcutBindings, *binding);
           } else {
             std::fprintf(stderr,
-                         "flux-compositor: ignoring invalid keybinding %s in %s\n",
+                         "lambda-window-manager: ignoring invalid keybinding %s in %s\n",
                          actionName.c_str(),
                          path->c_str());
           }
         } else {
           std::fprintf(stderr,
-                       "flux-compositor: ignoring non-string keybinding %s in %s\n",
+                       "lambda-window-manager: ignoring non-string keybinding %s in %s\n",
                        actionName.c_str(),
                        path->c_str());
         }
@@ -609,7 +609,7 @@ CompositorConfig loadConfig() {
     config.backgroundColor = *color;
     config.backgroundGradientEnd.reset();
   } else if (table.contains("background") || table.contains("background_color")) {
-    std::fprintf(stderr, "flux-compositor: ignoring invalid background color in %s\n", path->c_str());
+    std::fprintf(stderr, "lambda-window-manager: ignoring invalid background color in %s\n", path->c_str());
   }
 
   if (auto value = configString(table, "background_gradient")) {
@@ -617,7 +617,7 @@ CompositorConfig loadConfig() {
       config.backgroundColor = gradient->first;
       config.backgroundGradientEnd = gradient->second;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid background gradient in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid background gradient in %s\n", path->c_str());
     }
   }
 
@@ -636,7 +636,7 @@ CompositorConfig loadConfig() {
         config.wallpaperMode = *mode;
         return true;
       }
-      std::fprintf(stderr, "flux-compositor: ignoring invalid wallpaper mode in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid wallpaper mode in %s\n", path->c_str());
       return true;
     }
     return false;
@@ -650,7 +650,7 @@ CompositorConfig loadConfig() {
     if (auto cursorSize = configInt(table, "cursor_size"); cursorSize && *cursorSize >= 8 && *cursorSize <= 256) {
       config.cursorSize = *cursorSize;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid cursor_size value in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid cursor_size value in %s\n", path->c_str());
     }
   }
 
@@ -661,7 +661,7 @@ CompositorConfig loadConfig() {
         config.outputSelector = *selector;
         return true;
       }
-      std::fprintf(stderr, "flux-compositor: ignoring empty output selector in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring empty output selector in %s\n", path->c_str());
       return true;
     }
     return false;
@@ -673,7 +673,7 @@ CompositorConfig loadConfig() {
     if (auto scale = configFloat(table, key); scale && *scale >= 0.5f && *scale <= 4.f) {
       config.scale = *scale;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid scale value in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid scale value in %s\n", path->c_str());
     }
     return true;
   };
@@ -682,7 +682,7 @@ CompositorConfig loadConfig() {
   auto parseOutputScaleEntry = [&](std::string outputName, toml::table const& outputTable) {
     outputName = trim(outputName);
     if (outputName.empty()) {
-      std::fprintf(stderr, "flux-compositor: ignoring output scale with empty output name in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring output scale with empty output name in %s\n", path->c_str());
       return;
     }
     auto parseNamedScaleKey = [&](char const* key) -> bool {
@@ -691,7 +691,7 @@ CompositorConfig loadConfig() {
         config.outputScales[outputName] = *scale;
       } else {
         std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid scale for output %s in %s\n",
+                     "lambda-window-manager: ignoring invalid scale for output %s in %s\n",
                      outputName.c_str(),
                      path->c_str());
       }
@@ -706,7 +706,7 @@ CompositorConfig loadConfig() {
         parseOutputScaleEntry(std::string(key.str()), *outputTable);
       } else {
         std::fprintf(stderr,
-                     "flux-compositor: ignoring non-table output entry %s in %s\n",
+                     "lambda-window-manager: ignoring non-table output entry %s in %s\n",
                      std::string(key.str()).c_str(),
                      path->c_str());
       }
@@ -719,7 +719,7 @@ CompositorConfig loadConfig() {
         if (outputName) {
           parseOutputScaleEntry(*outputName, *outputTable);
         } else {
-          std::fprintf(stderr, "flux-compositor: ignoring output scale without name in %s\n", path->c_str());
+          std::fprintf(stderr, "lambda-window-manager: ignoring output scale without name in %s\n", path->c_str());
         }
       }
     }
@@ -729,7 +729,7 @@ CompositorConfig loadConfig() {
     if (auto enabled = configBool(table, "animations")) {
       config.animationsEnabled = *enabled;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid animations value in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid animations value in %s\n", path->c_str());
     }
   }
 
@@ -737,7 +737,7 @@ CompositorConfig loadConfig() {
     if (auto enabled = configBool(table, "hardware_cursor")) {
       config.hardwareCursorEnabled = *enabled;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid hardware_cursor value in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid hardware_cursor value in %s\n", path->c_str());
     }
   }
 
@@ -746,7 +746,7 @@ CompositorConfig loadConfig() {
     if (auto timeout = configInt(table, key); timeout && *timeout >= 0 && *timeout <= 86'400) {
       config.idleBlankTimeoutSeconds = *timeout;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid %s value in %s\n", key, path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid %s value in %s\n", key, path->c_str());
     }
     return true;
   };
@@ -758,7 +758,7 @@ CompositorConfig loadConfig() {
     if (auto enabled = configBool(table, "window_glass")) {
       config.chrome.windowGlassEnabled = *enabled;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid window_glass value in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid window_glass value in %s\n", path->c_str());
     }
   }
 
@@ -766,7 +766,7 @@ CompositorConfig loadConfig() {
     if (auto opacity = configNumber(table, "window_glass_opacity"); opacity && *opacity >= 0.f && *opacity <= 1.f) {
       config.chrome.windowGlassOpacity = *opacity;
     } else {
-      std::fprintf(stderr, "flux-compositor: ignoring invalid window_glass_opacity value in %s\n", path->c_str());
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid window_glass_opacity value in %s\n", path->c_str());
     }
   }
 
@@ -778,12 +778,12 @@ CompositorConfig loadConfig() {
       config.darkChrome = darkChrome;
     }
   } else if (table.contains("chrome")) {
-    std::fprintf(stderr, "flux-compositor: ignoring non-table chrome section in %s\n", path->c_str());
+    std::fprintf(stderr, "lambda-window-manager: ignoring non-table chrome section in %s\n", path->c_str());
   }
 
   applyEnvironmentOverrides(config);
 
-  std::fprintf(stderr, "flux-compositor: loaded config %s\n", path->c_str());
+  std::fprintf(stderr, "lambda-window-manager: loaded config %s\n", path->c_str());
   return config;
 }
 

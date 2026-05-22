@@ -51,7 +51,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-clipboard-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-clipboard-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -107,7 +107,7 @@ void dataSourceSend(void*, wl_data_source*, char const* mimeType, int fd) {
   }
   close(fd);
 }
-void dataSourceCancelled(void*, wl_data_source*) { std::fprintf(stderr, "flux-compositor-clipboard-demo: source cancelled\n"); }
+void dataSourceCancelled(void*, wl_data_source*) { std::fprintf(stderr, "lambda-window-manager-clipboard-demo: source cancelled\n"); }
 void dataSourceDndDropPerformed(void*, wl_data_source*) {}
 void dataSourceDndFinished(void*, wl_data_source*) {}
 void dataSourceAction(void*, wl_data_source*, std::uint32_t) {}
@@ -115,7 +115,7 @@ wl_data_source_listener const kDataSourceListener{
     dataSourceTarget, dataSourceSend, dataSourceCancelled, dataSourceDndDropPerformed, dataSourceDndFinished, dataSourceAction};
 
 void dataOfferOffer(void*, wl_data_offer*, char const* mimeType) {
-  std::fprintf(stderr, "flux-compositor-clipboard-demo: offered %s\n", mimeType);
+  std::fprintf(stderr, "lambda-window-manager-clipboard-demo: offered %s\n", mimeType);
 }
 void dataOfferSourceActions(void*, wl_data_offer*, std::uint32_t) {}
 void dataOfferAction(void*, wl_data_offer*, std::uint32_t) {}
@@ -151,7 +151,7 @@ void setClipboardSelection(DemoClient* client, std::uint32_t serial) {
   wl_data_device_set_selection(client->dataDevice, client->dataSource, serial);
   wl_display_flush(client->display);
   client->selectionSet = true;
-  std::fprintf(stderr, "flux-compositor-clipboard-demo: set clipboard selection\n");
+  std::fprintf(stderr, "lambda-window-manager-clipboard-demo: set clipboard selection\n");
 }
 
 void pointerEnter(void*, wl_pointer*, std::uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t) {}
@@ -224,7 +224,7 @@ void destroyClient(DemoClient& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-clipboard-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-clipboard-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
     client.registry = wl_display_get_registry(client.display);
     wl_registry_add_listener(client.registry, &kRegistryListener, &client);
@@ -245,7 +245,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Clipboard demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-clipboard-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-clipboard-demo");
     wl_surface_commit(client.surface);
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
       throw std::runtime_error("initial configure timed out");
@@ -255,7 +255,7 @@ int main() {
     wl_surface_damage_buffer(client.surface, 0, 0, kWidth, kHeight);
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-clipboard-demo: click the window to set and receive clipboard selection\n");
+    std::fprintf(stderr, "lambda-window-manager-clipboard-demo: click the window to set and receive clipboard selection\n");
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
       if (client.receiveFd >= 0) {
@@ -263,7 +263,7 @@ int main() {
         ssize_t n = read(client.receiveFd, buffer, sizeof(buffer) - 1u);
         if (n > 0) {
           buffer[n] = '\0';
-          std::fprintf(stderr, "flux-compositor-clipboard-demo: received \"%s\"\n", buffer);
+          std::fprintf(stderr, "lambda-window-manager-clipboard-demo: received \"%s\"\n", buffer);
           gRunning.store(false, std::memory_order_relaxed);
         }
       }
@@ -271,7 +271,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-clipboard-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-clipboard-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

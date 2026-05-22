@@ -43,7 +43,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-fractional-scale-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-fractional-scale-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -108,7 +108,7 @@ void fractionalScalePreferredScale(void* data, wp_fractional_scale_v1*, std::uin
   auto* client = static_cast<DemoClient*>(data);
   client->gotPreferredScale = true;
   double const ratio = static_cast<double>(scale) / 120.0;
-  std::fprintf(stderr, "flux-compositor-fractional-scale-demo: preferred scale %u (%.2fx)\n", scale, ratio);
+  std::fprintf(stderr, "lambda-window-manager-fractional-scale-demo: preferred scale %u (%.2fx)\n", scale, ratio);
 }
 
 wp_fractional_scale_v1_listener const kFractionalScaleListener{
@@ -193,7 +193,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-fractional-scale-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-fractional-scale-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -216,7 +216,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Fractional Scale demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-fractional-scale-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-fractional-scale-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -228,7 +228,7 @@ int main() {
     wl_surface_damage_buffer(client.surface, 0, 0, kWidth, kHeight);
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-fractional-scale-demo: committed %dx%d buffer\n", kWidth, kHeight);
+    std::fprintf(stderr, "lambda-window-manager-fractional-scale-demo: committed %dx%d buffer\n", kWidth, kHeight);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.gotPreferredScale; }, 3000)) {
       throw std::runtime_error("preferred scale event timed out: " + displayError(client));
@@ -241,7 +241,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-fractional-scale-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-fractional-scale-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

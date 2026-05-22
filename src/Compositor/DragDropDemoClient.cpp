@@ -63,7 +63,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-dnd-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-dnd-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -159,7 +159,7 @@ xdg_toplevel_listener const kToplevelListener{
 };
 
 void sourceTarget(void*, wl_data_source*, char const* mimeType) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: target accepted %s\n", mimeType ? mimeType : "(none)");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: target accepted %s\n", mimeType ? mimeType : "(none)");
 }
 
 void sourceSend(void*, wl_data_source*, char const* mimeType, int fd) {
@@ -169,7 +169,7 @@ void sourceSend(void*, wl_data_source*, char const* mimeType, int fd) {
   }
   write(fd, kPayload, std::strlen(kPayload));
   close(fd);
-  std::fprintf(stderr, "flux-compositor-dnd-demo: source sent payload\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: source sent payload\n");
 }
 
 void sourceCancelled(void* data, wl_data_source*) {
@@ -178,15 +178,15 @@ void sourceCancelled(void* data, wl_data_source*) {
   client->targetWindow.hover = false;
   repaintWindow(client->sourceWindow);
   repaintWindow(client->targetWindow);
-  std::fprintf(stderr, "flux-compositor-dnd-demo: drag cancelled\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: drag cancelled\n");
 }
 
 void sourceDropPerformed(void*, wl_data_source*) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: drop performed\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: drop performed\n");
 }
 
 void sourceFinished(void*, wl_data_source*) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: drag finished\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: drag finished\n");
 }
 
 char const* actionName(std::uint32_t action) {
@@ -199,7 +199,7 @@ char const* actionName(std::uint32_t action) {
 }
 
 void sourceAction(void*, wl_data_source*, std::uint32_t action) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: source action %s\n", actionName(action));
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: source action %s\n", actionName(action));
 }
 
 wl_data_source_listener const kDataSourceListener{
@@ -212,14 +212,14 @@ wl_data_source_listener const kDataSourceListener{
 };
 
 void offerOffer(void*, wl_data_offer*, char const* mimeType) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: target saw offered mime %s\n", mimeType ? mimeType : "(null)");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: target saw offered mime %s\n", mimeType ? mimeType : "(null)");
 }
 
 void offerSourceActions(void*, wl_data_offer*, std::uint32_t actions) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: target saw source actions 0x%x\n", actions);
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: target saw source actions 0x%x\n", actions);
 }
 void offerAction(void*, wl_data_offer*, std::uint32_t action) {
-  std::fprintf(stderr, "flux-compositor-dnd-demo: target action %s\n", actionName(action));
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: target action %s\n", actionName(action));
 }
 
 wl_data_offer_listener const kDataOfferListener{
@@ -255,7 +255,7 @@ void pointerButton(void* data, wl_pointer*, std::uint32_t serial, std::uint32_t,
                             serial);
   client->sourceWindow.blockVisible = false;
   repaintWindow(client->sourceWindow);
-  std::fprintf(stderr, "flux-compositor-dnd-demo: drag started; release over the blue target window\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: drag started; release over the blue target window\n");
 }
 
 void pointerAxis(void*, wl_pointer*, std::uint32_t, std::uint32_t, wl_fixed_t) {}
@@ -289,7 +289,7 @@ void readDroppedText(DemoClient* client) {
   ssize_t const bytes = read(client->receiveFd, buffer, sizeof(buffer) - 1u);
   if (bytes > 0) {
     buffer[bytes] = '\0';
-    std::fprintf(stderr, "flux-compositor-dnd-demo: target received \"%s\"\n", buffer);
+    std::fprintf(stderr, "lambda-window-manager-dnd-demo: target received \"%s\"\n", buffer);
     close(client->receiveFd);
     client->receiveFd = -1;
   } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
@@ -321,7 +321,7 @@ void dataDeviceEnter(void* data,
   }
   client->targetWindow.hover = true;
   repaintWindow(client->targetWindow);
-  std::fprintf(stderr, "flux-compositor-dnd-demo: entered target window\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: entered target window\n");
 }
 
 void dataDeviceLeave(void* data, wl_data_device*) {
@@ -345,7 +345,7 @@ void dataDeviceDrop(void* data, wl_data_device*) {
   client->targetWindow.blockVisible = true;
   repaintWindow(client->targetWindow);
   wl_display_flush(client->display);
-  std::fprintf(stderr, "flux-compositor-dnd-demo: drop requested payload\n");
+  std::fprintf(stderr, "lambda-window-manager-dnd-demo: drop requested payload\n");
 }
 
 void dataDeviceSelection(void*, wl_data_device*, wl_data_offer*) {}
@@ -404,7 +404,7 @@ void createWindow(DemoClient& client, DemoWindow& window, char const* title) {
   window.toplevel = xdg_surface_get_toplevel(window.xdgSurface);
   xdg_toplevel_add_listener(window.toplevel, &kToplevelListener, &window);
   xdg_toplevel_set_title(window.toplevel, title);
-  xdg_toplevel_set_app_id(window.toplevel, "flux-compositor-dnd-demo");
+  xdg_toplevel_set_app_id(window.toplevel, "lambda-window-manager-dnd-demo");
   wl_surface_commit(window.surface);
 }
 
@@ -447,7 +447,7 @@ int main() {
   client.sourceWindow.source = true;
   client.sourceWindow.blockVisible = true;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-dnd-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-dnd-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -474,7 +474,7 @@ int main() {
     commitWindow(client, client.targetWindow);
     commitWindow(client, client.sourceWindow);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-dnd-demo: orange source and blue target committed\n");
+    std::fprintf(stderr, "lambda-window-manager-dnd-demo: orange source and blue target committed\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -484,7 +484,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-dnd-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-dnd-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

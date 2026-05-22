@@ -11,6 +11,37 @@
 namespace flux::compositor {
 namespace {
 
+bool hasAnchor(std::uint32_t anchor, std::uint32_t edge) {
+  return (anchor & edge) != 0;
+}
+
+std::int32_t layerExtent(WaylandServer::Impl::LayerSurface const* layerSurface) {
+  if (!layerSurface) return 0;
+  std::int32_t const configuredHeight = static_cast<std::int32_t>(layerSurface->height);
+  std::int32_t const committedHeight = displayHeight(layerSurface->surface);
+  return std::max(0, configuredHeight > 0 ? configuredHeight : committedHeight);
+}
+
+void refreshShellReservedZones(WaylandServer::Impl* server) {
+  if (!server) return;
+  std::int32_t topBar = 0;
+  std::int32_t dock = 0;
+  for (auto const& layerSurface : server->layerSurfaces_) {
+    if (!layerSurface) continue;
+    if (layerSurface->nameSpace == "lambda.topbar") {
+      topBar = std::max(topBar, std::max(0, layerSurface->exclusiveZone));
+    } else if (layerSurface->nameSpace == "lambda.dock" &&
+               hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
+      dock = std::max(dock, layerExtent(layerSurface.get()) + std::max(0, layerSurface->marginBottom));
+    }
+  }
+  if (topBar == server->topBarExclusiveZone_ && dock == server->dockReservedZone_) return;
+  server->topBarExclusiveZone_ = topBar;
+  server->dockReservedZone_ = dock;
+  ++server->contentSerial_;
+  server->notifyShellStateChanged();
+}
+
 void layerShellDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -20,6 +51,7 @@ void layerSurfaceSetSize(wl_client*, wl_resource* resource, std::uint32_t width,
   if (!layerSurface) return;
   layerSurface->width = width;
   layerSurface->height = height;
+  refreshShellReservedZones(layerSurface->server);
 }
 
 void layerSurfaceSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
@@ -32,9 +64,15 @@ void layerSurfaceSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anch
     return;
   }
   layerSurface->anchor = anchor;
+  refreshShellReservedZones(layerSurface->server);
 }
 
-void layerSurfaceSetExclusiveZone(wl_client*, wl_resource*, std::int32_t) {}
+void layerSurfaceSetExclusiveZone(wl_client*, wl_resource* resource, std::int32_t zone) {
+  auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
+  if (!layerSurface) return;
+  layerSurface->exclusiveZone = zone;
+  refreshShellReservedZones(layerSurface->server);
+}
 
 void layerSurfaceSetMargin(wl_client*, wl_resource* resource, std::int32_t top, std::int32_t right,
                            std::int32_t bottom, std::int32_t left) {
@@ -44,9 +82,14 @@ void layerSurfaceSetMargin(wl_client*, wl_resource* resource, std::int32_t top, 
   layerSurface->marginRight = right;
   layerSurface->marginBottom = bottom;
   layerSurface->marginLeft = left;
+  refreshShellReservedZones(layerSurface->server);
 }
 
-void layerSurfaceSetKeyboardInteractivity(wl_client*, wl_resource*, std::uint32_t) {}
+void layerSurfaceSetKeyboardInteractivity(wl_client*, wl_resource* resource, std::uint32_t interactivity) {
+  auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
+  if (!layerSurface) return;
+  layerSurface->keyboardInteractivity = interactivity;
+}
 
 void layerSurfaceGetPopup(wl_client*, wl_resource*, wl_resource*) {}
 
@@ -114,9 +157,6 @@ void bindLayerShellImpl(wl_client* client, void* data, std::uint32_t version, st
 
 void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!layerSurface || !layerSurface->surface) return;
-  auto hasAnchor = [](std::uint32_t anchor, std::uint32_t edge) {
-    return (anchor & edge) != 0;
-  };
   auto* surface = layerSurface->surface;
   std::int32_t const width = displayWidth(surface);
   std::int32_t const height = displayHeight(surface);
@@ -141,9 +181,6 @@ void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
 
 void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!layerSurface || !layerSurface->resource) return;
-  auto hasAnchor = [](std::uint32_t anchor, std::uint32_t edge) {
-    return (anchor & edge) != 0;
-  };
   std::uint32_t width = layerSurface->width;
   std::uint32_t height = layerSurface->height;
   if (width == 0 &&

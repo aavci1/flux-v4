@@ -18,7 +18,7 @@ AppliedCompositorConfig applyCompositorConfig(CompositorConfig const& config, Ca
   if (config.wallpaperPath) {
     applied.wallpaperImage = loadImage(*config.wallpaperPath, canvas.gpuDevice());
     if (!applied.wallpaperImage) {
-      std::fprintf(stderr, "flux-compositor: failed to load wallpaper %s\n", config.wallpaperPath->c_str());
+      std::fprintf(stderr, "lambda-window-manager: failed to load wallpaper %s\n", config.wallpaperPath->c_str());
     }
   }
   return applied;

@@ -56,7 +56,6 @@ struct CpuTraceState {
   double snapshotMs = 0.0;
   double surfaceMs = 0.0;
   double closingMs = 0.0;
-  double launcherMs = 0.0;
   double cursorMs = 0.0;
   double presentMs = 0.0;
   double canvasPresentMs = 0.0;
@@ -105,7 +104,7 @@ std::mutex &traceMutex() {
 
 bool cpuSamplerEnabled() {
   static bool const enabled = [] {
-    char const *value = std::getenv("FLUX_COMPOSITOR_SAMPLE_TRACE");
+    char const *value = std::getenv("LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE");
     return debug::envNonZero(value);
   }();
   return enabled;
@@ -113,7 +112,7 @@ bool cpuSamplerEnabled() {
 
 int cpuSamplerIntervalUsec() {
   static int const interval = [] {
-    char const *value = std::getenv("FLUX_COMPOSITOR_SAMPLE_USEC");
+    char const *value = std::getenv("LAMBDA_WINDOW_MANAGER_SAMPLE_USEC");
     if (!value || !*value)
       return 2000;
     int const parsed = std::atoi(value);
@@ -223,16 +222,16 @@ CpuTraceState &state() {
 }
 
 std::string defaultTracePath() {
-  if (char const *configured = std::getenv("FLUX_COMPOSITOR_CPU_TRACE_LOG"); configured && *configured) {
+  if (char const *configured = std::getenv("LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG"); configured && *configured) {
     return configured;
   }
   if (char const *stateHome = std::getenv("XDG_STATE_HOME"); stateHome && *stateHome) {
-    return std::string(stateHome) + "/flux-compositor/cpu.log";
+    return std::string(stateHome) + "/lambda-window-manager/cpu.log";
   }
   if (char const *home = std::getenv("HOME"); home && *home) {
-    return std::string(home) + "/.local/state/flux-compositor/cpu.log";
+    return std::string(home) + "/.local/state/lambda-window-manager/cpu.log";
   }
-  return "/tmp/flux-compositor-cpu.log";
+  return "/tmp/lambda-window-manager-cpu.log";
 }
 
 char const *tracePath() {
@@ -241,8 +240,8 @@ char const *tracePath() {
 }
 
 char const *fallbackTracePath() {
-  char const *path = std::getenv("FLUX_COMPOSITOR_CPU_TRACE_LOG");
-  return path && *path ? path : "/tmp/flux-compositor-cpu.log";
+  char const *path = std::getenv("LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG");
+  return path && *path ? path : "/tmp/lambda-window-manager-cpu.log";
 }
 
 std::FILE *traceFile(CpuTraceState &traceState) {
@@ -285,7 +284,6 @@ void resetCounters(CpuTraceState &traceState, CpuTraceClock::time_point now, dou
   traceState.snapshotMs = 0.0;
   traceState.surfaceMs = 0.0;
   traceState.closingMs = 0.0;
-  traceState.launcherMs = 0.0;
   traceState.cursorMs = 0.0;
   traceState.presentMs = 0.0;
   traceState.canvasPresentMs = 0.0;
@@ -351,7 +349,7 @@ void maybeLog(CpuTraceState &traceState) {
         "wayland_dispatches=%llu changed=%llu unchanged=%llu "
         "surfaces=%.2f/f "
         "phase_avg_ms total=%.3f bg=%.3f snapshot=%.3f surface=%.3f closing=%.3f "
-        "launcher=%.3f cursor=%.3f present=%.3f canvas_present=%.3f kms_present=%.3f "
+        "cursor=%.3f present=%.3f canvas_present=%.3f kms_present=%.3f "
         "max_total=%.3f max_surface=%.3f "
         "max_present=%.3f shm copies=%llu mb=%.1f mbps=%.1f copy_ms=%.3f "
         "image creates=%llu updates=%llu mb=%.1f mbps=%.1f upload_ms=%.3f "
@@ -376,7 +374,7 @@ void maybeLog(CpuTraceState &traceState) {
         static_cast<unsigned long long>(traceState.waylandDispatches - traceState.waylandDispatchesChanged),
         static_cast<double>(traceState.surfaces) * invFrames, traceState.totalMs * invFrames,
         traceState.backgroundMs * invFrames, traceState.snapshotMs * invFrames, traceState.surfaceMs * invFrames,
-        traceState.closingMs * invFrames, traceState.launcherMs * invFrames, traceState.cursorMs * invFrames,
+        traceState.closingMs * invFrames, traceState.cursorMs * invFrames,
         traceState.presentMs * invFrames, traceState.canvasPresentMs * invFrames, traceState.kmsPresentMs * invFrames,
         traceState.maxTotalMs, traceState.maxSurfaceMs, traceState.maxPresentMs,
         static_cast<unsigned long long>(traceState.shmCopies), shmMb, shmMb / seconds, traceState.shmCopyMs,
@@ -409,7 +407,7 @@ void maybeLog(CpuTraceState &traceState) {
 
 bool cpuTraceEnabled() noexcept {
   static bool const enabled = [] {
-    char const *value = std::getenv("FLUX_COMPOSITOR_CPU_TRACE");
+    char const *value = std::getenv("LAMBDA_WINDOW_MANAGER_CPU_TRACE");
     return debug::envNonZero(value);
   }();
   return enabled;
@@ -433,8 +431,8 @@ void initializeCpuSampler() noexcept {
   timer.it_value = timer.it_interval;
   if (setitimer(ITIMER_PROF, &timer, nullptr) == 0) {
     std::fprintf(stderr,
-                 "flux-compositor: CPU sample trace enabled at %dus CPU interval "
-                 "(set FLUX_COMPOSITOR_SAMPLE_TRACE=0 to disable)\n",
+                 "lambda-window-manager: CPU sample trace enabled at %dus CPU interval "
+                 "(set LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0 to disable)\n",
                  intervalUsec);
   }
 }
@@ -456,7 +454,6 @@ void recordCpuFrame(CpuFrameTrace const &frame) {
   traceState.snapshotMs += frame.snapshotMs;
   traceState.surfaceMs += frame.surfaceMs;
   traceState.closingMs += frame.closingMs;
-  traceState.launcherMs += frame.launcherMs;
   traceState.cursorMs += frame.cursorMs;
   traceState.presentMs += frame.presentMs;
   traceState.canvasPresentMs += frame.canvasPresentMs;

@@ -44,6 +44,29 @@ struct DisplayMode {
   int refreshHz = 0;
 };
 
+enum class LayerShellLayer {
+  Background,
+  Bottom,
+  Top,
+  Overlay,
+};
+
+struct LayerShellOptions {
+  bool enabled = false;
+  LayerShellLayer layer = LayerShellLayer::Top;
+  std::string nameSpace;
+  bool anchorTop = false;
+  bool anchorBottom = false;
+  bool anchorLeft = false;
+  bool anchorRight = false;
+  int marginTop = 0;
+  int marginRight = 0;
+  int marginBottom = 0;
+  int marginLeft = 0;
+  int exclusiveZone = 0;
+  bool keyboardInteractive = false;
+};
+
 struct WindowConfig {
   Size size = {1280, 720};
   std::string title = "Flux Application";
@@ -59,6 +82,9 @@ struct WindowConfig {
   /// On KMS, request a specific connector mode. Zero values use the output's preferred mode.
   /// Other backends currently ignore this value.
   DisplayMode displayMode{};
+  /// On Wayland, create this window as a layer-shell surface instead of an xdg_toplevel.
+  /// Other backends currently ignore this value.
+  LayerShellOptions layerShell{};
 };
 
 struct WindowState {

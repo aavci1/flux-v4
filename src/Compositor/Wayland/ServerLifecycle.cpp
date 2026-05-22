@@ -148,11 +148,12 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   socketName_ = socket;
   setenv("WAYLAND_DISPLAY", socketName_.c_str(), 1);
   if (char const* runtimeDir = std::getenv("XDG_RUNTIME_DIR"); runtimeDir && *runtimeDir) {
-    displayNameFile_ = std::string(runtimeDir) + "/flux-compositor-display";
+    displayNameFile_ = std::string(runtimeDir) + "/lambda-window-manager-display";
     std::ofstream file(displayNameFile_, std::ios::trunc);
     file << socketName_ << '\n';
   }
-  std::fprintf(stderr, "flux-compositor: Wayland display %s\n", socketName_.c_str());
+  std::fprintf(stderr, "lambda-window-manager: Wayland display %s\n", socketName_.c_str());
+  initializeShellIpc();
   diagnostics::crashLog("wayland-start socket=%s globals=ready", socketName_.c_str());
 }
 
@@ -163,6 +164,7 @@ WaylandServer::Impl::~Impl() {
                         toplevels_.size(),
                         dmabufBuffers_.size());
   if (!displayNameFile_.empty()) unlink(displayNameFile_.c_str());
+  shutdownShellIpc();
   if (display_) {
     wl_display_destroy_clients(display_);
     wl_display_destroy(display_);

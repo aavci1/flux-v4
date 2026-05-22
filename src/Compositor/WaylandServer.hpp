@@ -23,6 +23,7 @@ public:
 
   [[nodiscard]] char const* socketName() const noexcept;
   [[nodiscard]] int eventFd() const noexcept;
+  [[nodiscard]] int shellIpcFd() const noexcept;
   [[nodiscard]] float preferredScale() const noexcept;
   [[nodiscard]] std::int32_t logicalOutputWidth() const noexcept;
   [[nodiscard]] std::int32_t logicalOutputHeight() const noexcept;
@@ -31,12 +32,13 @@ public:
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
   [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
-  [[nodiscard]] CommandLauncherSnapshot commandLauncher() const;
   [[nodiscard]] std::uint64_t contentSerial() const noexcept;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 
   void dispatch();
+  void dispatchShellIpc();
+  void notifyShellStateChanged();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
   void setChromeConfig(ChromeConfig config);

@@ -155,7 +155,7 @@ Layer surfaces (zwlr_layer_shell_v1) also have `!surface->toplevel` and are also
 
 ## 7. Testing
 
-Manual test on hardware: launch the compositor, run `flux-compositor-popup-demo`, and move the pointer over the popup. Hovering rows should recolor them, clicking a row should turn it green and print a click log, clicking outside should dismiss, and pressing Escape should dismiss.
+Manual test on hardware: launch the compositor, run `lambda-window-manager-popup-demo`, and move the pointer over the popup. Hovering rows should recolor them, clicking a row should turn it green and print a click log, clicking outside should dismiss, and pressing Escape should dismiss.
 
 `foot` can still be used for broader real-app validation when a local config binds a popup/menu action. With the default local foot bindings, plain `BTN_RIGHT` extends selection, so no menu appearing on right-click is not by itself a compositor failure.
 
@@ -204,7 +204,7 @@ One commit. Half a day at most.
 
 ## 10. Acceptance
 
-- ✓ `flux-compositor-popup-demo` can validate popup pointer input visually: hover highlights rows and clicks select rows.
+- ✓ `lambda-window-manager-popup-demo` can validate popup pointer input visually: hover highlights rows and clicks select rows.
 - ◐ `foot` popup/menu behavior can be validated when the local foot config binds an action that opens an xdg-popup.
 - ◐ Clicking outside the menu dismisses it (existing behavior, regression check). Needs hardware validation on each real app.
 - ◐ Nested submenus (if foot has them or another client does) work the same way. Nested popup bounds are covered by deterministic geometry tests; hardware validation remains.

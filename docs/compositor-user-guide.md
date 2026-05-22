@@ -4,15 +4,14 @@ This guide covers the current Linux KMS compositor as it exists in this reposito
 
 ## Build
 
-Configure a KMS build:
+Configure one Linux build. On Linux, `FLUX_PLATFORM=AUTO` selects Wayland for normal Flux
+apps and still builds the KMS-only `lambda-window-manager` target by default.
 
 ```sh
-cmake -S . -B build-kms-compositor -G Ninja \
-  -DFLUX_PLATFORM=LINUX_KMS \
-  -DFLUX_BUILD_COMPOSITOR=ON \
+cmake -S . -B build -G Ninja \
   -DFLUX_BUILD_TESTS=ON \
   -DFLUX_BUILD_EXAMPLES=ON
-cmake --build build-kms-compositor
+cmake --build build
 ```
 
 Run the unit tests that cover deterministic compositor logic:
@@ -27,39 +26,52 @@ cmake --build build --target flux_tests
 Run from a real TTY. The compositor owns the selected KMS output until it exits.
 
 ```sh
-./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
+./build/lambda-window-manager 2>&1 | tee compositor.log
 ```
 
 List connected KMS outputs:
 
 ```sh
-./build-kms-compositor/flux-compositor --list-outputs
+./build/lambda-window-manager --list-outputs
 ```
 
 Run on a specific output by connector name, 0-based index, `primary`, or `secondary`:
 
 ```sh
-./build-kms-compositor/flux-compositor --output secondary 2>&1 | tee compositor.log
+./build/lambda-window-manager --output secondary 2>&1 | tee compositor.log
 ```
 
 Use a specific config file without changing the environment:
 
 ```sh
-./build-kms-compositor/flux-compositor --config /path/to/config.toml 2>&1 | tee compositor.log
+./build/lambda-window-manager --config /path/to/config.toml 2>&1 | tee compositor.log
 ```
 
 Expected startup behavior:
 
-- The output switches to the Flux compositor.
+- The output switches to the Lambda window manager.
 - The compositor logs all connected KMS outputs and the selected output.
 - A background is drawn from the compositor config.
 - The cursor uses the system Xcursor theme or a client-provided cursor surface.
 - The compositor writes the selected physical size, logical size, and scale to stderr and `compositor-sizes.log`.
 
+Start the desktop shell from another TTY after the window manager is running:
+
+```sh
+./build/lambda-shell
+```
+
+Expected shell behavior:
+
+- A glass top bar appears and reserves vertical work area.
+- A glass dock appears at the bottom.
+- `Super+Space`, the top-bar Lambda label, or the dock launcher icon opens the shell command launcher.
+- The dock reflects running/focused application state reported by `lambda-window-manager`.
+
 Clients can connect without setting `WAYLAND_DISPLAY` if they use the Flux demo helper. For other Wayland clients, use the display name written to:
 
 ```sh
-$XDG_RUNTIME_DIR/flux-compositor-display
+$XDG_RUNTIME_DIR/lambda-window-manager-display
 ```
 
 ## Exit
@@ -73,7 +85,7 @@ Ctrl+Alt+Backspace
 `Ctrl+C` is intentionally delivered to the focused Wayland client, which is required for terminal apps such as `foot`. To terminate from another shell, send SIGTERM:
 
 ```sh
-pkill -TERM flux-compositor
+pkill -TERM lambda-window-manager
 ```
 
 ## Input Permissions
@@ -91,9 +103,9 @@ If the cursor is visible but does not move, or no shortcuts work, check ACLs fir
 The compositor creates a default config file when none exists. The path is selected in this order:
 
 1. `--config PATH`
-2. `FLUX_COMPOSITOR_CONFIG`
-3. `$XDG_CONFIG_HOME/flux-compositor/config.toml`
-4. `$HOME/.config/flux-compositor/config.toml`
+2. `LAMBDA_WINDOW_MANAGER_CONFIG`
+3. `$XDG_CONFIG_HOME/lambda-window-manager/config.toml`
+4. `$HOME/.config/lambda-window-manager/config.toml`
 
 The file is reloaded at runtime when it changes.
 
@@ -179,8 +191,8 @@ Mouse behavior:
 Command launcher:
 
 - Press `Super+Space`.
-- Type a command, for example `./build-kms-compositor/solitaire-app`.
-- Press Enter to launch it; Escape cancels.
+- Type to filter the shell app registry.
+- Press Enter or click a result to launch/focus it; Escape or an outside click cancels.
 
 The launched process receives `WAYLAND_DISPLAY` for the running compositor automatically.
 
@@ -225,4 +237,4 @@ Set them before launching the compositor if you need to force a theme or size.
 - Full multi-output desktop layout if it lands in v1.
 - Install/session-manager packaging documentation.
 
-Set `FLUX_COMPOSITOR_PRESENT=vulkan-display` only for debugging if you need to compare against the previous Vulkan-display presenter.
+Set `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` only for debugging if you need to compare against the previous Vulkan-display presenter.

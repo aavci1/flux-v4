@@ -48,7 +48,7 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
   server->idleInhibitors_.push_back(std::move(inhibitor));
   wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, destroyResourceCallback<WaylandServer::Impl::IdleInhibitor, WaylandServer::Impl, &WaylandServer::Impl::destroyIdleInhibitor>);
   std::fprintf(stderr,
-               "flux-compositor: idle inhibitors active=%zu\n",
+               "lambda-window-manager: idle inhibitors active=%zu\n",
                server->idleInhibitors_.size());
 }
 

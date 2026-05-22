@@ -1,7 +1,7 @@
 # Flux Compositor
 
 **Status:** phases 1 and 2 have passed hardware smoke checks; phases 3 through 5 are implemented enough for Flux demos and initial real-app testing. The compositor cleanup spec is implemented, with Wayland globals, window/input management, runtime orchestration, lifecycle, snapshots, frame scheduling, and destroy cleanup split into concern files. Cursor rendering now uses the system Xcursor theme or client-provided cursor surfaces; the compositor no longer has built-in cursor artwork.
-**Repository:** `flux-compositor` is currently built from this repository as `flux-compositor` while the Flux-side KMS API settles.
+**Repository:** `lambda-window-manager` is currently built from this repository as `lambda-window-manager` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
@@ -29,11 +29,11 @@ These hold across all phases. Implementation may surface reasons to revise; if s
 
 ### 1.1 Process model
 
-One process. The compositor is a single executable, `flux-compositor`, launched from a TTY. It owns the display via KMS for the duration of its run. It exits on SIGINT/SIGTERM. There is no system service, no privileged-client model, no state machine for session phases. It is a user-session compositor, the same way Sway is.
+One process. The compositor is a single executable, `lambda-window-manager`, launched from a TTY. It owns the display via KMS for the duration of its run. It exits on SIGINT/SIGTERM. There is no system service, no privileged-client model, no state machine for session phases. It is a user-session compositor, the same way Sway is.
 
 ### 1.2 Single selected output (v1)
 
-The compositor handles exactly one active output. Full multi-output layout is not in v1. The KMS code paths in Flux enumerate connected outputs, and the compositor can select one by connector name, 0-based index, `primary`, or `secondary` through `--output`, `FLUX_COMPOSITOR_OUTPUT`, or `output = "..."` in the config.
+The compositor handles exactly one active output. Full multi-output layout is not in v1. The KMS code paths in Flux enumerate connected outputs, and the compositor can select one by connector name, 0-based index, `primary`, or `secondary` through `--output`, `LAMBDA_WINDOW_MANAGER_OUTPUT`, or `output = "..."` in the config.
 
 ### 1.3 Vulkan-only
 
@@ -74,7 +74,7 @@ See `docs/compositor-window-chrome.md` for the cutout convention, input routing,
 ### 1.9 Repository layout
 
 ```
-flux-compositor/
+lambda-window-manager/
 ├── CMakeLists.txt
 ├── README.md
 ├── docs/
@@ -110,7 +110,7 @@ The compositor will surface needs the framework doesn't currently meet. When tha
 
 1. **Identify whether the need is general.** "Render into a caller-supplied image" is general (`RenderTarget`). "Import an external GPU resource" is general (`Image::fromExternal*`). "Track which Wayland surface owns this scene node" is compositor-specific.
 
-2. **If general, the framework gets the feature.** Add it to Flux, with Metal and Vulkan parity. Tests on both backends. Audit script continues to pass. This is the established discipline: see `flux-compositor-api-spec.md` for the model; see the recent `VulkanFrameRecorder` work for the pattern of "Vulkan needs it; Mac already has something analogous; bring both into alignment."
+2. **If general, the framework gets the feature.** Add it to Flux, with Metal and Vulkan parity. Tests on both backends. Audit script continues to pass. This is the established discipline: see `lambda-window-manager-api-spec.md` for the model; see the recent `VulkanFrameRecorder` work for the pattern of "Vulkan needs it; Mac already has something analogous; bring both into alignment."
 
 3. **If compositor-specific, it stays in the compositor repo.** Window decoration rendering is compositor-specific. Surface-state tracking is compositor-specific. Wayland protocol handling is compositor-specific.
 
@@ -151,7 +151,7 @@ Before launching the compositor for the first time after any non-trivial change:
 1. Ensure an emergency TTY is logged in. From the physical console: Ctrl+Alt+F2 reaches TTY2; log in there.
 2. Ensure SSH from Mac works (last-resort kill path).
 3. Run the compositor from TTY1.
-4. If it hangs, Ctrl+Alt+F2 to TTY2, `sudo pkill -9 flux-compositor`.
+4. If it hangs, Ctrl+Alt+F2 to TTY2, `sudo pkill -9 lambda-window-manager`.
 5. If TTY switching breaks too, SSH from Mac and kill from there.
 6. If SSH is also unresponsive, power-cycle.
 
@@ -169,7 +169,7 @@ Phase 2+ : iteration cycle starts to matter. A Wayland client test app needs to 
 
 ### 3.6 Logging
 
-The compositor writes logs to stderr. Run as `flux-compositor 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by the environment variables documented in [`compositor-testing.md`](compositor-testing.md#instrumentation-environment), including `FLUX_COMPOSITOR_CPU_TRACE`, `FLUX_COMPOSITOR_PACING_TRACE`, and `FLUX_RESIZE_TRACE`.
+The compositor writes logs to stderr. Run as `lambda-window-manager 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by the environment variables documented in [`compositor-testing.md`](compositor-testing.md#instrumentation-environment), including `LAMBDA_WINDOW_MANAGER_CPU_TRACE`, `LAMBDA_WINDOW_MANAGER_PACING_TRACE`, and `FLUX_RESIZE_TRACE`.
 
 Avoid log spam in hot paths unless it is guarded by one of the instrumentation variables.
 
@@ -185,7 +185,7 @@ Mirror Flux's: C++23, RAII, no exceptions across module boundaries (use Result-s
 
 ### 4.1 Goal
 
-A `flux-compositor` binary that owns the display, presents a solid color via KMS+Vulkan, exits cleanly on signal. No Wayland yet, no input handling beyond signal handling, no anything else.
+A `lambda-window-manager` binary that owns the display, presents a solid color via KMS+Vulkan, exits cleanly on signal. No Wayland yet, no input handling beyond signal handling, no anything else.
 
 This phase is mostly setup and confidence-building. The real compositor work starts in phase 2.
 
@@ -320,7 +320,7 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 
 ### 4.6 Acceptance criteria
 
-- ✗ `flux-compositor` binary builds clean on CachyOS.
+- ✗ `lambda-window-manager` binary builds clean on CachyOS.
 - ✓ Running it from TTY1 turns the screen blue.
 - ✓ The compositor exits cleanly through SIGTERM or its configured terminate shortcut; Ctrl+C is reserved for focused Wayland clients.
 - ✗ CPU usage is low when content is static.
@@ -431,14 +431,14 @@ This single-threaded model holds through phase 3. Phase 4 may surface a need for
 
 ### 5.6 Acceptance criteria
 
-- ✓ `flux-compositor` accepts Wayland client connections through the scaffolded server.
-- ✓ `wl_subcompositor` is exposed and basic `wl_subsurface` children render relative to their parent surface, covered by `flux-compositor-popup-demo`.
+- ✓ `lambda-window-manager` accepts Wayland client connections through the scaffolded server.
+- ✓ `wl_subcompositor` is exposed and basic `wl_subsurface` children render relative to their parent surface, covered by `lambda-window-manager-popup-demo`.
 - ✓ Flux test apps configured to use Wayland can connect and create toplevels through the implemented xdg-shell path.
-- ✓ SHM-backed window content is copied into Flux images and drawn on screen, verified with `flux-compositor-shm-demo`.
-- ✓ `flux-compositor-shm-demo` provides a purpose-built SHM client smoke test. Start `flux-compositor`, note the logged Wayland display name, then run `WAYLAND_DISPLAY=<name> ./build-kms-compositor/flux-compositor-shm-demo` from another shell/TTY.
+- ✓ SHM-backed window content is copied into Flux images and drawn on screen, verified with `lambda-window-manager-shm-demo`.
+- ✓ `lambda-window-manager-shm-demo` provides a purpose-built SHM client smoke test. Start `lambda-window-manager`, note the logged Wayland display name, then run `WAYLAND_DISPLAY=<name> ./build/lambda-window-manager-shm-demo` from another shell/TTY.
 - ✓ `xdg-decoration` is exposed and server-side decoration mode is accepted/configured for clients that request it.
 - ✓ `wl_surface.frame` callbacks are completed after compositor presentation rather than immediately at request time.
-- ✓ `flux-compositor-dmabuf-demo` creates a GBM buffer, fills it with a pattern, sends it to the compositor as a dma-buf, and appears on screen through the readable linear-buffer path.
+- ✓ `lambda-window-manager-dmabuf-demo` creates a GBM buffer, fills it with a pattern, sends it to the compositor as a dma-buf, and appears on screen through the readable linear-buffer path.
 - ✓ Resizing clients no longer crashes the compositor in the tested paths.
 - ✓ Closing clients removes surfaces from the draw list and prunes cached client images.
 - ✓ DMABUF-based buffer submission works in the purpose-built demo.
@@ -490,7 +490,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, left-side close button, rounded corners, and soft shadow.
 - Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Left/Super+Right to snap; Super+Up to maximize; Super+Down to restore snapped/maximized windows; Ctrl+Alt+Backspace to terminate the compositor.
-- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented and covered by `flux-compositor-popup-demo`. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
+- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented and covered by `lambda-window-manager-popup-demo`. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
 
 ### 6.3 Out of scope for phase 3
 
@@ -577,15 +577,15 @@ Real-world Wayland apps work. Implements the protocols that typical Linux apps (
 
 Protocols to implement, in rough priority order:
 
-- **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling and a purpose-built `flux-compositor-layer-shell-demo`.
-- **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented, with a purpose-built `flux-compositor-viewport-demo` smoke client.
+- **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling and a purpose-built `lambda-window-manager-layer-shell-demo`.
+- **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented, with a purpose-built `lambda-window-manager-viewport-demo` smoke client.
 - **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry. Implemented for the current single-output layout.
 - **`wp_presentation_time`**: gives clients vblank-timing information for frame pacing. Used by video players and games for smooth playback. The compositor exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Feedback includes `sync_output` for the single active output. The default GBM/atomic-KMS presentation path uses DRM page-flip completion events with refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK`/`HW_COMPLETION` flags. The legacy Vulkan-display path can still use DRM vblank timing and optional `VK_GOOGLE_display_timing` completion records.
-- **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `flux-compositor-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `flux-compositor-pointer-constraints-demo`.
+- **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `lambda-window-manager-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `lambda-window-manager-pointer-constraints-demo`.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn Xcursor theme images.
-- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `flux-compositor-dnd-demo`.
+- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `lambda-window-manager-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `lambda-window-manager-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `lambda-window-manager-dnd-demo`.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented with protocol/state tracking and compositor-side software idle blanking; active inhibitors suppress blanking. DPMS/panel power-off is not implemented yet.
-- **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Implemented with simple token generation and a repeated-activation guard to avoid focus loops, with `flux-compositor-activation-demo` as the smoke client.
+- **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Implemented with simple token generation and a repeated-activation guard to avoid focus loops, with `lambda-window-manager-activation-demo` as the smoke client.
 - **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales. Implemented as protocol negotiation from the compositor config scale, including fractional values, with `wl_output` integer scale fallback for clients that do not bind the fractional-scale protocol.
 
 ### 7.3 Out of scope for phase 4
@@ -648,7 +648,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 ### 8.2 Scope
 
 - **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented. Titlebar drag to the top edge maximizes; dragging to left/right edges snaps halves; dragging to corners snaps quarters; Super+Up maximizes and Super+Down restores maximized/snapped windows.
-- **Configuration file:** `~/.config/flux-compositor/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, output selection, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.jpg"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `output = "HDMI-A-1"` or `output = "secondary"`, fallback `scale = 2.0`, per-connector `[outputs."DP-1"] scale = 2.0` overrides, `animations = false`, `hardware_cursor = false`, `idle_blank_timeout_seconds = 300`, and a `[keybindings]` section for compositor shortcuts including `launch_command = "super+space"`. Changing output selection requires restarting the compositor.
+- **Configuration file:** `~/.config/lambda-window-manager/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `LAMBDA_WINDOW_MANAGER_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, output selection, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.jpg"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `output = "HDMI-A-1"` or `output = "secondary"`, fallback `scale = 2.0`, per-connector `[outputs."DP-1"] scale = 2.0` overrides, `animations = false`, `hardware_cursor = false`, `idle_blank_timeout_seconds = 300`, and a `[keybindings]` section for compositor shortcuts including `launch_command = "super+space"`. Changing output selection requires restarting the compositor.
   Supported keybinding actions are `close`, `cycle_focus`, `snap_left`, `snap_right`, `maximize`, `restore`, and `terminate`; bindings use strings such as `"Super+Q"` or `"Ctrl+Alt+Backspace"`.
 - **Hardware cursor:** use KMS cursor planes when supported. The compositor loads the system Xcursor theme for its default/cursor-shape cursors and uploads themed or client-provided cursor pixels to the KMS cursor plane when they fit without compositor-side scaling. If the cursor plane cannot be used, the same themed cursor image is drawn in software; there is no built-in fallback cursor artwork.
 - **Frame timing improvements:** adaptive sync if the hardware supports it (FreeSync). Triple-buffering when beneficial. Initial KMS vblank pacing uses `drmWaitVBlank` when available and falls back to timer pacing if the driver rejects it.
@@ -781,11 +781,11 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-16 | local working tree | Added initial compositor-side Wayland server scaffold and checked-in xdg-shell server bindings. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Added checked-in linux-dmabuf server bindings and a compositor-side buffer-parameter lifetime scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Added `Image::fromRgbaPixels(...)` and used it to draw SHM-backed Wayland surface snapshots. | Implemented for Vulkan and Metal. |
-| 2026-05-16 | local working tree | Added `flux-compositor-shm-demo`, a tiny Wayland SHM client for first-client smoke testing. | Linux-only compositor test utility; no Metal API involved. |
+| 2026-05-16 | local working tree | Added `lambda-window-manager-shm-demo`, a tiny Wayland SHM client for first-client smoke testing. | Linux-only compositor test utility; no Metal API involved. |
 | 2026-05-16 | local working tree | Added checked-in xdg-decoration bindings and a server-side-decoration negotiation scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Moved Wayland frame callbacks to the compositor present loop. | Linux compositor-only event-loop behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added a first `Image::fromDmabuf(...)` Vulkan path and compositor-side dmabuf surface import wiring. | Vulkan/Linux-only path; Metal parity still deferred to IOSurface import when needed. |
-| 2026-05-16 | local working tree | Added `flux-compositor-dmabuf-demo`, a tiny GBM-backed Wayland client for the first dma-buf hardware smoke test. | Linux-only compositor test utility; no Metal API involved. |
+| 2026-05-16 | local working tree | Added `lambda-window-manager-dmabuf-demo`, a tiny GBM-backed Wayland client for the first dma-buf hardware smoke test. | Linux-only compositor test utility; no Metal API involved. |
 | 2026-05-16 | local working tree | Added compositor-owned server-side title bars and left-button move-drag handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added `wl_pointer.set_cursor` handling so client cursor surfaces draw as the pointer image instead of as separate windows. | Linux compositor-only pointer behavior; no Metal API involved. |
 | 2026-05-17 | local working tree | Added compositor window resizing, half-screen snap/drag-unsnap behavior, keyboard shortcuts, keyboard modifier forwarding, titlebar titles, and close-on-click-release handling. | Linux compositor-only window-management behavior; no Metal API involved. |
@@ -806,7 +806,7 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-18 | 4826a6c | Moved non-grabbing xdg-popup placement into unit-tested window geometry helpers. | Linux compositor-only popup positioning hardening; no Metal API involved. |
 | 2026-05-18 | 7c74c1a | Updated compositor status to reflect docs and popup geometry test coverage. | Documentation-only status update. |
 | 2026-05-18 | 141ebd7 | Added config-file support for compositor cursor theme and size with Xcursor environment fallback. | Linux compositor-only cursor configuration; no Metal API involved. |
-| 2026-05-18 | 7fec81f | Added `flux-compositor --config PATH` and `--help` so test configs can be selected without editing environment variables. | Linux compositor-only executable usability; no Metal API involved. |
+| 2026-05-18 | 7fec81f | Added `lambda-window-manager --config PATH` and `--help` so test configs can be selected without editing environment variables. | Linux compositor-only executable usability; no Metal API involved. |
 | 2026-05-21 | local working tree | Added an initial GBM/atomic-KMS presenter for compositor-owned scanout buffers and exposed render-target retargeting for Vulkan canvases. | Linux/KMS-only presentation backend; Mac continues to use `CAMetalLayer`. |
 
 ### 12.2 Open questions
@@ -816,7 +816,7 @@ Tracked as work proceeds. Removed when answered.
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Subsurface hit testing remains separate from the popup hit-test fix. Subsurfaces render relative to parents, but pointer routing still needs explicit subsurface ordering and coordinate translation.
 - Phase 4: `wp_presentation_time` now sends `sync_output`. The default GBM/atomic-KMS path reports DRM page-flip completion timestamps; the legacy Vulkan-display path uses DRM vblank timing and can delay feedback on optional `VK_GOOGLE_display_timing` records.
-- Presentation backend escape hatch: `FLUX_COMPOSITOR_PRESENT=vulkan-display` forces the legacy Vulkan-display presenter for debugging while the atomic-KMS path is being hardware-smoked.
+- Presentation backend escape hatch: `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` forces the legacy Vulkan-display presenter for debugging while the atomic-KMS path is being hardware-smoked.
 - Phase 5: Does multi-output land in v1 or post-v1?
 
 ### 12.3 Remaining implementation work

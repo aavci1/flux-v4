@@ -508,16 +508,6 @@ int main(int argc, char** argv) {
           canvas, textSystem, rejected, rejectedVisual, *rejectedImage, frameTime, chrome, false);
       flux::compositor::drawCommittedSurfaceSnapshot(
           canvas, textSystem, resizing, resizingVisual, *resizingImage, frameTime, chrome, false);
-      flux::compositor::drawCommandLauncher(canvas,
-                                            textSystem,
-                                            flux::compositor::CommandLauncherSnapshot{
-                                                .visible = true,
-                                                .command = "foot",
-                                                .message = "Enter to run, Escape to cancel",
-                                            },
-                                            chrome,
-                                            logicalWidth,
-                                            logicalHeight);
       target.endFrame();
     };
     for (int frame = 0; frame < frameCount; ++frame) {
@@ -528,7 +518,7 @@ int main(int argc, char** argv) {
     std::cout << output << '\n';
     return 0;
   } catch (std::exception const& error) {
-    std::cerr << "flux-compositor-render-fixture: " << error.what() << '\n';
+    std::cerr << "lambda-window-manager-render-fixture: " << error.what() << '\n';
     return 1;
   }
 }

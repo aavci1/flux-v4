@@ -49,7 +49,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-activation-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-activation-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -94,7 +94,7 @@ void commitBuffer(Window& window) {
 
 void tokenDone(void* data, xdg_activation_token_v1* token, char const* tokenString) {
   auto* client = static_cast<DemoClient*>(data);
-  std::fprintf(stderr, "flux-compositor-activation-demo: activating second window with token %s\n", tokenString);
+  std::fprintf(stderr, "lambda-window-manager-activation-demo: activating second window with token %s\n", tokenString);
   xdg_activation_v1_activate(client->activation, tokenString, client->second.surface);
   xdg_activation_token_v1_destroy(token);
   client->token = nullptr;
@@ -108,11 +108,11 @@ void requestActivation(DemoClient& client) {
   client.activationRequested = true;
   client.token = xdg_activation_v1_get_activation_token(client.activation);
   xdg_activation_token_v1_add_listener(client.token, &kTokenListener, &client);
-  xdg_activation_token_v1_set_app_id(client.token, "flux-compositor-activation-demo");
+  xdg_activation_token_v1_set_app_id(client.token, "lambda-window-manager-activation-demo");
   xdg_activation_token_v1_set_surface(client.token, client.first.surface);
   xdg_activation_token_v1_commit(client.token);
   wl_display_flush(client.display);
-  std::fprintf(stderr, "flux-compositor-activation-demo: requested activation token\n");
+  std::fprintf(stderr, "lambda-window-manager-activation-demo: requested activation token\n");
 }
 
 void wmBasePing(void*, xdg_wm_base* wmBase, std::uint32_t serial) {
@@ -172,7 +172,7 @@ void createWindow(DemoClient& client, Window& window, char const* title) {
   window.toplevel = xdg_surface_get_toplevel(window.xdgSurface);
   xdg_toplevel_add_listener(window.toplevel, &kToplevelListener, &client);
   xdg_toplevel_set_title(window.toplevel, title);
-  xdg_toplevel_set_app_id(window.toplevel, "flux-compositor-activation-demo");
+  xdg_toplevel_set_app_id(window.toplevel, "lambda-window-manager-activation-demo");
   wl_surface_commit(window.surface);
 }
 
@@ -202,7 +202,7 @@ void destroyClient(DemoClient& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-activation-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-activation-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -224,14 +224,14 @@ int main() {
     }
 
     std::fprintf(stderr,
-                 "flux-compositor-activation-demo: source starts on top; target should raise in about one second\n");
+                 "lambda-window-manager-activation-demo: source starts on top; target should raise in about one second\n");
     auto const activationDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
     while (std::chrono::steady_clock::now() < activationDeadline) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 50) < 0) break;
     }
     requestActivation(client);
     std::fprintf(stderr,
-                 "flux-compositor-activation-demo: expect the target window to be on top; close a window or Ctrl+C\n");
+                 "lambda-window-manager-activation-demo: expect the target window to be on top; close a window or Ctrl+C\n");
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
     }
@@ -239,7 +239,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-activation-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-activation-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

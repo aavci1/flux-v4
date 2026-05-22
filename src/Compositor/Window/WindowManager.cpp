@@ -57,6 +57,33 @@ OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
   };
 }
 
+OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server) {
+  OutputGeometry output = outputGeometryFor(server);
+  output.height = std::max(0, output.height - (server ? server->dockReservedZone_ : 0));
+  return output;
+}
+
+bool layerSurfaceAboveWindows(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+}
+
+WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, float x, float y) {
+  if (!server) return nullptr;
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    WaylandServer::Impl::Surface* surface = it->get();
+    std::int32_t const width = displayWidth(surface);
+    std::int32_t const height = displayHeight(surface);
+    if (!layerSurfaceAboveWindows(surface) || surface->minimized || width <= 0 || height <= 0) continue;
+    float const left = static_cast<float>(surface->windowX);
+    float const top = static_cast<float>(surface->windowY);
+    if (containsPoint(x, y, left, top, left + static_cast<float>(width), top + static_cast<float>(height))) {
+      return surface;
+    }
+  }
+  return nullptr;
+}
+
 std::int32_t titleBarHeightFor(WaylandServer::Impl const* server) {
   return std::max(0, server ? server->chromeConfig_.titleBarHeight : kTitleBarHeight);
 }
@@ -128,7 +155,7 @@ std::int32_t externalTitleBarHeight(WaylandServer::Impl* server, WaylandServer::
 }
 
 std::int32_t topInsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
-  return externalTitleBarHeight(server, surface);
+  return (server ? server->topBarExclusiveZone_ : 0) + externalTitleBarHeight(server, surface);
 }
 
 ResizeEdge resizeEdgesFromXdg(std::uint32_t edges) {
@@ -260,6 +287,7 @@ struct ChromeHitContext {
 };
 
 std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server, float x, float y) {
+  if (aboveWindowLayerAt(server, x, y)) return std::nullopt;
   if (popupAt(server, x, y)) return std::nullopt;
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
@@ -413,6 +441,7 @@ std::uint32_t resizeEdgesForContext(ChromeHitContext const& context, float x, fl
 } // namespace
 
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y) {
+  if (auto* layer = aboveWindowLayerAt(server, x, y)) return layer;
   if (auto* popup = popupAt(server, x, y)) return popup;
 
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
@@ -520,7 +549,7 @@ void clearCompositorCursorOverride(WaylandServer::Impl* server) {
 
 void updateCompositorCursorForPointer(WaylandServer::Impl* server) {
   if (!server) return;
-  if (server->commandLauncherVisible_ || server->dragSurface_ || server->dndSource_) {
+  if (server->dragSurface_ || server->dndSource_) {
     clearCompositorCursorOverride(server);
     return;
   }
@@ -677,7 +706,7 @@ bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer:
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
   if (!popup || popup->dismissed) return false;
   std::fprintf(stderr,
-               "flux-compositor: xdg_popup dismissed surface=%llu\n",
+               "lambda-window-manager: xdg_popup dismissed surface=%llu\n",
                static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
                                                    ? popup->xdgSurface->surface->id
                                                    : 0));
@@ -718,6 +747,8 @@ void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     }
   }
   server->keyboardFocus_ = next;
+  ++server->contentSerial_;
+  server->notifyShellStateChanged();
   noteFocusedToplevel(server, next);
   if (next) {
     wl_array keys;
@@ -838,13 +869,13 @@ void clearSnapPreview(WaylandServer::Impl* server) {
 }
 
 WindowGeometry frameGeometryFor(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
-  std::int32_t const topInset = topInsetForSurface(server, surface);
+  std::int32_t const titleBarHeight = externalTitleBarHeight(server, surface);
   WindowGeometry const content = windowGeometryFor(surface);
   return {
       .x = content.x,
-      .y = content.y - topInset,
+      .y = content.y - titleBarHeight,
       .width = content.width,
-      .height = content.height + topInset,
+      .height = content.height + titleBarHeight,
   };
 }
 
@@ -852,12 +883,13 @@ WindowGeometry snapPreviewFrameGeometry(WaylandServer::Impl* server,
                                         WaylandServer::Impl::Surface const* surface,
                                         SnapTarget target) {
   std::int32_t const topInset = topInsetForSurface(server, surface);
-  WindowGeometry const content = snapTargetGeometry(outputGeometryFor(server), target, topInset);
+  WindowGeometry const content = snapTargetGeometry(snapOutputGeometryFor(server), target, topInset);
+  std::int32_t const titleBarHeight = externalTitleBarHeight(server, surface);
   return {
       .x = content.x,
-      .y = content.y - topInset,
+      .y = content.y - titleBarHeight,
       .width = content.width,
-      .height = content.height + topInset,
+      .height = content.height + titleBarHeight,
   };
 }
 
@@ -912,7 +944,7 @@ std::optional<SnapTarget> activeDragSnapTarget(WaylandServer::Impl* server,
   }
   auto const target =
       snapTargetForWindow(windowGeometryFor(surface),
-                          outputGeometryFor(server),
+                          snapOutputGeometryFor(server),
                           topInsetForSurface(server, surface));
   if (!target) {
     clearSnapPreview(server);
@@ -964,7 +996,7 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const*
   }
   WindowGeometry const current = snapPreviewCurrentWindow(mutableServer, now);
   WindowGeometry const end = server->snapPreviewTargetWindow_;
-  OutputGeometry const output = outputGeometryFor(mutableServer);
+  OutputGeometry const output = snapOutputGeometryFor(mutableServer);
   return SnapPreviewSnapshot{
       .surfaceId = server->snapPreviewSurfaceId_,
       .x = current.x,
@@ -1039,7 +1071,7 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
     surface->restoreHeight = displayHeight(surface);
   }
   WindowGeometry const geometry =
-      snapTargetGeometry(outputGeometryFor(server), target, topInsetForSurface(server, surface));
+      snapTargetGeometry(snapOutputGeometryFor(server), target, topInsetForSurface(server, surface));
   surface->snapped = true;
   surface->maximized = false;
   startGeometryAnimation(server,
@@ -1062,10 +1094,11 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
       std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
   std::int32_t const restoreX =
       std::clamp(surface->restoreX, 0, std::max(0, server->logicalOutputWidth() - restoreWidth));
+  OutputGeometry const restoreOutput = snapOutputGeometryFor(server);
   std::int32_t const restoreY =
       std::clamp(surface->restoreY,
                  topInsetForSurface(server, surface),
-                 std::max(topInsetForSurface(server, surface), server->logicalOutputHeight() - restoreHeight));
+                 std::max(topInsetForSurface(server, surface), restoreOutput.height - restoreHeight));
   surface->maximized = false;
   surface->snapped = false;
   startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
@@ -1081,7 +1114,7 @@ void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     surface->restoreWidth = displayWidth(surface);
     surface->restoreHeight = displayHeight(surface);
   }
-  WindowGeometry const target = maximizedWindowGeometry(outputGeometryFor(server),
+  WindowGeometry const target = maximizedWindowGeometry(snapOutputGeometryFor(server),
                                                         topInsetForSurface(server, surface));
   surface->maximized = true;
   surface->snapped = false;
@@ -1113,7 +1146,7 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
           .width = surface->restoreWidth > 0 ? surface->restoreWidth : surface->width,
           .height = surface->restoreHeight > 0 ? surface->restoreHeight : surface->height,
       },
-      .output = outputGeometryFor(server),
+      .output = snapOutputGeometryFor(server),
       .topInset = topInsetForSurface(server, surface),
   });
   surface->windowX = restored.x;
@@ -1193,10 +1226,7 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
       restoreFocusedToplevel(server);
       return true;
     case WaylandServer::ShortcutAction::LaunchCommand:
-      server->commandLauncherVisible_ = true;
-      server->commandLauncherText_.clear();
-      server->commandLauncherMessage_ = "Type a command and press Enter";
-      sendPointerFocus(server, nullptr, timeMs);
+      server->requestShellOpenCommandLauncher();
       return true;
     case WaylandServer::ShortcutAction::Terminate:
       std::raise(SIGTERM);
@@ -1204,125 +1234,6 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
     }
   }
   return false;
-}
-
-std::string commandLauncherTextForKey(WaylandServer::Impl* server, std::uint32_t key) {
-  if (!server || !server->xkbState_) return {};
-  char utf8[64]{};
-  int const written = xkb_state_key_get_utf8(server->xkbState_, key + 8u, utf8, sizeof(utf8));
-  if (written <= 0) return {};
-  return std::string(utf8, static_cast<std::size_t>(written));
-}
-
-std::vector<std::string> parseCommandLine(std::string const& command) {
-  std::vector<std::string> args;
-  std::string current;
-  char quote = '\0';
-  bool escaping = false;
-  for (char c : command) {
-    if (escaping) {
-      current.push_back(c);
-      escaping = false;
-      continue;
-    }
-    if (c == '\\') {
-      escaping = true;
-      continue;
-    }
-    if (quote != '\0') {
-      if (c == quote) {
-        quote = '\0';
-      } else {
-        current.push_back(c);
-      }
-      continue;
-    }
-    if (c == '\'' || c == '"') {
-      quote = c;
-      continue;
-    }
-    if (std::isspace(static_cast<unsigned char>(c))) {
-      if (!current.empty()) {
-        args.push_back(std::move(current));
-        current.clear();
-      }
-      continue;
-    }
-    current.push_back(c);
-  }
-  if (escaping) current.push_back('\\');
-  if (!current.empty()) args.push_back(std::move(current));
-  return args;
-}
-
-void spawnCommand(std::string const& command, std::string const& waylandDisplay) {
-  std::vector<std::string> args = parseCommandLine(command);
-  if (args.empty()) return;
-  pid_t const child = fork();
-  if (child < 0) {
-    std::fprintf(stderr, "flux-compositor: fork failed while launching command\n");
-    return;
-  }
-  if (child == 0) {
-    if (setsid() < 0) _exit(126);
-    pid_t const grandchild = fork();
-    if (grandchild < 0) _exit(126);
-    if (grandchild > 0) _exit(0);
-    setenv("WAYLAND_DISPLAY", waylandDisplay.c_str(), 1);
-    std::vector<char*> argv;
-    argv.reserve(args.size() + 1u);
-    for (std::string& arg : args) argv.push_back(arg.data());
-    argv.push_back(nullptr);
-    execvp(argv.front(), argv.data());
-    _exit(127);
-  }
-  int status = 0;
-  while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
-}
-
-bool handleCommandLauncherKey(WaylandServer::Impl* server, std::uint32_t key, bool pressed) {
-  if (!server->commandLauncherVisible_) return false;
-  if (!pressed) return true;
-  if (server->ctrlDown_ || server->altDown_ || server->metaDown_) return true;
-
-  switch (key) {
-  case KEY_ESC:
-    server->commandLauncherVisible_ = false;
-    server->commandLauncherText_.clear();
-    server->commandLauncherMessage_.clear();
-    return true;
-  case KEY_ENTER:
-  case KEY_KPENTER: {
-    std::string command = server->commandLauncherText_;
-    command.erase(command.begin(),
-                  std::find_if(command.begin(), command.end(), [](unsigned char c) {
-                    return !std::isspace(c);
-                  }));
-    command.erase(std::find_if(command.rbegin(), command.rend(), [](unsigned char c) {
-                    return !std::isspace(c);
-                  }).base(),
-                  command.end());
-    if (command.empty()) {
-      server->commandLauncherMessage_ = "Type a command";
-      return true;
-    }
-    std::fprintf(stderr, "flux-compositor: launching command: %s\n", command.c_str());
-    server->commandLauncherVisible_ = false;
-    server->commandLauncherText_.clear();
-    server->commandLauncherMessage_.clear();
-    spawnCommand(command, server->socketName_);
-    return true;
-  }
-  case KEY_BACKSPACE:
-    if (!server->commandLauncherText_.empty()) server->commandLauncherText_.pop_back();
-    return true;
-  default:
-    if (std::string text = commandLauncherTextForKey(server, key); !text.empty()) {
-      if (server->commandLauncherText_.size() + text.size() <= 512u) server->commandLauncherText_ += text;
-      return true;
-    }
-    return true;
-  }
 }
 
 void updateDrag(WaylandServer::Impl* server) {
@@ -1408,11 +1319,6 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
                            static_cast<float>(constraint->surface->windowY),
                            static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
   }
-  if (commandLauncherVisible_) {
-    sendPointerFocus(this, nullptr, timeMs);
-    updateCompositorCursorForPointer(this);
-    return;
-  }
   if (resizeSurface_) {
     updateResize(this);
     updateCompositorCursorForPointer(this);
@@ -1454,11 +1360,6 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
                            static_cast<float>(constraint->surface->windowY),
                            static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
   }
-  if (commandLauncherVisible_) {
-    sendPointerFocus(this, nullptr, timeMs);
-    updateCompositorCursorForPointer(this);
-    return;
-  }
   if (resizeSurface_) {
     updateResize(this);
     updateCompositorCursorForPointer(this);
@@ -1479,13 +1380,6 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
 }
 
 void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
-  if (commandLauncherVisible_) {
-    (void)button;
-    (void)pressed;
-    (void)timeMs;
-    updateCompositorCursorForPointer(this);
-    return;
-  }
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (button == BTN_LEFT && !pressed && dndSource_) {
     updateDndTarget(this, target, timeMs);
@@ -1683,12 +1577,6 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
 }
 
 void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
-  if (commandLauncherVisible_) {
-    (void)dx;
-    (void)dy;
-    (void)timeMs;
-    return;
-  }
   if (!pointerFocus_) return;
   for (wl_resource* pointer : pointerResources_) {
     if (!resourceBelongsToSurfaceClient(pointer, pointerFocus_)) continue;
@@ -1710,7 +1598,6 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
   }
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
   if (consumeModifier) return;
-  if (commandLauncherVisible_ && handleCommandLauncherKey(this, key, pressed)) return;
   if (pressed && key == KEY_ESC && dismissTopPopup(this)) return;
   if (handleCompositorShortcut(this, key, pressed, timeMs)) return;
   if (!keyboardFocus_) return;
@@ -1723,6 +1610,106 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
                          key,
                          pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
   }
+}
+
+namespace {
+
+std::optional<std::string> commandForAppId(std::string const& appId) {
+  if (appId == "terminal" || appId == "foot") return "foot";
+  if (appId == "browser" || appId == "firefox") return "firefox";
+  if (appId == "files") return "xdg-open .";
+  if (appId == "settings") return "lambda-settings";
+  if (appId == "calendar") return "gnome-calendar";
+  if (appId == "mail") return "thunderbird";
+  if (appId == "music") return "rhythmbox";
+  return std::nullopt;
+}
+
+bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
+  if (requested == actual) return true;
+  if (requested == "terminal" && actual == "foot") return true;
+  if (requested == "browser" && actual == "firefox") return true;
+  if (requested == "files" && (actual == "org.gnome.Nautilus" || actual == "nautilus" || actual == "thunar")) {
+    return true;
+  }
+  return false;
+}
+
+void spawnShellCommand(std::string const& command, std::string const& waylandDisplay) {
+  if (command.empty()) return;
+  pid_t const child = fork();
+  if (child < 0) {
+    std::fprintf(stderr, "lambda-window-manager: fork failed while launching %s\n", command.c_str());
+    return;
+  }
+  if (child == 0) {
+    if (setsid() < 0) _exit(126);
+    pid_t const grandchild = fork();
+    if (grandchild < 0) _exit(126);
+    if (grandchild > 0) _exit(0);
+    setenv("WAYLAND_DISPLAY", waylandDisplay.c_str(), 1);
+    execl("/bin/sh", "sh", "-lc", command.c_str(), static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  int status = 0;
+  while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+}
+
+} // namespace
+
+void WaylandServer::Impl::launchShellApp(std::string const& appId) {
+  std::optional<std::string> const command = commandForAppId(appId);
+  if (!command) {
+    std::fprintf(stderr, "lambda-window-manager: refusing unknown shell app id %s\n", appId.c_str());
+    return;
+  }
+  spawnShellCommand(*command, socketName_);
+}
+
+bool WaylandServer::Impl::focusShellApp(std::string const& appId, std::uint32_t timeMs) {
+  for (auto it = surfaces_.rbegin(); it != surfaces_.rend(); ++it) {
+    Surface* surface = it->get();
+    if (!surface || !surfaceIsXdgToplevel(surface) || surface->minimized) continue;
+    XdgToplevel* toplevel = toplevelForSurface(this, surface);
+    if (!toplevel || !shellAppIdMatches(appId, toplevel->appId)) continue;
+    raiseSurface(this, surface);
+    setKeyboardFocus(this, surface);
+    sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    return true;
+  }
+  return false;
+}
+
+bool WaylandServer::Impl::focusShellWindow(std::uint64_t windowId, std::uint32_t timeMs) {
+  auto found = std::find_if(surfaces_.begin(), surfaces_.end(), [windowId](auto const& surface) {
+    return surface && surface->id == windowId && surfaceIsXdgToplevel(surface.get());
+  });
+  if (found == surfaces_.end() || (*found)->minimized) return false;
+  Surface* surface = found->get();
+  raiseSurface(this, surface);
+  setKeyboardFocus(this, surface);
+  sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  return true;
+}
+
+bool WaylandServer::Impl::claimCommandLauncherModal(std::uint32_t timeMs) {
+  for (auto const& layerSurface : layerSurfaces_) {
+    if (!layerSurface || layerSurface->nameSpace != "lambda.command-launcher" || !layerSurface->surface) continue;
+    commandLauncherModalSurface_ = layerSurface->surface;
+    setKeyboardFocus(this, layerSurface->surface);
+    sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    return true;
+  }
+  return false;
+}
+
+void WaylandServer::Impl::releaseCommandLauncherModal(std::uint32_t timeMs) {
+  if (keyboardFocus_ == commandLauncherModalSurface_) {
+    Surface* next = previousFocusedToplevel(this, keyboardFocus_);
+    setKeyboardFocus(this, next);
+    sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  }
+  commandLauncherModalSurface_ = nullptr;
 }
 
 } // namespace flux::compositor

@@ -51,7 +51,7 @@ For reference, each problem is restated with its evidence in the current tree.
 8. **Three separate copies of resize-trace logging.** The four resize-stabilization commits added ad-hoc tracing in three places:
    - `waylandResizeTrace` / `waylandResizeTraceLog` in `src/Graphics/Vulkan/VulkanGpuCanvas.cpp` (env: `FLUX_WAYLAND_RESIZE_TRACE`).
    - `resizeTrace` / `resizeTraceLog` in `src/Platform/Linux/WaylandWindow.cpp` (env: `FLUX_WAYLAND_RESIZE_TRACE`, identical to above).
-   - `resizeTraceEnabled` / `traceResizeSurface` in `src/Compositor/WaylandServer.cpp` (env: `FLUX_COMPOSITOR_RESIZE_TRACE`, different env, different format).
+   - `resizeTraceEnabled` / `traceResizeSurface` in `src/Compositor/WaylandServer.cpp` (env: `LAMBDA_WINDOW_MANAGER_RESIZE_TRACE`, different env, different format).
    Same pattern, three implementations, two env vars. Pragmatic to ship the resize fix; needs unification now that the fix is verified.
 
 9. **Framework changes log is no longer being maintained.** The most recent four commits added framework-level code (`VulkanGpuCanvas.cpp` swapchain reuse with headroom; `WaylandWindow.cpp` viewporter integration) without entries in `docs/compositor.md` §12.1. The framework changes log is the mechanism that operationalizes the cross-backend discipline rule; when it stops being maintained, the rule stops being enforceable.
@@ -91,7 +91,7 @@ The three existing sites are replaced with calls to `flux::detail::resizeTrace("
 
 **Backend parity?** No Metal API surface. The tracing exists because of Vulkan-specific resize behavior; Metal manages drawable size natively. No parity needed.
 
-**Acceptance:** all three trace sites resolve to `flux::detail::resizeTrace`. The old `FLUX_WAYLAND_RESIZE_TRACE` and `FLUX_COMPOSITOR_RESIZE_TRACE` env vars are removed.
+**Acceptance:** all three trace sites resolve to `flux::detail::resizeTrace`. The old `FLUX_WAYLAND_RESIZE_TRACE` and `LAMBDA_WINDOW_MANAGER_RESIZE_TRACE` env vars are removed.
 
 **LOC delta:** −80 (consolidation), +50 (new utility), net −30.
 
@@ -406,9 +406,9 @@ After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is 
 
 ### 5.1 Plan for safely reintroducing xdg-popups
 
-1. **Implement the protocol stub without any input grab.** Just respond to `get_popup` by creating a popup object that's tracked but renders as a regular surface (no popup-specific behavior). This isolates the protocol implementation from the input-grab logic that likely caused the freeze. Implemented and smoked with `flux-compositor-popup-demo`.
+1. **Implement the protocol stub without any input grab.** Just respond to `get_popup` by creating a popup object that's tracked but renders as a regular surface (no popup-specific behavior). This isolates the protocol implementation from the input-grab logic that likely caused the freeze. Implemented and smoked with `lambda-window-manager-popup-demo`.
 
-2. **Render and dismiss the popup correctly without grab.** Popups have positioning constraints (anchor, gravity, slide-along-edge fallback). Implement these statically — given a parent and a positioner, compute the popup's screen position. Outside-click and Escape dismissal send `popup_done` and unmap the popup. No animations, no grab. Implemented and smoked with `flux-compositor-popup-demo`.
+2. **Render and dismiss the popup correctly without grab.** Popups have positioning constraints (anchor, gravity, slide-along-edge fallback). Implement these statically — given a parent and a positioner, compute the popup's screen position. Outside-click and Escape dismissal send `popup_done` and unmap the popup. No animations, no grab. Implemented and smoked with `lambda-window-manager-popup-demo`.
 
 3. **Add the input grab last.** Wayland's grab semantics are subtle: the popup's input grab is bounded (it can be "interactive" or "non-interactive"), and a misbehaving grab can starve the rest of the input system. Implement with explicit timeouts on grab acquisition; if a popup has held an input grab for more than N seconds without user interaction, force-release and log.
 
@@ -416,7 +416,7 @@ After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is 
 
 ### 5.2 Plan for safely reintroducing xdg-activation
 
-Activation is simpler: a client requests focus, optionally with a token from a previous focus event. The lockup likely came from a focus loop (activation triggers a focus event which triggers another activation, etc.). A simple loop-detection denies repeated requests for the same surface within a short window. Implemented and smoked with `flux-compositor-activation-demo`.
+Activation is simpler: a client requests focus, optionally with a token from a previous focus event. The lockup likely came from a focus loop (activation triggers a focus event which triggers another activation, etc.). A simple loop-detection denies repeated requests for the same surface within a short window. Implemented and smoked with `lambda-window-manager-activation-demo`.
 
 ### 5.3 Acceptance
 

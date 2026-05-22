@@ -50,18 +50,22 @@ The selected physical device must report Vulkan 1.3. If Flux rejects the device,
 
 ## Configure
 
-Wayland build:
+Default Linux build:
 
 ```sh
-cmake -S . -B build-linux-wayland -G Ninja \
-  -DFLUX_PLATFORM=LINUX_WAYLAND \
+cmake -S . -B build -G Ninja \
   -DFLUX_BUILD_TESTS=ON \
   -DFLUX_BUILD_EXAMPLES=ON
-cmake --build build-linux-wayland
-ctest --test-dir build-linux-wayland --output-on-failure
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-KMS build:
+On Linux, `FLUX_PLATFORM=AUTO` selects the Wayland app backend for normal Flux
+apps. `lambda-window-manager` is a Linux-only KMS target and is built alongside
+that Wayland app backend by default, so day-to-day development should not need a
+separate KMS build directory.
+
+Dedicated KMS platform build:
 
 ```sh
 cmake -S . -B build-linux-kms -G Ninja \

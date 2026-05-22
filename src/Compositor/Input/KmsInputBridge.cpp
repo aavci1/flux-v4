@@ -18,7 +18,7 @@ bool debugCompositorInput() {
 void dispatchKmsInputEvent(WaylandServer& wayland, platform::KmsInputEvent const& event) {
   if (debugCompositorInput()) {
     std::fprintf(stderr,
-                 "flux-compositor: input kind=%u dx=%.2f dy=%.2f x=%.1f y=%.1f button=%u pressed=%d key=%u\n",
+                 "lambda-window-manager: input kind=%u dx=%.2f dy=%.2f x=%.1f y=%.1f button=%u pressed=%d key=%u\n",
                  static_cast<unsigned int>(event.kind),
                  event.dx,
                  event.dy,

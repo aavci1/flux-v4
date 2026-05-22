@@ -94,7 +94,7 @@ void activationActivate(wl_client*, wl_resource* resource, char const*, wl_resou
 
   std::uint32_t const now = monotonicMilliseconds();
   if (server->lastActivationSurface_ == surface && now - server->lastActivationTimeMs_ < 500u) {
-    std::fprintf(stderr, "flux-compositor: denied repeated xdg-activation request for surface=%llu\n",
+    std::fprintf(stderr, "lambda-window-manager: denied repeated xdg-activation request for surface=%llu\n",
                  static_cast<unsigned long long>(surface->id));
     return;
   }

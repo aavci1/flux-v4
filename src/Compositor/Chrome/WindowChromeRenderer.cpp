@@ -20,6 +20,10 @@ StrokeStyle visibleStroke(Color color, float width) {
   return color.a > 0.f && width > 0.f ? StrokeStyle::solid(color, width) : StrokeStyle::none();
 }
 
+Color glassBorderColor() {
+  return Color{0.34f, 0.39f, 0.50f, 0.22f};
+}
+
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   return ShadowStyle{
       .radius = focused ? 30.f : 18.f,
@@ -234,55 +238,8 @@ void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeC
   canvas.drawRect(previewRect,
                   radius,
                   FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity * 0.48f)),
-                  StrokeStyle::solid(Color{0.92f, 0.97f, 1.0f, 0.78f}, 1.f),
+                  StrokeStyle::solid(glassBorderColor(), 1.f),
                   ShadowStyle::none());
-}
-
-void drawCommandLauncher(Canvas& canvas,
-                         TextSystem& textSystem,
-                         CommandLauncherSnapshot const& launcher,
-                         ChromeConfig const& chrome,
-                         std::int32_t outputWidth,
-                         std::int32_t outputHeight) {
-  if (!launcher.visible) return;
-  float const width = std::min(680.f, std::max(280.f, static_cast<float>(outputWidth) - 80.f));
-  float const height = 72.f;
-  float const x = (static_cast<float>(outputWidth) - width) * 0.5f;
-  float const y = std::max(34.f, static_cast<float>(outputHeight) * 0.18f);
-  Rect const panel = Rect::sharp(x, y, width, height);
-  CornerRadius const radius{16.f};
-
-  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
-    canvas.drawBackdropBlur(panel, chrome.glassBlurRadius, Colors::transparent, radius);
-  }
-  canvas.drawRect(panel,
-                  radius,
-                  FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity)),
-                  visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth),
-                  ShadowStyle{.radius = 30.f, .offset = {0.f, 18.f}, .color = Color{0.f, 0.f, 0.f, 0.38f}});
-
-  Font commandFont{};
-  commandFont.size = 24.f;
-  commandFont.weight = 520.f;
-  TextLayoutOptions commandOptions{
-      .verticalAlignment = VerticalAlignment::Center,
-      .wrapping = TextWrapping::NoWrap,
-      .maxLines = 1,
-  };
-  std::string command = launcher.command.empty() ? std::string{"Run command"} : launcher.command;
-  Color commandColor = launcher.command.empty() ? Color{0.25f, 0.27f, 0.31f, 1.f}
-                                                : Color{0.04f, 0.05f, 0.07f, 1.f};
-  float constexpr panelInset = 22.f;
-  Rect const commandRect = Rect::sharp(x + panelInset,
-                                       y + panelInset,
-                                       width - panelInset * 2.f,
-                                       height - panelInset * 2.f);
-  if (auto layout = textSystem.layout(command, commandFont, commandColor, commandRect, commandOptions)) {
-    canvas.save();
-    canvas.clipRect(commandRect);
-    canvas.drawTextLayout(*layout, {0.f, 0.f});
-    canvas.restore();
-  }
 }
 
 } // namespace flux::compositor

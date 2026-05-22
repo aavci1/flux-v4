@@ -18,6 +18,10 @@ int WaylandServer::eventFd() const noexcept {
   return impl_->eventFd();
 }
 
+int WaylandServer::shellIpcFd() const noexcept {
+  return impl_->shellIpcFd();
+}
+
 float WaylandServer::preferredScale() const noexcept {
   return impl_->preferredScale();
 }
@@ -50,10 +54,6 @@ std::optional<int> WaylandServer::snapPreviewWakeDelayMs() const {
   return impl_->snapPreviewWakeDelayMs();
 }
 
-CommandLauncherSnapshot WaylandServer::commandLauncher() const {
-  return impl_->commandLauncher();
-}
-
 std::uint64_t WaylandServer::contentSerial() const noexcept {
   return impl_->contentSerial_;
 }
@@ -68,6 +68,14 @@ bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::u
 
 void WaylandServer::dispatch() {
   impl_->dispatch();
+}
+
+void WaylandServer::dispatchShellIpc() {
+  impl_->dispatchShellIpc();
+}
+
+void WaylandServer::notifyShellStateChanged() {
+  impl_->notifyShellStateChanged();
 }
 
 void WaylandServer::flushClients() {

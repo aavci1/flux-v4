@@ -47,7 +47,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-presentation-time-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-presentation-time-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -108,7 +108,7 @@ void presentationClockId(void* data, wp_presentation*, std::uint32_t clockId) {
   auto* client = static_cast<DemoClient*>(data);
   client->clockId = clockId;
   client->gotClockId = true;
-  std::fprintf(stderr, "flux-compositor-presentation-time-demo: clock_id=%u\n", clockId);
+  std::fprintf(stderr, "lambda-window-manager-presentation-time-demo: clock_id=%u\n", clockId);
 }
 
 wp_presentation_listener const kPresentationListener{
@@ -118,7 +118,7 @@ wp_presentation_listener const kPresentationListener{
 void feedbackSyncOutput(void* data, struct wp_presentation_feedback*, wl_output*) {
   auto* client = static_cast<DemoClient*>(data);
   client->gotSyncOutput = true;
-  std::fprintf(stderr, "flux-compositor-presentation-time-demo: sync_output\n");
+  std::fprintf(stderr, "lambda-window-manager-presentation-time-demo: sync_output\n");
 }
 
 void feedbackPresented(void* data,
@@ -134,7 +134,7 @@ void feedbackPresented(void* data,
   std::uint64_t const seconds = (static_cast<std::uint64_t>(tvSecHi) << 32u) | tvSecLo;
   std::uint64_t const sequence = (static_cast<std::uint64_t>(seqHi) << 32u) | seqLo;
   std::fprintf(stderr,
-               "flux-compositor-presentation-time-demo: presented sec=%llu nsec=%u refresh=%u seq=%llu flags=0x%x\n",
+               "lambda-window-manager-presentation-time-demo: presented sec=%llu nsec=%u refresh=%u seq=%llu flags=0x%x\n",
                static_cast<unsigned long long>(seconds),
                tvNsec,
                refresh,
@@ -147,7 +147,7 @@ void feedbackPresented(void* data,
 
 void feedbackDiscarded(void* data, struct wp_presentation_feedback*) {
   auto* client = static_cast<DemoClient*>(data);
-  std::fprintf(stderr, "flux-compositor-presentation-time-demo: feedback discarded\n");
+  std::fprintf(stderr, "lambda-window-manager-presentation-time-demo: feedback discarded\n");
   client->gotFeedback = true;
   client->feedback = nullptr;
   gRunning.store(false, std::memory_order_relaxed);
@@ -227,7 +227,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-presentation-time-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-presentation-time-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -249,7 +249,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Presentation Time demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-presentation-time-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-presentation-time-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -263,7 +263,7 @@ int main() {
     wl_surface_damage_buffer(client.surface, 0, 0, kWidth, kHeight);
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-presentation-time-demo: committed %dx%d buffer\n", kWidth, kHeight);
+    std::fprintf(stderr, "lambda-window-manager-presentation-time-demo: committed %dx%d buffer\n", kWidth, kHeight);
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -274,7 +274,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-presentation-time-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-presentation-time-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

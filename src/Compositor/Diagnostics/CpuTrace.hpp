@@ -14,7 +14,6 @@ struct CpuFrameTrace {
   double snapshotMs = 0.0;
   double surfaceMs = 0.0;
   double closingMs = 0.0;
-  double launcherMs = 0.0;
   double cursorMs = 0.0;
   double presentMs = 0.0;
   double canvasPresentMs = 0.0;

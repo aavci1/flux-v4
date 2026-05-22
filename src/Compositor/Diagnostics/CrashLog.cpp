@@ -27,22 +27,22 @@ std::atomic<int> gCrashLogFd{-1};
 std::string gCrashLogPath;
 
 bool crashLogRequested() noexcept {
-  static bool const requested = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_CRASH_LOG"));
+  static bool const requested = debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_CRASH_LOG"));
   return requested;
 }
 
 std::string defaultCrashLogPath() {
-  if (char const* configured = std::getenv("FLUX_COMPOSITOR_CRASH_LOG");
+  if (char const* configured = std::getenv("LAMBDA_WINDOW_MANAGER_CRASH_LOG");
       debug::envNonZero(configured) && std::strcmp(configured, "1") != 0) {
     return configured;
   }
   if (char const* stateHome = std::getenv("XDG_STATE_HOME"); stateHome && *stateHome) {
-    return std::string(stateHome) + "/flux-compositor/crash.log";
+    return std::string(stateHome) + "/lambda-window-manager/crash.log";
   }
   if (char const* home = std::getenv("HOME"); home && *home) {
-    return std::string(home) + "/.local/state/flux-compositor/crash.log";
+    return std::string(home) + "/.local/state/lambda-window-manager/crash.log";
   }
-  return "/tmp/flux-compositor-crash.log";
+  return "/tmp/lambda-window-manager-crash.log";
 }
 
 std::uint64_t monotonicMilliseconds() {
@@ -103,12 +103,12 @@ void initializeCrashLog() {
     std::filesystem::path const path(gCrashLogPath);
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
   } catch (...) {
-    gCrashLogPath = "/tmp/flux-compositor-crash.log";
+    gCrashLogPath = "/tmp/lambda-window-manager-crash.log";
   }
 
   int fd = open(gCrashLogPath.c_str(), O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
-  if (fd < 0 && gCrashLogPath != "/tmp/flux-compositor-crash.log") {
-    gCrashLogPath = "/tmp/flux-compositor-crash.log";
+  if (fd < 0 && gCrashLogPath != "/tmp/lambda-window-manager-crash.log") {
+    gCrashLogPath = "/tmp/lambda-window-manager-crash.log";
     fd = open(gCrashLogPath.c_str(), O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
   }
   if (fd < 0) return;

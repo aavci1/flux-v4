@@ -91,6 +91,8 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.focused);
   hashValue(hash, surface.activeSizing);
   hashValue(hash, surface.defaultGlassEligible);
+  hashValue(hash, surface.squareContentCorners);
+  hashValue(hash, surface.shellGlassSurface);
   hashValue(hash, surface.title.size());
   hashCombine(hash, surface.title.data(), surface.title.size());
   hashValue(hash, surface.backgroundBlurRects.size());
@@ -265,7 +267,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
         }
       } catch (std::exception const &error) {
         diagnostics::recordDmabufImport(elapsedMilliseconds(importStart), false);
-        std::fprintf(stderr, "flux-compositor: dmabuf Vulkan import failed: %s\n", error.what());
+        std::fprintf(stderr, "lambda-window-manager: dmabuf Vulkan import failed: %s\n", error.what());
         diagnostics::crashLog("dmabuf-import-failed surface=%llu buffer=%llu size=%dx%d format=0x%08x error=%s",
                               static_cast<unsigned long long>(surface.id),
                               static_cast<unsigned long long>(surface.dmabufBufferId), bufferWidth, bufferHeight,
@@ -277,7 +279,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
         close(fd);
     }
     if (cached.image && !cached.logged) {
-      std::fprintf(stderr, "flux-compositor: displaying DMABUF via Vulkan import\n");
+      std::fprintf(stderr, "lambda-window-manager: displaying DMABUF via Vulkan import\n");
       cached.logged = true;
     }
     if (cached.image) {
@@ -302,7 +304,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
       diagnostics::recordDmabufFallbackCopy(fallbackBytes, diagnostics::cpuTraceElapsedMilliseconds(fallbackStart),
                                             cached.image != nullptr);
       if (cached.image && !cached.logged) {
-        std::fprintf(stderr, "flux-compositor: displaying readable DMABUF contents\n");
+        std::fprintf(stderr, "lambda-window-manager: displaying readable DMABUF contents\n");
         cached.logged = true;
       }
       if (cached.image) {

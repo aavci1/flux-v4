@@ -133,6 +133,10 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	      .pacingSizing = server->resizeSurface_ == surface ||
 	                      surface->geometryAnimationActive,
 	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !surfaceContentFullyOpaque(surface),
+	      .squareContentCorners = surface->layerSurface && surface->layerSurface->nameSpace == "lambda.topbar",
+	      .shellGlassSurface = surface->layerSurface &&
+	                           (surface->layerSurface->nameSpace == "lambda.topbar" ||
+	                            surface->layerSurface->nameSpace == "lambda.dock"),
 	      .serial = surface->serial,
 	      .lastConfigureSerial = surface->lastConfigureSerial,
 	      .lastConfigureWidth = surface->lastConfigureWidth,
@@ -178,19 +182,37 @@ void appendSubsurfaceSnapshots(WaylandServer::Impl const* server,
   }
 }
 
+bool layerSurfaceAboveWindows(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+}
+
+bool renderInPass(WaylandServer::Impl::Surface const* surface, bool aboveWindowLayers) {
+  if (!surface || !surfaceIsTopLevelRenderable(surface)) return false;
+  return layerSurfaceAboveWindows(surface) == aboveWindowLayers;
+}
+
+void appendRenderableSurface(WaylandServer::Impl const* server,
+                             std::vector<CommittedSurfaceSnapshot>& snapshots,
+                             WaylandServer::Impl::Surface const* surface) {
+  if (surface->minimized) return;
+  if (surface->xdgPopup && surface->xdgPopup->dismissed) return;
+  if (surfaceIsRenderable(surface)) {
+    snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY, true));
+  }
+  appendSubsurfaceSnapshots(server, snapshots, surface, surface->windowX, surface->windowY);
+}
+
 } // namespace
 
 std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() const {
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
-  for (auto const& surface : surfaces_) {
-    if (!surfaceIsTopLevelRenderable(surface.get())) continue;
-    if (surface->minimized) continue;
-    if (surface->xdgPopup && surface->xdgPopup->dismissed) continue;
-    if (surfaceIsRenderable(surface.get())) {
-      snapshots.push_back(snapshotForSurface(this, surface.get(), surface->windowX, surface->windowY, true));
+  for (bool aboveWindowLayers : {false, true}) {
+    for (auto const& surface : surfaces_) {
+      if (!renderInPass(surface.get(), aboveWindowLayers)) continue;
+      appendRenderableSurface(this, snapshots, surface.get());
     }
-    appendSubsurfaceSnapshots(this, snapshots, surface.get(), surface->windowX, surface->windowY);
   }
   return snapshots;
 }
@@ -242,14 +264,6 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
   return snapshot;
 }
 
-CommandLauncherSnapshot WaylandServer::Impl::commandLauncher() const {
-  return {
-      .visible = commandLauncherVisible_,
-      .command = commandLauncherText_,
-      .message = commandLauncherMessage_,
-  };
-}
-
 std::vector<int> WaylandServer::Impl::duplicateDmabufFds(std::uint64_t surfaceId) const {
   auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
                               [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
@@ -291,7 +305,7 @@ bool WaylandServer::Impl::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<
                                    static_cast<std::size_t>(buffer.height);
   void* mapping = mmap(nullptr, dataSize, PROT_READ, MAP_SHARED, plane.fd, 0);
   if (mapping == MAP_FAILED) {
-    std::fprintf(stderr, "flux-compositor: dmabuf CPU fallback mmap failed: %s\n", std::strerror(errno));
+    std::fprintf(stderr, "lambda-window-manager: dmabuf CPU fallback mmap failed: %s\n", std::strerror(errno));
     return false;
   }
 

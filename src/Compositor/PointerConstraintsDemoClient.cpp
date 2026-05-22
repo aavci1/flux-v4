@@ -49,7 +49,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-pointer-constraints-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-pointer-constraints-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -103,11 +103,11 @@ xdg_toplevel_listener const kToplevelListener{
 };
 
 void pointerEnter(void*, wl_pointer*, std::uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t) {
-  std::fprintf(stderr, "flux-compositor-pointer-constraints-demo: pointer entered window\n");
+  std::fprintf(stderr, "lambda-window-manager-pointer-constraints-demo: pointer entered window\n");
 }
 
 void pointerLeave(void*, wl_pointer*, std::uint32_t, wl_surface*) {
-  std::fprintf(stderr, "flux-compositor-pointer-constraints-demo: pointer left window\n");
+  std::fprintf(stderr, "lambda-window-manager-pointer-constraints-demo: pointer left window\n");
 }
 
 void pointerMotion(void*, wl_pointer*, std::uint32_t, wl_fixed_t, wl_fixed_t) {}
@@ -145,7 +145,7 @@ void relativeMotion(void* data,
   auto* client = static_cast<DemoClient*>(data);
   ++client->motionCount;
   std::fprintf(stderr,
-               "flux-compositor-pointer-constraints-demo: relative #%d dx=%.2f dy=%.2f\n",
+               "lambda-window-manager-pointer-constraints-demo: relative #%d dx=%.2f dy=%.2f\n",
                client->motionCount,
                wl_fixed_to_double(dx),
                wl_fixed_to_double(dy));
@@ -158,13 +158,13 @@ zwp_relative_pointer_v1_listener const kRelativePointerListener{
 void locked(void* data, zwp_locked_pointer_v1*) {
   auto* client = static_cast<DemoClient*>(data);
   client->locked = true;
-  std::fprintf(stderr, "flux-compositor-pointer-constraints-demo: locked\n");
+  std::fprintf(stderr, "lambda-window-manager-pointer-constraints-demo: locked\n");
 }
 
 void unlocked(void* data, zwp_locked_pointer_v1*) {
   auto* client = static_cast<DemoClient*>(data);
   client->locked = false;
-  std::fprintf(stderr, "flux-compositor-pointer-constraints-demo: unlocked\n");
+  std::fprintf(stderr, "lambda-window-manager-pointer-constraints-demo: unlocked\n");
 }
 
 zwp_locked_pointer_v1_listener const kLockedPointerListener{
@@ -243,7 +243,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-pointer-constraints-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-pointer-constraints-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -268,7 +268,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Pointer Constraints demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-pointer-constraints-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-pointer-constraints-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -287,7 +287,7 @@ int main() {
     zwp_locked_pointer_v1_add_listener(client.lockedPointer, &kLockedPointerListener, &client);
     wl_display_flush(client.display);
     std::fprintf(stderr,
-                 "flux-compositor-pointer-constraints-demo: move pointer over the window; close it or press Ctrl+C to exit\n");
+                 "lambda-window-manager-pointer-constraints-demo: move pointer over the window; close it or press Ctrl+C to exit\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -296,7 +296,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-pointer-constraints-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-pointer-constraints-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

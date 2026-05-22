@@ -45,11 +45,11 @@ The mockup also includes wallpaper, application windows, Files/Settings/Terminal
 
 The current repository already contains the compositor/window manager under `src/Compositor`:
 
-- `CMakeLists.txt` builds the process as `flux-compositor` behind `FLUX_BUILD_COMPOSITOR`.
+- `CMakeLists.txt` builds the process as the Linux-only KMS target `lambda-window-manager` behind `LAMBDA_BUILD_WINDOW_MANAGER`; normal Linux Flux apps still use the Wayland backend in the same build tree.
 - The runtime owns KMS output selection, Wayland server lifecycle, surface snapshots, rendering, frame pacing, cursor rendering, input routing, window chrome, popups, layer-shell, and application windows.
 - The window manager already tracks xdg-toplevel title and app id, focus, geometry, minimize/maximize state, and layer surfaces. This is the right authority for shell window/app state snapshots.
-- `zwlr_layer_shell_v1` exists and can be used as the first transport for shell surfaces, but exclusive zone, keyboard interactivity, and popup handling are currently no-ops or minimal. `lambda-shell` can start with the current layer-shell path, but top-bar work-area reservation and command-launcher modality require either hardening layer-shell behavior or adding a trusted Lambda shell protocol.
-- The command launcher is still embedded in the compositor: `CommandLauncherSnapshot`, `commandLauncherVisible_`, `commandLauncherText_`, `commandLauncherMessage_`, `drawCommandLauncher`, `handleCommandLauncherKey`, `spawnCommand`, and launcher frame profiling remain in `src/Compositor`. These must be removed or converted to shell protocol dispatch during migration.
+- `zwlr_layer_shell_v1` exists and is used as the first transport for shell surfaces. Top-bar exclusive zones and command-launcher keyboard modality are implemented for trusted shell namespaces.
+- The command launcher UI lives in `lambda-shell`. `lambda-window-manager` captures the global shortcut, sends `lambda.shell.openCommandLauncher`, and keeps launch/focus authority through shell IPC requests.
 
 The rename from `flux-compositor` to `lambda-window-manager` should cover the build target, executable name, user-visible logs, default config/state paths, crash-log paths, documentation, and launch scripts. Internal C++ namespaces and source directory names may be renamed later if doing so would create unnecessary churn in the first shell milestone.
 

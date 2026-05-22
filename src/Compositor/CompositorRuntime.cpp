@@ -63,23 +63,23 @@ double elapsedMilliseconds(SteadyClock::time_point start) {
 }
 
 bool timingTraceEnabled() {
-  static bool const enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_TIMING"));
+  static bool const enabled = debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_TIMING"));
   return enabled;
 }
 
 bool pacingTraceEnabled() {
-  static bool const enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_PACING_TRACE"));
+  static bool const enabled = debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_PACING_TRACE"));
   return enabled;
 }
 
 bool forceVulkanDisplayPresenter() {
-  char const* value = std::getenv("FLUX_COMPOSITOR_PRESENT");
+  char const* value = std::getenv("LAMBDA_WINDOW_MANAGER_PRESENT");
   return value && (std::strcmp(value, "vulkan") == 0 || std::strcmp(value, "vulkan-display") == 0);
 }
 
 void traceTiming(char const* label, SteadyClock::time_point start) {
   if (!timingTraceEnabled()) return;
-  std::fprintf(stderr, "flux-compositor: timing %s %.3fms\n", label, elapsedMilliseconds(start));
+  std::fprintf(stderr, "lambda-window-manager: timing %s %.3fms\n", label, elapsedMilliseconds(start));
 }
 
 void tracePacing(char const* format, ...) {
@@ -98,8 +98,8 @@ void tracePacing(char const* format, ...) {
   write(stderr, stderrArgs);
   va_end(stderrArgs);
 
-  char const* path = std::getenv("FLUX_COMPOSITOR_PACING_TRACE_LOG");
-  if (!path || !*path) path = "/tmp/flux-compositor-pacing.log";
+  char const* path = std::getenv("LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG");
+  if (!path || !*path) path = "/tmp/lambda-window-manager-pacing.log";
   if (FILE* file = std::fopen(path, "a")) {
     write(file, args);
     std::fclose(file);
@@ -136,7 +136,7 @@ std::uint64_t clampInteractiveRenderAheadLeadNsec(std::uint64_t lead, std::uint3
 
 std::uint64_t initialRenderAheadLeadNsec(std::uint32_t refreshMilliHz) {
   static double const configuredMs = [] {
-    char const* value = std::getenv("FLUX_COMPOSITOR_RENDER_AHEAD_LEAD_MS");
+    char const* value = std::getenv("LAMBDA_WINDOW_MANAGER_RENDER_AHEAD_LEAD_MS");
     if (!value || !*value) return 0.0;
     char* end = nullptr;
     double parsed = std::strtod(value, &end);
@@ -165,7 +165,7 @@ PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTimin
 struct LoopInstrumentation {
   using Clock = std::chrono::steady_clock;
 
-  bool enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_IDLE_PROFILE"));
+  bool enabled = debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_IDLE_PROFILE"));
   Clock::time_point windowStart = Clock::now();
   std::uint64_t loops = 0;
   std::uint64_t frames = 0;
@@ -225,7 +225,7 @@ struct LoopInstrumentation {
 
     double const seconds = elapsedMs / 1000.0;
     std::fprintf(stderr,
-                 "flux-compositor: idle-profile %.1fs loops=%llu frames=%llu fps=%.1f polls=%llu poll_wakeups=%llu "
+                 "lambda-window-manager: idle-profile %.1fs loops=%llu frames=%llu fps=%.1f polls=%llu poll_wakeups=%llu "
                  "idle_skips=%llu dispatches=%llu vt_sleeps=%llu config_checks=%llu surfaces=%llu poll_ms=%.2f "
                  "dispatch_ms=%.2f vblank_ms=%.2f render_ms=%.2f\n",
                  seconds,
@@ -263,7 +263,7 @@ struct LoopInstrumentation {
 struct CompositorFrameProfile {
   using Clock = std::chrono::steady_clock;
 
-  bool enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_PROFILE"));
+  bool enabled = debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_PROFILE"));
   Clock::time_point windowStart = Clock::now();
   std::uint64_t frames = 0;
   std::uint64_t surfaces = 0;
@@ -271,7 +271,6 @@ struct CompositorFrameProfile {
   double snapshotMs = 0.0;
   double surfaceMs = 0.0;
   double closingMs = 0.0;
-  double launcherMs = 0.0;
   double cursorMs = 0.0;
   double presentMs = 0.0;
   double totalMs = 0.0;
@@ -288,9 +287,9 @@ struct CompositorFrameProfile {
 
     double const invFrames = 1.0 / static_cast<double>(frames);
     std::fprintf(stderr,
-                 "flux-compositor: frame-profile %.1fs frames=%llu fps=%.1f surfaces=%.2f/f "
+                 "lambda-window-manager: frame-profile %.1fs frames=%llu fps=%.1f surfaces=%.2f/f "
                  "total=%.3fms bg=%.3fms snapshots=%.3fms surfaces=%.3fms closing=%.3fms "
-                 "launcher=%.3fms cursor=%.3fms present=%.3fms\n",
+                 "cursor=%.3fms present=%.3fms\n",
                  elapsedMs / 1000.0,
                  static_cast<unsigned long long>(frames),
                  frames / (elapsedMs / 1000.0),
@@ -300,7 +299,6 @@ struct CompositorFrameProfile {
                  snapshotMs * invFrames,
                  surfaceMs * invFrames,
                  closingMs * invFrames,
-                 launcherMs * invFrames,
                  cursorMs * invFrames,
                  presentMs * invFrames);
 
@@ -311,7 +309,6 @@ struct CompositorFrameProfile {
     snapshotMs = 0.0;
     surfaceMs = 0.0;
     closingMs = 0.0;
-    launcherMs = 0.0;
     cursorMs = 0.0;
     presentMs = 0.0;
     totalMs = 0.0;
@@ -334,11 +331,11 @@ std::optional<std::size_t> parseOutputIndex(std::string_view selector, std::size
 }
 
 void printOutputs(std::vector<flux::platform::KmsOutput> const& outputs) {
-  std::fprintf(stderr, "flux-compositor: connected KMS outputs:\n");
+  std::fprintf(stderr, "lambda-window-manager: connected KMS outputs:\n");
   for (std::size_t i = 0; i < outputs.size(); ++i) {
     auto const& output = outputs[i];
     std::fprintf(stderr,
-                 "flux-compositor:   [%zu] %s %ux%u @ %.3f Hz\n",
+                 "lambda-window-manager:   [%zu] %s %ux%u @ %.3f Hz\n",
                  i,
                  output.name().c_str(),
                  output.width(),
@@ -372,13 +369,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     diagnostics::crashLog("runtime-start listOutputs=%d", options.listOutputs ? 1 : 0);
     if (diagnostics::cpuTraceEnabled()) {
       std::fprintf(stderr,
-                   "flux-compositor: CPU trace logging to %s (set FLUX_COMPOSITOR_CPU_TRACE=0 to disable)\n",
+                   "lambda-window-manager: CPU trace logging to %s (set LAMBDA_WINDOW_MANAGER_CPU_TRACE=0 to disable)\n",
                    diagnostics::cpuTracePath());
     }
     auto device = flux::platform::KmsDevice::open();
     auto outputs = device->outputs();
     if (outputs.empty()) {
-      std::fprintf(stderr, "flux-compositor: no connected KMS outputs\n");
+      std::fprintf(stderr, "lambda-window-manager: no connected KMS outputs\n");
       diagnostics::crashLog("runtime-abort no-connected-outputs");
       return 1;
     }
@@ -389,7 +386,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto outputIndex = selectOutputIndex(outputs, loadedConfig.config.outputSelector);
     if (!outputIndex) {
       std::fprintf(stderr,
-                   "flux-compositor: output selector \"%s\" did not match any connected output\n",
+                   "lambda-window-manager: output selector \"%s\" did not match any connected output\n",
                    loadedConfig.config.outputSelector ? loadedConfig.config.outputSelector->c_str() : "");
       diagnostics::crashLog("runtime-abort output-selector-miss selector=%s",
                             loadedConfig.config.outputSelector ? loadedConfig.config.outputSelector->c_str() : "");
@@ -449,7 +446,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (atomicPresenter) {
         vulkanDisplayCanvas.reset();
         canvas = &atomicPresenter->canvas();
-        std::fprintf(stderr, "flux-compositor: using GBM/atomic-KMS presenter\n");
+        std::fprintf(stderr, "lambda-window-manager: using GBM/atomic-KMS presenter\n");
         diagnostics::crashLog("presenter atomic-kms");
       } else {
         auto const surfaceStart = SteadyClock::now();
@@ -457,7 +454,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         traceTiming("create-vulkan-surface", surfaceStart);
         vulkanDisplayCanvas = flux::createVulkanCanvas(surface, 1u, textSystem);
         canvas = vulkanDisplayCanvas.get();
-        std::fprintf(stderr, "flux-compositor: using Vulkan display presenter\n");
+        std::fprintf(stderr, "lambda-window-manager: using Vulkan display presenter\n");
         diagnostics::crashLog("presenter vulkan-display");
       }
       canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
@@ -468,7 +465,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     createCanvas();
 
     std::fprintf(stderr,
-                 "flux-compositor: presenting %ux%u on %s\n",
+                 "lambda-window-manager: presenting %ux%u on %s\n",
                  output.width(),
                  output.height(),
                  output.name().c_str());
@@ -487,7 +484,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
         canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
         std::fprintf(stderr,
-                     "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
+                     "lambda-window-manager: output physical=%ux%u logical=%dx%d scale=%.2f\n",
                      output.width(),
                      output.height(),
                      wayland.logicalOutputWidth(),
@@ -524,7 +521,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
     if (!hardwareCursorAvailable && appliedConfig.config.hardwareCursorEnabled) {
-      std::fprintf(stderr, "flux-compositor: hardware cursor unavailable; using software cursor\n");
+      std::fprintf(stderr, "lambda-window-manager: hardware cursor unavailable; using software cursor\n");
     }
 
     bool forceRender = true;
@@ -541,7 +538,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       double snapshotMs = 0.0;
       double surfaceMs = 0.0;
       double closingMs = 0.0;
-      double launcherMs = 0.0;
       double cursorMs = 0.0;
       double presentMs = 0.0;
       double canvasPresentMs = 0.0;
@@ -640,10 +636,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         atomicRenderAheadLeadEstimateNsec = (atomicRenderAheadLeadEstimateNsec + target * 3ull) / 4ull;
       }
     };
-    auto pollFds = [&](std::array<int, 3>& storage) {
+    auto pollFds = [&](std::array<int, 4>& storage) {
       std::size_t count = 0;
       int const waylandEventFd = wayland.eventFd();
       if (waylandEventFd >= 0) storage[count++] = waylandEventFd;
+      int const shellIpcFd = wayland.shellIpcFd();
+      if (shellIpcFd >= 0) storage[count++] = shellIpcFd;
       if (atomicPresenter && atomicPresenter->hasPendingPageFlip()) {
         int const flipFd = atomicPresenter->eventFd();
         if (flipFd >= 0) storage[count++] = flipFd;
@@ -690,7 +688,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   "ageSurface=%llu inputToRender=%.3fms configureToRender=%.3fms ackToRender=%.3fms "
                   "commitToRender=%.3fms configureToCommit=%.3fms "
                   "phaseBg=%.3fms phaseSnapshot=%.3fms phaseSurface=%.3fms "
-                  "phaseClosing=%.3fms phaseLauncher=%.3fms phaseCursor=%.3fms "
+                  "phaseClosing=%.3fms phaseCursor=%.3fms "
                   "phasePresent=%.3fms phaseTotal=%.3fms\n",
                   presentId,
                   frame.surfaceCount,
@@ -716,7 +714,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   frame.profile.snapshotMs,
                   frame.profile.surfaceMs,
                   frame.profile.closingMs,
-                  frame.profile.launcherMs,
                   frame.profile.cursorMs,
                   frame.profile.presentMs,
                   frame.profile.totalMs);
@@ -900,7 +897,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             .snapshotMs = atomicFrameProfile.snapshotMs,
             .surfaceMs = atomicFrameProfile.surfaceMs,
             .closingMs = atomicFrameProfile.closingMs,
-            .launcherMs = atomicFrameProfile.launcherMs,
             .cursorMs = atomicFrameProfile.cursorMs,
             .presentMs = atomicFrameProfile.presentMs,
             .canvasPresentMs = atomicFrameProfile.canvasPresentMs,
@@ -1041,16 +1037,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       drawClosingSurfaces(*canvas, surfaceRenderState, frameTime);
       atomicFrameProfile.closingMs = profileMs(phaseStart);
       frameProfile.closingMs += atomicFrameProfile.closingMs;
-      phaseStart = profileNow();
-      drawCommandLauncher(*canvas,
-                          textSystem,
-                          wayland.commandLauncher(),
-                          appliedConfig.config.chrome,
-                          wayland.logicalOutputWidth(),
-                          wayland.logicalOutputHeight());
-      atomicFrameProfile.launcherMs = profileMs(phaseStart);
-      frameProfile.launcherMs += atomicFrameProfile.launcherMs;
-      phaseStart = profileNow();
       drawCompositorCursor(wayland,
                            *canvas,
                            output,
@@ -1091,7 +1077,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         lastKnownContentSerial = atomicReadyFrame.contentSerial;
       } else {
         if (!displayTimingSupportLogged && flux::vulkanCanvasSupportsDisplayTiming(canvas)) {
-          std::fprintf(stderr, "flux-compositor: Vulkan display timing available\n");
+          std::fprintf(stderr, "lambda-window-manager: Vulkan display timing available\n");
           displayTimingSupportLogged = true;
         }
         auto pastPresentationTimings = flux::pollVulkanCanvasPastPresentationTimings(canvas);
@@ -1118,7 +1104,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           .snapshotMs = atomicFrameProfile.snapshotMs,
           .surfaceMs = atomicFrameProfile.surfaceMs,
           .closingMs = atomicFrameProfile.closingMs,
-          .launcherMs = atomicFrameProfile.launcherMs,
           .cursorMs = atomicFrameProfile.cursorMs,
           .presentMs = atomicFrameProfile.presentMs,
           .canvasPresentMs = atomicFrameProfile.canvasPresentMs,
@@ -1162,13 +1147,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       ++loopStats.loops;
       diagnostics::recordCpuLoop();
+      wayland.dispatchShellIpc();
       auto const animationCheckTime = std::chrono::steady_clock::now();
       bool const animationFrameNeeded =
           wayland.hasActiveAnimations() ||
           hasActiveSurfaceAnimations(surfaceRenderState,
                                      animationCheckTime,
                                      appliedConfig.config.animationsEnabled);
-      std::array<int, 3> eventFdStorage{};
+      std::array<int, 4> eventFdStorage{};
       std::span<int const> const eventFds = pollFds(eventFdStorage);
       bool const atomicPageFlipPendingBeforePoll =
           atomicPresenter && atomicPresenter->hasPendingPageFlip();
@@ -1200,7 +1186,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       loopStats.recordPoll(timingStart, pollWoke, pollTimeoutMs);
       bool const waylandFdPolled = wayland.eventFd() >= 0;
       bool const waylandWoke = waylandFdPolled && pollMaskHas(pollResult.extraReadableMask, 0);
-      std::size_t const pageFlipFdIndex = waylandFdPolled ? 1u : 0u;
+      std::size_t const shellFdIndex = waylandFdPolled ? 1u : 0u;
+      bool const shellFdPolled = wayland.shellIpcFd() >= 0;
+      bool const shellWoke = shellFdPolled && pollMaskHas(pollResult.extraReadableMask, shellFdIndex);
+      std::size_t const pageFlipFdIndex = shellFdIndex + (shellFdPolled ? 1u : 0u);
       bool const pageFlipFdPolled = atomicPresenter && atomicPresenter->hasPendingPageFlip();
       bool const pageFlipWoke = pageFlipFdPolled && pollMaskHas(pollResult.extraReadableMask, pageFlipFdIndex);
       std::size_t const renderReadyFdIndex = pageFlipFdIndex + (pageFlipFdPolled ? 1u : 0u);
@@ -1213,16 +1202,22 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const pageFlipCompleted = dispatchAtomicPageFlip();
       if (pollWoke) {
         diagnostics::recordCpuWakeSources(pollResult.inputOrSystem,
-                                          waylandWoke,
+                                          waylandWoke || shellWoke,
                                           pageFlipWoke,
                                           renderReadyWoke);
+      }
+      if (shellWoke) {
+        wayland.dispatchShellIpc();
       }
       if (waylandWoke) {
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
         loopStats.recordDispatch(timingStart);
-        diagnostics::recordWaylandDispatch(noteContentSerialChange());
+        bool const contentChanged = noteContentSerialChange();
+        if (contentChanged) wayland.notifyShellStateChanged();
+        diagnostics::recordWaylandDispatch(contentChanged);
       }
+      wayland.dispatchShellIpc();
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       if (hadInputActivity) {
@@ -1241,7 +1236,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         loadedConfig = loadConfigWithMetadata();
         if (loadedConfig.config.outputSelector != previousOutputSelector) {
           std::fprintf(stderr,
-                       "flux-compositor: output selector changed; restart required to move compositor outputs\n");
+                       "lambda-window-manager: output selector changed; restart required to move compositor outputs\n");
         }
         applyConfig();
         configReloaded = true;
@@ -1258,7 +1253,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!vtForeground) {
         if (wasForegroundBeforeCheck) diagnostics::crashLog("vt-state foreground=0");
         ++loopStats.vtSleeps;
-        std::array<int, 3> vtEventFdStorage{};
+        std::array<int, 4> vtEventFdStorage{};
         std::span<int const> const vtEventFds = pollFds(vtEventFdStorage);
         timingStart = LoopInstrumentation::Clock::now();
         bool const vtPollWoke = device->pollEvents(kIdlePollMs, vtEventFds);
@@ -1266,8 +1261,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         dispatchAtomicPageFlip();
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
+        wayland.dispatchShellIpc();
         loopStats.recordDispatch(timingStart);
-        diagnostics::recordWaylandDispatch(noteContentSerialChange());
+        bool const contentChanged = noteContentSerialChange();
+        if (contentChanged) wayland.notifyShellStateChanged();
+        diagnostics::recordWaylandDispatch(contentChanged);
         if (inputActivityThisLoop) {
           lastInputActivity = SteadyClock::now();
           inputActivityThisLoop = false;
@@ -1422,14 +1420,18 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
       timingStart = LoopInstrumentation::Clock::now();
       wayland.dispatch();
+      wayland.dispatchShellIpc();
       loopStats.recordDispatch(timingStart);
-      diagnostics::recordWaylandDispatch(noteContentSerialChange());
+      bool const contentChanged = noteContentSerialChange();
+      if (contentChanged) wayland.notifyShellStateChanged();
+      diagnostics::recordWaylandDispatch(contentChanged);
 
       timingStart = LoopInstrumentation::Clock::now();
       renderCompositorFrame(frameTime, timingStart, presentationTiming, false);
       if (atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip()) {
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
+        wayland.dispatchShellIpc();
         loopStats.recordDispatch(timingStart);
         scheduleAtomicFrame(atomicReadyFrame);
       }
@@ -1447,7 +1449,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                           running.load(std::memory_order_relaxed) ? 1 : 0);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager: %s\n", e.what());
     diagnostics::crashLog("runtime-exception what=%s", e.what());
     return 1;
   } catch (...) {

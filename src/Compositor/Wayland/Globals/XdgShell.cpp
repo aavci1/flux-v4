@@ -580,7 +580,7 @@ void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t
   if (!popup) return;
   popup->grabbed = true;
   std::fprintf(stderr,
-               "flux-compositor: xdg_popup grab surface=%llu parent=%llu\n",
+               "lambda-window-manager: xdg_popup grab surface=%llu parent=%llu\n",
                static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
                                                    ? popup->xdgSurface->surface->id
                                                    : 0),
@@ -648,7 +648,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyXdgPopup>);
   std::fprintf(stderr,
-               "flux-compositor: xdg_popup created surface=%llu parent=%llu geometry=%d,%d %dx%d\n",
+               "lambda-window-manager: xdg_popup created surface=%llu parent=%llu geometry=%d,%d %dx%d\n",
                static_cast<unsigned long long>(xdgSurface->surface->id),
                static_cast<unsigned long long>(raw->parentSurface ? raw->parentSurface->id : 0),
                raw->configuredX,

@@ -70,6 +70,7 @@ struct WaylandServer::Impl {
 
   [[nodiscard]] char const* socketName() const noexcept;
   [[nodiscard]] int eventFd() const noexcept;
+  [[nodiscard]] int shellIpcFd() const noexcept;
   [[nodiscard]] float preferredScale() const noexcept;
   [[nodiscard]] std::int32_t logicalOutputWidth() const noexcept;
   [[nodiscard]] std::int32_t logicalOutputHeight() const noexcept;
@@ -78,12 +79,21 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
   [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
-  [[nodiscard]] CommandLauncherSnapshot commandLauncher() const;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
 
   void dispatch();
+  void initializeShellIpc();
+  void shutdownShellIpc();
+  void dispatchShellIpc();
   void flushClients();
+  void requestShellOpenCommandLauncher();
+  void notifyShellStateChanged();
+  void launchShellApp(std::string const& appId);
+  bool focusShellApp(std::string const& appId, std::uint32_t timeMs);
+  bool focusShellWindow(std::uint64_t windowId, std::uint32_t timeMs);
+  bool claimCommandLauncherModal(std::uint32_t timeMs);
+  void releaseCommandLauncherModal(std::uint32_t timeMs);
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
   void setChromeConfig(ChromeConfig config);
   void setPreferredScale(float scale);
@@ -160,6 +170,12 @@ struct WaylandServer::Impl {
   wl_global* backgroundEffectManagerGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
+  int shellListenFd_ = -1;
+  int shellClientFd_ = -1;
+  std::string shellSocketPath_;
+  std::string shellReadBuffer_;
+  bool shellHelloReceived_ = false;
+  bool shellSnapshotDirty_ = false;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
   std::vector<Surface*> focusOrder_;
@@ -205,6 +221,7 @@ struct WaylandServer::Impl {
   std::vector<wl_resource*> keyboardResources_;
   Surface* pointerFocus_ = nullptr;
   Surface* keyboardFocus_ = nullptr;
+  Surface* commandLauncherModalSurface_ = nullptr;
   Surface* dragSurface_ = nullptr;
   Surface* resizeSurface_ = nullptr;
   Surface* closePressSurface_ = nullptr;
@@ -244,9 +261,6 @@ struct WaylandServer::Impl {
   bool ctrlDown_ = false;
   bool altDown_ = false;
   bool shiftDown_ = false;
-  bool commandLauncherVisible_ = false;
-  std::string commandLauncherText_;
-  std::string commandLauncherMessage_;
   std::vector<ShortcutBinding> shortcutBindings_;
   ChromeConfig chromeConfig_;
   std::uint32_t shiftModifierIndex_ = ~0u;
@@ -261,6 +275,8 @@ struct WaylandServer::Impl {
   std::uint32_t nextConfigureSerial_ = 1;
   std::uint32_t nextInputSerial_ = 1;
   float preferredScale_ = 2.0f;
+  std::int32_t topBarExclusiveZone_ = 0;
+  std::int32_t dockReservedZone_ = 0;
   Surface* lastActivationSurface_ = nullptr;
   std::uint32_t lastActivationTimeMs_ = 0;
 };
@@ -437,6 +453,8 @@ struct WaylandServer::Impl::LayerSurface {
   std::uint32_t width = 0;
   std::uint32_t height = 0;
   std::uint32_t anchor = 0;
+  std::int32_t exclusiveZone = 0;
+  std::uint32_t keyboardInteractivity = 0;
   std::int32_t marginTop = 0;
   std::int32_t marginRight = 0;
   std::int32_t marginBottom = 0;

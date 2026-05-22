@@ -39,7 +39,7 @@ struct ScopedEnv {
 
 std::filesystem::path tempConfigPath() {
   auto path = std::filesystem::temp_directory_path() /
-              ("flux-compositor-config-test-" + std::to_string(static_cast<unsigned long long>(getpid())) + ".toml");
+              ("lambda-window-manager-config-test-" + std::to_string(static_cast<unsigned long long>(getpid())) + ".toml");
   std::filesystem::remove(path);
   return path;
 }
@@ -47,15 +47,15 @@ std::filesystem::path tempConfigPath() {
 } // namespace
 
 TEST_CASE("compositor config creates a default file when missing") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = std::filesystem::temp_directory_path() /
-                    ("flux-compositor-config-test-dir-" +
+                    ("lambda-window-manager-config-test-dir-" +
                      std::to_string(static_cast<unsigned long long>(getpid()))) /
                     "config.toml";
   std::filesystem::remove_all(path.parent_path());
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
 
@@ -73,9 +73,9 @@ TEST_CASE("compositor config creates a default file when missing") {
 }
 
 TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background = \"#112233\"\n";
@@ -87,7 +87,7 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   file << "[keybindings]\n";
   file << "snap_left = \"ctrl+alt+left\"\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
@@ -115,13 +115,13 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
 }
 
 TEST_CASE("compositor config resolves wallpaper paths from home and config directory") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   ScopedEnv homeEnv("HOME");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
 
   auto const root = std::filesystem::temp_directory_path() /
-                    ("flux-compositor-wallpaper-test-" +
+                    ("lambda-window-manager-wallpaper-test-" +
                      std::to_string(static_cast<unsigned long long>(getpid())));
   auto const configDir = root / "config";
   auto const homeDir = root / "home";
@@ -134,7 +134,7 @@ TEST_CASE("compositor config resolves wallpaper paths from home and config direc
     std::ofstream file(path);
     file << "wallpaper = \"~/Pictures/wallpaper.png\"\n";
   }
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
   auto homeLoaded = flux::compositor::loadConfigWithMetadata();
   REQUIRE(homeLoaded.config.wallpaperPath);
   CHECK(*homeLoaded.config.wallpaperPath == (homeDir / "Pictures/wallpaper.png").lexically_normal().string());
@@ -151,14 +151,14 @@ TEST_CASE("compositor config resolves wallpaper paths from home and config direc
 }
 
 TEST_CASE("compositor config parses shorthand and alpha colors") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background_gradient = \"#1234 #01020380\"\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
@@ -176,9 +176,9 @@ TEST_CASE("compositor config parses shorthand and alpha colors") {
 }
 
 TEST_CASE("compositor config parses chrome section") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "[chrome]\n";
@@ -199,7 +199,7 @@ TEST_CASE("compositor config parses chrome section") {
   file << "[chrome.dark]\n";
   file << "title_text_color = \"#e6ecf7\"\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   auto const& chrome = loaded.config.chrome;
@@ -246,15 +246,15 @@ TEST_CASE("chrome controls scale and center with title bar height") {
 }
 
 TEST_CASE("compositor config reports file changes") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   {
     std::ofstream file(path);
     file << "background = \"#223344\"\n";
   }
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   CHECK_FALSE(flux::compositor::configChanged(loaded));
@@ -263,9 +263,9 @@ TEST_CASE("compositor config reports file changes") {
 }
 
 TEST_CASE("compositor config parses gradient aliases and scale aliases") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background_gradient = \"#010203,#a0b0c0\"\n";
@@ -277,7 +277,7 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   file << "animations = \"off\"\n";
   file << "hardware_cursor = \"on\"\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
@@ -302,9 +302,9 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
 }
 
 TEST_CASE("compositor config supports per-output scale overrides") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "scale = 1.0\n";
@@ -313,7 +313,7 @@ TEST_CASE("compositor config supports per-output scale overrides") {
   file << "[outputs.\"DP-1\"]\n";
   file << "scale = 2.0\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
@@ -330,9 +330,9 @@ TEST_CASE("compositor config supports per-output scale overrides") {
 }
 
 TEST_CASE("compositor config ignores invalid values and preserves defaults") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background = \"nope\"\n";
@@ -347,7 +347,7 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   file << "snap_left = \"super+left+right\"\n";
   file << "snap_right = 42\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto loaded = flux::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
@@ -374,9 +374,9 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
 }
 
 TEST_CASE("compositor config supports shortcut aliases and replacement") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
-  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "[keybindings]\n";
@@ -385,7 +385,7 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   file << "run = \"ctrl+space\"\n";
   file << "quit = \"ctrl+alt+delete\"\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
   auto const config = flux::compositor::loadConfigWithMetadata().config;
   auto findAction = [&](flux::compositor::WaylandServer::ShortcutAction action) {
@@ -422,14 +422,14 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
 }
 
 TEST_CASE("compositor config allows output environment override") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "output = \"HDMI-A-1\"\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
-  setenv("FLUX_COMPOSITOR_OUTPUT", "secondary", 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_OUTPUT", "secondary", 1);
 
   auto const config = flux::compositor::loadConfigWithMetadata().config;
   REQUIRE(config.outputSelector);
@@ -439,14 +439,14 @@ TEST_CASE("compositor config allows output environment override") {
 }
 
 TEST_CASE("compositor config applies output environment override when config is invalid") {
-  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
-  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "scale = nope\n";
   file.close();
-  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
-  setenv("FLUX_COMPOSITOR_OUTPUT", "DP-1", 1);
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
+  setenv("LAMBDA_WINDOW_MANAGER_OUTPUT", "DP-1", 1);
 
   auto const config = flux::compositor::loadConfigWithMetadata().config;
   REQUIRE(config.outputSelector);

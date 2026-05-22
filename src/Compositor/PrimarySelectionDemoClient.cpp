@@ -52,7 +52,7 @@ struct DemoClient {
 };
 
 int createSharedMemoryFile(std::size_t size) {
-  int fd = memfd_create("flux-compositor-primary-selection-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  int fd = memfd_create("lambda-window-manager-primary-selection-demo", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
   if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
     close(fd);
@@ -120,7 +120,7 @@ void sourceSend(void*, zwp_primary_selection_source_v1*, char const* mimeType, i
 }
 
 void sourceCancelled(void*, zwp_primary_selection_source_v1*) {
-  std::fprintf(stderr, "flux-compositor-primary-selection-demo: source cancelled\n");
+  std::fprintf(stderr, "lambda-window-manager-primary-selection-demo: source cancelled\n");
 }
 
 zwp_primary_selection_source_v1_listener const kSourceListener{
@@ -129,7 +129,7 @@ zwp_primary_selection_source_v1_listener const kSourceListener{
 };
 
 void offerMime(void*, zwp_primary_selection_offer_v1*, char const* mimeType) {
-  std::fprintf(stderr, "flux-compositor-primary-selection-demo: offered %s\n", mimeType);
+  std::fprintf(stderr, "lambda-window-manager-primary-selection-demo: offered %s\n", mimeType);
 }
 
 zwp_primary_selection_offer_v1_listener const kOfferListener{
@@ -175,7 +175,7 @@ void setPrimarySelection(DemoClient* client, std::uint32_t serial) {
   zwp_primary_selection_device_v1_set_selection(client->primaryDevice, client->primarySource, serial);
   wl_display_flush(client->display);
   client->selectionSet = true;
-  std::fprintf(stderr, "flux-compositor-primary-selection-demo: set primary selection\n");
+  std::fprintf(stderr, "lambda-window-manager-primary-selection-demo: set primary selection\n");
 }
 
 void pointerEnter(void*, wl_pointer*, std::uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t) {}
@@ -282,7 +282,7 @@ std::string displayError(DemoClient const& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-primary-selection-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-primary-selection-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -308,7 +308,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux Primary Selection demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-primary-selection-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-primary-selection-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -320,7 +320,7 @@ int main() {
     wl_surface_damage_buffer(client.surface, 0, 0, kWidth, kHeight);
     wl_surface_commit(client.surface);
     wl_display_flush(client.display);
-    std::fprintf(stderr, "flux-compositor-primary-selection-demo: click the window to set and receive primary selection\n");
+    std::fprintf(stderr, "lambda-window-manager-primary-selection-demo: click the window to set and receive primary selection\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -329,7 +329,7 @@ int main() {
         ssize_t n = read(client.receiveFd, buffer, sizeof(buffer) - 1u);
         if (n > 0) {
           buffer[n] = '\0';
-          std::fprintf(stderr, "flux-compositor-primary-selection-demo: received \"%s\"\n", buffer);
+          std::fprintf(stderr, "lambda-window-manager-primary-selection-demo: received \"%s\"\n", buffer);
           gRunning.store(false, std::memory_order_relaxed);
         }
       }
@@ -337,7 +337,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-primary-selection-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-primary-selection-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

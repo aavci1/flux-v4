@@ -16,6 +16,7 @@
 #include "Detail/ResizeTrace.hpp"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xx-cutouts-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -112,6 +113,7 @@ struct SharedWaylandConnection {
   zxdg_decoration_manager_v1* decorationManager = nullptr;
   std::uint32_t decorationManagerVersion = 0;
   xx_cutouts_manager_v1* cutoutsManager = nullptr;
+  zwlr_layer_shell_v1* layerShell = nullptr;
   wl_seat* seat = nullptr;
   wl_pointer* pointer = nullptr;
   wl_cursor_theme* cursorTheme = nullptr;
@@ -182,6 +184,25 @@ wl_pointer_listener const sharedPointerListener{sharedPointerEnter, sharedPointe
 wl_keyboard_listener const sharedKeyboardListener{sharedKeymap, sharedKeyboardEnter, sharedKeyboardLeave,
                                                  sharedKeyboardKey, sharedKeyboardModifiers,
                                                  sharedKeyboardRepeatInfo};
+
+std::uint32_t layerShellLayer(LayerShellLayer layer) {
+  switch (layer) {
+  case LayerShellLayer::Background: return ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND;
+  case LayerShellLayer::Bottom: return ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM;
+  case LayerShellLayer::Top: return ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+  case LayerShellLayer::Overlay: return ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY;
+  }
+  return ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+}
+
+std::uint32_t layerShellAnchor(LayerShellOptions const& options) {
+  std::uint32_t anchor = 0;
+  if (options.anchorTop) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
+  if (options.anchorBottom) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
+  if (options.anchorLeft) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT;
+  if (options.anchorRight) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
+  return anchor;
+}
 
 SharedWaylandConnection* acquireWaylandConnection() {
   std::lock_guard lock(gWaylandConnectionMutex);
@@ -261,6 +282,10 @@ void releaseWaylandConnection() {
     wl_compositor_destroy(gWaylandConnection.compositor);
     gWaylandConnection.compositor = nullptr;
   }
+  if (gWaylandConnection.layerShell) {
+    zwlr_layer_shell_v1_destroy(gWaylandConnection.layerShell);
+    gWaylandConnection.layerShell = nullptr;
+  }
   if (gWaylandConnection.shm) {
     wl_shm_destroy(gWaylandConnection.shm);
     gWaylandConnection.shm = nullptr;
@@ -282,7 +307,7 @@ class WaylandWindow final : public platform::Window {
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
-        fullscreen_(config.fullscreen), decorationMode_(config.decorationMode) {
+        fullscreen_(config.fullscreen), decorationMode_(config.decorationMode), layerShellConfig_(config.layerShell) {
     if (pipe(wakePipe_) != 0) {
       throw std::runtime_error("Failed to create Wayland wake pipe");
     }
@@ -304,17 +329,21 @@ public:
       wp_fractional_scale_v1_add_listener(fractionalScale_, &fractionalScaleListener_, this);
       wl_surface_set_buffer_scale(surface_, 1);
     }
-    xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
-    xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
-    toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
-    xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
-    xdg_toplevel_set_title(toplevel_, title_.c_str());
     appId_ = Application::instance().name();
-    xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
-    if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
-    if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
-    configureDecorationProtocol();
-    if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
+    if (layerShellConfig_.enabled) {
+      configureLayerShellSurface();
+    } else {
+      xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
+      xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
+      toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
+      xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
+      xdg_toplevel_set_title(toplevel_, title_.c_str());
+      xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
+      if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
+      if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
+      configureDecorationProtocol();
+      if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
+    }
     wl_surface_commit(surface_);
     surfaceCommitted_ = true;
     while (!configured_) {
@@ -332,6 +361,7 @@ public:
       if (shared_->keyboardFocus == this) shared_->keyboardFocus = nullptr;
     }
     if (frameCallback_) wl_callback_destroy(frameCallback_);
+    if (layerSurface_) zwlr_layer_surface_v1_destroy(layerSurface_);
     if (cutouts_) xx_cutouts_v1_destroy(cutouts_);
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
     if (toplevel_) xdg_toplevel_destroy(toplevel_);
@@ -651,11 +681,11 @@ private:
     }
   }
 
-  static void topClose(void* data, xdg_toplevel*) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, self->handle_});
-  }
-  static void topConfigureBounds(void* data, xdg_toplevel*, std::int32_t width, std::int32_t height) {
+	  static void topClose(void* data, xdg_toplevel*) {
+	    auto* self = static_cast<WaylandWindow*>(data);
+	    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, self->handle_});
+	  }
+	  static void topConfigureBounds(void* data, xdg_toplevel*, std::int32_t width, std::int32_t height) {
     auto* self = static_cast<WaylandWindow*>(data);
     self->configureBoundsWidth_ = std::max(0, width);
     self->configureBoundsHeight_ = std::max(0, height);
@@ -664,8 +694,26 @@ private:
       detail::resizeTrace("wayland-window", "configure-bounds window=%u size=%dx%d\n",
                           self->handle_, self->configureBoundsWidth_, self->configureBoundsHeight_);
     }
-  }
-  static void topCapabilities(void*, xdg_toplevel*, wl_array*) {}
+	  }
+	  static void topCapabilities(void*, xdg_toplevel*, wl_array*) {}
+
+	  static void layerConfigure(void* data,
+	                             zwlr_layer_surface_v1* layerSurface,
+	                             std::uint32_t serial,
+	                             std::uint32_t width,
+	                             std::uint32_t height) {
+	    auto* self = static_cast<WaylandWindow*>(data);
+	    zwlr_layer_surface_v1_ack_configure(layerSurface, serial);
+	    self->configured_ = true;
+	    if (width > 0 && height > 0) {
+	      self->applyConfiguredSize(static_cast<int>(width), static_cast<int>(height));
+	    }
+	  }
+
+	  static void layerClosed(void* data, zwlr_layer_surface_v1*) {
+	    auto* self = static_cast<WaylandWindow*>(data);
+	    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, self->handle_});
+	  }
 
   static void decorationConfigure(void* data, zxdg_toplevel_decoration_v1*, std::uint32_t mode) {
     auto* self = static_cast<WaylandWindow*>(data);
@@ -923,6 +971,31 @@ private:
     }
   }
 
+  void configureLayerShellSurface() {
+    if (!shared_ || !shared_->layerShell) {
+      throw std::runtime_error("Wayland compositor does not expose zwlr_layer_shell_v1");
+    }
+    std::string ns = layerShellConfig_.nameSpace.empty() ? appId_ : layerShellConfig_.nameSpace;
+    layerSurface_ = zwlr_layer_shell_v1_get_layer_surface(shared_->layerShell,
+                                                          surface_,
+                                                          nullptr,
+                                                          layerShellLayer(layerShellConfig_.layer),
+                                                          ns.c_str());
+    zwlr_layer_surface_v1_add_listener(layerSurface_, &layerSurfaceListener_, this);
+    zwlr_layer_surface_v1_set_size(layerSurface_,
+                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
+                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
+    zwlr_layer_surface_v1_set_anchor(layerSurface_, layerShellAnchor(layerShellConfig_));
+    zwlr_layer_surface_v1_set_margin(layerSurface_,
+                                     layerShellConfig_.marginTop,
+                                     layerShellConfig_.marginRight,
+                                     layerShellConfig_.marginBottom,
+                                     layerShellConfig_.marginLeft);
+    zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, layerShellConfig_.exclusiveZone);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
+                                                     layerShellConfig_.keyboardInteractive ? 1u : 0u);
+  }
+
   void requestCutouts() {
     if (cutouts_) {
       xx_cutouts_v1_destroy(cutouts_);
@@ -1019,13 +1092,14 @@ private:
   }
 
   static inline wl_callback_listener frameCallbackListener_{frameDone};
-  static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
-                                                    surfacePreferredBufferTransform};
-  static inline wp_fractional_scale_v1_listener fractionalScaleListener_{fractionalPreferredScale};
-  static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
-  static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
-                                                       topCapabilities};
-  static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
+	  static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
+	                                                    surfacePreferredBufferTransform};
+	  static inline wp_fractional_scale_v1_listener fractionalScaleListener_{fractionalPreferredScale};
+	  static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
+	  static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
+	                                                       topCapabilities};
+	  static inline zwlr_layer_surface_v1_listener layerSurfaceListener_{layerConfigure, layerClosed};
+	  static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
   static inline xx_cutouts_v1_listener cutoutsListener_{cutoutBox, cutoutCorner, cutoutsConfigure};
   static constexpr float kClientTitlebarHeight = 48.f;
   static constexpr float kCompositorControlReserveWidth = 96.f;
@@ -1049,10 +1123,11 @@ private:
   std::vector<wl_output*> enteredOutputs_;
   wl_surface* surface_ = nullptr;
   WaylandNativeSurface nativeSurface_{};
-  wl_callback* frameCallback_ = nullptr;
-  xdg_surface* xdgSurface_ = nullptr;
-  xdg_toplevel* toplevel_ = nullptr;
-  zxdg_toplevel_decoration_v1* decoration_ = nullptr;
+	  wl_callback* frameCallback_ = nullptr;
+	  xdg_surface* xdgSurface_ = nullptr;
+	  xdg_toplevel* toplevel_ = nullptr;
+	  zwlr_layer_surface_v1* layerSurface_ = nullptr;
+	  zxdg_toplevel_decoration_v1* decoration_ = nullptr;
   xx_cutouts_v1* cutouts_ = nullptr;
   wp_viewport* viewport_ = nullptr;
   wp_fractional_scale_v1* fractionalScale_ = nullptr;
@@ -1066,8 +1141,9 @@ private:
   std::string appId_;
   float dpiScaleX_ = 1.f;
   float dpiScaleY_ = 1.f;
-  bool fullscreen_ = false;
-  WindowDecorationMode decorationMode_ = WindowDecorationMode::System;
+	  bool fullscreen_ = false;
+	  WindowDecorationMode decorationMode_ = WindowDecorationMode::System;
+	  LayerShellOptions layerShellConfig_{};
   bool surfaceCommitted_ = false;
   bool configured_ = false;
   bool serverSideDecorationsActive_ = false;
@@ -1146,10 +1222,13 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
   } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
     shared->viewporter = static_cast<wp_viewporter*>(
         wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
-  } else if (std::strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {
-    shared->fractionalScaleManager = static_cast<wp_fractional_scale_manager_v1*>(
-        wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1));
-  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
+	  } else if (std::strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {
+	    shared->fractionalScaleManager = static_cast<wp_fractional_scale_manager_v1*>(
+	        wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1));
+	  } else if (std::strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
+	    shared->layerShell = static_cast<zwlr_layer_shell_v1*>(
+	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1));
+	  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;
     output->output = static_cast<wl_output*>(

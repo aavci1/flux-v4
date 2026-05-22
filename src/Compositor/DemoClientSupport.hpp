@@ -17,7 +17,7 @@ namespace flux::compositor::demo {
 inline std::string displayNameFromRuntimeFile() {
   char const* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
   if (!runtimeDir || !*runtimeDir) return {};
-  std::ifstream file(std::string(runtimeDir) + "/flux-compositor-display");
+  std::ifstream file(std::string(runtimeDir) + "/lambda-window-manager-display");
   std::string name;
   file >> name;
   return name;
@@ -31,7 +31,7 @@ inline std::string resolveDisplayName() {
   if (!fileDisplay.empty()) return fileDisplay;
 
   throw std::runtime_error(
-      "WAYLAND_DISPLAY is not set and $XDG_RUNTIME_DIR/flux-compositor-display was not found");
+      "WAYLAND_DISPLAY is not set and $XDG_RUNTIME_DIR/lambda-window-manager-display was not found");
 }
 
 inline wl_display* connectDisplay(char const* clientName) {

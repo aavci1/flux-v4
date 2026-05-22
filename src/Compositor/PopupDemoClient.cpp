@@ -176,7 +176,7 @@ void popupSurfaceConfigure(void* data, xdg_surface* surface, std::uint32_t seria
   if (!client->popupCommitted) {
     commitBuffer(client->popupSurface, client->popupBuffer);
     client->popupCommitted = true;
-    std::fprintf(stderr, "flux-compositor-popup-demo: committed popup buffer\n");
+    std::fprintf(stderr, "lambda-window-manager-popup-demo: committed popup buffer\n");
   }
 }
 
@@ -196,16 +196,16 @@ xdg_toplevel_listener const kToplevelListener{
 };
 
 void popupConfigure(void*, xdg_popup*, std::int32_t x, std::int32_t y, std::int32_t width, std::int32_t height) {
-  std::fprintf(stderr, "flux-compositor-popup-demo: popup configured at %d,%d size %dx%d\n", x, y, width, height);
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: popup configured at %d,%d size %dx%d\n", x, y, width, height);
 }
 
 void popupDone(void*, xdg_popup*) {
-  std::fprintf(stderr, "flux-compositor-popup-demo: popup dismissed\n");
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: popup dismissed\n");
   gRunning.store(false, std::memory_order_relaxed);
 }
 
 void popupRepositioned(void*, xdg_popup*, std::uint32_t token) {
-  std::fprintf(stderr, "flux-compositor-popup-demo: popup repositioned token %u\n", token);
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: popup repositioned token %u\n", token);
 }
 
 xdg_popup_listener const kPopupListener{
@@ -222,7 +222,7 @@ void pointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface* surface, w
   client->popupHoverRow = row;
   client->popupClicked = false;
   std::fprintf(stderr,
-               "flux-compositor-popup-demo: pointer entered popup at %.1f,%.1f row %d\n",
+               "lambda-window-manager-popup-demo: pointer entered popup at %.1f,%.1f row %d\n",
                wl_fixed_to_double(surfaceX),
                wl_fixed_to_double(surfaceY),
                row);
@@ -234,7 +234,7 @@ void pointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface* surface) {
   if (surface != client->popupSurface) return;
   client->popupHoverRow = -1;
   client->popupClicked = false;
-  std::fprintf(stderr, "flux-compositor-popup-demo: pointer left popup\n");
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: pointer left popup\n");
   repaintPopup(*client);
 }
 
@@ -246,7 +246,7 @@ void pointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t, wl_fixed_
   if (row == client->popupHoverRow) return;
   client->popupHoverRow = row;
   client->popupClicked = false;
-  std::fprintf(stderr, "flux-compositor-popup-demo: popup hover row %d\n", row);
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: popup hover row %d\n", row);
   repaintPopup(*client);
 }
 
@@ -255,7 +255,7 @@ void pointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::u
   if (client->popupHoverRow < 0 || state != WL_POINTER_BUTTON_STATE_PRESSED) return;
   client->popupClicked = true;
   std::fprintf(stderr,
-               "flux-compositor-popup-demo: popup row %d clicked with button %u\n",
+               "lambda-window-manager-popup-demo: popup row %d clicked with button %u\n",
                client->popupHoverRow,
                button);
   repaintPopup(*client);
@@ -312,10 +312,10 @@ void createPopup(DemoClient& client) {
   xdg_positioner_destroy(positioner);
 
   client.popupBuffer =
-      createBuffer(client.shm, "flux-compositor-popup-demo-popup", kPopupWidth, kPopupHeight, true);
+      createBuffer(client.shm, "lambda-window-manager-popup-demo-popup", kPopupWidth, kPopupHeight, true);
   wl_surface_commit(client.popupSurface);
   wl_display_flush(client.display);
-  std::fprintf(stderr, "flux-compositor-popup-demo: requested popup; waiting for configure\n");
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: requested popup; waiting for configure\n");
 }
 
 void createSubsurface(DemoClient& client) {
@@ -323,10 +323,10 @@ void createSubsurface(DemoClient& client) {
   client.childSurface = wl_compositor_create_surface(client.compositor);
   client.childSubsurface = wl_subcompositor_get_subsurface(client.subcompositor, client.childSurface, client.surface);
   wl_subsurface_set_position(client.childSubsurface, 18, 18);
-  client.childBuffer = createBuffer(client.shm, "flux-compositor-popup-demo-child", 72, 48, true);
+  client.childBuffer = createBuffer(client.shm, "lambda-window-manager-popup-demo-child", 72, 48, true);
   commitBuffer(client.childSurface, client.childBuffer);
   wl_display_flush(client.display);
-  std::fprintf(stderr, "flux-compositor-popup-demo: committed child subsurface buffer\n");
+  std::fprintf(stderr, "lambda-window-manager-popup-demo: committed child subsurface buffer\n");
 }
 
 void registryGlobal(void* data, wl_registry* registry, std::uint32_t name, char const* interface,
@@ -381,7 +381,7 @@ void destroyClient(DemoClient& client) {
 int main() {
   DemoClient client;
   try {
-    client.display = flux::compositor::demo::connectDisplay("flux-compositor-popup-demo");
+    client.display = flux::compositor::demo::connectDisplay("lambda-window-manager-popup-demo");
     if (!client.display) throw std::runtime_error("wl_display_connect failed");
 
     client.registry = wl_display_get_registry(client.display);
@@ -399,7 +399,7 @@ int main() {
     client.toplevel = xdg_surface_get_toplevel(client.xdgSurface);
     xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
     xdg_toplevel_set_title(client.toplevel, "Flux popup demo");
-    xdg_toplevel_set_app_id(client.toplevel, "flux-compositor-popup-demo");
+    xdg_toplevel_set_app_id(client.toplevel, "lambda-window-manager-popup-demo");
     wl_surface_commit(client.surface);
 
     if (!flux::compositor::demo::waitUntil(client.display, [&] { return client.configured; }, 3000)) {
@@ -407,13 +407,13 @@ int main() {
     }
 
     client.parentBuffer =
-        createBuffer(client.shm, "flux-compositor-popup-demo-parent", kParentWidth, kParentHeight, false);
+        createBuffer(client.shm, "lambda-window-manager-popup-demo-parent", kParentWidth, kParentHeight, false);
     commitBuffer(client.surface, client.parentBuffer);
     wl_display_flush(client.display);
     createSubsurface(client);
     createPopup(client);
     std::fprintf(stderr,
-                 "flux-compositor-popup-demo: expect a parent window, a small child rectangle, and a popup rectangle; hover/click popup rows, click outside, or press Escape to dismiss it\n");
+                 "lambda-window-manager-popup-demo: expect a parent window, a small child rectangle, and a popup rectangle; hover/click popup rows, click outside, or press Escape to dismiss it\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;
@@ -422,7 +422,7 @@ int main() {
     destroyClient(client);
     return 0;
   } catch (std::exception const& e) {
-    std::fprintf(stderr, "flux-compositor-popup-demo: %s\n", e.what());
+    std::fprintf(stderr, "lambda-window-manager-popup-demo: %s\n", e.what());
     destroyClient(client);
     return 1;
   }

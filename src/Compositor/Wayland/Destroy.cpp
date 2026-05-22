@@ -308,10 +308,22 @@ void WaylandServer::Impl::destroyCursorShapeDevice(CursorShapeDevice* device) {
 
 void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
   eraseResource(idleInhibitors_, inhibitor);
-  std::fprintf(stderr, "flux-compositor: idle inhibitors active=%zu\n", idleInhibitors_.size());
+  std::fprintf(stderr, "lambda-window-manager: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
+  if (layerSurface && layerSurface->nameSpace == "lambda.topbar") {
+    topBarExclusiveZone_ = 0;
+    ++contentSerial_;
+    notifyShellStateChanged();
+  } else if (layerSurface && layerSurface->nameSpace == "lambda.dock") {
+    dockReservedZone_ = 0;
+    ++contentSerial_;
+    notifyShellStateChanged();
+  }
+  if (layerSurface && commandLauncherModalSurface_ == layerSurface->surface) {
+    commandLauncherModalSurface_ = nullptr;
+  }
   if (layerSurface && layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
     layerSurface->surface->layerSurface = nullptr;
     if (surfaceIsLayerSurface(layerSurface->surface)) layerSurface->surface->role = SurfaceRole::None;

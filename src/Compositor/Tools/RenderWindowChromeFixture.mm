@@ -357,7 +357,7 @@ int main(int argc, char** argv) {
       std::cout << output << '\n';
       return 0;
     } catch (std::exception const& error) {
-      std::cerr << "flux-compositor-render-fixture: " << error.what() << '\n';
+      std::cerr << "lambda-window-manager-render-fixture: " << error.what() << '\n';
       return 1;
     }
   }
