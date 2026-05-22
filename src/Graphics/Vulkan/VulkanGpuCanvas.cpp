@@ -2016,6 +2016,14 @@ public:
   }
 
   void drawBackdropBlur(Rect const &rect, float radius, Color tint, CornerRadius const &corners) override {
+    drawBackdropBlurCached(rect, rect, radius, tint, corners);
+  }
+
+  void drawBackdropBlurCached(Rect const &rect,
+                              Rect const &cacheRect,
+                              float radius,
+                              Color tint,
+                              CornerRadius const &corners) override {
     if (radius <= 0.f || rect.width <= 0.f || rect.height <= 0.f)
       return;
     Rect const bounds = transformedBounds(rect);
@@ -2051,6 +2059,11 @@ public:
     target.quads.push_back(q);
     DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, 1);
     op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
+    Rect const cacheBounds = transformedBounds(cacheRect);
+    if (cacheBounds.width > 0.f && cacheBounds.height > 0.f) {
+      op.blurCacheClip = cacheBounds;
+      op.hasBlurCacheClip = true;
+    }
     appendDrawOp(target.ops, op);
   }
 
@@ -3312,7 +3325,8 @@ private:
     for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
       DrawOp const &op = ops_[index];
       if (op.kind != DrawOp::Kind::BackdropBlur) continue;
-      Rect opBounds = intersectRects(quadBounds(op.first, op.count), op.clip);
+      Rect const blurBounds = op.hasBlurCacheClip ? op.blurCacheClip : quadBounds(op.first, op.count);
+      Rect opBounds = intersectRects(blurBounds, op.clip);
       if (opBounds.width <= 0.f || opBounds.height <= 0.f) continue;
       bounds = hasBounds ? unionRects(bounds, opBounds) : opBounds;
       hasBounds = true;
@@ -3387,6 +3401,8 @@ private:
     hashValue(h, op.count);
     hashValue(h, op.clip);
     hashValue(h, op.blurRadius);
+    hashValue(h, op.blurCacheClip);
+    hashValue(h, op.hasBlurCacheClip);
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalStorageDescriptor));
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalVertexBuffer));
     hashValue(h, op.externalTranslationX);

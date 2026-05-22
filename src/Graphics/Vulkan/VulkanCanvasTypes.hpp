@@ -59,6 +59,8 @@ struct DrawOp {
   std::uint32_t count = 0;
   Rect clip{};
   float blurRadius = 0.f;
+  Rect blurCacheClip{};
+  bool hasBlurCacheClip = false;
   VkDescriptorSet externalStorageDescriptor = VK_NULL_HANDLE;
   VkBuffer externalVertexBuffer = VK_NULL_HANDLE;
   float externalTranslationX = 0.f;

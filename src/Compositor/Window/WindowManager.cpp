@@ -964,6 +964,7 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const*
   }
   WindowGeometry const current = snapPreviewCurrentWindow(mutableServer, now);
   WindowGeometry const end = server->snapPreviewTargetWindow_;
+  OutputGeometry const output = outputGeometryFor(mutableServer);
   return SnapPreviewSnapshot{
       .surfaceId = server->snapPreviewSurfaceId_,
       .x = current.x,
@@ -974,6 +975,10 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const*
       .targetY = end.y,
       .targetWidth = end.width,
       .targetHeight = end.height,
+      .cacheX = 0,
+      .cacheY = 0,
+      .cacheWidth = output.width,
+      .cacheHeight = output.height,
   };
 }
 

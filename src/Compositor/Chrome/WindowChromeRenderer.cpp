@@ -223,7 +223,13 @@ void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeC
                                       static_cast<float>(preview.height));
   CornerRadius const radius{10.f};
   if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
-    canvas.drawBackdropBlur(previewRect, chrome.glassBlurRadius, Colors::transparent, radius);
+    Rect const cacheRect = preview.cacheWidth > 0 && preview.cacheHeight > 0
+                               ? Rect::sharp(static_cast<float>(preview.cacheX),
+                                             static_cast<float>(preview.cacheY),
+                                             static_cast<float>(preview.cacheWidth),
+                                             static_cast<float>(preview.cacheHeight))
+                               : previewRect;
+    canvas.drawBackdropBlurCached(previewRect, cacheRect, chrome.glassBlurRadius, Colors::transparent, radius);
   }
   canvas.drawRect(previewRect,
                   radius,

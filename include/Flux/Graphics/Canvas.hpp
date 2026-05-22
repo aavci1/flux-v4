@@ -115,6 +115,16 @@ public:
   virtual void drawBackdropBlur(Rect const& rect, float radius, Color tint = Colors::transparent,
                                 CornerRadius const& corners = {}) = 0;
 
+  /// Draw a backdrop blur while allowing backends to cache a larger stable source region.
+  /// This is useful for animated masks whose destination rect changes every frame but whose
+  /// underlying backdrop does not.
+  virtual void drawBackdropBlurCached(Rect const& rect, Rect const& cacheRect, float radius,
+                                      Color tint = Colors::transparent,
+                                      CornerRadius const& corners = {}) {
+    (void)cacheRect;
+    drawBackdropBlur(rect, radius, tint, corners);
+  }
+
   /// Metal: `id<MTLDevice>` as `void*` (use with `loadImage(path, canvas.gpuDevice())`). Null if unavailable.
   virtual void* gpuDevice() const = 0;
 
