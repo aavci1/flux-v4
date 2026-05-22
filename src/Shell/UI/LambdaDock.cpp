@@ -3,6 +3,7 @@
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
+#include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
@@ -16,30 +17,6 @@ flux::Color rgba(float r, float g, float b, float a) {
 
 flux::FillStyle gradient(flux::Color from, flux::Color to) {
   return flux::FillStyle::linearGradient(from, to, {0.f, 0.f}, {1.f, 1.f});
-}
-
-std::string utf8(char32_t codepoint) {
-  std::string out;
-  if (codepoint <= 0x7Fu) {
-    out.push_back(static_cast<char>(codepoint));
-  } else if (codepoint <= 0x7FFu) {
-    out.push_back(static_cast<char>(0xC0u | (codepoint >> 6u)));
-    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
-  } else if (codepoint <= 0xFFFFu) {
-    out.push_back(static_cast<char>(0xE0u | (codepoint >> 12u)));
-    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
-    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
-  } else {
-    out.push_back(static_cast<char>(0xF0u | (codepoint >> 18u)));
-    out.push_back(static_cast<char>(0x80u | ((codepoint >> 12u) & 0x3Fu)));
-    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
-    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
-  }
-  return out;
-}
-
-std::string icon(flux::IconName name) {
-  return utf8(static_cast<char32_t>(name));
 }
 
 struct IconPalette {
@@ -77,30 +54,32 @@ flux::IconName dockIconName(DockItem const& item) {
 flux::Element dockIcon(DockItem item, bool hover, std::function<void()> onTap) {
   IconPalette const palette = iconPalette(item);
   float const lift = hover ? -5.f : 0.f;
+  float const tileX = static_cast<float>((kDockCell - kDockIconTile) / 2);
+  float const tileY = 0.f + lift;
+  float const iconInset = static_cast<float>((kDockIconTile - kDockIconSize) / 2);
   std::vector<flux::Element> layers;
   layers.push_back(flux::Rectangle{}
-      .size(40.f, 40.f)
-      .position(4.f, 4.f + lift)
+      .size(static_cast<float>(kDockIconTile), static_cast<float>(kDockIconTile))
+      .position(tileX, tileY)
       .fill(gradient(palette.from, palette.to))
-      .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f))
-      .cornerRadius(11.f));
-  layers.push_back(flux::Text{
-      .text = icon(dockIconName(item)),
-      .font = flux::Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
+      .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.72f), 1.f))
+      .cornerRadius(13.f));
+  layers.push_back(flux::Icon{
+      .name = dockIconName(item),
+      .size = static_cast<float>(kDockIconSize),
+      .weight = 820.f,
       .color = palette.ink,
-      .horizontalAlignment = flux::HorizontalAlignment::Center,
-      .verticalAlignment = flux::VerticalAlignment::Center,
-  }.size(40.f, 40.f).position(4.f, 4.f + lift));
+  }.position(tileX + iconInset, tileY + iconInset));
   if (item.running) {
     layers.push_back(flux::Rectangle{}
-        .size(4.f, 4.f)
-        .position(22.f, 57.f)
+        .size(5.f, 5.f)
+        .position((static_cast<float>(kDockCell) - 5.f) * 0.5f, static_cast<float>(kDockCell) + 4.f)
         .fill(rgba(0.08f, 0.12f, 0.22f, item.focused ? 0.95f : 0.40f))
-        .cornerRadius(2.f));
+        .cornerRadius(2.5f));
   }
   auto element = flux::ZStack{
       .children = std::move(layers),
-  }.size(static_cast<float>(kDockCell), static_cast<float>(dockHeight()));
+  }.size(static_cast<float>(kDockCell), static_cast<float>(kDockCell + 8));
   if (onTap) element = std::move(element).onTap(std::move(onTap));
   return element;
 }
@@ -128,14 +107,24 @@ flux::Element LambdaDock::body() const {
   }
   return flux::HStack{
       .spacing = static_cast<float>(kDockGap),
-      .alignment = flux::Alignment::Center,
+      .alignment = flux::Alignment::Start,
       .children = std::move(children),
   }.padding(static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX),
             static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX))
    .size(static_cast<float>(props.width), static_cast<float>(dockHeight()))
-   .fill(rgba(0.02f, 0.03f, 0.06f, 0.72f))
-   .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.12f), 0.8f))
-   .cornerRadius(18.f);
+   .fill(flux::Colors::transparent);
+}
+
+flux::Element LambdaDockSurface::body() const {
+  return flux::ZStack{
+      .children = flux::children(
+          flux::Rectangle{}
+              .size(static_cast<float>(props.width), static_cast<float>(dockHeight()))
+              .fill(rgba(0.02f, 0.03f, 0.06f, 0.72f))
+              .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.16f), 0.8f))
+              .cornerRadius(18.f),
+          flux::Element{LambdaDock{props}}),
+  }.size(static_cast<float>(props.width), static_cast<float>(dockHeight()));
 }
 
 } // namespace lambda_shell

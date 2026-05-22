@@ -12,4 +12,10 @@ struct LambdaDock {
   flux::Element body() const;
 };
 
+struct LambdaDockSurface {
+  DockProps props;
+
+  flux::Element body() const;
+};
+
 } // namespace lambda_shell
