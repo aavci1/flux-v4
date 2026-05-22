@@ -366,13 +366,12 @@ struct TopBarContent {
                                 flux::IconName::Bluetooth,
                                 flux::IconName::VolumeUp,
                                 flux::IconName::BatteryFull}) {
-      statusItems.push_back(flux::Text{
-          .text = icon(name),
-          .font = flux::Font{.family = "Material Symbols Rounded", .size = 22.f, .weight = 900.f},
-          .color = text,
-          .horizontalAlignment = flux::HorizontalAlignment::Center,
-          .verticalAlignment = flux::VerticalAlignment::Center,
-      }.size(23.f, 23.f));
+      statusItems.push_back(flux::Icon {
+	.name = name,
+	.size = 16.f,
+	.weight = 900.f,
+	.color = text
+      });
     }
 
     return flux::HStack{
@@ -381,17 +380,12 @@ struct TopBarContent {
         .children = flux::children(
             flux::Text{
                 .text = "λ",
-                .font = flux::Font{.size = 20.f, .weight = 980.f},
+                .font = flux::Font{.size = 16.f, .weight = 900.f},
                 .color = text,
                 .horizontalAlignment = flux::HorizontalAlignment::Center,
                 .verticalAlignment = flux::VerticalAlignment::Center,
             }.size(22.f, static_cast<float>(kTopBarHeight)),
-            flux::Text{
-                .text = title,
-                .font = flux::Font{.size = 13.5f, .weight = 920.f},
-                .color = text,
-                .verticalAlignment = flux::VerticalAlignment::Center,
-            }.flex(1.f, 1.f, 0.f),
+	    flux::Spacer {},
             flux::HStack{
                 .spacing = 6.f,
                 .alignment = flux::Alignment::Center,
@@ -399,11 +393,10 @@ struct TopBarContent {
             },
             flux::Text{
                 .text = timeText,
-                .font = flux::Font{.size = 13.5f, .weight = 920.f},
+                .font = flux::Font{.size = 16.f, .weight = 900.f},
                 .color = text,
-                .horizontalAlignment = flux::HorizontalAlignment::Trailing,
                 .verticalAlignment = flux::VerticalAlignment::Center,
-            }.width(176.f)),
+            }),
     }.padding(0.f, 12.f, 0.f, 14.f)
      .height(static_cast<float>(kTopBarHeight));
   }
