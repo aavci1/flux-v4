@@ -207,9 +207,49 @@ git diff --check
 
 - `compositor.log`: stderr from the compositor session.
 - `~/.local/state/flux-compositor/crash.log`: durable compositor crash breadcrumbs. The compositor opens this automatically, appends low-volume lifecycle/surface/DMABUF/frame-stall events, and fsyncs each entry so the last events should survive a compositor crash or hard reset. Override with `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`.
-- `FLUX_RESIZE_TRACE=1`: enables resize tracing across the compositor and framework resize paths. By default it also writes `/tmp/flux-resize-trace.log`; override with `FLUX_RESIZE_TRACE_LOG=/path/to/log`.
-- `FLUX_COMPOSITOR_PACING_TRACE=1`: logs atomic page-flip scheduling and completion cadence. By default it writes `/tmp/flux-compositor-pacing.log`; override with `FLUX_COMPOSITOR_PACING_TRACE_LOG=/path/to/log`.
-- CPU trace: enabled by default while compositor CPU work is under investigation. It writes one summary line per second to `~/.local/state/flux-compositor/cpu.log`, including process CPU percent, compositor frame phases, SHM copy bandwidth/time, image upload/create time, and DMABUF import/fallback counts. Disable with `FLUX_COMPOSITOR_CPU_TRACE=0`; override the path with `FLUX_COMPOSITOR_CPU_TRACE_LOG=/path/to/log`.
+
+### Instrumentation Environment
+
+Boolean-style variables are enabled by any non-empty value except `0` unless noted otherwise.
+
+Compositor traces:
+
+- `FLUX_COMPOSITOR_CPU_TRACE=1`: enables one summary line per second in `~/.local/state/flux-compositor/cpu.log`, including process CPU percent, frame phases, wake sources, SHM copy time, image upload time, DMABUF import/fallback counts, and surface commit attribution.
+- `FLUX_COMPOSITOR_CPU_TRACE_LOG=/path/to/log`: overrides the CPU trace log path.
+- `FLUX_COMPOSITOR_SAMPLE_TRACE=1`: enables the SIGPROF sampled CPU profiler. This only runs when `FLUX_COMPOSITOR_CPU_TRACE=1` is also enabled.
+- `FLUX_COMPOSITOR_SAMPLE_USEC=2000`: sets the sampled profiler CPU-time interval in microseconds.
+- `FLUX_COMPOSITOR_PROFILE=1`: prints frame-profile summaries to stderr.
+- `FLUX_COMPOSITOR_IDLE_PROFILE=1`: prints loop, poll, idle, vblank, and render summaries to stderr.
+- `FLUX_COMPOSITOR_TIMING=1`: prints coarse compositor timing lines to stderr.
+- `FLUX_COMPOSITOR_PACING_TRACE=1`: logs atomic page-flip scheduling and completion cadence to stderr and `/tmp/flux-compositor-pacing.log`.
+- `FLUX_COMPOSITOR_PACING_TRACE_LOG=/path/to/log`: overrides the pacing trace log path.
+- `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`: overrides the durable crash breadcrumb path. Crash logging is initialized without needing an enable variable.
+
+Resize traces:
+
+- `FLUX_RESIZE_TRACE=1`: enables resize tracing across compositor and framework resize paths.
+- `FLUX_RESIZE_TRACE_LOG=/path/to/log`: overrides the resize trace path. Default is `/tmp/flux-resize-trace.log`.
+
+Input, KMS, and Wayland debug:
+
+- `FLUX_DEBUG_COMPOSITOR_INPUT=1`: logs compositor-dispatched input events.
+- `FLUX_DEBUG_KMS=1`: logs KMS, libinput, and platform details.
+- `FLUX_DEBUG_WAYLAND_DECORATIONS=1`: logs Wayland client-side decoration behavior.
+
+Framework debug:
+
+- `FLUX_DEBUG_INPUT=1`: enables framework input debug logs.
+- `FLUX_DEBUG_INPUT_VERBOSE=1`: enables verbose framework input debug logs.
+- `FLUX_DEBUG_LAYOUT=1`: enables framework layout debug logs.
+- `FLUX_DEBUG_PERF=1`: enables framework performance logs.
+- `FLUX_DEBUG_PERF=2` or `FLUX_DEBUG_PERF=verbose`: enables verbose framework performance logs.
+- `FLUX_DEBUG_PERF=anomaly` or `FLUX_DEBUG_PERF=quiet`: only logs framework performance anomalies.
+
+Graphics debug and performance toggles:
+
+- `FLUX_DEBUG_SCREENSHOT_PATH=/path/to/image`: writes one Vulkan debug screenshot.
+- `FLUX_RENDER_TARGET_DISABLE_FRAME_CACHE=1`: disables render target frame caching.
+- `FLUX_VULKAN_PRESENT_FENCES=0`, `false`, or `off`: disables Vulkan present fences.
 
 For resize/vblank investigation, launch the compositor like this:
 
@@ -224,7 +264,7 @@ For compositor CPU attribution, launch with:
 
 ```sh
 rm -f ~/.local/state/flux-compositor/cpu.log
-./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
+FLUX_COMPOSITOR_CPU_TRACE=1 ./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
 ```
 
 Expected trace shape under load: the `cpu=` value should track the compositor CPU seen in `top`, while `phase_avg_ms`, `shm`, `image`, and `dmabuf` fields identify whether the work is in frame rendering/presentation, SHM copies, texture uploads, or DMABUF import/fallback.

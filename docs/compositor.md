@@ -169,9 +169,9 @@ Phase 2+ : iteration cycle starts to matter. A Wayland client test app needs to 
 
 ### 3.6 Logging
 
-The compositor writes structured logs to stderr. Run as `flux-compositor 2>&1 | tee compositor.log` to capture sessions. Log levels: ERROR, WARN, INFO, DEBUG. Default level INFO; debug builds default to DEBUG. Environment variable `FLUX_COMPOSITOR_LOG=debug` overrides.
+The compositor writes logs to stderr. Run as `flux-compositor 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by the environment variables documented in [`compositor-testing.md`](compositor-testing.md#instrumentation-environment), including `FLUX_COMPOSITOR_CPU_TRACE`, `FLUX_COMPOSITOR_PACING_TRACE`, and `FLUX_RESIZE_TRACE`.
 
-Log format: `[level] timestamp file:line message`. Avoid log spam in hot paths (per-frame work, per-event work) at INFO level; use DEBUG.
+Avoid log spam in hot paths unless it is guarded by one of the instrumentation variables.
 
 ### 3.7 Coding conventions
 
