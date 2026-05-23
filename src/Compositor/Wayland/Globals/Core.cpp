@@ -532,10 +532,12 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
   bool const backgroundBlurChanged = applyBackgroundBlurState(surface);
+  bool const layerChromeChanged = applyLayerChromeState(surface);
 
   if (!hasBufferAttach) {
     bool const viewportChanged = pendingViewportStateChanged(surface);
-    if (!viewportChanged && !backgroundBlurChanged && surface->presentationFeedbacks.empty()) {
+    if (!viewportChanged && !backgroundBlurChanged && !layerChromeChanged &&
+        surface->presentationFeedbacks.empty()) {
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       return;
     }
@@ -547,7 +549,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
-    if (backgroundBlurChanged) bumpSurfaceSerial(surface);
+    if (backgroundBlurChanged || layerChromeChanged) bumpSurfaceSerial(surface);
     traceCrashSurfaceCommit(surface, "state", 0u, 0u);
     return;
   }

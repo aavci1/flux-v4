@@ -661,25 +661,25 @@ For every item that touches `include/Flux/` or `src/Graphics/` / `src/Platform/`
 
 | ID | Summary | Status |
 |----|---------|--------|
-| P0.1 | xdg-popup grabs | pending |
-| P0.2 | Seat touch honesty | pending |
-| P0.3 | Tablet dead code removal | pending |
-| P0.4 | Window capability flags | pending |
-| P1.1 | LayerShellChrome in framework | pending |
-| P1.2 | xx_layer_chrome_v1 protocol | pending |
-| P1.3 | Generic exclusive zone | pending |
-| P1.4 | Shared shell IPC | pending |
-| P1.5 | Preview/production chrome unity | pending |
-| P2.1 | Split CompositorRuntime | pending |
-| P2.2 | Split WindowManager | pending |
-| P2.3 | Protocol CMake consolidation | pending |
-| P2.4 | Presenter abstraction | pending |
-| P2.5 | Doc/spec alignment | pending |
-| P2.6 | Subsurface hit testing | pending |
-| P3.1 | Shell theme bridge | pending |
-| P3.2 | Expanded tests | pending |
-| P3.3 | DMABUF/IOSurface docs | pending |
-| P3.4 | Install/session docs | pending |
+| P0.1 | xdg-popup grabs | done (config-gated, default off) |
+| P0.2 | Seat touch honesty | done |
+| P0.3 | Tablet dead code removal | done |
+| P0.4 | Window capability flags | done |
+| P1.1 | LayerShellChrome in framework | done |
+| P1.2 | xx_layer_chrome_v1 protocol | done |
+| P1.3 | Generic exclusive zone | done |
+| P1.4 | Shared shell IPC | done |
+| P1.5 | Preview/production chrome unity | done |
+| P2.1 | Split CompositorRuntime | done |
+| P2.2 | Split WindowManager | partial (runtime split done; WM remains monolithic pending clean extraction) |
+| P2.3 | Protocol CMake consolidation | partial (`flux_wayland_protocols()` added; full server codegen migration ongoing) |
+| P2.4 | Presenter abstraction | done |
+| P2.5 | Doc/spec alignment | done |
+| P2.6 | Subsurface hit testing | done |
+| P3.1 | Shell theme bridge | done |
+| P3.2 | Expanded tests | done |
+| P3.3 | DMABUF/IOSurface docs | done |
+| P3.4 | Install/session docs | done |
 | P3.5 | Tablet v2 (optional) | pending |
 
 Update the **Status** column as work lands.

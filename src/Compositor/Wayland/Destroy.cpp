@@ -1,8 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
-
-#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
 
@@ -175,6 +174,9 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
 }
 
 void WaylandServer::Impl::destroyXdgPopup(XdgPopup* popup) {
+  if (popup && popup->server && popup->server->grabPopup_ == popup) {
+    releasePopupGrab(popup->server, popup, 0);
+  }
   if (popup && popup->xdgSurface && popup->xdgSurface->surface && popup->xdgSurface->surface->xdgPopup == popup) {
     popup->xdgSurface->surface->xdgPopup = nullptr;
     if (surfaceIsXdgPopup(popup->xdgSurface->surface)) popup->xdgSurface->surface->role = SurfaceRole::None;
@@ -311,15 +313,16 @@ void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
   std::fprintf(stderr, "lambda-window-manager: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
+void WaylandServer::Impl::destroyLayerChrome(LayerChrome* chrome) {
+  if (chrome && chrome->layerSurface) {
+    chrome->layerSurface->layerChrome = nullptr;
+  }
+  eraseResource(layerChromeObjects_, chrome);
+}
+
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
-  if (layerSurface && layerSurface->nameSpace == "lambda.topbar") {
-    topBarExclusiveZone_ = 0;
-    ++contentSerial_;
-    notifyShellStateChanged();
-  } else if (layerSurface && layerSurface->nameSpace == "lambda.dock") {
-    dockReservedZone_ = 0;
-    ++contentSerial_;
-    notifyShellStateChanged();
+  if (layerSurface) {
+    refreshShellReservedZones(layerSurface->server);
   }
   if (layerSurface && commandLauncherModalSurface_ == layerSurface->surface) {
     commandLauncherModalSurface_ = nullptr;

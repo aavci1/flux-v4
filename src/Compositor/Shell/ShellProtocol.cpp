@@ -1,13 +1,13 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include <Flux/Shell/ShellIpc.hpp>
+
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <cerrno>
-#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -22,69 +22,6 @@ std::string runtimePath(char const* name) {
     return std::string(runtimeDir) + "/" + name;
   }
   return std::string("/tmp/") + name;
-}
-
-std::string escapeJson(std::string_view text) {
-  std::string out;
-  out.reserve(text.size() + 8u);
-  for (char c : text) {
-    switch (c) {
-    case '\\': out += "\\\\"; break;
-    case '"': out += "\\\""; break;
-    case '\n': out += "\\n"; break;
-    case '\r': out += "\\r"; break;
-    case '\t': out += "\\t"; break;
-    default:
-      if (static_cast<unsigned char>(c) >= 0x20u) out.push_back(c);
-      break;
-    }
-  }
-  return out;
-}
-
-bool lineContains(std::string_view line, std::string_view needle) {
-  return line.find(needle) != std::string_view::npos;
-}
-
-std::string jsonStringField(std::string_view line, std::string_view name) {
-  std::string const key = "\"" + std::string(name) + "\"";
-  std::size_t pos = line.find(key);
-  if (pos == std::string_view::npos) return {};
-  pos = line.find(':', pos + key.size());
-  if (pos == std::string_view::npos) return {};
-  pos = line.find('"', pos + 1u);
-  if (pos == std::string_view::npos) return {};
-  std::string out;
-  bool escaping = false;
-  for (++pos; pos < line.size(); ++pos) {
-    char const c = line[pos];
-    if (escaping) {
-      out.push_back(c);
-      escaping = false;
-    } else if (c == '\\') {
-      escaping = true;
-    } else if (c == '"') {
-      break;
-    } else {
-      out.push_back(c);
-    }
-  }
-  return out;
-}
-
-std::uint64_t jsonUintField(std::string_view line, std::string_view name) {
-  std::string const key = "\"" + std::string(name) + "\"";
-  std::size_t pos = line.find(key);
-  if (pos == std::string_view::npos) return 0;
-  pos = line.find(':', pos + key.size());
-  if (pos == std::string_view::npos) return 0;
-  while (++pos < line.size() && std::isspace(static_cast<unsigned char>(line[pos]))) {}
-  std::uint64_t value = 0;
-  while (pos < line.size() && std::isdigit(static_cast<unsigned char>(line[pos]))) {
-    value = value * 10u + static_cast<unsigned>(line[pos] - '0');
-    ++pos;
-  }
-  return value;
 }
 
 void sendLine(int fd, std::string const& line) {
@@ -118,9 +55,9 @@ std::string windowStateJson(WaylandServer::Impl const* server, WaylandServer::Im
   std::string const appId = toplevel && !toplevel->appId.empty() ? toplevel->appId : "unknown";
   std::string const title = toplevel && !toplevel->title.empty() ? toplevel->title : appId;
   return "{\"id\":" + std::to_string(surface->id) +
-         ",\"appId\":\"" + escapeJson(appId) +
-         "\",\"title\":\"" + escapeJson(title) +
-         "\",\"outputId\":\"" + escapeJson(server->output_.name) +
+         ",\"appId\":\"" + flux::shell::escapeJson(appId) +
+         "\",\"title\":\"" + flux::shell::escapeJson(title) +
+         "\",\"outputId\":\"" + flux::shell::escapeJson(server->output_.name) +
          "\",\"state\":\"" + state +
          "\",\"focused\":" + (server->keyboardFocus_ == surface ? "true" : "false") +
          ",\"attention\":false}";
@@ -128,8 +65,8 @@ std::string windowStateJson(WaylandServer::Impl const* server, WaylandServer::Im
 
 std::string desktopSnapshotJson(WaylandServer::Impl const* server) {
   std::string json = "{\"type\":\"lambda.windowManager.snapshot\",\"outputs\":[{\"id\":\"" +
-                     escapeJson(server->output_.name) + "\",\"name\":\"" +
-                     escapeJson(server->output_.name) + "\",\"width\":" +
+                     flux::shell::escapeJson(server->output_.name) + "\",\"name\":\"" +
+                     flux::shell::escapeJson(server->output_.name) + "\",\"width\":" +
                      std::to_string(server->logicalOutputWidth()) + ",\"height\":" +
                      std::to_string(server->logicalOutputHeight()) + ",\"scale\":" +
                      std::to_string(server->preferredScale()) + "}],\"apps\":" +
@@ -167,37 +104,40 @@ void sendWelcome(WaylandServer::Impl* server) {
 }
 
 void handleShellLine(WaylandServer::Impl* server, std::string_view line) {
-  if (lineContains(line, "\"lambda.shell.hello\"")) {
+  auto message = flux::shell::parseLine(line);
+  if (!message) return;
+
+  switch (message->kind) {
+  case flux::shell::ShellMessageKind::ShellHello:
     server->shellHelloReceived_ = true;
     sendWelcome(server);
     return;
-  }
-  if (lineContains(line, "\"lambda.windowManager.launchApp\"")) {
-    server->launchShellApp(jsonStringField(line, "appId"));
+  case flux::shell::ShellMessageKind::WindowManagerLaunchApp:
+    server->launchShellApp(message->launchApp.appId);
     return;
-  }
-  if (lineContains(line, "\"lambda.windowManager.focusApp\"")) {
-    if (!server->focusShellApp(jsonStringField(line, "appId"), 0)) {
-      sendLine(server->shellClientFd_, "{\"type\":\"lambda.windowManager.error\",\"code\":\"not-found\",\"message\":\"app has no running windows\"}");
+  case flux::shell::ShellMessageKind::WindowManagerFocusApp:
+    if (!server->focusShellApp(message->focusApp.appId, 0)) {
+      sendLine(server->shellClientFd_,
+               flux::shell::serializeWindowManagerError("not-found", "app has no running windows"));
     }
     return;
-  }
-  if (lineContains(line, "\"lambda.windowManager.focusWindow\"")) {
-    if (!server->focusShellWindow(jsonUintField(line, "windowId"), 0)) {
-      sendLine(server->shellClientFd_, "{\"type\":\"lambda.windowManager.error\",\"code\":\"not-found\",\"message\":\"window not found\"}");
+  case flux::shell::ShellMessageKind::WindowManagerFocusWindow:
+    if (!server->focusShellWindow(message->focusWindow.windowId, 0)) {
+      sendLine(server->shellClientFd_,
+               flux::shell::serializeWindowManagerError("not-found", "window not found"));
     }
     return;
-  }
-  if (lineContains(line, "\"lambda.windowManager.claimCommandLauncherModal\"")) {
+  case flux::shell::ShellMessageKind::WindowManagerClaimCommandLauncherModal:
     server->claimCommandLauncherModal(0);
     return;
-  }
-  if (lineContains(line, "\"lambda.windowManager.releaseCommandLauncherModal\"")) {
+  case flux::shell::ShellMessageKind::WindowManagerReleaseCommandLauncherModal:
     server->releaseCommandLauncherModal(0);
     return;
-  }
-  if (lineContains(line, "\"lambda.shell.refreshState\"")) {
+  case flux::shell::ShellMessageKind::ShellRefreshState:
     sendLine(server->shellClientFd_, desktopSnapshotJson(server));
+    return;
+  default:
+    return;
   }
 }
 
@@ -265,7 +205,7 @@ void WaylandServer::Impl::dispatchShellIpc() {
     shellReadBuffer_.append(buffer, static_cast<std::size_t>(readBytes));
     for (;;) {
       std::size_t const newline = shellReadBuffer_.find('\n');
-      if (newline == std::string::npos) break;
+      if (newline == std::string_view::npos) break;
       std::string line = shellReadBuffer_.substr(0, newline);
       shellReadBuffer_.erase(0, newline + 1u);
       handleShellLine(this, line);
@@ -282,7 +222,7 @@ void WaylandServer::Impl::requestShellOpenCommandLauncher() {
     std::fprintf(stderr, "lambda-window-manager: lambda-shell is not connected; cannot open command launcher\n");
     return;
   }
-  sendLine(shellClientFd_, "{\"type\":\"lambda.shell.openCommandLauncher\"}");
+  sendLine(shellClientFd_, flux::shell::serializeOpenCommandLauncher());
 }
 
 void WaylandServer::Impl::notifyShellStateChanged() {

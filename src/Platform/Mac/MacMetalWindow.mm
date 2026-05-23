@@ -322,6 +322,7 @@ public:
   void completeAnimationFrame(bool needsAnotherFrame) override;
 
   void setCursor(Cursor kind) override;
+  [[nodiscard]] PlatformWindowCapabilities capabilities() const override;
   void rememberPointerDownEvent(NSEvent* event);
 
   ::flux::Window* fluxWindow() const;
@@ -1190,6 +1191,10 @@ void MacMetalWindow::setCursor(Cursor kind) {
   if (c && [NSCursor currentCursor] != c) {
     [c set];
   }
+}
+
+PlatformWindowCapabilities MacMetalWindow::capabilities() const {
+  return {};
 }
 
 namespace platform {

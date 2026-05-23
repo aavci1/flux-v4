@@ -10,6 +10,10 @@
 
 namespace flux::compositor {
 
+struct CompositorInputConfig {
+  bool popupGrabs = false;
+};
+
 class WaylandServer {
 public:
   using ShortcutAction = flux::compositor::ShortcutAction;
@@ -42,6 +46,9 @@ public:
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
   void setChromeConfig(ChromeConfig config);
+  void setChromeThemeConfig(ChromeConfig base, std::optional<ChromeConfig> dark);
+  void setShellThemeDark(bool dark);
+  void setInputConfig(CompositorInputConfig config);
   void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;

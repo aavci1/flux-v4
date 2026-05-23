@@ -754,6 +754,16 @@ CompositorConfig loadConfig() {
     parseIdleBlankTimeout("screen_blank_timeout_seconds");
   }
 
+  if (auto* inputTable = table["input"].as_table()) {
+    if (inputTable->contains("popup_grabs")) {
+      if (auto enabled = configBool(*inputTable, "popup_grabs")) {
+        config.popupGrabs = *enabled;
+      } else {
+        std::fprintf(stderr, "lambda-window-manager: ignoring invalid input.popup_grabs value in %s\n", path->c_str());
+      }
+    }
+  }
+
   if (table.contains("window_glass")) {
     if (auto enabled = configBool(table, "window_glass")) {
       config.chrome.windowGlassEnabled = *enabled;

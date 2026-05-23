@@ -232,6 +232,7 @@ set(FLUX_UI_SOURCES
   src/UI/Views/Tooltip.cpp
   src/UI/Views/TransformViews.cpp
   src/UI/Views/Toggle.cpp
+  src/Shell/ShellIpc.cpp
 )
 
 add_library(flux STATIC
@@ -268,6 +269,7 @@ if(FLUX_PLATFORM_MACOS)
   )
   add_dependencies(flux flux_shaders)
 elseif(FLUX_PLATFORM_LINUX_WAYLAND)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxWaylandProtocols.cmake)
   find_package(PkgConfig REQUIRED)
   find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
   pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
@@ -304,6 +306,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   set(FLUX_XX_CUTOUTS_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/xx-cutouts-v1.xml")
   set(FLUX_WLR_LAYER_SHELL_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/wlr-layer-shell-unstable-v1.xml")
   set(FLUX_EXT_BACKGROUND_EFFECT_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/ext-background-effect-v1.xml")
+  set(FLUX_XX_LAYER_CHROME_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/xx-layer-chrome-v1.xml")
   foreach(_flux_wayland_protocol_xml IN ITEMS
       "${FLUX_XDG_SHELL_XML}"
       "${FLUX_XDG_DECORATION_XML}"
@@ -311,7 +314,8 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
       "${FLUX_FRACTIONAL_SCALE_XML}"
       "${FLUX_XX_CUTOUTS_XML}"
       "${FLUX_WLR_LAYER_SHELL_XML}"
-      "${FLUX_EXT_BACKGROUND_EFFECT_XML}")
+      "${FLUX_EXT_BACKGROUND_EFFECT_XML}"
+      "${FLUX_XX_LAYER_CHROME_XML}")
     if(NOT EXISTS "${_flux_wayland_protocol_xml}")
       message(FATAL_ERROR
         "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
@@ -395,6 +399,17 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     DEPENDS ${FLUX_EXT_BACKGROUND_EFFECT_XML}
     VERBATIM
   )
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XX_LAYER_CHROME_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XX_LAYER_CHROME_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-protocol.c
+    DEPENDS ${FLUX_XX_LAYER_CHROME_XML}
+    VERBATIM
+  )
   set(_flux_vulkan_shader_headers)
   foreach(_flux_shader rect.vert rect.frag image.vert image.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
     string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
@@ -439,6 +454,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-protocol.c
   )
 elseif(FLUX_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
@@ -497,9 +513,9 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsInput.cpp
     src/Compositor/Protocols/cursor-shape-v1-protocol.c
+    src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
     src/Compositor/Protocols/ext-background-effect-v1-protocol.c
     src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
-    src/Compositor/Protocols/tablet-v2-protocol.c
     src/Compositor/Protocols/xdg-shell-protocol.c
     src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
@@ -570,7 +586,7 @@ target_link_libraries(flux PRIVATE libtess2)
 
 add_library(lambda-shell-ui STATIC
   src/Shell/ShellController.cpp
-  src/Shell/ShellIpc.cpp
+  src/Shell/ShellConnection.cpp
   src/Shell/ShellJson.cpp
   src/Shell/ShellModel.cpp
   src/Shell/UI/LambdaCommandLauncher.cpp
@@ -689,6 +705,11 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Chrome/CursorRenderer.cpp
     src/Compositor/Chrome/WindowChromeRenderer.cpp
     src/Compositor/CompositorRuntime.cpp
+    src/Compositor/CompositorConfigWatch.cpp
+    src/Compositor/CompositorRenderFrame.cpp
+    src/Compositor/PresentationLoop.cpp
+    src/Compositor/Presenter.cpp
+    src/Compositor/PresenterEnv.cpp
     src/Compositor/Config/AppliedCompositorConfig.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/Diagnostics/CrashLog.cpp
@@ -704,6 +725,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Wayland/Globals/Cutouts.cpp
     src/Compositor/Wayland/Globals/FractionalScale.cpp
     src/Compositor/Wayland/Globals/IdleInhibit.cpp
+    src/Compositor/Wayland/Globals/LayerChrome.cpp
     src/Compositor/Wayland/Globals/LayerShell.cpp
     src/Compositor/Wayland/Globals/LinuxDmabuf.cpp
     src/Compositor/Wayland/Globals/Output.cpp
@@ -724,6 +746,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
     src/Compositor/Protocols/cursor-shape-v1-protocol.c
+    src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
     src/Compositor/Protocols/ext-background-effect-v1-protocol.c
     src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
@@ -731,7 +754,6 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Protocols/presentation-time-protocol.c
     src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
     src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
-    src/Compositor/Protocols/tablet-v2-protocol.c
     src/Compositor/Protocols/viewporter-protocol.c
     src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-activation-v1-protocol.c
@@ -739,6 +761,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-shell-protocol.c
     src/Compositor/Protocols/xx-cutouts-v1-protocol.c
+    src/Compositor/Protocols/xx-layer-chrome-v1-protocol.c
     src/Platform/Linux/KmsApplication.cpp
     src/Platform/Linux/KmsInput.cpp
     src/Platform/Linux/KmsOutput.cpp
@@ -859,7 +882,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
   add_executable(lambda-window-manager-cursor-shape-demo
     src/Compositor/CursorShapeDemoClient.cpp
     src/Compositor/Protocols/cursor-shape-v1-protocol.c
-    src/Compositor/Protocols/tablet-v2-protocol.c
+    src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
     src/Compositor/Protocols/xdg-shell-protocol.c
   )
   target_include_directories(lambda-window-manager-cursor-shape-demo PRIVATE
@@ -1005,6 +1028,20 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
   )
   target_link_libraries(lambda-window-manager-popup-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
 
+  add_executable(lambda-window-manager-popup-grab-demo
+    src/Compositor/PopupGrabDemoClient.cpp
+    src/Compositor/Protocols/xdg-shell-protocol.c
+  )
+  target_include_directories(lambda-window-manager-popup-grab-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
+  )
+  target_compile_options(lambda-window-manager-popup-grab-demo PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(lambda-window-manager-popup-grab-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+
   add_executable(lambda-window-manager-activation-demo
     src/Compositor/ActivationDemoClient.cpp
     src/Compositor/Protocols/xdg-activation-v1-protocol.c
@@ -1060,6 +1097,7 @@ if(FLUX_BUILD_TESTS)
     tests/RuntimeInputTests.cpp
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
+    tests/ShellIpcTests.cpp
     tests/SvgPathTests.cpp
     tests/ThemeReactivityTests.cpp
   )
@@ -1075,6 +1113,13 @@ if(FLUX_BUILD_TESTS)
       tests/CompositorConfigTests.cpp
       tests/CompositorDecorationStateTests.cpp
       tests/CompositorWindowGeometryTests.cpp
+      tests/CompositorConfigHotReloadTests.cpp
+      tests/CompositorLayerShellZoneTests.cpp
+      tests/CompositorPresentationFeedbackTests.cpp
+      tests/CompositorSnapshotBuilderTests.cpp
+      tests/CompositorSubsurfaceHitTests.cpp
+      src/Compositor/Wayland/LayerShellZones.cpp
+      src/Compositor/PresenterEnv.cpp
       tests/VulkanRenderTargetTests.cpp
     )
   endif()

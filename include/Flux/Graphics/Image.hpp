@@ -79,7 +79,8 @@ public:
   static std::shared_ptr<Image> fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
                                                    std::uint32_t width, std::uint32_t height);
 
-  /// Import a single-plane Linux dma-buf as a Vulkan sampled image.
+  /// Import a single-plane Linux dma-buf as a Vulkan sampled image on Linux (FLUX_VULKAN).
+  /// Not available on macOS/Metal builds: callers must guard with `#if FLUX_VULKAN` or platform checks.
   /// The supplied plane fd is consumed by this call whether import succeeds or fails.
   static std::shared_ptr<Image> fromDmabuf(DmabufImageSpec const& spec);
 #endif

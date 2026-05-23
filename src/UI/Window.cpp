@@ -18,6 +18,9 @@
 
 #include <memory>
 #include <utility>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 
 #include "UI/Platform/Window.hpp"
 #include "UI/Platform/WindowFactory.hpp"
@@ -27,6 +30,44 @@
 #include <optional>
 
 namespace flux {
+
+namespace {
+
+void logUnsupportedWindowConfigOnce(char const* feature) {
+  static bool loggedLayerShell = false;
+  static bool loggedBackgroundBlur = false;
+  static bool loggedOutputName = false;
+  static bool loggedDisplayMode = false;
+  bool* slot = nullptr;
+  if (std::strcmp(feature, "layerShell") == 0) slot = &loggedLayerShell;
+  else if (std::strcmp(feature, "backgroundBlur") == 0) slot = &loggedBackgroundBlur;
+  else if (std::strcmp(feature, "outputName") == 0) slot = &loggedOutputName;
+  else if (std::strcmp(feature, "displayMode") == 0) slot = &loggedDisplayMode;
+  if (!slot || *slot) return;
+  *slot = true;
+  std::fprintf(stderr, "flux: WindowConfig.%s is not supported on this platform backend\n", feature);
+}
+
+void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities const& capabilities) {
+  char const* env = std::getenv("FLUX_LOG_WINDOW_CONFIG");
+  if (!env || !*env || *env == '0') return;
+
+  if (config.layerShell.enabled && !capabilities.supportsLayerShell) {
+    logUnsupportedWindowConfigOnce("layerShell");
+  }
+  if (config.layerShell.backgroundBlur && !capabilities.supportsBackgroundBlur) {
+    logUnsupportedWindowConfigOnce("backgroundBlur");
+  }
+  if (!config.outputName.empty() && !capabilities.supportsOutputSelection) {
+    logUnsupportedWindowConfigOnce("outputName");
+  }
+  if ((config.displayMode.width > 0 || config.displayMode.height > 0 || config.displayMode.refreshHz > 0) &&
+      !capabilities.supportsDisplayMode) {
+    logUnsupportedWindowConfigOnce("displayMode");
+  }
+}
+
+} // namespace
 
 struct Window::Impl {
   std::unique_ptr<platform::Window> platform_;
@@ -95,6 +136,7 @@ void Window::Impl::shutdown() {
 Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>(*this, config);
   d->platform_ = platform::createWindow(config);
+  validateWindowConfig(config, d->platform_->capabilities());
   d->platform_->setFluxWindow(this);
   d->refreshChromeMetrics();
   Application::instance().eventQueue().post(WindowLifecycleEvent{
@@ -334,6 +376,10 @@ void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
 
 EnvironmentBinding const& Window::environmentBinding() const {
   return d->windowEnvironmentBinding_;
+}
+
+PlatformWindowCapabilities Window::platformCapabilities() const {
+  return d->platform_ ? d->platform_->capabilities() : PlatformWindowCapabilities{};
 }
 
 EnvironmentBinding& Window::environmentBindingMut() {

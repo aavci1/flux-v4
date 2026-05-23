@@ -7,15 +7,15 @@
 
 namespace lambda_shell {
 
-class ShellIpc {
+class ShellConnection {
 public:
   using LineHandler = std::function<void(std::string_view line)>;
 
-  ShellIpc();
-  ~ShellIpc();
+  ShellConnection();
+  ~ShellConnection();
 
-  ShellIpc(ShellIpc const&) = delete;
-  ShellIpc& operator=(ShellIpc const&) = delete;
+  ShellConnection(ShellConnection const&) = delete;
+  ShellConnection& operator=(ShellConnection const&) = delete;
 
   bool connect();
   int fd() const noexcept { return fd_; }

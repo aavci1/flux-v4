@@ -8,6 +8,7 @@
 #include "Compositor/Wayland/Globals/Cutouts.hpp"
 #include "Compositor/Wayland/Globals/FractionalScale.hpp"
 #include "Compositor/Wayland/Globals/IdleInhibit.hpp"
+#include "Compositor/Wayland/Globals/LayerChrome.hpp"
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 #include "Compositor/Wayland/Globals/Output.hpp"
@@ -31,6 +32,7 @@
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "xx-cutouts-v1-server-protocol.h"
+#include "xx-layer-chrome-v1-server-protocol.h"
 #include "xdg-activation-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-output-unstable-v1-server-protocol.h"
@@ -118,10 +120,12 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   fractionalScaleManagerGlobal_ =
       wl_global_create(display_, &wp_fractional_scale_manager_v1_interface, 1, this, bindFractionalScaleManager);
   cursorShapeManagerGlobal_ =
-      wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 2, this, bindCursorShapeManager);
+      wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 1, this, bindCursorShapeManager);
   idleInhibitManagerGlobal_ =
       wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
   layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 1, this, bindLayerShell);
+  layerChromeManagerGlobal_ =
+      wl_global_create(display_, &xx_layer_chrome_manager_v1_interface, 1, this, bindLayerChromeManager);
   presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
   relativePointerManagerGlobal_ =
       wl_global_create(display_, &zwp_relative_pointer_manager_v1_interface, 1, this, bindRelativePointerManager);
@@ -137,7 +141,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
-      !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
+      !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !layerChromeManagerGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
       !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ ||
       !activationGlobal_ || !cutoutsManagerGlobal_ || !backgroundEffectManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
@@ -212,14 +216,46 @@ void WaylandServer::Impl::setShortcutBindings(std::vector<ShortcutBinding> bindi
   shortcutBindings_ = std::move(bindings);
 }
 
-void WaylandServer::Impl::setChromeConfig(ChromeConfig config) {
-  chromeConfig_ = config;
+void WaylandServer::Impl::refreshActiveChromeConfig() {
+  chromeConfig_ = chromeBaseConfig_;
+  if (shellThemeDark_ && chromeDarkConfig_) {
+    ChromeConfig const& dark = *chromeDarkConfig_;
+    chromeConfig_.titleTextColor = dark.titleTextColor;
+    chromeConfig_.glassTint = dark.glassTint;
+    chromeConfig_.windowBorderColor = dark.windowBorderColor;
+    chromeConfig_.borderLineColor = dark.borderLineColor;
+    chromeConfig_.closeGlyphColor = dark.closeGlyphColor;
+    chromeConfig_.minimizeGlyphColor = dark.minimizeGlyphColor;
+    chromeConfig_.minimizeGlyphHoverColor = dark.minimizeGlyphHoverColor;
+  }
+}
+
+void WaylandServer::Impl::setChromeThemeConfig(ChromeConfig base, std::optional<ChromeConfig> dark) {
+  chromeBaseConfig_ = std::move(base);
+  chromeDarkConfig_ = std::move(dark);
+  refreshActiveChromeConfig();
   for (auto const& toplevel : toplevels_) {
     if (!toplevel || !toplevel->cutouts) continue;
     toplevel->cutouts->lastSent = false;
     sendToplevelStateConfigure(this, toplevel.get());
   }
   flushClients();
+}
+
+void WaylandServer::Impl::setShellThemeDark(bool dark) {
+  if (shellThemeDark_ == dark) return;
+  shellThemeDark_ = dark;
+  refreshActiveChromeConfig();
+  ++contentSerial_;
+  notifyShellStateChanged();
+}
+
+void WaylandServer::Impl::setChromeConfig(ChromeConfig config) {
+  setChromeThemeConfig(std::move(config), chromeDarkConfig_);
+}
+
+void WaylandServer::Impl::setInputConfig(CompositorInputConfig config) {
+  popupGrabsEnabled_ = config.popupGrabs;
 }
 
 void WaylandServer::Impl::setPreferredScale(float scale) {

@@ -575,21 +575,14 @@ void xdgPopupDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t) {
+void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource* seat, std::uint32_t serial) {
   auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
-  if (!popup) return;
-  popup->grabbed = true;
-  std::fprintf(stderr,
-               "lambda-window-manager: xdg_popup grab surface=%llu parent=%llu\n",
-               static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
-                                                   ? popup->xdgSurface->surface->id
-                                                   : 0),
-               static_cast<unsigned long long>(popup->parentSurface ? popup->parentSurface->id : 0));
-  diagnostics::crashLog("xdg-popup-grab surface=%llu parent=%llu",
-                        static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
-                                                            ? popup->xdgSurface->surface->id
-                                                            : 0),
-                        static_cast<unsigned long long>(popup->parentSurface ? popup->parentSurface->id : 0));
+  if (!popup || !popup->server) return;
+  if (!popup->server->popupGrabsEnabled_) {
+    popup->grabbed = true;
+    return;
+  }
+  establishPopupGrab(popup->server, popup, seat, serial);
 }
 
 void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* positionerResource, std::uint32_t token) {

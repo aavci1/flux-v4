@@ -90,6 +90,18 @@ void WaylandServer::setChromeConfig(ChromeConfig config) {
   impl_->setChromeConfig(config);
 }
 
+void WaylandServer::setChromeThemeConfig(ChromeConfig base, std::optional<ChromeConfig> dark) {
+  impl_->setChromeThemeConfig(std::move(base), std::move(dark));
+}
+
+void WaylandServer::setShellThemeDark(bool dark) {
+  impl_->setShellThemeDark(dark);
+}
+
+void WaylandServer::setInputConfig(CompositorInputConfig config) {
+  impl_->setInputConfig(config);
+}
+
 void WaylandServer::setPreferredScale(float scale) {
   impl_->setPreferredScale(scale);
 }

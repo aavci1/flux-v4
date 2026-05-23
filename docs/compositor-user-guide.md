@@ -98,6 +98,30 @@ sudo setfacl -m "u:$USER:rw" /dev/input/event*
 
 If the cursor is visible but does not move, or no shortcuts work, check ACLs first.
 
+## Session and environment
+
+| Variable | Purpose |
+|----------|---------|
+| `XDG_RUNTIME_DIR` | Required for Wayland socket and shell IPC under `$XDG_RUNTIME_DIR/lambda-window-manager-display` and `lambda-window-manager-shell.sock`. |
+| `LAMBDA_WINDOW_MANAGER_CONFIG` | Override compositor TOML path (see `--config`). |
+| `LAMBDA_WINDOW_MANAGER_OUTPUT` | Override `[output]` connector selector (`HDMI-A-1`, `0`, `primary`, `secondary`). |
+| `LAMBDA_WINDOW_MANAGER_PRESENT` | `vulkan-display` selects legacy Vulkan-display presenter; default is GBM/atomic-KMS. |
+| `LAMBDA_WINDOW_MANAGER_TIMING` | Log per-phase timing to stderr when non-zero. |
+| `LAMBDA_WINDOW_MANAGER_PACING_TRACE` | Verbose presentation pacing trace. |
+| `LAMBDA_WINDOW_MANAGER_PROFILE` | Aggregate frame-profile stats every ~2s. |
+| `LAMBDA_WINDOW_MANAGER_IDLE_PROFILE` | Poll/idle loop stats every ~2s. |
+| `FLUX_RESIZE_TRACE` | Log resize/configure traces (compositor + clients). |
+| `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Enable Vulkan validation layers during development. |
+
+Typical TTY session:
+
+1. Log in on TTY1; ensure `XDG_RUNTIME_DIR` is set (usually `/run/user/$UID` on systemd).
+2. Run `./build/lambda-window-manager` (optionally `--output`, `--config`).
+3. From TTY2 or SSH, run `./build/lambda-shell` after the compositor logs its socket path.
+4. Wayland clients use `$XDG_RUNTIME_DIR/lambda-window-manager-display` unless they read the compositor-published env.
+
+Security note: the shell connects over a Unix socket with mode `0600` under `XDG_RUNTIME_DIR`. Layer-shell namespace strings are not a security boundary; only trusted shell binaries should connect to the compositor IPC socket.
+
 ## Config
 
 The compositor creates a default config file when none exists. The path is selected in this order:

@@ -146,6 +146,22 @@ Expected result: two windows appear. Drag the orange source rectangle to the blu
 
 Expected result: the popup appears next to its parent surface. Moving the pointer over popup rows changes the highlighted row, clicking a row turns it green and logs the click, clicking outside dismisses it, and the compositor does not freeze.
 
+### Popup Grab (submenu)
+
+Requires compositor config `[input] popup_grabs = true`.
+
+```sh
+./build/lambda-window-manager-popup-grab-demo
+```
+
+Optional trace logging:
+
+```sh
+LAMBDA_WINDOW_MANAGER_POPUP_TRACE=1 ./build/lambda-window-manager
+```
+
+Expected result: clicking the parent opens a menu popup that grabs input. Hovering **More >** opens a nested submenu that takes the grab; both stay interactive, clicking outside dismisses the top popup, and the compositor does not freeze.
+
 ### Activation
 
 ```sh

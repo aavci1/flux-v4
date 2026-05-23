@@ -48,10 +48,10 @@ The compositor consumes Flux as a library, not as a framework. It does not call 
 - `VulkanContext` for shared Vulkan device state.
 - `RenderTarget` for rendering into KMS framebuffers it owns.
 - `Image::fromExternalVulkan` for importing Wayland client buffers.
-- `Canvas` for drawing compositor-side chrome.
-- `SceneGraph` for organizing renderables (compositor UI + client surfaces in one graph).
+- `Canvas` for immediate-mode compositor rendering (background, client surfaces, chrome, cursor).
+- `CommittedSurfaceSnapshot` + `SurfaceRenderer` for Wayland client buffer presentation (not Flux `SceneGraph`).
 
-It does *not* use Flux's `Window`, `Application`, or `Element`/`View` system. The compositor has its own main loop, its own input dispatch, its own scene-graph construction logic. The architectural inversion is intentional: Flux apps build a scene from declarative views; the compositor builds a scene from Wayland surfaces.
+It does *not* use Flux's `Window`, `Application`, `Element`/`View`, or `SceneGraph`. The compositor has its own main loop, input dispatch, and snapshot-driven render path. Flux apps build UI from declarative views; the compositor builds frames from Wayland surface state each tick.
 
 ### 1.5 No wlroots
 
@@ -76,31 +76,32 @@ See `docs/compositor-window-chrome.md` for the cutout convention, input routing,
 ### 1.9 Repository layout
 
 ```
-lambda-window-manager/
+flux-v4/
 ├── CMakeLists.txt
-├── README.md
+├── cmake/
+│   └── FluxWaylandProtocols.cmake   # client/server protocol generation helper
 ├── docs/
-│   ├── development.md           # build, run, debug
-│   └── protocols.md             # Wayland protocols implemented
+│   ├── compositor.md
+│   └── compositor-implementation-plan.md
 ├── src/
-│   ├── main.cpp
-│   ├── Compositor.{hpp,cpp}     # top-level orchestrator
-│   ├── Output/                  # KMS output handling
-│   ├── Input/                   # libinput → Wayland seat
-│   ├── Wayland/                 # libwayland-server integration
-│   │   ├── Server.{hpp,cpp}
-│   │   ├── Globals/             # one file per global (wl_compositor, xdg_wm_base, etc.)
-│   │   └── Protocols/           # generated headers from XML
-│   ├── Surface/                 # surface state, buffer management
-│   ├── Scene/                   # compositor scene graph
-│   ├── Window/                  # window-management logic
-│   └── Chrome/                  # window decoration rendering
-├── protocols/                   # protocol XML files
-├── shaders/                     # any compositor-specific shaders (probably none in v1)
-└── tests/
+│   ├── Compositor/
+│   │   ├── main.cpp
+│   │   ├── CompositorRuntime.cpp      # KMS loop orchestration
+│   │   ├── PresentationLoop.cpp       # output selection, pacing helpers
+│   │   ├── CompositorRenderFrame.cpp  # snapshot → Canvas render path
+│   │   ├── CompositorConfigWatch.cpp  # hot reload
+│   │   ├── Presenter.cpp              # atomic-KMS vs Vulkan-display
+│   │   ├── WaylandServer.{hpp,cpp}
+│   │   ├── Wayland/Globals/           # one file per Wayland global
+│   │   ├── Wayland/Snapshots.cpp      # committed surface snapshots
+│   │   ├── Window/WindowManager.cpp   # focus, pointer, shortcuts, move/resize
+│   │   ├── Surface/                   # client surface draw path
+│   │   ├── Chrome/                    # title bar / glass rendering
+│   │   ├── Config/                    # TOML config + apply
+│   │   └── Protocols/                 # protocol XML (+ generated server .c)
+│   └── Platform/Linux/                # KMS device/output/input
+└── tests/                             # deterministic compositor unit tests
 ```
-
-Sibling layout to `flux-v4` during development. CMake assumes `../flux-v4`.
 
 ---
 
@@ -122,13 +123,13 @@ The pattern from `RenderTarget`: I claimed the API was "Vulkan only because the 
 
 ### 2.1 Known framework changes already required
 
-These are the framework changes the compositor will need that haven't yet landed:
+These are the framework changes the compositor needed; most have landed:
 
-- **DMABUF import on Linux.** `Image::fromExternalVulkan` exists, but importing a DMABUF FD specifically (with proper `VK_KHR_external_memory_fd` / `VK_EXT_external_memory_dma_buf` usage, fence sync, format translation between DRM fourcc and Vulkan formats) is not yet implemented. The Metal equivalent would be `IOSurface` import — `Image::fromExternalMetal(IOSurface*)`. Both should land together when the compositor needs them in phase 2.
+- **DMABUF import on Linux (done).** `Image::fromDmabuf(...)` imports client dma-buf buffers on Linux/Vulkan (`FLUX_VULKAN`). It is not available on macOS/Metal builds. `Image::fromExternalVulkan` remains for caller-owned Vulkan images. IOSurface import on Metal is optional and not required for the compositor.
 
-- **Output management beyond Window.** Flux's KMS backend uses `Window` as the abstraction. The compositor doesn't use `Window` — it manages outputs directly. Either Flux's KMS code is generalized so the compositor can use parts of it without going through Window, or the compositor reimplements the output enumeration. Likely the former; the framework gains a more granular API and Window becomes a thin layer over it. Metal equivalent: `Window` over `CAMetalLayer` already exists at a similar layer; if the framework adds a lower-level KMS-output type, the Mac side may not need an equivalent (Apple manages displays, apps don't enumerate them).
+- **Output management beyond Window (done).** `KmsDevice` / `KmsOutput` / `KmsAtomicPresenter` let the compositor own KMS outputs without Flux `Window`.
 
-- **Frame pacing decoupled from Window.** Flux's animation clock currently drives frame requests through `Window`. The compositor needs to drive its own frame loop. Either the clock can be driven by external frame ticks (extension of the existing `setFrameDriver` callback infrastructure), or the compositor uses its own clock and Flux's is bypassed. The former is preferable — animations within the compositor's scene graph should use the standard Flux animation infrastructure.
+- **Frame pacing decoupled from Window (done).** The compositor main loop drives presentation; Flux `Application::run` is unused.
 
 These are listed here for visibility. Each phase's framework-changes section identifies which of these (or new ones) land with that phase.
 
@@ -809,14 +810,15 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-18 | 7c74c1a | Updated compositor status to reflect docs and popup geometry test coverage. | Documentation-only status update. |
 | 2026-05-18 | 141ebd7 | Added config-file support for compositor cursor theme and size with Xcursor environment fallback. | Linux compositor-only cursor configuration; no Metal API involved. |
 | 2026-05-18 | 7fec81f | Added `lambda-window-manager --config PATH` and `--help` so test configs can be selected without editing environment variables. | Linux compositor-only executable usability; no Metal API involved. |
-| 2026-05-21 | local working tree | Added an initial GBM/atomic-KMS presenter for compositor-owned scanout buffers and exposed render-target retargeting for Vulkan canvases. | Linux/KMS-only presentation backend; Mac continues to use `CAMetalLayer`. |
+| 2026-05-23 | window-manager-refactor branch | Split compositor runtime into `PresentationLoop`, `CompositorRenderFrame`, `CompositorConfigWatch`, and `Presenter`; added `flux_wayland_protocols()` CMake helper; documented `Image::fromDmabuf` as Linux-only. | Linux/KMS compositor structure; no Metal API involved. |
 
 ### 12.2 Open questions
 
 Tracked as work proceeds. Removed when answered.
 
+- **Touch input:** `wl_seat` is advertised with pointer and keyboard only; bind version is capped at 3 so `get_touch` is not exposed. Touch is not implemented and not advertised via `WL_SEAT_CAPABILITY_TOUCH`.
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
-- Phase 3: Subsurface hit testing remains separate from the popup hit-test fix. Subsurfaces render relative to parents, but pointer routing still needs explicit subsurface ordering and coordinate translation.
+- Phase 3: Subsurface hit testing walks the subsurface tree in `WindowManager.cpp::surfaceAt` (deepest subsurface wins). Coordinate translation matches snapshot placement (`parent origin + subsurface position`).
 - Phase 4: `wp_presentation_time` now sends `sync_output`. The default GBM/atomic-KMS path reports DRM page-flip completion timestamps; the legacy Vulkan-display path uses DRM vblank timing and can delay feedback on optional `VK_GOOGLE_display_timing` records.
 - Presentation backend escape hatch: `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` forces the legacy Vulkan-display presenter for debugging while the atomic-KMS path is being hardware-smoked.
 - Phase 5: Does multi-output land in v1 or post-v1?

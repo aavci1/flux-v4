@@ -53,6 +53,7 @@ struct WaylandServer::Impl {
   struct CursorShapeDevice;
   struct IdleInhibitor;
   struct LayerSurface;
+  struct LayerChrome;
   struct PresentationFeedback;
   struct PendingPresentationBatch;
   struct RelativePointer;
@@ -96,6 +97,9 @@ struct WaylandServer::Impl {
   void releaseCommandLauncherModal(std::uint32_t timeMs);
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
   void setChromeConfig(ChromeConfig config);
+  void setChromeThemeConfig(ChromeConfig base, std::optional<ChromeConfig> dark);
+  void setShellThemeDark(bool dark);
+  void setInputConfig(CompositorInputConfig config);
   void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
@@ -131,6 +135,7 @@ struct WaylandServer::Impl {
   void destroyCursorShapeDevice(CursorShapeDevice* device);
   void destroyIdleInhibitor(IdleInhibitor* inhibitor);
   void destroyLayerSurface(LayerSurface* layerSurface);
+  void destroyLayerChrome(LayerChrome* chrome);
   void destroyPresentationFeedback(PresentationFeedback* feedback);
   void destroyRelativePointer(RelativePointer* relativePointer);
   void destroyPointerConstraint(PointerConstraint* constraint);
@@ -160,6 +165,7 @@ struct WaylandServer::Impl {
   wl_global* cursorShapeManagerGlobal_ = nullptr;
   wl_global* idleInhibitManagerGlobal_ = nullptr;
   wl_global* layerShellGlobal_ = nullptr;
+  wl_global* layerChromeManagerGlobal_ = nullptr;
   wl_global* presentationGlobal_ = nullptr;
   wl_global* relativePointerManagerGlobal_ = nullptr;
   wl_global* pointerConstraintsGlobal_ = nullptr;
@@ -184,6 +190,8 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
   std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
   std::vector<std::unique_ptr<XdgPopup>> popups_;
+  WaylandServer::Impl::XdgPopup* grabPopup_ = nullptr;
+  bool popupGrabsEnabled_ = false;
   std::vector<std::unique_ptr<ShmPool>> shmPools_;
   std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
@@ -198,6 +206,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
   std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
   std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;
+  std::vector<std::unique_ptr<LayerChrome>> layerChromeObjects_;
   std::vector<std::unique_ptr<PresentationFeedback>> presentationFeedbacks_;
   std::vector<PendingPresentationBatch> pendingPresentationBatches_;
   std::vector<std::unique_ptr<RelativePointer>> relativePointers_;
@@ -263,6 +272,10 @@ struct WaylandServer::Impl {
   bool shiftDown_ = false;
   std::vector<ShortcutBinding> shortcutBindings_;
   ChromeConfig chromeConfig_;
+  ChromeConfig chromeBaseConfig_;
+  std::optional<ChromeConfig> chromeDarkConfig_;
+  bool shellThemeDark_ = false;
+  void refreshActiveChromeConfig();
   std::uint32_t shiftModifierIndex_ = ~0u;
   std::uint32_t ctrlModifierIndex_ = ~0u;
   std::uint32_t altModifierIndex_ = ~0u;
@@ -448,6 +461,7 @@ struct WaylandServer::Impl::LayerSurface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
+  LayerChrome* layerChrome = nullptr;
   std::uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_TOP;
   std::string nameSpace;
   std::uint32_t width = 0;
@@ -460,6 +474,15 @@ struct WaylandServer::Impl::LayerSurface {
   std::int32_t marginBottom = 0;
   std::int32_t marginLeft = 0;
   bool configured = false;
+  LayerShellChromeSnapshot chrome{};
+  LayerShellChromeSnapshot pendingChrome{};
+  bool chromePending = false;
+};
+
+struct WaylandServer::Impl::LayerChrome {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  LayerSurface* layerSurface = nullptr;
 };
 
 struct WaylandServer::Impl::PresentationFeedback {
@@ -556,7 +579,15 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface);
 void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
 void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
+void refreshShellReservedZones(WaylandServer::Impl* server);
+bool applyLayerChromeState(WaylandServer::Impl::Surface* surface);
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
+void establishPopupGrab(WaylandServer::Impl* server,
+                        WaylandServer::Impl::XdgPopup* popup,
+                        wl_resource* seat,
+                        std::uint32_t serial);
+void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup, std::uint32_t timeMs);
+bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs);
 void minimizeToplevel(WaylandServer::Impl* server,

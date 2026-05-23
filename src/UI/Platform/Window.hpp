@@ -8,6 +8,7 @@
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/UI/WindowChrome.hpp>
+#include <Flux/UI/Window.hpp>
 
 namespace flux {
 
@@ -73,6 +74,8 @@ public:
 
   /// Layer-shell surfaces only. No-op on xdg toplevel windows.
   virtual void setLayerShellKeyboardInteractive(bool /*enabled*/) {}
+
+  [[nodiscard]] virtual PlatformWindowCapabilities capabilities() const { return {}; }
 };
 
 } // namespace platform

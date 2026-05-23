@@ -2,6 +2,8 @@
 
 #include "Shell/ShellDesktopView.hpp"
 #include "Shell/ShellJson.hpp"
+
+#include <Flux/Shell/ShellIpc.hpp>
 #include "Shell/ShellViews.hpp"
 
 #include <Flux/UI/EventQueue.hpp>
@@ -38,6 +40,8 @@ flux::WindowConfig topBarWindowConfig() {
   layer.anchorLeft = true;
   layer.anchorRight = true;
   layer.exclusiveZone = kTopBarHeight;
+  layer.chrome.style = LayerShellChromeStyle::BlurPanelBorder;
+  layer.chrome.squareBottomCorners = true;
   return WindowConfig{
       .size = {0.f, static_cast<float>(kTopBarHeight)},
       .title = "Lambda Top Bar",
@@ -50,6 +54,7 @@ flux::WindowConfig dockWindowConfig(int width) {
   LayerShellOptions layer = layerBase(LayerShellLayer::Overlay, "lambda.dock");
   layer.anchorBottom = true;
   layer.marginBottom = kDockBottom;
+  layer.chrome.style = LayerShellChromeStyle::BlurPanelBorder;
   return WindowConfig{
       .size = {static_cast<float>(std::max(width, 1)), static_cast<float>(dockHeight())},
       .title = "Lambda Dock",
@@ -239,11 +244,13 @@ void ShellController::syncLauncherWindow() {
 }
 
 void ShellController::handleIpcLine(std::string_view line) {
-  if (lineContains(line, "\"lambda.shell.openCommandLauncher\"")) {
+  auto message = flux::shell::parseLine(line);
+  if (!message) return;
+  if (message->kind == flux::shell::ShellMessageKind::ShellOpenCommandLauncher) {
     openLauncher();
     return;
   }
-  if (lineContains(line, "\"lambda.windowManager.snapshot\"")) {
+  if (message->kind == flux::shell::ShellMessageKind::WindowManagerSnapshot) {
     model_.applySnapshot(line);
     if (previewHandle_) {
       requestLauncherRedraw();

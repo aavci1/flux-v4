@@ -2,6 +2,8 @@
 
 #include "Shell/ShellJson.hpp"
 
+#include <Flux/Shell/ShellIpc.hpp>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -176,9 +178,9 @@ void ShellModel::backspaceQuery() {
 void ShellModel::activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc) {
   if (!sendIpc) return;
   if (item.running) {
-    sendIpc("{\"type\":\"lambda.windowManager.focusApp\",\"appId\":\"" + escapeJson(item.appId) + "\"}");
+    sendIpc(flux::shell::serializeFocusApp(item.appId));
   } else if (item.kind == "app") {
-    sendIpc("{\"type\":\"lambda.windowManager.launchApp\",\"appId\":\"" + escapeJson(item.appId) + "\"}");
+    sendIpc(flux::shell::serializeLaunchApp(item.appId));
   }
 }
 

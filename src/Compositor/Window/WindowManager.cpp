@@ -14,8 +14,10 @@
 #include <cerrno>
 #include <cctype>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <ctime>
+#include <chrono>
 #include <optional>
 #include <vector>
 #include <wayland-server-core.h>
@@ -75,6 +77,11 @@ WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, fl
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
     if (!layerSurfaceAboveWindows(surface) || surface->minimized || width <= 0 || height <= 0) continue;
+    if (surface->layerSurface &&
+        surface->layerSurface->keyboardInteractivity ==
+            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) {
+      return surface;
+    }
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY);
     if (containsPoint(x, y, left, top, left + static_cast<float>(width), top + static_cast<float>(height))) {
@@ -230,6 +237,38 @@ WaylandServer::Impl::XdgPopup* popupForSurface(WaylandServer::Impl* server, Wayl
   return nullptr;
 }
 
+bool popupTraceEnabled() {
+  static bool const enabled = [] {
+    char const* env = std::getenv("LAMBDA_WINDOW_MANAGER_POPUP_TRACE");
+    return env && *env && *env != '0';
+  }();
+  return enabled;
+}
+
+void popupTrace(char const* fmt, ...) {
+  if (!popupTraceEnabled()) return;
+  va_list args;
+  va_start(args, fmt);
+  std::vfprintf(stderr, fmt, args);
+  va_end(args);
+}
+
+bool popupIsDescendantOf(WaylandServer::Impl* server,
+                         WaylandServer::Impl::XdgPopup* popup,
+                         WaylandServer::Impl::XdgPopup* ancestor) {
+  if (!popup || !ancestor) return false;
+  if (popup == ancestor) return true;
+  WaylandServer::Impl::Surface* parent = popup->parentSurface;
+  while (parent) {
+    if (parent == ancestor->xdgSurface->surface) return true;
+    if (!surfaceIsXdgPopup(parent)) return false;
+    WaylandServer::Impl::XdgPopup* parentPopup = popupForSurface(server, parent);
+    if (!parentPopup) return false;
+    parent = parentPopup->parentSurface;
+  }
+  return false;
+}
+
 std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup) {
   if (!server || !popup || popup->dismissed || !popup->xdgSurface || !popup->xdgSurface->surface) {
     return std::nullopt;
@@ -263,6 +302,13 @@ std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, Way
 WaylandServer::Impl::Surface* popupAt(WaylandServer::Impl* server, float x, float y) {
   for (auto it = server->popups_.rbegin(); it != server->popups_.rend(); ++it) {
     WaylandServer::Impl::XdgPopup* popup = it->get();
+    if (!popup || popup->dismissed || !popup->resource || !popup->xdgSurface || !popup->xdgSurface->surface) {
+      continue;
+    }
+    if (server->popupGrabsEnabled_ && server->grabPopup_ &&
+        popup != server->grabPopup_ && !popupIsDescendantOf(server, popup, server->grabPopup_)) {
+      continue;
+    }
     auto const bounds = popupScreenBounds(server, popup);
     if (!bounds) continue;
     float const left = static_cast<float>(bounds->x);
@@ -440,9 +486,44 @@ std::uint32_t resizeEdgesForContext(ChromeHitContext const& context, float x, fl
 
 } // namespace
 
+WaylandServer::Impl::Surface* subsurfaceAt(WaylandServer::Impl* server,
+                                           WaylandServer::Impl::Surface* parent,
+                                           float parentX,
+                                           float parentY,
+                                           float x,
+                                           float y) {
+  if (!server || !parent) return nullptr;
+  for (auto it = server->subsurfaces_.rbegin(); it != server->subsurfaces_.rend(); ++it) {
+    auto const& subsurface = *it;
+    if (!subsurface || subsurface->parent != parent || !subsurface->surface) continue;
+    WaylandServer::Impl::Surface* surface = subsurface->surface;
+    std::int32_t const width = displayWidth(surface);
+    std::int32_t const height = displayHeight(surface);
+    if (width <= 0 || height <= 0) continue;
+    float const left = parentX + static_cast<float>(subsurface->x);
+    float const top = parentY + static_cast<float>(subsurface->y);
+    float const right = left + static_cast<float>(width);
+    float const bottom = top + static_cast<float>(height);
+    if (!containsPoint(x, y, left, top, right, bottom)) continue;
+    if (WaylandServer::Impl::Surface* nested = subsurfaceAt(server, surface, left, top, x, y)) return nested;
+    return surface;
+  }
+  return nullptr;
+}
+
+bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
+void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup, std::uint32_t timeMs);
+void establishPopupGrab(WaylandServer::Impl* server,
+                        WaylandServer::Impl::XdgPopup* popup,
+                        wl_resource* seat,
+                        std::uint32_t serial);
+void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next);
+bool dismissPopup(WaylandServer::Impl::XdgPopup* popup);
+
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y) {
   if (auto* layer = aboveWindowLayerAt(server, x, y)) return layer;
   if (auto* popup = popupAt(server, x, y)) return popup;
+  if (server->popupGrabsEnabled_ && server->grabPopup_) return nullptr;
 
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
@@ -470,6 +551,9 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
             .cutouts = true,
         };
         if (controlsRegionContains(context, x, y)) return nullptr;
+      }
+      if (WaylandServer::Impl::Surface* subsurface = subsurfaceAt(server, surface, left, top, x, y)) {
+        return subsurface;
       }
       return surface;
     }
@@ -669,6 +753,80 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   updatePointerConstraintsForFocus(server);
 }
 
+bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!server || !server->popupGrabsEnabled_ || !server->grabPopup_ || !surface) return false;
+  if (server->grabPopup_->xdgSurface && surface == server->grabPopup_->xdgSurface->surface) return true;
+  WaylandServer::Impl::XdgPopup* popup = popupForSurface(server, surface);
+  return popup && popupIsDescendantOf(server, popup, server->grabPopup_);
+}
+
+void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup, std::uint32_t timeMs) {
+  if (!server || !popup || server->grabPopup_ != popup) return;
+  popupTrace("lambda-window-manager: xdg_popup grab released surface=%llu\n",
+             static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                 ? popup->xdgSurface->surface->id
+                                                 : 0));
+  server->grabPopup_ = nullptr;
+  popup->grabbed = false;
+
+  WaylandServer::Impl::Surface* parent = popup->parentSurface;
+  if (parent && surfaceIsXdgPopup(parent)) {
+    WaylandServer::Impl::XdgPopup* parentPopup = popupForSurface(server, parent);
+    if (parentPopup && parentPopup->grabbed && !parentPopup->dismissed) {
+      server->grabPopup_ = parentPopup;
+      setKeyboardFocus(server, parentPopup->xdgSurface->surface);
+      sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
+    }
+  }
+}
+
+void establishPopupGrab(WaylandServer::Impl* server,
+                        WaylandServer::Impl::XdgPopup* popup,
+                        wl_resource* /*seat*/,
+                        std::uint32_t serial) {
+  if (!server || !popup || popup->dismissed || !popup->resource || !popup->xdgSurface ||
+      !popup->xdgSurface->surface) {
+    return;
+  }
+
+  WaylandServer::Impl::Surface* parent = popup->parentSurface;
+  if (parent && surfaceIsXdgPopup(parent)) {
+    WaylandServer::Impl::XdgPopup* parentPopup = popupForSurface(server, parent);
+    if (!parentPopup || parentPopup->dismissed) {
+      dismissPopup(popup);
+      return;
+    }
+    if (!parentPopup->grabbed) {
+      wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB,
+                             "parent xdg_popup does not have an active grab");
+      return;
+    }
+  }
+
+  if (serial < server->pointerEnterSerial_ && serial != server->lastPointerButtonSerial_) {
+    wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB, "stale grab serial");
+    return;
+  }
+
+  if (server->grabPopup_ && server->grabPopup_ != popup) {
+    server->grabPopup_->grabbed = false;
+  }
+
+  popup->grabbed = true;
+  server->grabPopup_ = popup;
+  setKeyboardFocus(server, popup->xdgSurface->surface);
+
+  std::uint32_t const timeMs = static_cast<std::uint32_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+  sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
+
+  popupTrace("lambda-window-manager: xdg_popup grab surface=%llu parent=%llu serial=%u\n",
+             static_cast<unsigned long long>(popup->xdgSurface->surface->id),
+             static_cast<unsigned long long>(parent ? parent->id : 0),
+             serial);
+}
+
 void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy, std::uint32_t timeMs) {
   if (!server->pointerFocus_ || (dx == 0.0 && dy == 0.0)) return;
   wl_client* focusedClient = wl_resource_get_client(server->pointerFocus_->resource);
@@ -705,11 +863,13 @@ bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer:
 
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
   if (!popup || popup->dismissed) return false;
-  std::fprintf(stderr,
-               "lambda-window-manager: xdg_popup dismissed surface=%llu\n",
-               static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
-                                                   ? popup->xdgSurface->surface->id
-                                                   : 0));
+  popupTrace("lambda-window-manager: xdg_popup dismissed surface=%llu\n",
+             static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                 ? popup->xdgSurface->surface->id
+                                                 : 0));
+  if (popup->server->grabPopup_ == popup) {
+    releasePopupGrab(popup->server, popup, 0);
+  }
   popup->dismissed = true;
   bool const restoreToplevelFocus = popup->xdgSurface &&
                                     popup->xdgSurface->surface &&
@@ -729,6 +889,11 @@ bool dismissTopPopup(WaylandServer::Impl* server) {
 }
 
 bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target) {
+  if (server->popupGrabsEnabled_ && server->grabPopup_) {
+    if (surfaceInGrabSubtree(server, target)) return false;
+    WaylandServer::Impl::XdgPopup* popup = topmostPopup(server);
+    return popup ? dismissPopup(popup) : false;
+  }
   WaylandServer::Impl::XdgPopup* popup = topmostPopup(server);
   if (!popup || surfaceBelongsToPopup(target, popup)) return false;
   return dismissPopup(popup);
@@ -1694,7 +1859,8 @@ bool WaylandServer::Impl::focusShellWindow(std::uint64_t windowId, std::uint32_t
 
 bool WaylandServer::Impl::claimCommandLauncherModal(std::uint32_t timeMs) {
   for (auto const& layerSurface : layerSurfaces_) {
-    if (!layerSurface || layerSurface->nameSpace != "lambda.command-launcher" || !layerSurface->surface) continue;
+    if (!layerSurface || !layerSurface->surface) continue;
+    if (layerSurface->keyboardInteractivity != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) continue;
     commandLauncherModalSurface_ = layerSurface->surface;
     setKeyboardFocus(this, layerSurface->surface);
     sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);

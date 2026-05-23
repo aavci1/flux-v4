@@ -19,8 +19,17 @@ Color withOpacity(Color color, float opacity) {
   return color;
 }
 
-Color glassBorderColor() {
-  return Color{1.f, 1.f, 1.f, 0.34f};
+bool layerChromeActive(LayerShellChromeSnapshot const& chrome) {
+  return chrome.style != LayerShellChromeStyle::None;
+}
+
+bool layerChromeTint(LayerShellChromeSnapshot const& chrome) {
+  return chrome.style == LayerShellChromeStyle::BlurPanel ||
+         chrome.style == LayerShellChromeStyle::BlurPanelBorder;
+}
+
+bool layerChromeBorder(LayerShellChromeSnapshot const& chrome) {
+  return chrome.style == LayerShellChromeStyle::BlurPanelBorder;
 }
 
 float easeOutCubic(float value) {
@@ -94,7 +103,9 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                ChromeConfig const& chrome,
                                Rect const& fullContentRect,
                                CornerRadius const& contentCorners) {
-  if (chrome.glassBlurRadius <= 0.f) return;
+  bool const layerChrome = layerChromeActive(surface.chrome);
+  float const blurRadius = layerChrome ? surface.chrome.blurRadius : chrome.glassBlurRadius;
+  if (blurRadius <= 0.f) return;
 
   CommittedSurfaceSnapshot::RegionRect defaultRegion{
       .x = 0,
@@ -105,7 +116,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   std::span<CommittedSurfaceSnapshot::RegionRect const> regions;
   if (!surface.backgroundBlurRects.empty()) {
     regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(surface.backgroundBlurRects);
-  } else if (chrome.windowGlassEnabled && surface.defaultGlassEligible) {
+  } else if (layerChrome || (chrome.windowGlassEnabled && surface.defaultGlassEligible)) {
     regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(&defaultRegion, 1);
   } else {
     return;
@@ -121,8 +132,14 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
     CornerRadius const corners = sameRect(rect, fullContentRect)
                                      ? contentCorners
                                      : cornerRadiusForPiece(fullContentRect, rect, contentCorners);
-    canvas.drawBackdropBlur(rect, chrome.glassBlurRadius, Colors::transparent, corners);
-    if (surface.shellGlassSurface) {
+    canvas.drawBackdropBlur(rect, blurRadius, Colors::transparent, corners);
+    if (layerChromeTint(surface.chrome)) {
+      canvas.drawRect(rect,
+                      corners,
+                      FillStyle::solid(withOpacity(surface.chrome.tint, surface.chrome.tintOpacity)),
+                      StrokeStyle::none(),
+                      ShadowStyle::none());
+    } else if (chrome.windowGlassEnabled && surface.defaultGlassEligible) {
       canvas.drawRect(rect,
                       corners,
                       FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity * 0.48f)),
@@ -132,11 +149,11 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   }
 }
 
-void drawShellGlassBorder(Canvas& canvas,
-                          CommittedSurfaceSnapshot const& surface,
-                          Rect const& fullContentRect,
-                          CornerRadius const& contentCorners) {
-  if (!surface.shellGlassSurface) return;
+void drawLayerChromeBorder(Canvas& canvas,
+                           CommittedSurfaceSnapshot const& surface,
+                           Rect const& fullContentRect,
+                           CornerRadius const& contentCorners) {
+  if (!layerChromeBorder(surface.chrome)) return;
 
   CommittedSurfaceSnapshot::RegionRect defaultRegion{
       .x = 0,
@@ -151,7 +168,7 @@ void drawShellGlassBorder(Canvas& canvas,
     regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(&defaultRegion, 1);
   }
 
-  Color const border = glassBorderColor();
+  Color const border = surface.chrome.borderColor;
   for (auto const& region : regions) {
     Rect const requested = Rect::sharp(static_cast<float>(surface.x + region.x),
                                       static_cast<float>(surface.y + region.y),
@@ -162,7 +179,7 @@ void drawShellGlassBorder(Canvas& canvas,
     CornerRadius const corners = sameRect(rect, fullContentRect)
                                      ? contentCorners
                                      : cornerRadiusForPiece(fullContentRect, rect, contentCorners);
-    if (surface.squareContentCorners) {
+    if (surface.chrome.squareBottomCorners) {
       canvas.drawRect(Rect::sharp(rect.x, rect.y + rect.height - 1.f, rect.width, 1.f),
                       CornerRadius{},
                       FillStyle::solid(border),
@@ -227,7 +244,8 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   float const windowHeight = static_cast<float>(surface.height);
   float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
   bool const cutoutChrome = surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
-  CornerRadius const windowCorners = surface.squareContentCorners ? CornerRadius{} : chrome.windowCornerRadius;
+  CornerRadius const windowCorners =
+      surface.chrome.squareBottomCorners ? CornerRadius{} : chrome.windowCornerRadius;
   CornerRadius const contentCorners = cutoutChrome
                                           ? windowCorners
                                           : (titleBarHeight > 0.f
@@ -332,7 +350,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
     }
   }
   canvas.restore();
-  drawShellGlassBorder(canvas, surface, fullContentRect, contentCorners);
+  drawLayerChromeBorder(canvas, surface, fullContentRect, contentCorners);
   if (cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   drawWindowFrameBorder(canvas, surface, chrome);
   canvas.restore();

@@ -1,12 +1,24 @@
 #pragma once
 
-#include <cstdint>
+#include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/UI/Window.hpp>
+
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace flux::compositor {
+
+struct LayerShellChromeSnapshot {
+  LayerShellChromeStyle style = LayerShellChromeStyle::None;
+  float blurRadius = 32.f;
+  Color tint{238.f / 255.f, 244.f / 255.f, 1.f, 0.60f};
+  Color borderColor{1.f, 1.f, 1.f, 0.34f};
+  float tintOpacity = 0.48f;
+  bool squareBottomCorners = false;
+};
 
 enum class CursorShape : std::uint8_t {
   Arrow,
@@ -87,8 +99,7 @@ struct CommittedSurfaceSnapshot {
   bool activeSizing = false;
   bool pacingSizing = false;
   bool defaultGlassEligible = false;
-  bool squareContentCorners = false;
-  bool shellGlassSurface = false;
+  LayerShellChromeSnapshot chrome{};
   std::uint64_t serial = 0;
   std::uint32_t lastConfigureSerial = 0;
   std::int32_t lastConfigureWidth = 0;

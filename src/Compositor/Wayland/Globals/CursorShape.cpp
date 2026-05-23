@@ -104,13 +104,12 @@ void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std:
 struct wp_cursor_shape_manager_v1_interface const cursorShapeManagerImpl{
     .destroy = cursorShapeManagerDestroy,
     .get_pointer = cursorShapeManagerGetPointer,
-    .get_tablet_tool_v2 = [](wl_client*, wl_resource*, std::uint32_t, wl_resource*) {},
 };
 
 
 void bindCursorShapeManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &wp_cursor_shape_manager_v1_interface, std::min(version, 2u), id);
+      wl_resource_create(client, &wp_cursor_shape_manager_v1_interface, std::min(version, 1u), id);
   wl_resource_set_implementation(resource, &cursorShapeManagerImpl, data, nullptr);
 }
 

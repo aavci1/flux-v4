@@ -15,33 +15,6 @@ bool hasAnchor(std::uint32_t anchor, std::uint32_t edge) {
   return (anchor & edge) != 0;
 }
 
-std::int32_t layerExtent(WaylandServer::Impl::LayerSurface const* layerSurface) {
-  if (!layerSurface) return 0;
-  std::int32_t const configuredHeight = static_cast<std::int32_t>(layerSurface->height);
-  std::int32_t const committedHeight = displayHeight(layerSurface->surface);
-  return std::max(0, configuredHeight > 0 ? configuredHeight : committedHeight);
-}
-
-void refreshShellReservedZones(WaylandServer::Impl* server) {
-  if (!server) return;
-  std::int32_t topBar = 0;
-  std::int32_t dock = 0;
-  for (auto const& layerSurface : server->layerSurfaces_) {
-    if (!layerSurface) continue;
-    if (layerSurface->nameSpace == "lambda.topbar") {
-      topBar = std::max(topBar, std::max(0, layerSurface->exclusiveZone));
-    } else if (layerSurface->nameSpace == "lambda.dock" &&
-               hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
-      dock = std::max(dock, layerExtent(layerSurface.get()) + std::max(0, layerSurface->marginBottom));
-    }
-  }
-  if (topBar == server->topBarExclusiveZone_ && dock == server->dockReservedZone_) return;
-  server->topBarExclusiveZone_ = topBar;
-  server->dockReservedZone_ = dock;
-  ++server->contentSerial_;
-  server->notifyShellStateChanged();
-}
-
 void layerShellDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -155,6 +128,27 @@ void bindLayerShellImpl(wl_client* client, void* data, std::uint32_t version, st
 
 } // namespace
 
+void refreshShellReservedZones(WaylandServer::Impl* server) {
+  if (!server) return;
+  std::int32_t topBar = 0;
+  std::int32_t dock = 0;
+  for (auto const& layerSurface : server->layerSurfaces_) {
+    if (!layerSurface) continue;
+    std::int32_t const zone = std::max(0, layerSurface->exclusiveZone);
+    if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) != 0) {
+      topBar = std::max(topBar, zone);
+    }
+    if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) != 0) {
+      dock = std::max(dock, zone);
+    }
+  }
+  if (topBar == server->topBarExclusiveZone_ && dock == server->dockReservedZone_) return;
+  server->topBarExclusiveZone_ = topBar;
+  server->dockReservedZone_ = dock;
+  ++server->contentSerial_;
+  server->notifyShellStateChanged();
+}
+
 void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!layerSurface || !layerSurface->surface) return;
   auto* surface = layerSurface->surface;
@@ -162,17 +156,17 @@ void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   std::int32_t const height = displayHeight(surface);
   if (width <= 0 || height <= 0) return;
 
-  if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT)) {
+  if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) != 0) {
     surface->windowX = layerSurface->marginLeft;
-  } else if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) {
+  } else if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) != 0) {
     surface->windowX = layerSurface->server->logicalOutputWidth() - width - layerSurface->marginRight;
   } else {
     surface->windowX = (layerSurface->server->logicalOutputWidth() - width) / 2;
   }
 
-  if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP)) {
+  if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) != 0) {
     surface->windowY = layerSurface->marginTop;
-  } else if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
+  } else if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) != 0) {
     surface->windowY = layerSurface->server->logicalOutputHeight() - height - layerSurface->marginBottom;
   } else {
     surface->windowY = (layerSurface->server->logicalOutputHeight() - height) / 2;
@@ -184,14 +178,14 @@ void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface) {
   std::uint32_t width = layerSurface->width;
   std::uint32_t height = layerSurface->height;
   if (width == 0 &&
-      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) &&
-      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) {
+      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) != 0 &&
+      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) != 0) {
     width = static_cast<std::uint32_t>(
         std::max(1, layerSurface->server->logicalOutputWidth() - layerSurface->marginLeft - layerSurface->marginRight));
   }
   if (height == 0 &&
-      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) &&
-      hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
+      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) != 0 &&
+      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) != 0) {
     height = static_cast<std::uint32_t>(
         std::max(1, layerSurface->server->logicalOutputHeight() - layerSurface->marginTop - layerSurface->marginBottom));
   }

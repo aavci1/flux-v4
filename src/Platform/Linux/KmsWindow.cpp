@@ -196,6 +196,15 @@ void KmsWindow::setCursor(Cursor kind) {
   if (app_.focusedWindow() == this) applyCursor();
 }
 
+PlatformWindowCapabilities KmsWindow::capabilities() const {
+  return {
+      .supportsLayerShell = false,
+      .supportsBackgroundBlur = false,
+      .supportsOutputSelection = true,
+      .supportsDisplayMode = true,
+  };
+}
+
 void KmsWindow::processEvents() {
   drainFrameTimer();
   app_.dispatchPendingInput();

@@ -177,6 +177,7 @@ public:
   void acknowledgeAnimationFrameTick() override;
   void completeAnimationFrame(bool needsAnotherFrame) override;
   void setCursor(Cursor kind) override;
+  [[nodiscard]] PlatformWindowCapabilities capabilities() const override;
 
   void suspendForVtSwitch();
   void resumeFromVtSwitch();

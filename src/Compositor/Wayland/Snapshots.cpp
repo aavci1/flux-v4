@@ -91,6 +91,11 @@ ChromeButton chromeButtonAt(WaylandServer::Impl const* server,
   return ChromeButton::None;
 }
 
+LayerShellChromeSnapshot chromeForSurface(WaylandServer::Impl::Surface const* surface) {
+  if (!surface || !surface->layerSurface) return {};
+  return surface->layerSurface->chrome;
+}
+
 CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
                                             WaylandServer::Impl::Surface const* surface,
                                             std::int32_t x,
@@ -133,10 +138,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	      .pacingSizing = server->resizeSurface_ == surface ||
 	                      surface->geometryAnimationActive,
 	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !surfaceContentFullyOpaque(surface),
-	      .squareContentCorners = surface->layerSurface && surface->layerSurface->nameSpace == "lambda.topbar",
-	      .shellGlassSurface = surface->layerSurface &&
-	                           (surface->layerSurface->nameSpace == "lambda.topbar" ||
-	                            surface->layerSurface->nameSpace == "lambda.dock"),
+	      .chrome = chromeForSurface(surface),
 	      .serial = surface->serial,
 	      .lastConfigureSerial = surface->lastConfigureSerial,
 	      .lastConfigureWidth = surface->lastConfigureWidth,

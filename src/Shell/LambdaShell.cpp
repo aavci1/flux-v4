@@ -1,5 +1,5 @@
 #include "Shell/ShellController.hpp"
-#include "Shell/ShellIpc.hpp"
+#include "Shell/ShellConnection.hpp"
 
 #include <Flux/UI/Application.hpp>
 

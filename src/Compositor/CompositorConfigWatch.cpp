@@ -1,0 +1,30 @@
+#include "Compositor/CompositorConfigWatch.hpp"
+
+#include "Compositor/Config/AppliedCompositorConfig.hpp"
+#include "Compositor/CompositorPresentation.hpp"
+
+namespace flux::compositor {
+
+void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceOutputScale) {
+  auto const configStart = presentation::SteadyClock::now();
+  ctx.appliedConfig = applyCompositorConfig(ctx.effectiveConfig(), ctx.canvas);
+  presentation::traceTiming("apply-config", configStart);
+  ctx.wayland.setShortcutBindings(ctx.appliedConfig.config.shortcutBindings);
+  ctx.wayland.setChromeThemeConfig(ctx.appliedConfig.config.chrome, ctx.appliedConfig.config.darkChrome);
+  ctx.applyOutputScale(forceOutputScale);
+}
+
+bool maybeReloadCompositorConfig(CompositorConfigWatchContext& ctx) {
+  if (!configChanged(ctx.loadedConfig)) return false;
+
+  auto const previousOutputSelector = ctx.loadedConfig.config.outputSelector;
+  ctx.loadedConfig = loadConfigWithMetadata();
+  if (ctx.loadedConfig.config.outputSelector != previousOutputSelector) {
+    std::fprintf(stderr,
+                 "lambda-window-manager: output selector changed; restart required to move compositor outputs\n");
+  }
+  applyCompositorRuntimeConfig(ctx);
+  return true;
+}
+
+} // namespace flux::compositor

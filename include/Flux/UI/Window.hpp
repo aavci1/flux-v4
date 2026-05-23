@@ -8,6 +8,7 @@
 #include <Flux/UI/Action.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -44,11 +45,39 @@ struct DisplayMode {
   int refreshHz = 0;
 };
 
+/// Per-backend window feature support. Query with `Window::platformCapabilities()`.
+///
+/// Backend matrix (config field → capability):
+/// - `layerShell` / `backgroundBlur` → Wayland compositor client only
+/// - `outputName` / `displayMode` → KMS only
+/// - Mac Metal → none of the above (normal xdg/Cocoa windows)
+struct PlatformWindowCapabilities {
+  bool supportsLayerShell = false;
+  bool supportsBackgroundBlur = false;
+  bool supportsOutputSelection = false;
+  bool supportsDisplayMode = false;
+};
+
 enum class LayerShellLayer {
   Background,
   Bottom,
   Top,
   Overlay,
+};
+
+enum class LayerShellChromeStyle : std::uint8_t {
+  None,
+  BlurPanel,
+  BlurPanelBorder,
+};
+
+struct LayerShellChromeOptions {
+  LayerShellChromeStyle style = LayerShellChromeStyle::None;
+  float blurRadius = 32.f;
+  Color tint{238.f / 255.f, 244.f / 255.f, 1.f, 0.60f};
+  Color borderColor{1.f, 1.f, 1.f, 0.34f};
+  float tintOpacity = 0.48f;
+  bool squareBottomCorners = false;
 };
 
 struct LayerShellOptions {
@@ -67,6 +96,7 @@ struct LayerShellOptions {
   bool keyboardInteractive = false;
   /// When supported by the compositor, apply a blurred background effect to the full surface region.
   bool backgroundBlur = false;
+  LayerShellChromeOptions chrome{};
 };
 
 struct WindowConfig {
@@ -192,6 +222,9 @@ public:
   void setView();
 
   EnvironmentBinding const& environmentBinding() const;
+
+  /// Reports which optional `WindowConfig` fields the current platform backend honors.
+  [[nodiscard]] PlatformWindowCapabilities platformCapabilities() const;
 
   template<typename T>
   void setEnvironmentValue(typename EnvironmentKey<T>::Value value);

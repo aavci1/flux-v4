@@ -145,7 +145,7 @@ struct wl_seat_interface const seatImpl{
 } // namespace
 
 void bindSeat(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 7u), id);
+  wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 3u), id);
   auto* server = static_cast<WaylandServer::Impl*>(data);
   server->seatResources_.push_back(resource);
   wl_resource_set_implementation(resource, &seatImpl, server, seatDestroyResource);

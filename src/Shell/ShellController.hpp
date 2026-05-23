@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Shell/ShellIpc.hpp"
+#include "Shell/ShellConnection.hpp"
 #include "Shell/ShellModel.hpp"
 
 #include <Flux/UI/Application.hpp>
@@ -24,7 +24,7 @@ public:
   void closeLauncher();
 
   ShellModel& model() noexcept { return model_; }
-  ShellIpc& ipc() noexcept { return ipc_; }
+  ShellConnection& ipc() noexcept { return ipc_; }
 
 private:
   void mountProductionViews();
@@ -41,7 +41,7 @@ private:
 
   flux::Application& app_;
   ShellModel& model_;
-  ShellIpc ipc_;
+  ShellConnection ipc_;
   std::optional<unsigned int> topBarHandle_;
   std::optional<unsigned int> dockHandle_;
   std::optional<unsigned int> launcherHandle_;

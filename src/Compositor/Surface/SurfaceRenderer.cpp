@@ -91,8 +91,12 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.focused);
   hashValue(hash, surface.activeSizing);
   hashValue(hash, surface.defaultGlassEligible);
-  hashValue(hash, surface.squareContentCorners);
-  hashValue(hash, surface.shellGlassSurface);
+  hashValue(hash, static_cast<std::uint8_t>(surface.chrome.style));
+  hashValue(hash, surface.chrome.blurRadius);
+  hashColor(hash, surface.chrome.tint);
+  hashColor(hash, surface.chrome.borderColor);
+  hashValue(hash, surface.chrome.tintOpacity);
+  hashValue(hash, surface.chrome.squareBottomCorners);
   hashValue(hash, surface.title.size());
   hashCombine(hash, surface.title.data(), surface.title.size());
   hashValue(hash, surface.backgroundBlurRects.size());
