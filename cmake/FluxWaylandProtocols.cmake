@@ -1,6 +1,34 @@
 # FluxWaylandProtocols.cmake — generate Wayland protocol sources for flux (client) and
-# lambda-window-manager (server) from XML. Avoids compiling duplicate checked-in protocol .c
-# files when generated equivalents exist.
+# lambda-window-manager (server) from XML at build time.
+
+function(flux_init_wayland_protocol_dir)
+  if(NOT FLUX_WAYLAND_PROTOCOL_DIR)
+    set(FLUX_WAYLAND_PROTOCOL_DIR ${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols CACHE INTERNAL "")
+    file(MAKE_DIRECTORY ${FLUX_WAYLAND_PROTOCOL_DIR})
+  endif()
+  set(FLUX_WAYLAND_PROTOCOL_DIR ${FLUX_WAYLAND_PROTOCOL_DIR} PARENT_SCOPE)
+endfunction()
+
+function(flux_setup_wayland_protocol_paths WAYLAND_PROTOCOLS_DIR)
+  set(_flux_protocol_local ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols)
+  set(FLUX_XDG_SHELL_XML "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml" PARENT_SCOPE)
+  set(FLUX_XDG_DECORATION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_XDG_OUTPUT_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-output/xdg-output-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_XDG_ACTIVATION_XML "${WAYLAND_PROTOCOLS_DIR}/staging/xdg-activation/xdg-activation-v1.xml" PARENT_SCOPE)
+  set(FLUX_VIEWPORTER_XML "${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml" PARENT_SCOPE)
+  set(FLUX_PRESENTATION_TIME_XML "${WAYLAND_PROTOCOLS_DIR}/stable/presentation-time/presentation-time.xml" PARENT_SCOPE)
+  set(FLUX_LINUX_DMABUF_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_CURSOR_SHAPE_XML "${WAYLAND_PROTOCOLS_DIR}/staging/cursor-shape/cursor-shape-v1.xml" PARENT_SCOPE)
+  set(FLUX_IDLE_INHIBIT_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/idle-inhibit/idle-inhibit-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_POINTER_CONSTRAINTS_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_RELATIVE_POINTER_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_PRIMARY_SELECTION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/primary-selection/primary-selection-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_FRACTIONAL_SCALE_XML "${_flux_protocol_local}/fractional-scale-v1.xml" PARENT_SCOPE)
+  set(FLUX_XX_CUTOUTS_XML "${_flux_protocol_local}/xx-cutouts-v1.xml" PARENT_SCOPE)
+  set(FLUX_WLR_LAYER_SHELL_XML "${_flux_protocol_local}/wlr-layer-shell-unstable-v1.xml" PARENT_SCOPE)
+  set(FLUX_EXT_BACKGROUND_EFFECT_XML "${_flux_protocol_local}/ext-background-effect-v1.xml" PARENT_SCOPE)
+  set(FLUX_XX_LAYER_CHROME_XML "${_flux_protocol_local}/xx-layer-chrome-v1.xml" PARENT_SCOPE)
+endfunction()
 
 function(flux_wayland_protocols)
   cmake_parse_arguments(_flux_wp
@@ -22,11 +50,7 @@ function(flux_wayland_protocols)
     find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
   endif()
 
-  if(NOT FLUX_WAYLAND_PROTOCOL_DIR)
-    set(FLUX_WAYLAND_PROTOCOL_DIR ${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols PARENT_SCOPE)
-    file(MAKE_DIRECTORY ${FLUX_WAYLAND_PROTOCOL_DIR})
-  endif()
-
+  flux_init_wayland_protocol_dir()
   set(_flux_wp_out_dir ${FLUX_WAYLAND_PROTOCOL_DIR})
   set(_flux_wp_outputs)
   set(_flux_wp_commands)
@@ -42,7 +66,7 @@ function(flux_wayland_protocols)
 
   if(_flux_wp_MODE STREQUAL "SERVER" OR _flux_wp_MODE STREQUAL "BOTH")
     set(_flux_wp_server_h ${_flux_wp_out_dir}/${_flux_wp_BASENAME}-server-protocol.h)
-    set(_flux_wp_server_c ${_flux_wp_out_dir}/${_flux_wp_BASENAME}-protocol.c)
+    set(_flux_wp_server_c ${_flux_wp_out_dir}/${_flux_wp_BASENAME}-server-code.c)
     list(APPEND _flux_wp_outputs ${_flux_wp_server_h} ${_flux_wp_server_c})
     list(APPEND _flux_wp_commands
       COMMAND ${WAYLAND_SCANNER} server-header ${_flux_wp_XML} ${_flux_wp_server_h}
@@ -61,11 +85,32 @@ function(flux_wayland_protocols)
 
   target_sources(${_flux_wp_TARGET} PRIVATE ${_flux_wp_outputs})
   set_source_files_properties(${_flux_wp_outputs} PROPERTIES GENERATED TRUE)
+endfunction()
 
-  if(_flux_wp_MODE STREQUAL "CLIENT" OR _flux_wp_MODE STREQUAL "BOTH")
-    set(_flux_wp_client_sources ${_flux_wp_client_c} PARENT_SCOPE)
-  endif()
-  if(_flux_wp_MODE STREQUAL "SERVER" OR _flux_wp_MODE STREQUAL "BOTH")
-    set(_flux_wp_server_sources ${_flux_wp_server_c} PARENT_SCOPE)
-  endif()
+function(flux_wayland_client_protocols TARGET)
+  foreach(_flux_wp IN ITEMS ${ARGN})
+    if(_flux_wp MATCHES "^([^|]+)\\|(.+)$")
+      flux_wayland_protocols(
+        TARGET ${TARGET}
+        MODE CLIENT
+        XML "${CMAKE_MATCH_1}"
+        BASENAME "${CMAKE_MATCH_2}")
+    else()
+      message(FATAL_ERROR "flux_wayland_client_protocols entry must be XML|BASENAME, got: ${_flux_wp}")
+    endif()
+  endforeach()
+endfunction()
+
+function(flux_wayland_server_protocols TARGET)
+  foreach(_flux_wp IN ITEMS ${ARGN})
+    if(_flux_wp MATCHES "^([^|]+)\\|(.+)$")
+      flux_wayland_protocols(
+        TARGET ${TARGET}
+        MODE SERVER
+        XML "${CMAKE_MATCH_1}"
+        BASENAME "${CMAKE_MATCH_2}")
+    else()
+      message(FATAL_ERROR "flux_wayland_server_protocols entry must be XML|BASENAME, got: ${_flux_wp}")
+    endif()
+  endforeach()
 endfunction()

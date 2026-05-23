@@ -671,8 +671,8 @@ For every item that touches `include/Flux/` or `src/Graphics/` / `src/Platform/`
 | P1.4 | Shared shell IPC | done |
 | P1.5 | Preview/production chrome unity | done |
 | P2.1 | Split CompositorRuntime | done |
-| P2.2 | Split WindowManager | partial (runtime split done; WM remains monolithic pending clean extraction) |
-| P2.3 | Protocol CMake consolidation | partial (`flux_wayland_protocols()` added; full server codegen migration ongoing) |
+| P2.2 | Split WindowManager | done |
+| P2.3 | Protocol CMake consolidation | done |
 | P2.4 | Presenter abstraction | done |
 | P2.5 | Doc/spec alignment | done |
 | P2.6 | Subsurface hit testing | done |

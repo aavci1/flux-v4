@@ -295,22 +295,22 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     pkg_check_modules(WAYLAND_SERVER REQUIRED IMPORTED_TARGET wayland-server)
   endif()
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
-  set(FLUX_WAYLAND_PROTOCOL_DIR ${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols)
   set(FLUX_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
-  file(MAKE_DIRECTORY ${FLUX_WAYLAND_PROTOCOL_DIR})
   file(MAKE_DIRECTORY ${FLUX_VULKAN_GENERATED_DIR})
-  set(FLUX_XDG_SHELL_XML "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml")
-  set(FLUX_XDG_DECORATION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml")
-  set(FLUX_VIEWPORTER_XML "${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml")
-  set(FLUX_FRACTIONAL_SCALE_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/fractional-scale-v1.xml")
-  set(FLUX_XX_CUTOUTS_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/xx-cutouts-v1.xml")
-  set(FLUX_WLR_LAYER_SHELL_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/wlr-layer-shell-unstable-v1.xml")
-  set(FLUX_EXT_BACKGROUND_EFFECT_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/ext-background-effect-v1.xml")
-  set(FLUX_XX_LAYER_CHROME_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/xx-layer-chrome-v1.xml")
+  flux_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
   foreach(_flux_wayland_protocol_xml IN ITEMS
       "${FLUX_XDG_SHELL_XML}"
       "${FLUX_XDG_DECORATION_XML}"
+      "${FLUX_XDG_OUTPUT_XML}"
+      "${FLUX_XDG_ACTIVATION_XML}"
       "${FLUX_VIEWPORTER_XML}"
+      "${FLUX_PRESENTATION_TIME_XML}"
+      "${FLUX_LINUX_DMABUF_XML}"
+      "${FLUX_CURSOR_SHAPE_XML}"
+      "${FLUX_IDLE_INHIBIT_XML}"
+      "${FLUX_POINTER_CONSTRAINTS_XML}"
+      "${FLUX_RELATIVE_POINTER_XML}"
+      "${FLUX_PRIMARY_SELECTION_XML}"
       "${FLUX_FRACTIONAL_SCALE_XML}"
       "${FLUX_XX_CUTOUTS_XML}"
       "${FLUX_WLR_LAYER_SHELL_XML}"
@@ -322,94 +322,48 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
         "Install the wayland-protocols development package or fix pkg-config's wayland-protocols path.")
     endif()
   endforeach()
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XDG_SHELL_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XDG_SHELL_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
-    DEPENDS ${FLUX_XDG_SHELL_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XX_CUTOUTS_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XX_CUTOUTS_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
-    DEPENDS ${FLUX_XX_CUTOUTS_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XDG_DECORATION_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XDG_DECORATION_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
-    DEPENDS ${FLUX_XDG_DECORATION_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_VIEWPORTER_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_VIEWPORTER_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
-    DEPENDS ${FLUX_VIEWPORTER_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_FRACTIONAL_SCALE_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_FRACTIONAL_SCALE_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
-    DEPENDS ${FLUX_FRACTIONAL_SCALE_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_WLR_LAYER_SHELL_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_WLR_LAYER_SHELL_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-protocol.c
-    DEPENDS ${FLUX_WLR_LAYER_SHELL_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_EXT_BACKGROUND_EFFECT_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_EXT_BACKGROUND_EFFECT_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
-    DEPENDS ${FLUX_EXT_BACKGROUND_EFFECT_XML}
-    VERBATIM
-  )
-  add_custom_command(
-    OUTPUT
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-client-protocol.h
-      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XX_LAYER_CHROME_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XX_LAYER_CHROME_XML}
-            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-protocol.c
-    DEPENDS ${FLUX_XX_LAYER_CHROME_XML}
-    VERBATIM
-  )
+  add_library(flux_wayland_client_protocols OBJECT
+    src/Compositor/Protocols/tablet-v2-tool-interface-stub.c)
+  target_include_directories(flux_wayland_client_protocols PUBLIC ${FLUX_WAYLAND_PROTOCOL_DIR})
+  flux_wayland_client_protocols(flux_wayland_client_protocols
+    "${FLUX_XDG_SHELL_XML}|xdg-shell"
+    "${FLUX_XDG_DECORATION_XML}|xdg-decoration-unstable-v1"
+    "${FLUX_VIEWPORTER_XML}|viewporter"
+    "${FLUX_FRACTIONAL_SCALE_XML}|fractional-scale-v1"
+    "${FLUX_XX_CUTOUTS_XML}|xx-cutouts-v1"
+    "${FLUX_WLR_LAYER_SHELL_XML}|wlr-layer-shell-unstable-v1"
+    "${FLUX_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
+    "${FLUX_XX_LAYER_CHROME_XML}|xx-layer-chrome-v1"
+    "${FLUX_LINUX_DMABUF_XML}|linux-dmabuf-unstable-v1"
+    "${FLUX_CURSOR_SHAPE_XML}|cursor-shape-v1"
+    "${FLUX_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"
+    "${FLUX_PRESENTATION_TIME_XML}|presentation-time"
+    "${FLUX_RELATIVE_POINTER_XML}|relative-pointer-unstable-v1"
+    "${FLUX_POINTER_CONSTRAINTS_XML}|pointer-constraints-unstable-v1"
+    "${FLUX_PRIMARY_SELECTION_XML}|primary-selection-unstable-v1"
+    "${FLUX_XDG_ACTIVATION_XML}|xdg-activation-v1")
+  if(LAMBDA_BUILD_WINDOW_MANAGER)
+    add_library(flux_wayland_server_protocols OBJECT)
+    target_include_directories(flux_wayland_server_protocols PUBLIC ${FLUX_WAYLAND_PROTOCOL_DIR})
+    flux_wayland_server_protocols(flux_wayland_server_protocols
+      "${FLUX_XDG_SHELL_XML}|xdg-shell"
+      "${FLUX_XDG_DECORATION_XML}|xdg-decoration-unstable-v1"
+      "${FLUX_XDG_OUTPUT_XML}|xdg-output-unstable-v1"
+      "${FLUX_VIEWPORTER_XML}|viewporter"
+      "${FLUX_FRACTIONAL_SCALE_XML}|fractional-scale-v1"
+      "${FLUX_WLR_LAYER_SHELL_XML}|wlr-layer-shell-unstable-v1"
+      "${FLUX_PRESENTATION_TIME_XML}|presentation-time"
+      "${FLUX_RELATIVE_POINTER_XML}|relative-pointer-unstable-v1"
+      "${FLUX_POINTER_CONSTRAINTS_XML}|pointer-constraints-unstable-v1"
+      "${FLUX_PRIMARY_SELECTION_XML}|primary-selection-unstable-v1"
+      "${FLUX_LINUX_DMABUF_XML}|linux-dmabuf-unstable-v1"
+      "${FLUX_CURSOR_SHAPE_XML}|cursor-shape-v1"
+      "${FLUX_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"
+      "${FLUX_XDG_ACTIVATION_XML}|xdg-activation-v1"
+      "${FLUX_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
+      "${FLUX_XX_CUTOUTS_XML}|xx-cutouts-v1"
+      "${FLUX_XX_LAYER_CHROME_XML}|xx-layer-chrome-v1")
+  endif()
   set(_flux_vulkan_shader_headers)
   foreach(_flux_shader rect.vert rect.frag image.vert image.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
     string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
@@ -447,17 +401,39 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     src/Platform/Linux/Common/XkbState.cpp
     src/Platform/Linux/WaylandApplication.cpp
     src/Platform/Linux/WaylandWindow.cpp
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
-    ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-layer-chrome-v1-protocol.c
   )
+  target_link_libraries(flux PRIVATE flux_wayland_client_protocols)
 elseif(FLUX_PLATFORM_LINUX_KMS)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxWaylandProtocols.cmake)
   find_package(PkgConfig REQUIRED)
+  find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
+  pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
+  pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+  if(NOT WAYLAND_PROTOCOLS_DIR)
+    message(FATAL_ERROR
+      "Flux: pkg-config package wayland-protocols did not provide pkgdatadir. "
+      "Install/reinstall wayland-protocols or fix PKG_CONFIG_PATH.")
+  endif()
+  flux_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
+  add_library(flux_wayland_server_protocols OBJECT)
+  target_include_directories(flux_wayland_server_protocols PUBLIC ${FLUX_WAYLAND_PROTOCOL_DIR})
+  flux_wayland_server_protocols(flux_wayland_server_protocols
+    "${FLUX_XDG_SHELL_XML}|xdg-shell"
+    "${FLUX_XDG_DECORATION_XML}|xdg-decoration-unstable-v1"
+    "${FLUX_XDG_OUTPUT_XML}|xdg-output-unstable-v1"
+    "${FLUX_VIEWPORTER_XML}|viewporter"
+    "${FLUX_FRACTIONAL_SCALE_XML}|fractional-scale-v1"
+    "${FLUX_WLR_LAYER_SHELL_XML}|wlr-layer-shell-unstable-v1"
+    "${FLUX_PRESENTATION_TIME_XML}|presentation-time"
+    "${FLUX_RELATIVE_POINTER_XML}|relative-pointer-unstable-v1"
+    "${FLUX_POINTER_CONSTRAINTS_XML}|pointer-constraints-unstable-v1"
+    "${FLUX_PRIMARY_SELECTION_XML}|primary-selection-unstable-v1"
+    "${FLUX_LINUX_DMABUF_XML}|linux-dmabuf-unstable-v1"
+    "${FLUX_CURSOR_SHAPE_XML}|cursor-shape-v1"
+    "${FLUX_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"
+    "${FLUX_XDG_ACTIVATION_XML}|xdg-activation-v1"
+    "${FLUX_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
+    "${FLUX_XX_CUTOUTS_XML}|xx-cutouts-v1")
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
   pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
@@ -500,6 +476,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     VERBATIM
   )
   add_dependencies(flux flux_vulkan_shaders)
+  target_include_directories(flux PRIVATE ${FLUX_WAYLAND_PROTOCOL_DIR})
   target_sources(flux PRIVATE
     src/UI/Application.cpp
     src/Graphics/Linux/FreeTypeTextSystem.cpp
@@ -512,24 +489,9 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Platform/Linux/KmsWindow.cpp
     src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsInput.cpp
-    src/Compositor/Protocols/cursor-shape-v1-protocol.c
     src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
-    src/Compositor/Protocols/ext-background-effect-v1-protocol.c
-    src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
-    src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
-    src/Compositor/Protocols/viewporter-protocol.c
-    src/Compositor/Protocols/fractional-scale-v1-protocol.c
-    src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
-    src/Compositor/Protocols/presentation-time-protocol.c
-    src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
-    src/Compositor/Protocols/pointer-constraints-unstable-v1-protocol.c
-    src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
-    src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-activation-v1-protocol.c
-    src/Compositor/Protocols/xx-cutouts-v1-protocol.c
   )
+  target_link_libraries(flux PRIVATE flux_wayland_server_protocols)
 endif()
 
 target_include_directories(flux PUBLIC
@@ -743,33 +705,23 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Wayland/Snapshots.cpp
     src/Compositor/Window/WindowGeometry.cpp
     src/Compositor/Window/WindowManager.cpp
+    src/Compositor/Window/WindowManagerCommon.cpp
+    src/Compositor/Window/PointerRouter.cpp
+    src/Compositor/Window/FocusStack.cpp
+    src/Compositor/Window/KeyboardShortcuts.cpp
+    src/Compositor/Window/InteractiveMoveResize.cpp
+    src/Compositor/Window/LayerShellInput.cpp
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
-    src/Compositor/Protocols/cursor-shape-v1-protocol.c
     src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
-    src/Compositor/Protocols/ext-background-effect-v1-protocol.c
-    src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
-    src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
-    src/Compositor/Protocols/pointer-constraints-unstable-v1-protocol.c
-    src/Compositor/Protocols/presentation-time-protocol.c
-    src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
-    src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
-    src/Compositor/Protocols/viewporter-protocol.c
-    src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-activation-v1-protocol.c
-    src/Compositor/Protocols/xdg-decoration-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-output-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
-    src/Compositor/Protocols/xx-cutouts-v1-protocol.c
-    src/Compositor/Protocols/xx-layer-chrome-v1-protocol.c
     src/Platform/Linux/KmsApplication.cpp
     src/Platform/Linux/KmsInput.cpp
     src/Platform/Linux/KmsOutput.cpp
     src/Platform/Linux/KmsWindow.cpp
   )
   target_include_directories(lambda-window-manager PRIVATE
+    ${FLUX_WAYLAND_PROTOCOL_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
   )
   target_compile_options(lambda-window-manager PRIVATE
     -Wall
@@ -778,6 +730,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
   )
   target_link_libraries(lambda-window-manager PRIVATE
     flux
+    flux_wayland_server_protocols
     tomlplusplus::tomlplusplus
     PkgConfig::WAYLAND_SERVER
     PkgConfig::LIBDRM
@@ -817,245 +770,100 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
       "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/MaterialSymbolsRounded.ttf"
       "$<TARGET_FILE_DIR:lambda-shell>/fonts/MaterialSymbolsRounded.ttf")
 
+  function(flux_link_compositor_demo TARGET)
+    target_include_directories(${TARGET} PRIVATE ${FLUX_WAYLAND_PROTOCOL_DIR})
+    target_compile_options(${TARGET} PRIVATE
+      -Wall
+      -Wextra
+      -Wpedantic
+    )
+    target_link_libraries(${TARGET} PRIVATE
+      flux_wayland_client_protocols
+      PkgConfig::WAYLAND_CLIENT)
+  endfunction()
+
   add_executable(lambda-window-manager-shm-demo
     src/Compositor/ShmDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-shm-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-shm-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-shm-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-shm-demo)
 
   add_executable(lambda-window-manager-dmabuf-demo
     src/Compositor/DmabufDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
-    src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
   )
-  target_include_directories(lambda-window-manager-dmabuf-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-dmabuf-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
+  flux_link_compositor_demo(lambda-window-manager-dmabuf-demo)
   target_link_libraries(lambda-window-manager-dmabuf-demo PRIVATE
-    PkgConfig::WAYLAND_CLIENT
     PkgConfig::GBM
     PkgConfig::LIBDRM)
 
   add_executable(lambda-window-manager-viewport-demo
     src/Compositor/ViewportDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
-    src/Compositor/Protocols/viewporter-protocol.c
   )
-  target_include_directories(lambda-window-manager-viewport-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-viewport-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-viewport-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-viewport-demo)
 
   add_executable(lambda-window-manager-fractional-scale-demo
     src/Compositor/FractionalScaleDemoClient.cpp
-    src/Compositor/Protocols/fractional-scale-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-fractional-scale-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-fractional-scale-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-fractional-scale-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-fractional-scale-demo)
 
   add_executable(lambda-window-manager-cursor-shape-demo
     src/Compositor/CursorShapeDemoClient.cpp
-    src/Compositor/Protocols/cursor-shape-v1-protocol.c
-    src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-cursor-shape-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-cursor-shape-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-cursor-shape-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-cursor-shape-demo)
 
   add_executable(lambda-window-manager-idle-inhibit-demo
     src/Compositor/IdleInhibitDemoClient.cpp
-    src/Compositor/Protocols/idle-inhibit-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-idle-inhibit-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-idle-inhibit-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-idle-inhibit-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-idle-inhibit-demo)
 
   add_executable(lambda-window-manager-layer-shell-demo
     src/Compositor/LayerShellDemoClient.cpp
-    src/Compositor/Protocols/wlr-layer-shell-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-layer-shell-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-layer-shell-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-layer-shell-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-layer-shell-demo)
 
   add_executable(lambda-window-manager-presentation-time-demo
     src/Compositor/PresentationTimeDemoClient.cpp
-    src/Compositor/Protocols/presentation-time-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-presentation-time-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-presentation-time-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-presentation-time-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-presentation-time-demo)
 
   add_executable(lambda-window-manager-relative-pointer-demo
     src/Compositor/RelativePointerDemoClient.cpp
-    src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-relative-pointer-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-relative-pointer-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-relative-pointer-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-relative-pointer-demo)
 
   add_executable(lambda-window-manager-pointer-constraints-demo
     src/Compositor/PointerConstraintsDemoClient.cpp
-    src/Compositor/Protocols/pointer-constraints-unstable-v1-protocol.c
-    src/Compositor/Protocols/relative-pointer-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-pointer-constraints-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-pointer-constraints-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-pointer-constraints-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-pointer-constraints-demo)
 
   add_executable(lambda-window-manager-primary-selection-demo
     src/Compositor/PrimarySelectionDemoClient.cpp
-    src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-primary-selection-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-primary-selection-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-primary-selection-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-primary-selection-demo)
 
   add_executable(lambda-window-manager-clipboard-demo
     src/Compositor/ClipboardDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-clipboard-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-clipboard-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-clipboard-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-clipboard-demo)
 
   add_executable(lambda-window-manager-dnd-demo
     src/Compositor/DragDropDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-dnd-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-dnd-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-dnd-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-dnd-demo)
 
   add_executable(lambda-window-manager-popup-demo
     src/Compositor/PopupDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-popup-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-popup-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-popup-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-popup-demo)
 
   add_executable(lambda-window-manager-popup-grab-demo
     src/Compositor/PopupGrabDemoClient.cpp
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-popup-grab-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-popup-grab-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-popup-grab-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-popup-grab-demo)
 
   add_executable(lambda-window-manager-activation-demo
     src/Compositor/ActivationDemoClient.cpp
-    src/Compositor/Protocols/xdg-activation-v1-protocol.c
-    src/Compositor/Protocols/xdg-shell-protocol.c
   )
-  target_include_directories(lambda-window-manager-activation-demo PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
-  )
-  target_compile_options(lambda-window-manager-activation-demo PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-  )
-  target_link_libraries(lambda-window-manager-activation-demo PRIVATE PkgConfig::WAYLAND_CLIENT)
+  flux_link_compositor_demo(lambda-window-manager-activation-demo)
 
 endif()
 
