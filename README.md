@@ -35,9 +35,10 @@ Current example targets:
 ## Documentation
 
 - [Documentation index](docs/README.md)
+- [Project status and roadmap](docs/roadmap.md)
 - [Conventions](docs/conventions.md)
 - [Reactive graph](docs/reactive-graph.md)
 - [Migrating to v5](docs/migrating-to-v5.md)
-- [Final performance record](docs/v5-final-perf.md)
+- [Compositor](docs/compositor.md) (Linux window manager)
 
 Public API headers live under `include/Flux/`. The umbrella header is [`include/Flux.hpp`](include/Flux.hpp). Declarative UI apps usually include [`include/Flux/UI/UI.hpp`](include/Flux/UI/UI.hpp) and use `Window::setView`.

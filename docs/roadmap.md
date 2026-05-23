@@ -1,13 +1,133 @@
-# Compositor implementation plan
+# Flux project status and roadmap
 
-**Status:** active plan (post-review, 2026-05-22).  
-**Scope:** `lambda-window-manager`, Flux framework surfaces used by the compositor, and `lambda-shell` integration.  
-**Related:** [compositor.md](compositor.md), [lambda-shell-spec.md](lambda-shell-spec.md), [compositor-cleanup-spec.md](compositor-cleanup-spec.md) (completed structural cleanup).
-
-This document turns the compositor code review into an ordered implementation plan. Each item states **where code lives** (framework vs compositor vs shell), **backend parity expectations**, **implementation details**, and **acceptance criteria**.
+**Last updated:** 2026-05-23  
+**Purpose:** Single place for current project status, active work, and archived milestone notes.  
+**Architecture reference:** [compositor.md](compositor.md) (compositor design and framework log).  
+**How to run:** [compositor-user-guide.md](compositor-user-guide.md), [compositor-testing.md](compositor-testing.md), [linux-development.md](linux-development.md).
 
 ---
 
+## 1. Project snapshot
+
+| Area | Status |
+|------|--------|
+| **Flux v5 UI runtime** | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
+| **App platforms** | macOS (Metal), Linux Wayland (Vulkan), Linux KMS (Vulkan). |
+| **Examples** | 28+ demo targets; build with `-DFLUX_BUILD_EXAMPLES=ON`. |
+| **Linux compositor** | `lambda-window-manager` — KMS + Wayland server + Vulkan paint. Roadmap P0–P3 largely implemented; hardware validation continues. |
+| **Desktop shell** | `lambda-shell` + `lambda-shell-preview` — layer-shell UI, shared `Flux::Shell::ShellIpc`, `xx_layer_chrome_v1`. |
+
+Build the compositor with `-DLAMBDA_BUILD_WINDOW_MANAGER=ON` (Linux only). See [conventions.md](conventions.md) for CMake layout.
+
+---
+
+## 2. Flux v5 — complete
+
+v5 is the current public API under `Flux/Reactive`, `Flux/UI`, and `Flux/SceneGraph`. Applications use declarative `body()` trees that mount once; state changes flow through signals and update retained scene nodes.
+
+**Runtime characteristics**
+
+- `MountRoot` / `MountContext` own the retained tree and environment bindings.
+- `Signal`, `Computed`, `Effect`, and `Scope` form the reactive graph.
+- `Bindable<T>` on view modifiers installs effects that patch mounted nodes.
+- `Window::setTheme()` and compile-time `EnvironmentKey` supply reactive theme and chrome metrics.
+
+**Validation (Stage 9)**
+
+- Tests: `flux_reactive_tests` and full `ctest` pass on normal, ASAN, UBSAN, and TSAN builds.
+- All example binaries passed launch-smoke checks.
+- `scripts/check_stale_symbols.sh` passes.
+
+**Performance (AmbientLoopLab, `animation-demo`, 60 fps steady state)**
+
+| Bucket | Wall-clock share |
+|--------|------------------|
+| Signal set | ~0.01% |
+| Effect runs (inclusive body) | ~0.17% |
+| Poll / propagation / flush | &lt;0.01% each |
+| **Inclusive reactive path** | **~0.19%** |
+
+Measured with `FLUX_PROFILE_REACTIVE=ON` (see historical note in git history; detailed tables were archived when v5 perf docs were consolidated).
+
+**Docs for app authors:** [reactive-graph.md](reactive-graph.md), [composites.md](composites.md), [migrating-to-v5.md](migrating-to-v5.md), [ui-view-body-style.md](ui-view-body-style.md).
+
+---
+
+## 3. Linux compositor — current status
+
+Executable: `lambda-window-manager` (`src/Compositor/`). Consumes Flux as a **renderer library** (`VulkanContext`, `Canvas`, `Image::fromDmabuf`) — not `Application::run`.
+
+| Phase | Summary | State |
+|-------|---------|--------|
+| 1 — First pixels | KMS + Vulkan scanout, atomic page flips | Largely done; some TTY kill-path checks still informal |
+| 2 — Wayland server | SHM + dma-buf clients, xdg-shell | Done on hardware smoke |
+| 3 — Input + WM | Focus, chrome, move, resize, snap, shortcuts | Done; popup grabs **implemented, config-gated** (`popup_grabs`, default off) |
+| 4 — Protocols | layer-shell, viewporter, `xx_layer_chrome_v1`, clipboard, … | Done in tree; see [compositor-user-guide.md](compositor-user-guide.md) |
+| 5 — Polish | Animations, config hot reload, cursor theme, async wallpapers | In progress; adaptive sync / DPMS / multi-output still open |
+
+**Rendering path:** Immediate-mode `Canvas` over immutable `CommittedSurfaceSnapshot` lists — not the app `SceneGraph`.
+
+**Structure:** Runtime split (`CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`); WM split (`FocusStack`, `PointerRouter`, `InteractiveMoveResize`, …). Protocol codegen via `cmake/FluxWaylandProtocols.cmake`.
+
+**Remaining validation (see §8)**
+
+- Enable and hardware-validate **xdg-popup grabs** (`[input] popup_grabs = true`).
+- Real-app menus (GTK/Qt/browser), presentation timing under load, GBM/atomic-KMS path.
+- Optional **tablet v2** (P3.5); legacy `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` debug presenter may be removed after smoke.
+
+---
+
+## 4. Lambda shell — current status
+
+Process model: `lambda-window-manager` + `lambda-shell` (reconnect if WM restarts). Contract: [lambda-shell-spec.md](lambda-shell-spec.md).
+
+| Surface namespace | Role |
+|-------------------|------|
+| `lambda.topbar` | Status bar (layer top) |
+| `lambda.dock` | Dock (layer overlay) |
+| `lambda.command-launcher` | Modal launcher |
+
+Shell UI uses Flux v5 reactive views (`ShellModel` signals, no remount loop). Preview app (`lambda-shell-preview`) runs in a normal window for Mac/Linux dev without the compositor. Layer chrome uses `LayerShellChromeOptions` + `BackdropBlur` aligned with production (**P1.5** done).
+
+---
+
+## 5. Completed milestones (archive)
+
+Short record of finished plans removed from `docs/` to reduce clutter.
+
+### Compositor structural cleanup (2026-05-18)
+
+- Split Wayland globals into `src/Compositor/Wayland/Globals/`.
+- Pimpl `WaylandServer`; moved runtime to `CompositorRuntime.cpp`.
+- Replaced hand-rolled TOML with tomlplusplus.
+- Unified resize tracing under `flux::detail::resizeTrace` (`FLUX_RESIZE_TRACE`).
+- Window/input logic in `Window/WindowManager.cpp`.
+
+### Compositor bug sweep
+
+- Popup-first hit testing; `SurfaceRole` tag; configure states on xdg-toplevel.
+- xkbcommon text input for launcher; `execvp` spawn; config color formats.
+- Xcursor parsing without libXcursor; config hot reload scale guard.
+
+### Popup hit-test fix
+
+- `surfaceAt` consults popups before toplevels; geometry covered by unit tests and popup demo.
+
+### Flux v5 stage gates (0–8 complete, 9 validation green)
+
+Stages 0–8 landed retained mounting and reactive control flow. Stage 9 hardening added relayout fixes, environment key migration, interaction signals, and profiling tooling.
+
+### Compositor roadmap P0–P3 (2026-05)
+
+Landed on `window-manager-refactor`: `LayerShellChrome`, `xx_layer_chrome_v1`, shared `ShellIpc`, WM/runtime splits, presenter abstraction, subsurface hit tests, expanded unit tests, install/user-guide updates, async wallpaper loading, brighter shell glass. Popup grabs behind config (default off).
+
+---
+
+## 6. Active roadmap (reference)
+
+Detailed P0–P3 specs are kept below for history. **Current priorities are in §8.**
+
+Principles and prioritized work items (**P0–P3**). Update the tracking table at the end as items land.
 ## Principles (non-negotiable)
 
 1. **Enrich Flux first** when a capability is reusable (blur regions, layer-shell chrome, IPC helpers, capability flags on `Window`). Applications declare intent; the compositor interprets generic protocol state.
@@ -364,7 +484,7 @@ struct LayerShellChromeOptions {
 **Key points.**
 
 - Eases testing presentation math without linking entire Wayland server.
-- Follow naming from [compositor-cleanup-spec.md](compositor-cleanup-spec.md) intent.
+- Follow naming from [roadmap.md §5 (archive)](roadmap.md §5 (archive)) intent.
 
 **Acceptance.**
 
@@ -396,7 +516,7 @@ struct LayerShellChromeOptions {
 
 **Key points.**
 
-- Extract pure functions already in `WindowGeometry.hpp` first; add tests per [compositor.md](compositor.md) §12.3.
+- Extract pure functions already in `WindowGeometry.hpp` first; add tests per §3 compositor gaps and P3.2 below.
 
 **Acceptance.**
 
@@ -486,8 +606,8 @@ struct LayerShellChromeOptions {
   - §1.9: reflect actual tree (`CompositorRuntime`, `Wayland/Globals`, no `Scene/`).
   - §2.1: mark DMABUF/SHM reuse done; IOSurface import status.
   - §12.1: require commit SHA for new entries.
-- Add cross-link from [README.md](README.md) to this plan.
-- When P1/P0 items land, update phase table and [compositor-bugs.md](compositor-bugs.md).
+- Done: docs index points here.
+- When P1/P0 items land, update phase table and [roadmap.md §5 (archive)](roadmap.md §5 (archive)).
 
 **Key points.**
 
@@ -561,7 +681,7 @@ struct LayerShellChromeOptions {
 
 **Implementation details.**
 
-- Add tests per [compositor.md](compositor.md) §12.3:
+- Add tests per §3 compositor gaps and P3.2 below:
   - Config hot reload (scale change, wallpaper path).
   - Layer-shell exclusive zone aggregation (pure function extracted from `LayerShell.cpp`).
   - Snapshot builder: role flags, chrome snapshot, buffer null.
@@ -655,9 +775,8 @@ For every item that touches `include/Flux/` or `src/Graphics/` / `src/Platform/`
 2. Add a row to [compositor.md](compositor.md) §12.1 with **real commit SHA**, description, and **Mac parity status**.
 3. If no Metal parity is required, state why (Linux-only KMS/DMABUF/Wayland).
 
----
 
-## Tracking
+## 7. Work item tracking
 
 | ID | Summary | Status |
 |----|---------|--------|
@@ -682,13 +801,42 @@ For every item that touches `include/Flux/` or `src/Graphics/` / `src/Platform/`
 | P3.4 | Install/session docs | done |
 | P3.5 | Tablet v2 (optional) | pending |
 
-Update the **Status** column as work lands.
-
 ---
 
-## References
+## 8. Next to implement
 
-- Review source: compositor architecture review (2026-05-22).
-- Completed prior cleanup: [compositor-cleanup-spec.md](compositor-cleanup-spec.md).
-- Shell contract: [lambda-shell-spec.md](lambda-shell-spec.md).
-- Test procedures: [compositor-testing.md](compositor-testing.md).
+Ordered by impact. These are the live backlog items after P0–P3 landed in tree.
+
+### 1. Hardware-validate popup grabs (P0.1 follow-up)
+
+- Set `[input] popup_grabs = true` in compositor config.
+- Run `lambda-window-manager-popup-grab-demo` and at least one real toolkit menu (GTK/Qt/browser) per [compositor-testing.md](compositor-testing.md).
+- If stable on CachyOS hardware, flip default to `true` and document in [compositor-user-guide.md](compositor-user-guide.md).
+
+### 2. Real-application validation
+
+- Extend beyond `foot`: GTK, Qt, browser clients; confirm layer-shell shell, clipboard, and presentation feedback under normal use.
+- See [compositor-user-guide.md](compositor-user-guide.md) “Remaining Work”.
+
+### 3. Presentation and pacing hardening
+
+- Hardware-smoke GBM/atomic-KMS page-flip completion with video or game workloads.
+- Adaptive sync and triple-buffering (phase 5 polish).
+- Consider removing the legacy `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` path once atomic presenter is proven.
+
+### 4. Session and display polish
+
+- Proper input/session brokering instead of manual `/dev/input/event*` ACLs.
+- DPMS / panel power-off (software idle blanking exists; inhibitors supported).
+- Multi-output desktop layout (still undecided for v1 vs post-v1).
+
+### 5. Optional: tablet v2 (P3.5)
+
+- Only if test hardware is available; register `zwp_tablet_manager_v2` and wire cursor-shape tablet tools.
+
+### 6. Framework / shell follow-ups
+
+- IOSurface import on Metal remains optional (`Image::fromDmabuf` is Linux-only by design).
+- Continue logging framework changes in [compositor.md](compositor.md) §12.1 with real commit SHAs.
+
+**Related docs:** [compositor.md](compositor.md) · [lambda-shell-spec.md](lambda-shell-spec.md) · [compositor-testing.md](compositor-testing.md) · [compositor-user-guide.md](compositor-user-guide.md)

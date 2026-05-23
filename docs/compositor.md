@@ -1,12 +1,12 @@
 # Flux Compositor
 
-**Status:** phases 1 and 2 have passed hardware smoke checks; phases 3 through 5 are implemented enough for Flux demos and initial real-app testing. The compositor cleanup spec is implemented, with Wayland globals, window/input management, runtime orchestration, lifecycle, snapshots, frame scheduling, and destroy cleanup split into concern files. Cursor rendering now uses the system Xcursor theme or client-provided cursor surfaces; the compositor no longer has built-in cursor artwork.
+**Status:** phases 1–5 are implemented for Flux demos and initial real-app testing. The compositor roadmap (P0–P3) is largely complete in tree; remaining validation and optional work are tracked in [roadmap.md](roadmap.md) §8.
 **Repository:** `lambda-window-manager` is currently built from this repository as `lambda-window-manager` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
 
-**Next work:** see [compositor-implementation-plan.md](compositor-implementation-plan.md) for the active prioritized roadmap (framework-first shell chrome, protocol honesty, structural splits).
+**Next work:** see [roadmap.md](roadmap.md) for project status and the prioritized P0–P3 backlog.
 
 ---
 
@@ -47,7 +47,7 @@ The compositor consumes Flux as a library, not as a framework. It does not call 
 
 - `VulkanContext` for shared Vulkan device state.
 - `RenderTarget` for rendering into KMS framebuffers it owns.
-- `Image::fromExternalVulkan` for importing Wayland client buffers.
+- `Image::fromExternalVulkan` and `Image::fromDmabuf` for importing Wayland client buffers.
 - `Canvas` for immediate-mode compositor rendering (background, client surfaces, chrome, cursor).
 - `CommittedSurfaceSnapshot` + `SurfaceRenderer` for Wayland client buffer presentation (not Flux `SceneGraph`).
 
@@ -75,6 +75,8 @@ See `docs/compositor-window-chrome.md` for the cutout convention, input routing,
 
 ### 1.9 Repository layout
 
+Compositor sources live under `src/Compositor/` in this repository (target `lambda-window-manager`):
+
 ```
 flux-v4/
 ├── CMakeLists.txt
@@ -82,7 +84,7 @@ flux-v4/
 │   └── FluxWaylandProtocols.cmake   # client/server protocol generation helper
 ├── docs/
 │   ├── compositor.md
-│   └── compositor-implementation-plan.md
+│   └── roadmap.md
 ├── src/
 │   ├── Compositor/
 │   │   ├── main.cpp
@@ -94,7 +96,7 @@ flux-v4/
 │   │   ├── WaylandServer.{hpp,cpp}
 │   │   ├── Wayland/Globals/           # one file per Wayland global
 │   │   ├── Wayland/Snapshots.cpp      # committed surface snapshots
-│   │   ├── Window/WindowManager.cpp   # focus, pointer, shortcuts, move/resize
+│   │   ├── Window/                    # WM façade + FocusStack, PointerRouter, …
 │   │   ├── Surface/                   # client surface draw path
 │   │   ├── Chrome/                    # title bar / glass rendering
 │   │   ├── Config/                    # TOML config + apply
@@ -102,7 +104,6 @@ flux-v4/
 │   └── Platform/Linux/                # KMS device/output/input
 └── tests/                             # deterministic compositor unit tests
 ```
-
 ---
 
 ## 2. The framework-vs-compositor boundary
@@ -130,6 +131,8 @@ These are the framework changes the compositor needed; most have landed:
 - **Output management beyond Window (done).** `KmsDevice` / `KmsOutput` / `KmsAtomicPresenter` let the compositor own KMS outputs without Flux `Window`.
 
 - **Frame pacing decoupled from Window (done).** The compositor main loop drives presentation; Flux `Application::run` is unused.
+
+- **Shell IPC, layer chrome, window capabilities (done).** See [roadmap.md](roadmap.md) §5 and §12.1 below for commit-level history.
 
 These are listed here for visibility. Each phase's framework-changes section identifies which of these (or new ones) land with that phase.
 
@@ -767,7 +770,7 @@ This section is updated as work progresses. Entries record completion of each ph
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Atomic KMS backend compiling | 2026-05-16 | - | Blue background, VT switching, and explicit compositor termination were verified on the earlier Vulkan-display path. The compositor now defaults to GBM scanout buffers plus atomic KMS page flips; hardware smoke validation is pending. Ctrl+C is ignored by the compositor so terminal clients can use it, while kernel-log, CPU-idle, and kill-path checks remain pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
-| Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
+| Phase 3: Input + window management | Stacking WM active | 2026-05-16 | - | Focus, chrome, move/resize, snap, shortcuts, popup-first hit testing, and config-gated xdg-popup grabs (`popup_grabs`, default off) are in tree. Hardware validation of grabs on real apps remains. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
 | Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge/corner shows an animated snap preview after a short dwell, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, the compositor default presentation path uses GBM/atomic KMS with page-flip completion events, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
 
@@ -825,18 +828,4 @@ Tracked as work proceeds. Removed when answered.
 
 ### 12.3 Remaining implementation work
 
-Autonomous-safe work that can continue without live compositor testing:
-
-- Documentation: install/session-manager packaging docs still need to be written.
-- Tests: add more deterministic coverage for config reload behavior, layer-shell geometry, surface commit state, data-device edge cases, and presentation-feedback bookkeeping where the code can be isolated without KMS hardware.
-- Refactoring: continue extracting deterministic protocol math and state transitions out of Wayland callbacks when that makes behavior testable without changing runtime semantics.
-
-Hardware or real-app validation work:
-
-- Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
-- Popup hardening: popup hit testing is now popup-first and nested popup bounds are unit-tested. Broader real-app menu behavior remains pending, and full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
-- Presentation timing: hardware-smoke the new GBM/atomic-KMS page-flip completion path, then validate it with video/game workloads.
-- Frame pacing: adaptive sync and triple-buffering remain pending.
-- Idle behavior: compositor-side software idle blanking is implemented and idle inhibitors suppress it; DPMS/panel power-off remains unimplemented.
-- Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.
-- Multi-output: still undecided for v1 versus post-v1.
+Tracked in [roadmap.md](roadmap.md) (§3 status summary and §6 P0–P3 items). Update that document as work lands; keep §12.1 framework log entries here with commit SHAs.
