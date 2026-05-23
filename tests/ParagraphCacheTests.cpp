@@ -265,6 +265,25 @@ TEST_CASE("CoreText rejects stale runs on empty attributed strings") {
     CHECK_THROWS_AS((void)sys.layout(as, 400.f, TextLayoutOptions {}), std::invalid_argument);
 }
 
+TEST_CASE("CoreText tolerates invalid UTF-8 in plain strings") {
+    Font f {};
+    f.family = ".AppleSystemUIFont";
+    f.size = 15.f;
+
+    std::string text = "download ";
+    text.push_back(static_cast<char>(0xC3));
+    text += " item";
+
+    TextLayoutOptions opt {};
+    opt.maxLines = 2;
+
+    CoreTextSystem sys;
+    CHECK_NOTHROW((void)sys.measure(text, f, Colors::black, 160.f, opt));
+    auto const layout = sys.layout(text, f, Colors::black, 160.f, opt);
+    REQUIRE(layout != nullptr);
+    CHECK(layout->measuredSize.width >= 0.f);
+}
+
 #else
 
 TEST_CASE("Paragraph cache tests skipped on non-Apple builds") { CHECK(true); }

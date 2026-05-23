@@ -472,6 +472,70 @@ static NSUInteger utf16UnitsForCodepoint(std::uint32_t cp) {
   return cp > 0xFFFF ? 2u : 1u;
 }
 
+static bool validUtf8Scalar(std::uint32_t cp, std::size_t byteLength) {
+  if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+    return false;
+  }
+  if (byteLength == 1) {
+    return cp <= 0x7F;
+  }
+  if (byteLength == 2) {
+    return cp >= 0x80 && cp <= 0x7FF;
+  }
+  if (byteLength == 3) {
+    return cp >= 0x800 && cp <= 0xFFFF;
+  }
+  if (byteLength == 4) {
+    return cp >= 0x10000;
+  }
+  return false;
+}
+
+static size_t utf8AdvanceLossy(char const* s, std::size_t len, std::size_t i, std::uint32_t* outCp) {
+  std::uint32_t cp = 0;
+  std::size_t const adv = utf8Advance(s, len, i, &cp);
+  if (adv > 0 && validUtf8Scalar(cp, adv)) {
+    *outCp = cp;
+    return adv;
+  }
+  *outCp = 0xFFFD;
+  return i < len ? 1 : 0;
+}
+
+static void appendUtf8Codepoint(std::string& out, std::uint32_t cp) {
+  if (cp <= 0x7F) {
+    out.push_back(static_cast<char>(cp));
+  } else if (cp <= 0x7FF) {
+    out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  } else if (cp <= 0xFFFF) {
+    out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  } else {
+    out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+    out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  }
+}
+
+static std::string sanitizeUtf8Lossy(std::string_view utf8) {
+  std::string out;
+  out.reserve(utf8.size());
+  std::size_t i = 0;
+  while (i < utf8.size()) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8AdvanceLossy(utf8.data(), utf8.size(), i, &cp);
+    if (adv == 0) {
+      break;
+    }
+    appendUtf8Codepoint(out, cp);
+    i += adv;
+  }
+  return out;
+}
+
 /// Maps half-open UTF-8 byte range `[bStart, bEnd)` to an `NSRange` in UTF-16 (Foundation string units).
 static NSRange utf8ByteRangeToNSRange(char const* utf8, std::size_t utf8Len, std::uint32_t bStart,
                                       std::uint32_t bEnd) {
@@ -503,6 +567,49 @@ static NSRange utf8ByteRangeToNSRange(char const* utf8, std::size_t utf8Len, std
     i += adv;
   }
   return NSMakeRange(u16Start, u16End - u16Start);
+}
+
+static NSRange utf8ByteRangeToNSRangeLossy(char const* utf8, std::size_t utf8Len, std::uint32_t bStart,
+                                           std::uint32_t bEnd) {
+  if (bEnd > utf8Len) {
+    bEnd = static_cast<std::uint32_t>(utf8Len);
+  }
+  if (bStart > bEnd) {
+    bStart = bEnd;
+  }
+  NSUInteger u16Start = 0;
+  std::size_t i = 0;
+  while (i < utf8Len && i < bStart) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8AdvanceLossy(utf8, utf8Len, i, &cp);
+    if (adv == 0) {
+      break;
+    }
+    u16Start += utf16UnitsForCodepoint(cp);
+    i += adv;
+  }
+  NSUInteger u16End = u16Start;
+  while (i < utf8Len && i < bEnd) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8AdvanceLossy(utf8, utf8Len, i, &cp);
+    if (adv == 0) {
+      break;
+    }
+    u16End += utf16UnitsForCodepoint(cp);
+    i += adv;
+  }
+  return NSMakeRange(u16Start, u16End - u16Start);
+}
+
+static NSRange clampNSRange(NSRange range, NSUInteger length) {
+  if (range.location > length) {
+    range.location = length;
+  }
+  NSUInteger const available = length - range.location;
+  if (range.length > available) {
+    range.length = available;
+  }
+  return range;
 }
 
 /// Builds a lookup table where entry `i` is the UTF-8 byte length of the UTF-16 prefix `[0, i)`.
@@ -1444,7 +1551,18 @@ struct CoreTextSystem::Impl {
   CFAttributedStringRef createCFAttributed(CoreTextSystem& sys, AttributedString const& text,
                                            std::span<ResolvedStyle const> resolved,
                                            TextLayoutOptions const& options) {
-    NSString* ns = [NSString stringWithUTF8String:text.utf8.c_str()];
+    NSString* ns = [[NSString alloc] initWithBytes:text.utf8.data()
+                                            length:text.utf8.size()
+                                          encoding:NSUTF8StringEncoding];
+    bool lossyUtf8 = false;
+    std::string sanitized;
+    if (!ns) {
+      sanitized = sanitizeUtf8Lossy(text.utf8);
+      ns = [[NSString alloc] initWithBytes:sanitized.data()
+                                    length:sanitized.size()
+                                  encoding:NSUTF8StringEncoding];
+      lossyUtf8 = true;
+    }
     if (!ns) {
       ns = @"";
     }
@@ -1457,7 +1575,10 @@ struct CoreTextSystem::Impl {
     for (std::size_t ri = 0; ri < text.runs.size(); ++ri) {
       auto const& run = text.runs[ri];
       ResolvedStyle const& a = resolved[ri];
-      NSRange range = utf8ByteRangeToNSRange(bytes, byteLen, run.start, run.end);
+      NSRange range = lossyUtf8
+          ? utf8ByteRangeToNSRangeLossy(bytes, byteLen, run.start, run.end)
+          : utf8ByteRangeToNSRange(bytes, byteLen, run.start, run.end);
+      range = clampNSRange(range, [mas length]);
       std::string_view const fam =
           a.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(a.font.family);
       std::uint32_t fid = 0;

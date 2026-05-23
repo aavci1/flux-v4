@@ -54,6 +54,79 @@ int runShellCommand(std::string const& command) {
   return std::system(command.c_str());
 }
 
+std::size_t utf8ScalarByteLength(unsigned char lead) {
+  if (lead < 0x80) {
+    return 1;
+  }
+  if ((lead & 0xE0) == 0xC0) {
+    return 2;
+  }
+  if ((lead & 0xF0) == 0xE0) {
+    return 3;
+  }
+  if ((lead & 0xF8) == 0xF0) {
+    return 4;
+  }
+  return 0;
+}
+
+bool validUtf8Scalar(std::string_view text, std::size_t index, std::size_t length) {
+  if (length == 0 || index + length > text.size()) {
+    return false;
+  }
+  unsigned char const lead = static_cast<unsigned char>(text[index]);
+  std::uint32_t codepoint = 0;
+  if (length == 1) {
+    return lead < 0x80;
+  }
+  for (std::size_t offset = 1; offset < length; ++offset) {
+    unsigned char const ch = static_cast<unsigned char>(text[index + offset]);
+    if ((ch & 0xC0) != 0x80) {
+      return false;
+    }
+  }
+  if (length == 2) {
+    codepoint = (static_cast<std::uint32_t>(lead & 0x1F) << 6) |
+                (static_cast<unsigned char>(text[index + 1]) & 0x3F);
+    return codepoint >= 0x80;
+  }
+  if (length == 3) {
+    codepoint = (static_cast<std::uint32_t>(lead & 0x0F) << 12) |
+                (static_cast<std::uint32_t>(static_cast<unsigned char>(text[index + 1]) & 0x3F) << 6) |
+                (static_cast<unsigned char>(text[index + 2]) & 0x3F);
+    return codepoint >= 0x800 && (codepoint < 0xD800 || codepoint > 0xDFFF);
+  }
+  codepoint = (static_cast<std::uint32_t>(lead & 0x07) << 18) |
+              (static_cast<std::uint32_t>(static_cast<unsigned char>(text[index + 1]) & 0x3F) << 12) |
+              (static_cast<std::uint32_t>(static_cast<unsigned char>(text[index + 2]) & 0x3F) << 6) |
+              (static_cast<unsigned char>(text[index + 3]) & 0x3F);
+  return codepoint >= 0x10000 && codepoint <= 0x10FFFF;
+}
+
+std::string sanitizedUtf8Prefix(std::string_view text, std::size_t maxScalars, bool& truncated) {
+  std::string output;
+  output.reserve(std::min(text.size(), maxScalars * 4));
+  std::size_t index = 0;
+  std::size_t scalars = 0;
+  while (index < text.size()) {
+    if (scalars >= maxScalars) {
+      truncated = true;
+      break;
+    }
+    unsigned char const lead = static_cast<unsigned char>(text[index]);
+    std::size_t const length = utf8ScalarByteLength(lead);
+    if (validUtf8Scalar(text, index, length)) {
+      output.append(text.substr(index, length));
+      index += length;
+    } else {
+      output += "\xEF\xBF\xBD";
+      ++index;
+    }
+    ++scalars;
+  }
+  return output;
+}
+
 FileVisualKind visualKindForPath(std::filesystem::path const& path, bool isDirectory) {
   if (isDirectory) {
     return FileVisualKind::Folder;
@@ -122,13 +195,18 @@ std::vector<SidebarPlace> const& sidebarPlaces() {
 
 std::string gridDisplayName(std::string name) {
   constexpr std::size_t kMaxChars = 20;
-  if (name.size() <= kMaxChars) {
-    return name;
-  }
   if (kMaxChars <= 3) {
     return "...";
   }
-  return name.substr(0, kMaxChars - 3) + "...";
+  bool truncated = false;
+  std::string display = sanitizedUtf8Prefix(name, kMaxChars, truncated);
+  if (!truncated) {
+    return display;
+  }
+  truncated = false;
+  display = sanitizedUtf8Prefix(name, kMaxChars - 3, truncated);
+  display += "...";
+  return display;
 }
 
 std::string normalizeDirectoryPath(std::filesystem::path path) {

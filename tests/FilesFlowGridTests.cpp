@@ -152,6 +152,22 @@ TEST_CASE("FilesFlowGrid layout column and row math") {
   CHECK(rows.back() == 8);
 }
 
+TEST_CASE("FilesStore display names truncate on UTF-8 scalar boundaries") {
+  std::string name = "1234567890123456";
+  name += "\xC3\xA9";
+  name += "-tail";
+
+  std::string expected = "1234567890123456";
+  expected += "\xC3\xA9";
+  expected += "...";
+  CHECK(gridDisplayName(name) == expected);
+
+  std::string invalid = "bad";
+  invalid.push_back(static_cast<char>(0xC3));
+  invalid += "name";
+  CHECK(gridDisplayName(invalid) == std::string("bad\xEF\xBF\xBDname"));
+}
+
 TEST_CASE("FilesFlowGrid measure matches layout formula") {
   FakeTextSystem textSystem;
   Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(52)};
