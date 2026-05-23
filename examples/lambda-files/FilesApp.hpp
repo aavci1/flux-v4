@@ -344,11 +344,9 @@ struct FilesAppRoot {
     auto listingKey = useState(std::string{});
     auto crumbs = useState(std::vector<BreadcrumbCrumb>{});
     auto listError = useState(std::string{});
-    auto statusMessage = useState(std::string{});
     auto activePlaceId = useState(std::string{"home"});
     auto selectedPath = useState(std::string{});
     auto scrollOffset = useState(Point{});
-    auto gridViewActive = useState(true);
 
     auto places = useState(sidebarPlaces());
 
@@ -363,13 +361,11 @@ struct FilesAppRoot {
 
     syncListing();
 
-    auto applyHistory = [history, activePlaceId, selectedPath, scrollOffset, statusMessage, syncListing](
-                            NavigationHistory next) {
+    auto applyHistory = [history, activePlaceId, selectedPath, scrollOffset, syncListing](NavigationHistory next) {
       history.set(std::move(next));
       activePlaceId.set(std::string{});
       selectedPath.set(std::string{});
       scrollOffset.set(Point{});
-      statusMessage.set(std::string{});
       syncListing();
     };
 
@@ -395,27 +391,18 @@ struct FilesAppRoot {
       applyHistory(goUp(history()));
     };
 
-    auto activateEntry = [navigateToPath, selectedPath, statusMessage](FileEntry const& entry) {
+    auto activateEntry = [navigateToPath, selectedPath](FileEntry const& entry) {
       if (entry.isDirectory) {
         navigateToPath(entry.path);
         return;
       }
       selectedPath.set(entry.path.string());
       std::string error;
-      if (!openEntry(entry, error)) {
-        statusMessage.set(std::move(error));
-      } else {
-        statusMessage.set(std::string{});
-      }
+      (void)openEntry(entry, error);
     };
 
     Reactive::Bindable<bool> const canGoBack{[history] { return history().canGoBack(); }};
     Reactive::Bindable<bool> const canGoForward{[history] { return history().canGoForward(); }};
-
-    Reactive::Bindable<std::string> const itemCountLabel{[entries] {
-      std::size_t const count = entries().size();
-      return std::to_string(count) + (count == 1 ? " item" : " items");
-    }};
 
     auto chrome = useEnvironment<WindowChromeMetricsKey>();
     WindowChromeMetrics const metrics = chrome();
@@ -503,55 +490,7 @@ struct FilesAppRoot {
                                 }))}
                         .flex(1.f, 1.f, 0.f)
                         .fill(FilesTheme::windowBg))}
-                .flex(1.f, 1.f, 0.f),
-            HStack{
-                .spacing = 8.f,
-                .alignment = Alignment::Center,
-                .children = children(
-                    Text{
-                        .text = itemCountLabel,
-                        .font = Font{.size = 11.5f},
-                        .color = FilesTheme::text2,
-                    },
-                    Spacer{}.flex(1.f, 1.f),
-                    Text{
-                        .text = "View:",
-                        .font = Font{.size = 11.5f},
-                        .color = FilesTheme::text3,
-                    },
-                    Element{IconToolButton{
-                        .icon = IconName::GridView,
-                        .iconSize = 16.f,
-                        .activeState = Reactive::Bindable<bool>{[gridViewActive] {
-                          return gridViewActive();
-                        }},
-                        .onTap = [gridViewActive] { gridViewActive.set(true); },
-                    }},
-                    Element{IconToolButton{
-                        .icon = IconName::ViewList,
-                        .iconSize = 16.f,
-                        .activeState = Reactive::Bindable<bool>{[gridViewActive] {
-                          return !gridViewActive();
-                        }},
-                        .onTap = [gridViewActive] { gridViewActive.set(false); },
-                    }})}
-                .padding(6.f, 14.f, 6.f, 14.f)
-                .height(FilesTheme::kStatusbarHeight)
-                .fill(FilesTheme::chromeBg)
-                .stroke(FilesTheme::line, 1.f),
-            Show(
-                [statusMessage] { return !statusMessage().empty(); },
-                [statusMessage] {
-                  return Text{
-                      .text = statusMessage,
-                      .font = Font::footnote(),
-                      .color = FilesTheme::text2,
-                      .horizontalAlignment = HorizontalAlignment::Leading,
-                  }
-                      .padding(6.f, 14.f, 6.f, 14.f)
-                      .fill(FilesTheme::chromeBg);
-                },
-                [] { return Rectangle{}.size(0.f, 0.f); })),
+                .flex(1.f, 1.f, 0.f)),
     }
         .fill(FilesTheme::windowBg);
 

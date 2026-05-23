@@ -33,7 +33,6 @@ struct FilesTheme {
 
   static constexpr float kSidebarWidth = 220.f;
   static constexpr float kTitlebarHeight = 48.f;
-  static constexpr float kStatusbarHeight = 28.f;
   static constexpr float kTitlebarPadH = 16.f;
   static constexpr float kTitlebarPadV = 0.f;
   static constexpr float kToolbarBtn = 28.f;

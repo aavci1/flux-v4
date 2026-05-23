@@ -122,10 +122,13 @@ bool sameLayoutSize(Size const& a, Size const& b) noexcept {
 }
 
 void relayoutToFixedSizeIfNeeded(scenegraph::SceneNode& node, Size const& size) {
+  LayoutConstraints const constraints = fixedConstraints(size);
   if (sameLayoutSize(node.size(), size)) {
+    node.setLayoutConstraints(constraints);
     return;
   }
-  node.relayout(fixedConstraints(size), false);
+  node.relayout(constraints, false);
+  node.setLayoutConstraints(constraints);
 }
 
 LayoutConstraints stackChildConstraints(LayoutConstraints constraints) {
