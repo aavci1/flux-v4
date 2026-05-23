@@ -17,6 +17,7 @@ namespace flux::compositor {
 struct CompositorConfig {
   Color backgroundColor{0.20f, 0.50f, 0.95f, 1.0f};
   std::optional<Color> backgroundGradientEnd;
+  bool backgroundConfigured = false;
   std::optional<std::string> wallpaperPath;
   ImageFillMode wallpaperMode = ImageFillMode::Cover;
   std::optional<std::string> cursorTheme;

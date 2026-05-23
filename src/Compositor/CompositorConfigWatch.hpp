@@ -7,9 +7,12 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 
+#include <filesystem>
 #include <functional>
 
 namespace flux::compositor {
+
+class AsyncWallpaperLoader;
 
 struct CompositorConfigWatchContext {
   LoadedCompositorConfig& loadedConfig;
@@ -19,6 +22,9 @@ struct CompositorConfigWatchContext {
   flux::Canvas& canvas;
   std::function<CompositorConfig()> effectiveConfig;
   std::function<void(bool forceOutputScale)> applyOutputScale;
+  AsyncWallpaperLoader* wallpaperLoader = nullptr;
+  std::uint32_t wallpaperMaxLongEdge = 1920;
+  std::filesystem::path wallpaperCacheDir;
 };
 
 /// Returns true when config was reloaded and applied.

@@ -9,8 +9,10 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 #if FLUX_VULKAN
 #include <vulkan/vulkan.h>
@@ -94,6 +96,24 @@ public:
 protected:
   Image() = default;
 };
+
+/// CPU-side RGBA decode result. Safe to produce off the render thread.
+struct DecodedImageRgba {
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  std::vector<std::uint8_t> pixels;
+};
+
+/// Downscales decoded RGBA pixels so the longest edge is at most \p maxLongEdge.
+[[nodiscard]] flux::DecodedImageRgba downscaleDecodedImageRgba(flux::DecodedImageRgba image,
+                                                               std::uint32_t maxLongEdge);
+
+/// Decodes an image file to tightly packed RGBA pixels without creating a GPU image.
+[[nodiscard]] std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path);
+
+/// Creates a GPU image from decoded RGBA pixels. Must run on the render thread.
+[[nodiscard]] std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded,
+                                                          void* gpuDevice = nullptr);
 
 /// Loads an image from disk into a backend image.
 /// `gpuDevice` must match the target canvas device when the backend requires it.

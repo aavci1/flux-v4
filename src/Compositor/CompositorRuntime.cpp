@@ -9,6 +9,8 @@
 #include "Compositor/CompositorPresentation.hpp"
 #include "Compositor/CompositorRenderFrame.hpp"
 #include "Compositor/Config/AppliedCompositorConfig.hpp"
+#include "Compositor/Config/WallpaperCache.hpp"
+#include "Compositor/Config/WallpaperLoader.hpp"
 #include "Compositor/Config/CompositorConfig.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Diagnostics/CpuTrace.hpp"
@@ -166,6 +168,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         .effectiveConfig = effectiveConfig,
         .applyOutputScale = applyOutputScale,
     };
+    AsyncWallpaperLoader wallpaperLoader;
+    configWatch.wallpaperLoader = &wallpaperLoader;
+    configWatch.wallpaperMaxLongEdge = std::max(output.width(), output.height());
+    configWatch.wallpaperCacheDir = wallpaperCacheDirectory(device->cacheDir());
     applyCompositorRuntimeConfig(configWatch, true);
 
     SurfaceRenderState surfaceRenderState;
@@ -649,6 +655,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       if (shouldCheckConfig && maybeReloadCompositorConfig(configWatch)) {
         configReloaded = true;
+      }
+      if (pollWallpaperPreview(configWatch)) {
+        forceRender = true;
+      }
+      if (pollWallpaperLoad(configWatch)) {
+        configReloaded = true;
+        forceRender = true;
+      } else if (configWatch.appliedConfig.wallpaperPreviewRevealStart ||
+                 configWatch.appliedConfig.wallpaperRevealStart) {
+        forceRender = true;
       }
       bool const vtForeground = device->isVtForeground();
       bool const wasForegroundBeforeCheck = wasVtForeground;

@@ -73,10 +73,10 @@ enum class LayerShellChromeStyle : std::uint8_t {
 
 struct LayerShellChromeOptions {
   LayerShellChromeStyle style = LayerShellChromeStyle::None;
-  float blurRadius = 32.f;
-  Color tint{238.f / 255.f, 244.f / 255.f, 1.f, 0.60f};
-  Color borderColor{1.f, 1.f, 1.f, 0.34f};
-  float tintOpacity = 0.48f;
+  float blurRadius = 42.f;
+  Color tint{1.f, 1.f, 1.f, 0.40f};
+  Color borderColor{1.f, 1.f, 1.f, 0.58f};
+  float tintOpacity = 0.30f;
   bool squareBottomCorners = false;
 };
 

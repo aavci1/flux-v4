@@ -67,7 +67,7 @@ namespace {
 constexpr std::size_t kMaxFramesInFlight = 3;
 constexpr int kBackdropBlurIterations = 2;
 constexpr std::uint32_t kBackdropBlurDownsample = 2;
-constexpr float kBackdropBlurRadiusBoost = 1.2f;
+constexpr float kBackdropBlurRadiusBoost = 1.35f;
 
 bool renderTargetFrameCacheDisabled() {
   static bool const disabled = [] {

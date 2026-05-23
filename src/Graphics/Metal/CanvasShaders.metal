@@ -450,6 +450,10 @@ fragment float4 backdrop_frag(BackdropVertexOut in [[stage_in]],
   }
 
   float4 c = blurredScene.sample(smpl, in.uv);
+  float luma = dot(c.rgb, float3(0.299, 0.587, 0.114));
+  float3 vibrant = mix(float3(luma), c.rgb, 1.34);
+  vibrant = min(vibrant * 1.08, float3(1.0));
+  c.rgb = vibrant;
   float4 tint = uniforms[0].tint;
   float4 tintP = float4(tint.rgb * tint.a, tint.a);
   return (tintP + c * (1.0f - tintP.a)) * coverage;

@@ -673,6 +673,8 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Presenter.cpp
     src/Compositor/PresenterEnv.cpp
     src/Compositor/Config/AppliedCompositorConfig.cpp
+    src/Compositor/Config/WallpaperLoader.cpp
+    src/Compositor/Config/WallpaperCache.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/Diagnostics/CrashLog.cpp
     src/Compositor/Diagnostics/CpuTrace.cpp

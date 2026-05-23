@@ -1,6 +1,7 @@
 #include "Compositor/CompositorConfigWatch.hpp"
 
 #include "Compositor/Config/AppliedCompositorConfig.hpp"
+#include "Compositor/Config/WallpaperLoader.hpp"
 #include "Compositor/CompositorPresentation.hpp"
 
 namespace flux::compositor {
@@ -12,6 +13,22 @@ void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceO
   ctx.wayland.setShortcutBindings(ctx.appliedConfig.config.shortcutBindings);
   ctx.wayland.setChromeThemeConfig(ctx.appliedConfig.config.chrome, ctx.appliedConfig.config.darkChrome);
   ctx.applyOutputScale(forceOutputScale);
+  if (ctx.wallpaperLoader && ctx.appliedConfig.config.wallpaperPath) {
+    if (!tryLoadWallpaperFromCache(ctx)) {
+      ctx.wallpaperLoader->requestLoad(*ctx.appliedConfig.config.wallpaperPath,
+                                       ctx.wallpaperMaxLongEdge,
+                                       ctx.wallpaperCacheDir);
+    }
+  } else if (ctx.wallpaperLoader) {
+    ctx.wallpaperLoader->cancel();
+    ctx.appliedConfig.wallpaperImage = nullptr;
+    ctx.appliedConfig.wallpaperPreviewImage = nullptr;
+    ctx.appliedConfig.wallpaperLoadPending = false;
+    ctx.appliedConfig.wallpaperPreviewOpacity = 0.f;
+    ctx.appliedConfig.wallpaperPreviewRevealStart.reset();
+    ctx.appliedConfig.wallpaperRevealOpacity = 1.f;
+    ctx.appliedConfig.wallpaperRevealStart.reset();
+  }
 }
 
 bool maybeReloadCompositorConfig(CompositorConfigWatchContext& ctx) {

@@ -13,46 +13,26 @@
 #pragma GCC diagnostic pop
 #endif
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace flux {
 
-bool Image::updateRgbaPixels(std::span<std::uint8_t const>, void*) {
-  return false;
-}
+namespace {
 
-bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void* gpuDevice) {
-  return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
-}
-
-std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
-  std::filesystem::path const imagePath{std::string(path)};
-  std::ifstream in(imagePath, std::ios::binary);
-  if (!in) {
-    return nullptr;
-  }
-
-  std::error_code ec;
-  auto const fileSize = std::filesystem::file_size(imagePath, ec);
-  if (ec || fileSize == 0 || fileSize > static_cast<std::uintmax_t>(std::numeric_limits<int>::max())) {
-    return nullptr;
-  }
-
-  std::vector<std::uint8_t> data(static_cast<std::size_t>(fileSize));
-  in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
-  if (in.gcount() != static_cast<std::streamsize>(data.size())) {
-    return nullptr;
-  }
+std::optional<DecodedImageRgba> decodeImageRgbaFromBytes(std::span<std::uint8_t const> data) {
   if (data.empty() || data.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-    return nullptr;
+    return std::nullopt;
   }
 
   int width = 0;
@@ -64,21 +44,163 @@ std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
     if (decoded) {
       stbi_image_free(decoded);
     }
-    return nullptr;
+    return std::nullopt;
   }
 
   std::size_t const pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
   if (pixelCount > std::numeric_limits<std::size_t>::max() / 4u) {
     stbi_image_free(decoded);
-    return nullptr;
+    return std::nullopt;
   }
 
-  std::span<std::uint8_t const> pixels(decoded, pixelCount * 4u);
-  std::shared_ptr<Image> image =
-      Image::fromRgbaPixels(static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), pixels,
-                            gpuDevice);
+  DecodedImageRgba result{
+      .width = static_cast<std::uint32_t>(width),
+      .height = static_cast<std::uint32_t>(height),
+      .pixels = {},
+  };
+  result.pixels.assign(decoded, decoded + pixelCount * 4u);
   stbi_image_free(decoded);
-  return image;
+  return result;
+}
+
+DecodedImageRgba halveDecodedImageRgbaBox(DecodedImageRgba const& source) {
+  std::uint32_t const srcW = source.width;
+  std::uint32_t const srcH = source.height;
+  std::uint32_t const dstW = std::max(1u, srcW / 2u);
+  std::uint32_t const dstH = std::max(1u, srcH / 2u);
+  DecodedImageRgba dst{
+      .width = dstW,
+      .height = dstH,
+      .pixels = std::vector<std::uint8_t>(static_cast<std::size_t>(dstW) * static_cast<std::size_t>(dstH) * 4u),
+  };
+
+  for (std::uint32_t y = 0; y < dstH; ++y) {
+    for (std::uint32_t x = 0; x < dstW; ++x) {
+      std::uint32_t const sx = x * 2u;
+      std::uint32_t const sy = y * 2u;
+      std::uint32_t r = 0;
+      std::uint32_t g = 0;
+      std::uint32_t b = 0;
+      std::uint32_t a = 0;
+      std::uint32_t count = 0;
+      for (std::uint32_t oy = 0; oy < 2u; ++oy) {
+        for (std::uint32_t ox = 0; ox < 2u; ++ox) {
+          std::uint32_t const px = sx + ox;
+          std::uint32_t const py = sy + oy;
+          if (px >= srcW || py >= srcH) {
+            continue;
+          }
+          std::size_t const index =
+              (static_cast<std::size_t>(py) * static_cast<std::size_t>(srcW) + static_cast<std::size_t>(px)) * 4u;
+          r += source.pixels[index + 0u];
+          g += source.pixels[index + 1u];
+          b += source.pixels[index + 2u];
+          a += source.pixels[index + 3u];
+          ++count;
+        }
+      }
+      if (count == 0) {
+        count = 1;
+      }
+      std::size_t const dstIndex =
+          (static_cast<std::size_t>(y) * static_cast<std::size_t>(dstW) + static_cast<std::size_t>(x)) * 4u;
+      dst.pixels[dstIndex + 0u] = static_cast<std::uint8_t>(r / count);
+      dst.pixels[dstIndex + 1u] = static_cast<std::uint8_t>(g / count);
+      dst.pixels[dstIndex + 2u] = static_cast<std::uint8_t>(b / count);
+      dst.pixels[dstIndex + 3u] = static_cast<std::uint8_t>(a / count);
+    }
+  }
+  return dst;
+}
+
+} // namespace
+
+DecodedImageRgba downscaleDecodedImageRgba(DecodedImageRgba image, std::uint32_t maxLongEdge) {
+  if (image.width == 0 || image.height == 0 || maxLongEdge == 0) {
+    return image;
+  }
+  while (std::max(image.width, image.height) > maxLongEdge * 2u) {
+    image = halveDecodedImageRgbaBox(image);
+  }
+  if (std::max(image.width, image.height) <= maxLongEdge) {
+    return image;
+  }
+
+  float const scale =
+      static_cast<float>(maxLongEdge) / static_cast<float>(std::max(image.width, image.height));
+  std::uint32_t const dstW = std::max(1u, static_cast<std::uint32_t>(static_cast<float>(image.width) * scale));
+  std::uint32_t const dstH = std::max(1u, static_cast<std::uint32_t>(static_cast<float>(image.height) * scale));
+  DecodedImageRgba dst{
+      .width = dstW,
+      .height = dstH,
+      .pixels = std::vector<std::uint8_t>(static_cast<std::size_t>(dstW) * static_cast<std::size_t>(dstH) * 4u),
+  };
+
+  for (std::uint32_t y = 0; y < dstH; ++y) {
+    float const srcY = (static_cast<float>(y) + 0.5f) / static_cast<float>(dstH) * static_cast<float>(image.height) -
+                       0.5f;
+    std::uint32_t const sy = std::min(image.height - 1u, static_cast<std::uint32_t>(std::max(0.f, srcY)));
+    for (std::uint32_t x = 0; x < dstW; ++x) {
+      float const srcX =
+          (static_cast<float>(x) + 0.5f) / static_cast<float>(dstW) * static_cast<float>(image.width) - 0.5f;
+      std::uint32_t const sx = std::min(image.width - 1u, static_cast<std::uint32_t>(std::max(0.f, srcX)));
+      std::size_t const srcIndex =
+          (static_cast<std::size_t>(sy) * static_cast<std::size_t>(image.width) + static_cast<std::size_t>(sx)) * 4u;
+      std::size_t const dstIndex =
+          (static_cast<std::size_t>(y) * static_cast<std::size_t>(dstW) + static_cast<std::size_t>(x)) * 4u;
+      dst.pixels[dstIndex + 0u] = image.pixels[srcIndex + 0u];
+      dst.pixels[dstIndex + 1u] = image.pixels[srcIndex + 1u];
+      dst.pixels[dstIndex + 2u] = image.pixels[srcIndex + 2u];
+      dst.pixels[dstIndex + 3u] = image.pixels[srcIndex + 3u];
+    }
+  }
+  return dst;
+}
+
+bool Image::updateRgbaPixels(std::span<std::uint8_t const>, void*) {
+  return false;
+}
+
+bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void* gpuDevice) {
+  return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
+}
+
+std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path) {
+  std::filesystem::path const imagePath{std::string(path)};
+  std::ifstream in(imagePath, std::ios::binary);
+  if (!in) {
+    return std::nullopt;
+  }
+
+  std::error_code ec;
+  auto const fileSize = std::filesystem::file_size(imagePath, ec);
+  if (ec || fileSize == 0 || fileSize > static_cast<std::uintmax_t>(std::numeric_limits<int>::max())) {
+    return std::nullopt;
+  }
+
+  std::vector<std::uint8_t> data(static_cast<std::size_t>(fileSize));
+  in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+  if (in.gcount() != static_cast<std::streamsize>(data.size())) {
+    return std::nullopt;
+  }
+
+  return decodeImageRgbaFromBytes(data);
+}
+
+std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, void* gpuDevice) {
+  if (decoded.width == 0 || decoded.height == 0 || decoded.pixels.empty()) {
+    return nullptr;
+  }
+  std::span<std::uint8_t const> pixels(decoded.pixels.data(), decoded.pixels.size());
+  return Image::fromRgbaPixels(decoded.width, decoded.height, pixels, gpuDevice);
+}
+
+std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
+  std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path);
+  if (!decoded) {
+    return nullptr;
+  }
+  return imageFromDecodedRgba(*decoded, gpuDevice);
 }
 
 } // namespace flux

@@ -605,9 +605,11 @@ CompositorConfig loadConfig() {
   if (auto color = parseColorKey("background")) {
     config.backgroundColor = *color;
     config.backgroundGradientEnd.reset();
+    config.backgroundConfigured = true;
   } else if (auto color = parseColorKey("background_color")) {
     config.backgroundColor = *color;
     config.backgroundGradientEnd.reset();
+    config.backgroundConfigured = true;
   } else if (table.contains("background") || table.contains("background_color")) {
     std::fprintf(stderr, "lambda-window-manager: ignoring invalid background color in %s\n", path->c_str());
   }
@@ -616,6 +618,7 @@ CompositorConfig loadConfig() {
     if (auto gradient = parseLinearGradient(*value)) {
       config.backgroundColor = gradient->first;
       config.backgroundGradientEnd = gradient->second;
+      config.backgroundConfigured = true;
     } else {
       std::fprintf(stderr, "lambda-window-manager: ignoring invalid background gradient in %s\n", path->c_str());
     }
