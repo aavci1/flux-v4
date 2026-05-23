@@ -391,7 +391,7 @@ namespace {
 std::optional<std::string> commandForAppId(std::string const& appId) {
   if (appId == "terminal" || appId == "foot") return "foot";
   if (appId == "browser" || appId == "firefox") return "firefox";
-  if (appId == "files") return "xdg-open .";
+  if (appId == "files") return "lambda-files";
   if (appId == "settings") return "lambda-settings";
   if (appId == "calendar") return "gnome-calendar";
   if (appId == "mail") return "thunderbird";
@@ -403,7 +403,9 @@ bool shellAppIdMatches(std::string const& requested, std::string const& actual) 
   if (requested == actual) return true;
   if (requested == "terminal" && actual == "foot") return true;
   if (requested == "browser" && actual == "firefox") return true;
-  if (requested == "files" && (actual == "org.gnome.Nautilus" || actual == "nautilus" || actual == "thunar")) {
+  if (requested == "files" &&
+      (actual == "files" || actual == "lambda-files" || actual == "org.gnome.Nautilus" ||
+       actual == "nautilus" || actual == "thunar")) {
     return true;
   }
   return false;

@@ -122,6 +122,23 @@ inline void controlLayoutVertical(scenegraph::SceneNode& group, Size frameSize, 
   group.setSize(Size{controlFiniteOrZero(width), controlFiniteOrZero(std::max(frameSize.height, y))});
 }
 
+inline void controlLayoutHorizontal(scenegraph::SceneNode& group, Size frameSize, float spacing) {
+  float x = 0.f;
+  float height = frameSize.height;
+  auto children = group.children();
+  for (std::size_t i = 0; i < children.size(); ++i) {
+    auto& child = children[i];
+    child->setPosition(Point{x, 0.f});
+    Size const childSize = child->size();
+    height = std::max(height, childSize.height);
+    x += childSize.width;
+    if (i + 1 < children.size()) {
+      x += spacing;
+    }
+  }
+  group.setSize(Size{controlFiniteOrZero(std::max(frameSize.width, x)), controlFiniteOrZero(height)});
+}
+
 inline void controlLayoutSingle(scenegraph::SceneNode& group, Size frameSize) {
   Size size = frameSize;
   auto children = group.children();
@@ -191,6 +208,7 @@ inline void controlPropagateLayoutChange(scenegraph::SceneNode& node, Size oldSi
 
   while (scenegraph::SceneNode* parent = child->parent()) {
     if (controlClipsContents(*parent)) {
+      (void)parent->relayoutStoredConstraints();
       break;
     }
 

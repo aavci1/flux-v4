@@ -3771,7 +3771,7 @@ private:
       ensureTextureDescriptor(backdropSceneTexture_);
       return;
     }
-    VkImageBlit blit{};
+    VkImageBlit2 blit{VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
     blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.srcSubresource.layerCount = 1;
     blit.srcOffsets[0] = {static_cast<std::int32_t>(srcRect.x), static_cast<std::int32_t>(srcRect.y), 0};
@@ -3784,14 +3784,15 @@ private:
     blit.dstOffsets[1] = {static_cast<std::int32_t>(dstRect.x + dstRect.width),
                           static_cast<std::int32_t>(dstRect.y + dstRect.height),
                           1};
-    vkCmdBlitImage(commandBuffer,
-                   targetImage,
-                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   backdropSceneTexture_.image,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   1,
-                   &blit,
-                   VK_FILTER_LINEAR);
+    VkBlitImageInfo2 blitInfo{VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
+    blitInfo.srcImage = targetImage;
+    blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    blitInfo.dstImage = backdropSceneTexture_.image;
+    blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    blitInfo.regionCount = 1;
+    blitInfo.pRegions = &blit;
+    blitInfo.filter = VK_FILTER_LINEAR;
+    vkCmdBlitImage2(commandBuffer, &blitInfo);
 
     transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
     ensureTextureDescriptor(backdropSceneTexture_);

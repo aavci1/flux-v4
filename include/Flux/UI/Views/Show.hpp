@@ -133,16 +133,17 @@ private:
     }
 
     void relayout(scenegraph::SceneNode& group, LayoutConstraints const& nextConstraints) {
+      constraints = nextConstraints;
       if (scenegraph::detail::isTransientRelayout()) {
         assignedSlot = detail::controlAssignedSlot(nextConstraints);
       } else {
-        constraints = nextConstraints;
         assignedSlot.reset();
       }
       frameSize = detail::controlAssignedSize(nextConstraints);
       auto children = group.children();
       if (!children.empty() && children.front()) {
         (void)children.front()->relayout(nextConstraints);
+        children.front()->setLayoutConstraints(nextConstraints);
       }
       detail::controlLayoutSingle(group, frameSize);
     }

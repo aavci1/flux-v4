@@ -25,6 +25,7 @@ namespace flux {
 
 enum class ForLayout {
   VerticalStack,
+  HorizontalStack,
   Overlay,
 };
 
@@ -58,8 +59,13 @@ public:
     auto group = std::make_unique<scenegraph::SceneNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
-    group->setLayoutFlow(state_->layout == ForLayout::Overlay ? scenegraph::LayoutFlow::None
-                                                              : scenegraph::LayoutFlow::VerticalStack);
+    scenegraph::LayoutFlow flow = scenegraph::LayoutFlow::VerticalStack;
+    if (state_->layout == ForLayout::Overlay) {
+      flow = scenegraph::LayoutFlow::None;
+    } else if (state_->layout == ForLayout::HorizontalStack) {
+      flow = scenegraph::LayoutFlow::HorizontalStack;
+    }
+    group->setLayoutFlow(flow);
     group->setLayoutSpacing(state_->spacing);
 
     auto controlScope = std::make_shared<Reactive::Scope>();
@@ -310,6 +316,8 @@ private:
     void applyGroupLayout(scenegraph::SceneNode& group, Size frameSize) const {
       if (layout == ForLayout::Overlay) {
         detail::controlLayoutOverlay(group, frameSize);
+      } else if (layout == ForLayout::HorizontalStack) {
+        detail::controlLayoutHorizontal(group, frameSize, spacing);
       } else {
         detail::controlLayoutVertical(group, frameSize, spacing);
       }
@@ -401,8 +409,25 @@ private:
       if (layout == ForLayout::Overlay) {
         Size size{};
         for (Row const& row : rows) {
-          size.width = std::max(size.width, row.cachedSize.width);
-          size.height = std::max(size.height, row.cachedSize.height);
+          float x = 0.f;
+          float y = 0.f;
+          if (detail::ElementModifiers const* mods = row.element.modifiers()) {
+            x = mods->positionX.evaluate();
+            y = mods->positionY.evaluate();
+          }
+          size.width = std::max(size.width, x + row.cachedSize.width);
+          size.height = std::max(size.height, y + row.cachedSize.height);
+        }
+        return clampSize(size, outerConstraints);
+      }
+      if (layout == ForLayout::HorizontalStack) {
+        Size size{};
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+          size.width += rows[i].cachedSize.width;
+          size.height = std::max(size.height, rows[i].cachedSize.height);
+          if (i + 1 < rows.size()) {
+            size.width += spacing;
+          }
         }
         return clampSize(size, outerConstraints);
       }

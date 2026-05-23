@@ -897,6 +897,8 @@ if(FLUX_BUILD_TESTS)
     tests/BindableInferenceTests.cpp
     tests/EnvironmentKeyOtherTU.cpp
     tests/EnvironmentKeyTests.cpp
+    tests/FilesFlowGridTests.cpp
+    examples/lambda-files/FilesStore.cpp
     tests/ForTests.cpp
     tests/MountRootTests.cpp
     tests/main.cpp
@@ -938,6 +940,7 @@ if(FLUX_BUILD_TESTS)
   target_include_directories(flux_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/lambda-files
   )
 
   target_link_libraries(flux_tests PRIVATE

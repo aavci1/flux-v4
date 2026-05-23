@@ -73,6 +73,16 @@ bool sameLayoutConstraints(LayoutConstraints const& a, LayoutConstraints const& 
          sameLayoutScalar(a.minHeight, b.minHeight);
 }
 
+Size relayoutChildAndStoreConstraints(std::unique_ptr<scenegraph::SceneNode>& child,
+                                      LayoutConstraints const& constraints) {
+  if (!child) {
+    return {};
+  }
+  (void)child->relayout(constraints);
+  child->setLayoutConstraints(constraints);
+  return child->size();
+}
+
 Size measureChild(Element const& child, MeasureContext& ctx, LayoutConstraints const& constraints,
                   TextSystem& textSystem) {
   ctx.pushConstraints(constraints, LayoutHints{});
@@ -409,17 +419,15 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     childSizes->clear();
     childSizes->reserve(mountedChildren.size());
     for (std::unique_ptr<scenegraph::SceneNode>& child : mountedChildren) {
-      if (child && child->relayout(constraints)) {
-        childSizes->push_back(child->size());
-      } else {
-        childSizes->push_back(child ? child->size() : Size{});
-      }
+      childSizes->push_back(relayoutChildAndStoreConstraints(child, constraints));
     }
     layout::ScrollContentLayout const contentLayout =
         layout::layoutScrollContent(scrollAxis, viewportState.peek(), offsetState.peek(), *childSizes);
-    for (std::size_t i = 0; i < mountedChildren.size() && i < contentLayout.slots.size(); ++i) {
+    layout::ScrollContentLayout const childLayout =
+        layout::layoutScrollContent(scrollAxis, viewportState.peek(), Point{}, *childSizes);
+    for (std::size_t i = 0; i < mountedChildren.size() && i < childLayout.slots.size(); ++i) {
       if (mountedChildren[i]) {
-        mountedChildren[i]->setPosition(contentLayout.slots[i].origin);
+        mountedChildren[i]->setPosition(childLayout.slots[i].origin);
       }
     }
     rawContentGroup->setSize(contentLayout.contentSize);
@@ -453,11 +461,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     childSizes->clear();
     childSizes->reserve(mountedChildren.size());
     for (std::unique_ptr<scenegraph::SceneNode>& child : mountedChildren) {
-      if (child && child->relayout(premeasureConstraints)) {
-        childSizes->push_back(child->size());
-      } else {
-        childSizes->push_back(child ? child->size() : Size{});
-      }
+      childSizes->push_back(relayoutChildAndStoreConstraints(child, premeasureConstraints));
     }
     if (plan.viewport.width <= 0.f || plan.viewport.height <= 0.f) {
       plan.viewport = viewportFromConstraints(
@@ -467,8 +471,9 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     rawContentGroup->setLayoutConstraints(plan.childConstraints);
     if (!sameLayoutConstraints(premeasureConstraints, plan.childConstraints)) {
       for (std::size_t i = 0; i < mountedChildren.size(); ++i) {
-        if (mountedChildren[i] && mountedChildren[i]->relayout(plan.childConstraints)) {
-          (*childSizes)[i] = mountedChildren[i]->size();
+        if (mountedChildren[i]) {
+          (*childSizes)[i] =
+              relayoutChildAndStoreConstraints(mountedChildren[i], plan.childConstraints);
         }
       }
     }
