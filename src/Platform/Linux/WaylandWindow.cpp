@@ -24,7 +24,6 @@
 #include "viewporter-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xx-cutouts-v1-client-protocol.h"
-#include "xx-layer-chrome-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -182,7 +181,6 @@ struct SharedWaylandConnection {
   std::uint32_t decorationManagerVersion = 0;
   xx_cutouts_manager_v1* cutoutsManager = nullptr;
   zwlr_layer_shell_v1* layerShell = nullptr;
-  xx_layer_chrome_manager_v1* layerChromeManager = nullptr;
   ext_background_effect_manager_v1* backgroundEffectManager = nullptr;
   wl_seat* seat = nullptr;
   wl_pointer* pointer = nullptr;
@@ -283,17 +281,6 @@ std::uint32_t colorToRgba(Color color) {
   };
   return (channel(color.r) << 24u) | (channel(color.g) << 16u) | (channel(color.b) << 8u) |
          channel(color.a);
-}
-
-std::uint32_t layerChromeStyleProtocol(LayerShellChromeStyle style) {
-  switch (style) {
-  case LayerShellChromeStyle::BlurPanel:
-    return XX_LAYER_CHROME_V1_STYLE_BLUR_PANEL;
-  case LayerShellChromeStyle::BlurPanelBorder:
-    return XX_LAYER_CHROME_V1_STYLE_BLUR_PANEL_BORDER;
-  default:
-    return XX_LAYER_CHROME_V1_STYLE_NONE;
-  }
 }
 
 int createPopupSharedMemoryFile(char const* name, std::size_t size) {
@@ -1949,26 +1936,36 @@ private:
       backgroundEffect_ = ext_background_effect_manager_v1_get_background_effect(shared_->backgroundEffectManager,
                                                                                  surface_);
     }
+    if (glassConfig_.enabled) {
+      Color tint = glassConfig_.tint;
+      tint.a *= std::clamp(glassConfig_.tintOpacity, 0.f, 1.f);
+      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(glassConfig_.blurRadius));
+      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
+      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(glassConfig_.borderColor));
+    } else if (chrome.style != LayerShellChromeStyle::None) {
+      Color tint = chrome.tint;
+      tint.a *= std::clamp(chrome.tintOpacity, 0.f, 1.f);
+      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(chrome.blurRadius));
+      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
+      ext_background_effect_surface_v1_set_border(
+          backgroundEffect_,
+          colorToRgba(chrome.style == LayerShellChromeStyle::BlurPanelBorder
+                          ? chrome.borderColor
+                          : Color{0.f, 0.f, 0.f, 0.f}));
+      float const radius = 16.f;
+      ext_background_effect_surface_v1_set_corner_radii(backgroundEffect_,
+                                                        wl_fixed_from_double(radius),
+                                                        wl_fixed_from_double(radius),
+                                                        wl_fixed_from_double(chrome.squareBottomCorners ? 0.f : radius),
+                                                        wl_fixed_from_double(chrome.squareBottomCorners ? 0.f : radius));
+    } else {
+      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
+      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
+    }
     wl_region* region = wl_compositor_create_region(shared_->compositor);
     wl_region_add(region, 0, 0, width, height);
     ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
     wl_region_destroy(region);
-  }
-
-  void updateLayerChromeMetadata() {
-    LayerShellChromeOptions const& chrome = layerShellConfig_.chrome;
-    if (!layerSurface_ || chrome.style == LayerShellChromeStyle::None || !shared_ ||
-        !shared_->layerChromeManager) {
-      return;
-    }
-    if (!layerChrome_) {
-      layerChrome_ = xx_layer_chrome_manager_v1_get_layer_chrome(shared_->layerChromeManager, layerSurface_);
-    }
-    xx_layer_chrome_v1_set_style(layerChrome_, layerChromeStyleProtocol(chrome.style));
-    xx_layer_chrome_v1_set_tint(layerChrome_, colorToRgba(chrome.tint));
-    xx_layer_chrome_v1_set_border(layerChrome_, colorToRgba(chrome.borderColor));
-    xx_layer_chrome_v1_set_blur_radius(layerChrome_, wl_fixed_from_double(chrome.blurRadius));
-    xx_layer_chrome_v1_set_square_bottom_corners(layerChrome_, chrome.squareBottomCorners ? 1u : 0u);
   }
 
   void configureLayerShellSurface() {
@@ -1994,7 +1991,6 @@ private:
     zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, layerShellConfig_.exclusiveZone);
     zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
                                                      layerShellConfig_.keyboardInteractive ? 1u : 0u);
-    updateLayerChromeMetadata();
     updateBackgroundEffectRegion();
   }
 
@@ -2133,7 +2129,6 @@ private:
 	  xdg_surface* xdgSurface_ = nullptr;
 	  xdg_toplevel* toplevel_ = nullptr;
 	  zwlr_layer_surface_v1* layerSurface_ = nullptr;
-	  xx_layer_chrome_v1* layerChrome_ = nullptr;
 	  ext_background_effect_surface_v1* backgroundEffect_ = nullptr;
 	  zxdg_toplevel_decoration_v1* decoration_ = nullptr;
   xx_cutouts_v1* cutouts_ = nullptr;
@@ -2250,10 +2245,7 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
 	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1));
 	  } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
 	    shared->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
-	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, 1));
-	  } else if (std::strcmp(interface, xx_layer_chrome_manager_v1_interface.name) == 0) {
-	    shared->layerChromeManager = static_cast<xx_layer_chrome_manager_v1*>(
-	        wl_registry_bind(registry, name, &xx_layer_chrome_manager_v1_interface, 1));
+	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 2u)));
 	  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;

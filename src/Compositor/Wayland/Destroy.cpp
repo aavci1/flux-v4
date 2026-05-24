@@ -313,13 +313,6 @@ void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
   std::fprintf(stderr, "lambda-window-manager: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
-void WaylandServer::Impl::destroyLayerChrome(LayerChrome* chrome) {
-  if (chrome && chrome->layerSurface) {
-    chrome->layerSurface->layerChrome = nullptr;
-  }
-  eraseResource(layerChromeObjects_, chrome);
-}
-
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
   if (layerSurface) {
     refreshShellReservedZones(layerSurface->server);

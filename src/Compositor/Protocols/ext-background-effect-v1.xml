@@ -26,7 +26,7 @@
     DEALINGS IN THE SOFTWARE.
   </copyright>
 
-  <interface name="ext_background_effect_manager_v1" version="1">
+  <interface name="ext_background_effect_manager_v1" version="2">
     <description summary="background effect factory">
       This protocol provides a way to improve visuals of translucent surfaces
       by applying effects like blur to the background behind them.
@@ -80,7 +80,7 @@
     </request>
   </interface>
 
-  <interface name="ext_background_effect_surface_v1" version="1">
+  <interface name="ext_background_effect_surface_v1" version="2">
     <description summary="background effects for a surface">
       The background effect object provides a way to specify a region behind
       a surface that should have background effects like blur applied.
@@ -123,6 +123,56 @@
       </description>
       <arg name="region" type="object" interface="wl_region" allow-null="true"
            summary="blur region of the surface"/>
+    </request>
+
+    <request name="set_blur_radius" since="2">
+      <description summary="set preferred blur radius">
+        This request sets the preferred blur radius for the background effect.
+        The value is specified in surface-local logical pixels.
+
+        The blur radius is double-buffered state, and will be applied on
+        the next wl_surface.commit.
+      </description>
+      <arg name="radius" type="fixed" summary="preferred blur radius"/>
+    </request>
+
+    <request name="set_tint" since="2">
+      <description summary="set background effect tint">
+        This request sets the tint applied after the background effect. Colors
+        are encoded as RGBA with the red channel in the most significant byte
+        and alpha in the least significant byte.
+
+        The tint is double-buffered state, and will be applied on
+        the next wl_surface.commit.
+      </description>
+      <arg name="tint" type="uint" summary="RGBA tint color"/>
+    </request>
+
+    <request name="set_border" since="2">
+      <description summary="set background effect border">
+        This request sets the border color applied around the effect region.
+        Colors are encoded as RGBA with the red channel in the most significant
+        byte and alpha in the least significant byte.
+
+        The border is double-buffered state, and will be applied on
+        the next wl_surface.commit.
+      </description>
+      <arg name="border" type="uint" summary="RGBA border color"/>
+    </request>
+
+    <request name="set_corner_radii" since="2">
+      <description summary="set effect corner radii">
+        This request sets the corner radii for the effect region in
+        surface-local logical pixels. The arguments are ordered clockwise from
+        top-left.
+
+        The corner radii are double-buffered state, and will be applied on
+        the next wl_surface.commit.
+      </description>
+      <arg name="top_left" type="fixed" summary="top-left corner radius"/>
+      <arg name="top_right" type="fixed" summary="top-right corner radius"/>
+      <arg name="bottom_right" type="fixed" summary="bottom-right corner radius"/>
+      <arg name="bottom_left" type="fixed" summary="bottom-left corner radius"/>
     </request>
   </interface>
 </protocol>

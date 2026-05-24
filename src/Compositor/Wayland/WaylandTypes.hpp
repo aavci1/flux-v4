@@ -11,13 +11,12 @@
 
 namespace flux::compositor {
 
-struct LayerShellChromeSnapshot {
-  LayerShellChromeStyle style = LayerShellChromeStyle::None;
+struct SurfaceBackgroundEffectSnapshot {
   float blurRadius = 46.f;
-  Color tint{0.86f, 0.96f, 1.f, 0.56f};
-  Color borderColor{1.f, 1.f, 1.f, 0.62f};
-  float tintOpacity = 1.f;
-  bool squareBottomCorners = false;
+  Color tint{0.f, 0.f, 0.f, 0.f};
+  Color borderColor{0.f, 0.f, 0.f, 0.f};
+  bool cornerRadiusSet = false;
+  CornerRadius cornerRadius{};
 };
 
 enum class CursorShape : std::uint8_t {
@@ -99,7 +98,7 @@ struct CommittedSurfaceSnapshot {
   bool activeSizing = false;
   bool pacingSizing = false;
   bool defaultGlassEligible = false;
-  LayerShellChromeSnapshot chrome{};
+  SurfaceBackgroundEffectSnapshot backgroundEffect{};
   std::uint64_t serial = 0;
   std::uint32_t lastConfigureSerial = 0;
   std::int32_t lastConfigureWidth = 0;

@@ -316,8 +316,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
       "${FLUX_FRACTIONAL_SCALE_XML}"
       "${FLUX_XX_CUTOUTS_XML}"
       "${FLUX_WLR_LAYER_SHELL_XML}"
-      "${FLUX_EXT_BACKGROUND_EFFECT_XML}"
-      "${FLUX_XX_LAYER_CHROME_XML}")
+      "${FLUX_EXT_BACKGROUND_EFFECT_XML}")
     if(NOT EXISTS "${_flux_wayland_protocol_xml}")
       message(FATAL_ERROR
         "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
@@ -335,7 +334,6 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     "${FLUX_XX_CUTOUTS_XML}|xx-cutouts-v1"
     "${FLUX_WLR_LAYER_SHELL_XML}|wlr-layer-shell-unstable-v1"
     "${FLUX_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
-    "${FLUX_XX_LAYER_CHROME_XML}|xx-layer-chrome-v1"
     "${FLUX_LINUX_DMABUF_XML}|linux-dmabuf-unstable-v1"
     "${FLUX_CURSOR_SHAPE_XML}|cursor-shape-v1"
     "${FLUX_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"
@@ -363,8 +361,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
       "${FLUX_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"
       "${FLUX_XDG_ACTIVATION_XML}|xdg-activation-v1"
       "${FLUX_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
-      "${FLUX_XX_CUTOUTS_XML}|xx-cutouts-v1"
-      "${FLUX_XX_LAYER_CHROME_XML}|xx-layer-chrome-v1")
+      "${FLUX_XX_CUTOUTS_XML}|xx-cutouts-v1")
   endif()
   set(_flux_vulkan_shader_headers)
   foreach(_flux_shader rect.vert rect.frag image.vert image.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
@@ -691,7 +688,6 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Wayland/Globals/Cutouts.cpp
     src/Compositor/Wayland/Globals/FractionalScale.cpp
     src/Compositor/Wayland/Globals/IdleInhibit.cpp
-    src/Compositor/Wayland/Globals/LayerChrome.cpp
     src/Compositor/Wayland/Globals/LayerShell.cpp
     src/Compositor/Wayland/Globals/LinuxDmabuf.cpp
     src/Compositor/Wayland/Globals/Output.cpp

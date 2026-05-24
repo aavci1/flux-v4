@@ -446,10 +446,19 @@ bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Impl::Surface const* 
 }
 
 bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
-  if (!surface || !surface->backgroundBlurPending) return false;
-  surface->backgroundBlurRects = surface->pendingBackgroundBlurRects;
-  surface->backgroundBlurPending = false;
-  return true;
+  if (!surface) return false;
+  bool changed = false;
+  if (surface->backgroundBlurPending) {
+    surface->backgroundBlurRects = surface->pendingBackgroundBlurRects;
+    surface->backgroundBlurPending = false;
+    changed = true;
+  }
+  if (surface->backgroundEffectStatePending) {
+    surface->backgroundEffectState = surface->pendingBackgroundEffectState;
+    surface->backgroundEffectStatePending = false;
+    changed = true;
+  }
+  return changed;
 }
 
 bool pendingViewportStateChanged(WaylandServer::Impl::Surface const* surface) {
@@ -532,11 +541,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
   bool const backgroundBlurChanged = applyBackgroundBlurState(surface);
-  bool const layerChromeChanged = applyLayerChromeState(surface);
 
   if (!hasBufferAttach) {
     bool const viewportChanged = pendingViewportStateChanged(surface);
-    if (!viewportChanged && !backgroundBlurChanged && !layerChromeChanged &&
+    if (!viewportChanged && !backgroundBlurChanged &&
         surface->presentationFeedbacks.empty()) {
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       return;
@@ -549,7 +557,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
-    if (backgroundBlurChanged || layerChromeChanged) bumpSurfaceSerial(surface);
+    if (backgroundBlurChanged) bumpSurfaceSerial(surface);
     traceCrashSurfaceCommit(surface, "state", 0u, 0u);
     return;
   }

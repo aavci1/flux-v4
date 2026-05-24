@@ -8,7 +8,6 @@
 #include "Compositor/Wayland/Globals/Cutouts.hpp"
 #include "Compositor/Wayland/Globals/FractionalScale.hpp"
 #include "Compositor/Wayland/Globals/IdleInhibit.hpp"
-#include "Compositor/Wayland/Globals/LayerChrome.hpp"
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 #include "Compositor/Wayland/Globals/Output.hpp"
@@ -32,7 +31,6 @@
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "xx-cutouts-v1-server-protocol.h"
-#include "xx-layer-chrome-v1-server-protocol.h"
 #include "xdg-activation-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-output-unstable-v1-server-protocol.h"
@@ -124,8 +122,6 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   idleInhibitManagerGlobal_ =
       wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
   layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 1, this, bindLayerShell);
-  layerChromeManagerGlobal_ =
-      wl_global_create(display_, &xx_layer_chrome_manager_v1_interface, 1, this, bindLayerChromeManager);
   presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
   relativePointerManagerGlobal_ =
       wl_global_create(display_, &zwp_relative_pointer_manager_v1_interface, 1, this, bindRelativePointerManager);
@@ -137,11 +133,11 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
   cutoutsManagerGlobal_ = wl_global_create(display_, &xx_cutouts_manager_v1_interface, 1, this, bindCutoutsManager);
   backgroundEffectManagerGlobal_ =
-      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 1, this, bindBackgroundEffectManager);
+      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 2, this, bindBackgroundEffectManager);
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
-      !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !layerChromeManagerGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
+      !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
       !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ ||
       !activationGlobal_ || !cutoutsManagerGlobal_ || !backgroundEffectManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");

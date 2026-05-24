@@ -32,7 +32,7 @@
 #include "wayland-util.h"
 
 #ifndef __has_attribute
-# define __has_attribute(x) 0
+# define __has_attribute(x) 0  /* Compatibility with non-clang compilers. */
 #endif
 
 #if (__has_attribute(visibility) || defined(__GNUC__) && __GNUC__ >= 4)
@@ -41,11 +41,14 @@
 #define WL_PRIVATE
 #endif
 
+extern const struct wl_interface ext_background_effect_surface_v1_interface;
 extern const struct wl_interface wl_region_interface;
 extern const struct wl_interface wl_surface_interface;
-extern const struct wl_interface ext_background_effect_surface_v1_interface;
 
 static const struct wl_interface *ext_background_effect_v1_types[] = {
+	NULL,
+	NULL,
+	NULL,
 	NULL,
 	&ext_background_effect_surface_v1_interface,
 	&wl_surface_interface,
@@ -54,7 +57,7 @@ static const struct wl_interface *ext_background_effect_v1_types[] = {
 
 static const struct wl_message ext_background_effect_manager_v1_requests[] = {
 	{ "destroy", "", ext_background_effect_v1_types + 0 },
-	{ "get_background_effect", "no", ext_background_effect_v1_types + 1 },
+	{ "get_background_effect", "no", ext_background_effect_v1_types + 4 },
 };
 
 static const struct wl_message ext_background_effect_manager_v1_events[] = {
@@ -62,18 +65,23 @@ static const struct wl_message ext_background_effect_manager_v1_events[] = {
 };
 
 WL_PRIVATE const struct wl_interface ext_background_effect_manager_v1_interface = {
-	"ext_background_effect_manager_v1", 1,
+	"ext_background_effect_manager_v1", 2,
 	2, ext_background_effect_manager_v1_requests,
 	1, ext_background_effect_manager_v1_events,
 };
 
 static const struct wl_message ext_background_effect_surface_v1_requests[] = {
 	{ "destroy", "", ext_background_effect_v1_types + 0 },
-	{ "set_blur_region", "?o", ext_background_effect_v1_types + 3 },
+	{ "set_blur_region", "?o", ext_background_effect_v1_types + 6 },
+	{ "set_blur_radius", "2f", ext_background_effect_v1_types + 0 },
+	{ "set_tint", "2u", ext_background_effect_v1_types + 0 },
+	{ "set_border", "2u", ext_background_effect_v1_types + 0 },
+	{ "set_corner_radii", "2ffff", ext_background_effect_v1_types + 0 },
 };
 
 WL_PRIVATE const struct wl_interface ext_background_effect_surface_v1_interface = {
-	"ext_background_effect_surface_v1", 1,
-	2, ext_background_effect_surface_v1_requests,
+	"ext_background_effect_surface_v1", 2,
+	6, ext_background_effect_surface_v1_requests,
 	0, NULL,
 };
+

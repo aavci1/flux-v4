@@ -9,7 +9,9 @@ TEST_CASE("committed surface snapshot defaults describe empty buffer state") {
   CHECK(snapshot.bufferHeight == 0);
   CHECK(snapshot.dmabufFormat == 0);
   CHECK(snapshot.dmabufPlanes.empty());
-  CHECK(snapshot.chrome.style == flux::LayerShellChromeStyle::None);
+  CHECK(snapshot.backgroundEffect.tint.a == 0.f);
+  CHECK(snapshot.backgroundEffect.borderColor.a == 0.f);
+  CHECK_FALSE(snapshot.backgroundEffect.cornerRadiusSet);
 }
 
 TEST_CASE("presentation timing carries refresh interval metadata") {

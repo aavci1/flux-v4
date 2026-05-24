@@ -242,6 +242,10 @@ enum ext_background_effect_surface_v1_error {
 
 #define EXT_BACKGROUND_EFFECT_SURFACE_V1_DESTROY 0
 #define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BLUR_REGION 1
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BLUR_RADIUS 2
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_TINT 3
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BORDER 4
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_CORNER_RADII 5
 
 
 /**
@@ -252,6 +256,22 @@ enum ext_background_effect_surface_v1_error {
  * @ingroup iface_ext_background_effect_surface_v1
  */
 #define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BLUR_REGION_SINCE_VERSION 1
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ */
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BLUR_RADIUS_SINCE_VERSION 2
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ */
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_TINT_SINCE_VERSION 2
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ */
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BORDER_SINCE_VERSION 2
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ */
+#define EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_CORNER_RADII_SINCE_VERSION 2
 
 /** @ingroup iface_ext_background_effect_surface_v1 */
 static inline void
@@ -312,6 +332,73 @@ ext_background_effect_surface_v1_set_blur_region(struct ext_background_effect_su
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) ext_background_effect_surface_v1,
 			 EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BLUR_REGION, NULL, wl_proxy_get_version((struct wl_proxy *) ext_background_effect_surface_v1), 0, region);
+}
+
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ *
+ * This request sets the preferred blur radius for the background effect.
+ * The value is specified in surface-local logical pixels.
+ *
+ * The blur radius is double-buffered state, and will be applied on
+ * the next wl_surface.commit.
+ */
+static inline void
+ext_background_effect_surface_v1_set_blur_radius(struct ext_background_effect_surface_v1 *ext_background_effect_surface_v1, wl_fixed_t radius)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) ext_background_effect_surface_v1,
+			 EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BLUR_RADIUS, NULL, wl_proxy_get_version((struct wl_proxy *) ext_background_effect_surface_v1), 0, radius);
+}
+
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ *
+ * This request sets the tint applied after the background effect. Colors
+ * are encoded as RGBA with the red channel in the most significant byte
+ * and alpha in the least significant byte.
+ *
+ * The tint is double-buffered state, and will be applied on
+ * the next wl_surface.commit.
+ */
+static inline void
+ext_background_effect_surface_v1_set_tint(struct ext_background_effect_surface_v1 *ext_background_effect_surface_v1, uint32_t tint)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) ext_background_effect_surface_v1,
+			 EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_TINT, NULL, wl_proxy_get_version((struct wl_proxy *) ext_background_effect_surface_v1), 0, tint);
+}
+
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ *
+ * This request sets the border color applied around the effect region.
+ * Colors are encoded as RGBA with the red channel in the most significant
+ * byte and alpha in the least significant byte.
+ *
+ * The border is double-buffered state, and will be applied on
+ * the next wl_surface.commit.
+ */
+static inline void
+ext_background_effect_surface_v1_set_border(struct ext_background_effect_surface_v1 *ext_background_effect_surface_v1, uint32_t border)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) ext_background_effect_surface_v1,
+			 EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_BORDER, NULL, wl_proxy_get_version((struct wl_proxy *) ext_background_effect_surface_v1), 0, border);
+}
+
+/**
+ * @ingroup iface_ext_background_effect_surface_v1
+ *
+ * This request sets the corner radii for the effect region in
+ * surface-local logical pixels. The arguments are ordered clockwise from
+ * top-left.
+ *
+ * The corner radii are double-buffered state, and will be applied on
+ * the next wl_surface.commit.
+ */
+static inline void
+ext_background_effect_surface_v1_set_corner_radii(struct ext_background_effect_surface_v1 *ext_background_effect_surface_v1, wl_fixed_t top_left, wl_fixed_t top_right, wl_fixed_t bottom_right, wl_fixed_t bottom_left)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) ext_background_effect_surface_v1,
+			 EXT_BACKGROUND_EFFECT_SURFACE_V1_SET_CORNER_RADII, NULL, wl_proxy_get_version((struct wl_proxy *) ext_background_effect_surface_v1), 0, top_left, top_right, bottom_right, bottom_left);
 }
 
 #ifdef  __cplusplus

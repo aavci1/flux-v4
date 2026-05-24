@@ -15,7 +15,7 @@
 | **App platforms** | macOS (Metal), Linux Wayland (Vulkan), Linux KMS (Vulkan). |
 | **Examples** | 28+ demo targets; build with `-DFLUX_BUILD_EXAMPLES=ON`. |
 | **Linux compositor** | `lambda-window-manager` — KMS + Wayland server + Vulkan paint. Roadmap P0–P3 largely implemented; hardware validation continues. |
-| **Desktop shell** | `lambda-shell` + `lambda-shell-preview` — layer-shell UI, shared `Flux::Shell::ShellIpc`, `xx_layer_chrome_v1`. |
+| **Desktop shell** | `lambda-shell` + `lambda-shell-preview` — layer-shell UI, shared `Flux::Shell::ShellIpc`, compositor-backed background effects. |
 
 Build the compositor with `-DLAMBDA_BUILD_WINDOW_MANAGER=ON` (Linux only). See [conventions.md](conventions.md) for CMake layout.
 
@@ -62,7 +62,7 @@ Executable: `lambda-window-manager` (`src/Compositor/`). Consumes Flux as a **re
 | 1 — First pixels | KMS + Vulkan scanout, atomic page flips | Largely done; some TTY kill-path checks still informal |
 | 2 — Wayland server | SHM + dma-buf clients, xdg-shell | Done on hardware smoke |
 | 3 — Input + WM | Focus, chrome, move, resize, snap, shortcuts | Done; popup grabs **implemented, config-gated** (`popup_grabs`, default off) |
-| 4 — Protocols | layer-shell, viewporter, `xx_layer_chrome_v1`, clipboard, … | Done in tree; see [compositor-user-guide.md](compositor-user-guide.md) |
+| 4 — Protocols | layer-shell, viewporter, `ext_background_effect_v1`, clipboard, … | Done in tree; see [compositor-user-guide.md](compositor-user-guide.md) |
 | 5 — Polish | Animations, config hot reload, cursor theme, async wallpapers | In progress; adaptive sync / DPMS / multi-output still open |
 
 **Rendering path:** Immediate-mode `Canvas` over immutable `CommittedSurfaceSnapshot` lists — not the app `SceneGraph`.
@@ -119,7 +119,7 @@ Stages 0–8 landed retained mounting and reactive control flow. Stage 9 hardeni
 
 ### Compositor roadmap P0–P3 (2026-05)
 
-Landed on `window-manager-refactor`: `LayerShellChrome`, `xx_layer_chrome_v1`, shared `ShellIpc`, WM/runtime splits, presenter abstraction, subsurface hit tests, expanded unit tests, install/user-guide updates, async wallpaper loading, brighter shell glass. Popup grabs behind config (default off).
+Landed on `window-manager-refactor`: `LayerShellChrome`, `ext_background_effect_v1`, shared `ShellIpc`, WM/runtime splits, presenter abstraction, subsurface hit tests, expanded unit tests, install/user-guide updates, async wallpaper loading, brighter shell glass. Popup grabs behind config (default off).
 
 ---
 
@@ -311,11 +311,9 @@ struct LayerShellChromeOptions {
 ```
 
 - Extend `LayerShellOptions` with `LayerShellChromeOptions chrome`.
-- **Client (`WaylandWindow.cpp`):** On commit/configure, if `chrome.style != None`:
-  - Call existing `ext_background_effect_surface_v1_set_blur_region` for full surface (or margin inset).
-  - Attach chrome metadata for compositor via **new small private protocol** *or* `wl_surface` buffer-less side channel (see P1.2). Minimal v1: encode style in layer namespace convention doc + optional `xx_layer_chrome_v1` (preferred long-term).
-- **Compositor:** Replace `shellGlassSurface` bool in `CommittedSurfaceSnapshot` with `LayerShellChromeSnapshot chrome` copied from surface role state (set from protocol, not string compare).
-- **Painter (`CommittedSurfacePainter.cpp`):** Drive `drawBackdropBlur` + tint + border from snapshot chrome, not `if (shellGlassSurface)`.
+- **Client (`WaylandWindow.cpp`):** On commit/configure, if `chrome.style != None`, use `ext_background_effect_surface_v1` for full-surface blur, tint, border, blur radius, and corner radii.
+- **Compositor:** Replace `shellGlassSurface` bool in `CommittedSurfaceSnapshot` with background-effect state copied from surface role state (set from protocol, not string compare).
+- **Painter (`CommittedSurfacePainter.cpp`):** Drive `drawBackdropBlur` + tint + border from snapshot background-effect state, not `if (shellGlassSurface)`.
 - **Remove** all `nameSpace == "lambda.topbar"` branches from `Snapshots.cpp`, `LayerShell.cpp`, `Destroy.cpp` except optional **defaults** when shell sends generic chrome without protocol extension.
 
 **Key points.**
@@ -327,14 +325,14 @@ struct LayerShellChromeOptions {
 **Acceptance.**
 
 - `lambda-shell` top bar and dock look the same on compositor and `lambda-shell-preview` (within GPU blur variance).
-- Third-party layer-shell client can request `BlurPanelBorder` without `lambda.*` namespace.
+- Third-party layer-shell client can request blur/tint/border/corner radii without `lambda.*` namespace.
 - No `shellGlassSurface` in `WaylandTypes.hpp` after migration (or deprecated one release).
 
 **Depends on.** P0.4 (preview uses capabilities). Optional: P1.2 for clean metadata transport.
 
 ---
 
-### P1.2 — Layer chrome metadata protocol (optional but recommended)
+### P1.2 — Background effect metadata protocol
 
 | | |
 |---|---|
@@ -345,12 +343,12 @@ struct LayerShellChromeOptions {
 
 **Implementation details.**
 
-- Add `xx_layer_chrome_v1.xml` (or extend `ext_background_effect` with chrome hints if upstreamable later):
-  - `xx_layer_chrome_v1` object per `zwlr_layer_surface_v1`
-  - `set_style(enum)`, `set_tint(rgba)`, `set_border(rgba)`, `set_blur_radius(fixed)`
+- Extend `ext_background_effect_v1.xml`:
+  - one object per `wl_surface`
+  - `set_blur_region(region)`, `set_blur_radius(fixed)`, `set_tint(rgba)`, `set_border(rgba)`, `set_corner_radii(fixed, fixed, fixed, fixed)`
 - Generate client code into `build/wayland-protocols/`; server code only in WM target.
 - Bind from `lambda-shell` in `ShellController` when creating layer surfaces.
-- Compositor stores style on `Impl::LayerSurface`; snapshots copy into `LayerShellChromeSnapshot`.
+- Compositor stores background-effect state on `Impl::Surface`; snapshots copy into `SurfaceBackgroundEffectSnapshot`.
 
 **Key points.**
 
@@ -785,7 +783,7 @@ For every item that touches `include/Flux/` or `src/Graphics/` / `src/Platform/`
 | P0.3 | Tablet dead code removal | done |
 | P0.4 | Window capability flags | done |
 | P1.1 | LayerShellChrome in framework | done |
-| P1.2 | xx_layer_chrome_v1 protocol | done |
+| P1.2 | background-effect material protocol | done |
 | P1.3 | Generic exclusive zone | done |
 | P1.4 | Shared shell IPC | done |
 | P1.5 | Preview/production chrome unity | done |

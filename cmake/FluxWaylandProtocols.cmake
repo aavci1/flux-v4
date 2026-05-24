@@ -27,7 +27,6 @@ function(flux_setup_wayland_protocol_paths WAYLAND_PROTOCOLS_DIR)
   set(FLUX_XX_CUTOUTS_XML "${_flux_protocol_local}/xx-cutouts-v1.xml" PARENT_SCOPE)
   set(FLUX_WLR_LAYER_SHELL_XML "${_flux_protocol_local}/wlr-layer-shell-unstable-v1.xml" PARENT_SCOPE)
   set(FLUX_EXT_BACKGROUND_EFFECT_XML "${_flux_protocol_local}/ext-background-effect-v1.xml" PARENT_SCOPE)
-  set(FLUX_XX_LAYER_CHROME_XML "${_flux_protocol_local}/xx-layer-chrome-v1.xml" PARENT_SCOPE)
 endfunction()
 
 function(flux_wayland_protocols)
