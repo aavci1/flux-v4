@@ -208,6 +208,7 @@ inline void controlPropagateLayoutChange(scenegraph::SceneNode& node, Size oldSi
 
   while (scenegraph::SceneNode* parent = child->parent()) {
     if (controlClipsContents(*parent)) {
+      parent->invalidateSubtreeLayout();
       (void)parent->relayoutStoredConstraints();
       break;
     }

@@ -19,10 +19,12 @@
 #include <Flux/UI/Views/VStack.hpp>
 
 #include "FilesFlowGrid.hpp"
+#include "FilesApp.hpp"
 #include "FilesFlowGridLayout.hpp"
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -121,10 +123,15 @@ scenegraph::SceneNode* scrollContentGroup(scenegraph::SceneNode& viewport) {
   return viewport.children()[0].get();
 }
 
+scenegraph::SceneNode const& gridForGroup(scenegraph::SceneNode const& gridRoot) {
+  if (gridRoot.children().size() == 1 && gridRoot.children()[0]) {
+    return *gridRoot.children()[0];
+  }
+  return gridRoot;
+}
+
 std::size_t gridRowCount(scenegraph::SceneNode const& gridRoot) {
-  REQUIRE(gridRoot.children().size() == 1);
-  scenegraph::SceneNode const& forGroup = *gridRoot.children()[0];
-  return forGroup.children().size();
+  return gridForGroup(gridRoot).children().size();
 }
 
 } // namespace
@@ -169,7 +176,6 @@ TEST_CASE("FilesStore display names truncate on UTF-8 scalar boundaries") {
 }
 
 TEST_CASE("FilesFlowGrid measure matches layout formula") {
-  FakeTextSystem textSystem;
   Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(52)};
   Reactive::Signal<std::string> listingKey{"/test/dir"};
   Reactive::Signal<std::string> selectedPath{};
@@ -187,15 +193,13 @@ TEST_CASE("FilesFlowGrid measure matches layout formula") {
       .minHeight = 0.f,
   };
 
-  MeasureContext measureContext{textSystem, testEnvironment()};
-  Size const measured = grid.measure(measureContext, constraints, {}, textSystem);
+  Size const measured = measureFilesFlowGrid(grid, constraints);
   Size const expected = kLayout.contentSizeFor(kGridWidth, 52);
   CHECK(measured.width == doctest::Approx(expected.width));
   CHECK(measured.height == doctest::Approx(expected.height));
 }
 
 TEST_CASE("FilesFlowGrid has no extent before it receives a real width") {
-  FakeTextSystem textSystem;
   Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(8)};
   Reactive::Signal<std::string> listingKey{"/test/dir"};
   Reactive::Signal<std::string> selectedPath{};
@@ -213,8 +217,7 @@ TEST_CASE("FilesFlowGrid has no extent before it receives a real width") {
       .minHeight = 0.f,
   };
 
-  MeasureContext measureContext{textSystem, testEnvironment()};
-  Size const measured = grid.measure(measureContext, constraints, {}, textSystem);
+  Size const measured = measureFilesFlowGrid(grid, constraints);
 
   CHECK(measured.width == doctest::Approx(0.f));
   CHECK(measured.height == doctest::Approx(0.f));
@@ -224,13 +227,10 @@ TEST_CASE("FilesFlowGrid mounted row count follows entry count") {
   struct Root {
     Reactive::Signal<std::vector<FileEntry>> entries;
     Reactive::Signal<std::string> listingKey;
+    FilesFlowGrid grid;
 
     Element body() const {
-      return Element{FilesFlowGrid{
-          .entries = entries,
-          .listingKey = listingKey,
-          .selectedPath = Reactive::Signal<std::string>{},
-      }};
+      return Element{grid};
     }
   };
 
@@ -238,13 +238,24 @@ TEST_CASE("FilesFlowGrid mounted row count follows entry count") {
   Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(52)};
   Reactive::Signal<std::string> listingKey{"/test/dir"};
   scenegraph::SceneGraph sceneGraph;
-  MountRoot root{std::make_unique<TypedRootHolder<Root>>(std::in_place, Root{entries, listingKey}),
+  MountRoot root{std::make_unique<TypedRootHolder<Root>>(
+                     std::in_place,
+                     Root{
+                         .entries = entries,
+                         .listingKey = listingKey,
+                         .grid =
+                             FilesFlowGrid{
+                                 .entries = entries,
+                                 .listingKey = listingKey,
+                                 .selectedPath = Reactive::Signal<std::string>{},
+                             },
+                     }),
                  textSystem,
                  testEnvironment(),
                  Size{kGridWidth, 600.f}};
 
   root.mount(sceneGraph);
-  REQUIRE(sceneGraph.root().children().size() == 1);
+  root.resize(Size{kGridWidth, 600.f}, sceneGraph);
   CHECK(gridRowCount(sceneGraph.root()) == 9);
 
   entries.set(makeEntries(5, "/test/dir"));
@@ -323,6 +334,7 @@ TEST_CASE("FilesFlowGrid expands inside the Files app shell layout") {
   struct Root {
     Reactive::Signal<std::vector<FileEntry>> entries;
     Reactive::Signal<std::string> listingKey;
+    FilesFlowGrid filesGrid;
 
     Element body() const {
       return VStack{
@@ -343,12 +355,8 @@ TEST_CASE("FilesFlowGrid expands inside the Files app shell layout") {
                               [] {
                                 return Text{.text = "error"};
                               },
-                              [entries = entries, listingKey = listingKey] {
-                                return Element{FilesFlowGrid{
-                                    .entries = entries,
-                                    .listingKey = listingKey,
-                                    .selectedPath = Reactive::Signal<std::string>{},
-                                }}
+                              [&filesGrid = filesGrid] {
+                                return Element{filesGrid}
                                     .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
                                              FilesTheme::kContentPadV, FilesTheme::kContentPadH);
                               })),
@@ -361,9 +369,19 @@ TEST_CASE("FilesFlowGrid expands inside the Files app shell layout") {
   FakeTextSystem textSystem;
   Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(80)};
   Reactive::Signal<std::string> listingKey{"/test/dir"};
+  FilesFlowGrid filesGrid{
+      .entries = entries,
+      .listingKey = listingKey,
+      .selectedPath = Reactive::Signal<std::string>{},
+  };
   scenegraph::SceneGraph sceneGraph;
   MountRoot root{std::make_unique<TypedRootHolder<Root>>(
-                     std::in_place, Root{entries, listingKey}),
+                     std::in_place,
+                     Root{
+                         .entries = entries,
+                         .listingKey = listingKey,
+                         .filesGrid = filesGrid,
+                     }),
                  textSystem,
                  testEnvironment(),
                  Size{1040.f, 680.f}};
@@ -397,6 +415,16 @@ TEST_CASE("FilesFlowGrid expands inside the Files app shell layout") {
   CHECK(content->position().y == doctest::Approx(-120.f));
 
   root.resize(Size{820.f, 680.f}, sceneGraph);
+  float const resizedGridWidthForMeasure = 820.f - FilesTheme::kSidebarWidth - 1.f -
+                                           2.f * FilesTheme::kContentPadH;
+  measureFilesFlowGrid(
+      filesGrid,
+      LayoutConstraints{
+          .maxWidth = resizedGridWidthForMeasure,
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      });
 
   scenegraph::SceneNode* resizedViewport = findClippingViewport(sceneGraph.root());
   REQUIRE(resizedViewport != nullptr);
@@ -538,7 +566,7 @@ TEST_CASE("FilesFlowGrid ScrollView keeps child origins stable during scrolled c
   CHECK(offset.get().y == doctest::Approx(40.f));
 }
 
-TEST_CASE("FilesFlowGrid ScrollView clamps offset when listing shrinks without a root resize") {
+TEST_CASE("FilesFlowGrid ScrollView clamps offset when listing shrinks") {
   struct Root {
     Reactive::Signal<std::vector<FileEntry>> entries;
     Reactive::Signal<std::string> listingKey;
@@ -575,20 +603,30 @@ TEST_CASE("FilesFlowGrid ScrollView clamps offset when listing shrinks without a
                  Size{kGridWidth, 320.f}};
 
   root.mount(sceneGraph);
-  REQUIRE(contentSize.peek().height > viewportSize.peek().height);
+  scenegraph::SceneNode const* viewport = findClippingViewport(sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  scenegraph::SceneNode const* content = scrollContentGroup(*viewport);
+  if (viewport->hasLayoutConstraints()) {
+    LayoutConstraints const constraints = viewport->layoutConstraints();
+    CHECK(constraints.maxHeight < 1000.f);
+    CHECK(constraints.minHeight < 1000.f);
+  }
+  REQUIRE(content->size().height > viewport->size().height);
   REQUIRE(offset.peek().y > 0.f);
 
   entries.set(makeEntries(5, "/test/dir"));
   listingKey.set("/test/dir");
+  root.resize(Size{kGridWidth, 320.f}, sceneGraph);
 
-  CHECK(contentSize.peek().height == doctest::Approx(FilesTheme::kGridTileH).epsilon(1.f));
-  CHECK(contentSize.peek().height <= viewportSize.peek().height + 1.f);
+  CHECK(content->size().height == doctest::Approx(FilesTheme::kGridTileH).epsilon(1.f));
+  CHECK(content->size().height <= viewport->size().height + 1.f);
   CHECK(offset.peek().y == doctest::Approx(0.f));
 
   entries.set(makeEntries(52, "/test/dir"));
   listingKey.set("/test/dir");
+  root.resize(Size{kGridWidth, 320.f}, sceneGraph);
 
-  CHECK(contentSize.peek().height == doctest::Approx(kLayout.contentSizeFor(kGridWidth, 52).height).epsilon(1.f));
+  CHECK(content->size().height == doctest::Approx(kLayout.contentSizeFor(kGridWidth, 52).height).epsilon(1.f));
   CHECK(offset.peek().y == doctest::Approx(0.f));
 }
 
@@ -636,10 +674,11 @@ TEST_CASE("FilesFlowGrid ScrollView can scroll after folder navigation without r
   scrollInteraction->onScroll(Vec2{0.f, -120.f});
   CHECK(content->position().y == doctest::Approx(-120.f));
 
-  offset.set(Point{});
   entries.set(makeEntries(80, "/second"));
   listingKey.set("/second");
+  offset.set(Point{});
 
+  CHECK(offset.peek().y == doctest::Approx(0.f));
   CHECK(content->position().y == doctest::Approx(0.f));
   REQUIRE(content->size().height > viewport->size().height);
 
@@ -653,6 +692,7 @@ TEST_CASE("FilesFlowGrid app shell hit-test scrolling survives folder navigation
     Reactive::Signal<std::vector<FileEntry>> entries;
     Reactive::Signal<std::string> listingKey;
     Reactive::Signal<Point> offset;
+    FilesFlowGrid filesGrid;
 
     Element body() const {
       return VStack{
@@ -675,12 +715,8 @@ TEST_CASE("FilesFlowGrid app shell hit-test scrolling survives folder navigation
                               [] {
                                 return Text{.text = "error"};
                               },
-                              [entries = entries, listingKey = listingKey] {
-                                return Element{FilesFlowGrid{
-                                    .entries = entries,
-                                    .listingKey = listingKey,
-                                    .selectedPath = Reactive::Signal<std::string>{},
-                                }}
+                              [&filesGrid = filesGrid] {
+                                return Element{filesGrid}
                                     .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
                                              FilesTheme::kContentPadV, FilesTheme::kContentPadH);
                               })),
@@ -696,7 +732,18 @@ TEST_CASE("FilesFlowGrid app shell hit-test scrolling survives folder navigation
   Reactive::Signal<Point> offset{};
   scenegraph::SceneGraph sceneGraph;
   MountRoot root{std::make_unique<TypedRootHolder<Root>>(
-                     std::in_place, Root{entries, listingKey, offset}),
+                     std::in_place,
+                     Root{
+                         .entries = entries,
+                         .listingKey = listingKey,
+                         .offset = offset,
+                         .filesGrid =
+                             FilesFlowGrid{
+                                 .entries = entries,
+                                 .listingKey = listingKey,
+                                 .selectedPath = Reactive::Signal<std::string>{},
+                             },
+                     }),
                  textSystem,
                  testEnvironment(),
                  Size{1040.f, 680.f}};
@@ -715,11 +762,13 @@ TEST_CASE("FilesFlowGrid app shell hit-test scrolling survives folder navigation
   REQUIRE(firstHit.has_value());
   interactionData(*firstHit->interaction).onScroll(Vec2{0.f, -120.f});
   CHECK(content->position().y == doctest::Approx(-120.f));
+  CHECK(offset.peek().y == doctest::Approx(120.f));
 
-  offset.set(Point{});
   entries.set(makeEntries(80, "/second"));
   listingKey.set("/second");
+  offset.set(Point{});
 
+  CHECK(offset.peek().y == doctest::Approx(0.f));
   CHECK(content->position().y == doctest::Approx(0.f));
   REQUIRE(content->size().height > viewport->size().height);
 
@@ -729,6 +778,300 @@ TEST_CASE("FilesFlowGrid app shell hit-test scrolling survives folder navigation
   REQUIRE(secondHit.has_value());
   interactionData(*secondHit->interaction).onScroll(Vec2{0.f, -120.f});
   CHECK(content->position().y == doctest::Approx(-120.f));
+  CHECK(offset.peek().y == doctest::Approx(120.f));
+}
+
+TEST_CASE("FilesAppRoot main scroll view survives sidebar folder navigation") {
+  std::filesystem::path const sandbox =
+      std::filesystem::temp_directory_path() / "lambda-files-scroll-navigation-test";
+  std::filesystem::remove_all(sandbox);
+  std::filesystem::create_directories(sandbox / "Desktop");
+  std::filesystem::create_directories(sandbox / "Documents");
+  std::filesystem::create_directories(sandbox / "Downloads");
+  for (int index = 0; index < 120; ++index) {
+    std::filesystem::create_directory(sandbox / "Downloads" /
+                                      ("download-folder-" + std::to_string(index)));
+  }
+
+  ::setenv("HOME", sandbox.string().c_str(), 1);
+  ::setenv("XDG_DOWNLOAD_DIR", (sandbox / "Downloads").string().c_str(), 1);
+
+  FakeTextSystem textSystem;
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<FilesAppRoot>>(
+                     std::in_place, FilesAppRoot{nullptr}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{1040.f, 680.f}};
+
+  root.mount(sceneGraph);
+  root.resize(Size{1040.f, 680.f}, sceneGraph);
+
+  Point const contentPoint{FilesTheme::kSidebarWidth + 40.f,
+                           FilesTheme::kTitlebarHeight + 80.f};
+  auto initialScrollHit = scenegraph::hitTestInteraction(
+      sceneGraph, contentPoint, [](scenegraph::Interaction const& interaction) {
+        return static_cast<bool>(interactionData(interaction).onScroll);
+      });
+  REQUIRE(initialScrollHit.has_value());
+  REQUIRE(initialScrollHit->node != nullptr);
+  CHECK(initialScrollHit->node->size().height == doctest::Approx(632.f).epsilon(1.f));
+
+  auto downloadsHit = scenegraph::hitTestInteraction(
+      sceneGraph, Point{32.f, FilesTheme::kTitlebarHeight + FilesTheme::kSidePad + 98.f},
+      [](scenegraph::Interaction const& interaction) {
+        return static_cast<bool>(interactionData(interaction).onTap);
+      });
+  REQUIRE(downloadsHit.has_value());
+  interactionData(*downloadsHit->interaction).onTap(MouseButton::Left);
+
+  auto scrollHit = scenegraph::hitTestInteraction(
+      sceneGraph, contentPoint, [](scenegraph::Interaction const& interaction) {
+        return static_cast<bool>(interactionData(interaction).onScroll);
+      });
+  REQUIRE(scrollHit.has_value());
+  auto const* viewport = scrollHit->node;
+  REQUIRE(viewport != nullptr);
+  auto const& scrollInteraction = interactionData(*scrollHit->interaction);
+  REQUIRE(scrollInteraction.onScroll);
+
+  scenegraph::SceneNode const* content = scrollContentGroup(*viewport);
+  REQUIRE(content->size().height > viewport->size().height);
+
+  scrollInteraction.onScroll(Vec2{0.f, -120.f});
+  CHECK(content->position().y == doctest::Approx(-120.f));
+
+  std::filesystem::remove_all(sandbox);
+}
+
+TEST_CASE("FilesFlowGrid large listing scrolls after folder navigation") {
+  struct Root {
+    Reactive::Signal<std::vector<FileEntry>> entries;
+    Reactive::Signal<std::string> listingKey;
+    Reactive::Signal<Point> offset;
+
+    Element body() const {
+      return ScrollView{
+          .axis = ScrollAxis::Vertical,
+          .scrollOffset = offset,
+          .dragScrollEnabled = true,
+          .children = children(Element{FilesFlowGrid{
+              .entries = entries,
+              .listingKey = listingKey,
+              .selectedPath = Reactive::Signal<std::string>{},
+          }}),
+      };
+    }
+  };
+
+  int constexpr kLargeCount = 120;
+  int constexpr kSmallCount = 8;
+  FakeTextSystem textSystem;
+  Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(kLargeCount, "/big")};
+  Reactive::Signal<std::string> listingKey{"/big"};
+  Reactive::Signal<Point> offset{};
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<Root>>(
+                     std::in_place, Root{entries, listingKey, offset}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{kGridWidth, 320.f}};
+
+  root.mount(sceneGraph);
+
+  scenegraph::SceneNode* viewport = findClippingViewport(sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  scenegraph::SceneNode* content = scrollContentGroup(*viewport);
+  REQUIRE(content->children().size() == 1);
+  scenegraph::SceneNode const& forGroup = gridForGroup(*content->children()[0]);
+  int const largeRows = kLayout.rowCountForEntries(kLargeCount, kLayout.columnCountForWidth(kGridWidth));
+  REQUIRE(forGroup.children().size() == static_cast<std::size_t>(largeRows));
+  REQUIRE(content->size().height > viewport->size().height);
+
+  float const scrollY = std::min(400.f, content->size().height - viewport->size().height);
+  offset.set(Point{0.f, scrollY});
+  CHECK(content->position().y == doctest::Approx(-scrollY));
+
+  entries.set(makeEntries(kSmallCount, "/small"));
+  listingKey.set("/small");
+
+  int const smallRows = kLayout.rowCountForEntries(kSmallCount, kLayout.columnCountForWidth(kGridWidth));
+  REQUIRE(forGroup.children().size() == static_cast<std::size_t>(smallRows));
+  CHECK(content->position().y == doctest::Approx(0.f));
+
+  entries.set(makeEntries(kLargeCount, "/big-again"));
+  listingKey.set("/big-again");
+
+  REQUIRE(content->size().height > viewport->size().height);
+  CHECK(offset.peek().y == doctest::Approx(0.f));
+  auto const* scrollInteraction = interactionData(*viewport);
+  REQUIRE(scrollInteraction != nullptr);
+  REQUIRE(scrollInteraction->onScroll);
+  scrollInteraction->onScroll(Vec2{0.f, -80.f});
+  CHECK(offset.peek().y == doctest::Approx(80.f));
+  CHECK(content->position().y == doctest::Approx(-80.f));
+}
+
+TEST_CASE("FilesFlowGrid app shell content size tracks listing without window resize") {
+  struct Root {
+    Reactive::Signal<std::vector<FileEntry>> entries;
+    Reactive::Signal<std::string> listingKey;
+    Reactive::Signal<Size> contentSize;
+    Reactive::Signal<Size> viewportSize;
+
+    Element body() const {
+      return VStack{
+          .spacing = 0.f,
+          .alignment = Alignment::Stretch,
+          .children = children(
+              Rectangle{}.height(FilesTheme::kTitlebarHeight),
+              HStack{
+                  .spacing = 0.f,
+                  .alignment = Alignment::Stretch,
+                  .children = children(
+                      Rectangle{}.width(FilesTheme::kSidebarWidth),
+                      Rectangle{}.width(1.f),
+                      Element{ScrollView{
+                          .axis = ScrollAxis::Vertical,
+                          .viewportSize = viewportSize,
+                          .contentSize = contentSize,
+                          .children = children(Show(
+                              [] { return false; },
+                              [] { return Text{.text = "error"}; },
+                              [entries = entries, listingKey = listingKey] {
+                                return Element{FilesFlowGrid{
+                                    .entries = entries,
+                                    .listingKey = listingKey,
+                                    .selectedPath = Reactive::Signal<std::string>{},
+                                }}
+                                    .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
+                                             FilesTheme::kContentPadV, FilesTheme::kContentPadH);
+                              })),
+                      }}.flex(1.f, 1.f, 0.f)),
+              }.flex(1.f, 1.f, 0.f)),
+      };
+    }
+  };
+
+  float const shellWidth = 1040.f;
+  float const gridWidth = shellWidth - FilesTheme::kSidebarWidth - 1.f -
+                          FilesTheme::kContentPadH * 2.f;
+  float const largeHeight = kLayout.contentSizeFor(gridWidth, 52).height +
+                            FilesTheme::kContentPadV * 2.f;
+  float const smallHeight = kLayout.contentSizeFor(gridWidth, 5).height +
+                            FilesTheme::kContentPadV * 2.f;
+
+  FakeTextSystem textSystem;
+  Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(52)};
+  Reactive::Signal<std::string> listingKey{"/test/dir"};
+  Reactive::Signal<Size> contentSize{};
+  Reactive::Signal<Size> viewportSize{};
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<Root>>(
+                     std::in_place,
+                     Root{.entries = entries,
+                          .listingKey = listingKey,
+                          .contentSize = contentSize,
+                          .viewportSize = viewportSize}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{shellWidth, 680.f}};
+
+  root.mount(sceneGraph);
+
+  scenegraph::SceneNode const* viewport = findClippingViewport(sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  scenegraph::SceneNode const* content = scrollContentGroup(*viewport);
+
+  CHECK(contentSize.peek().height == doctest::Approx(largeHeight).epsilon(1.f));
+  CHECK(content->size().height == doctest::Approx(largeHeight).epsilon(1.f));
+
+  entries.set(makeEntries(5, "/other"));
+  listingKey.set("/other");
+
+  CHECK(contentSize.peek().height == doctest::Approx(smallHeight).epsilon(1.f));
+  CHECK(content->size().height == doctest::Approx(smallHeight).epsilon(1.f));
+}
+
+TEST_CASE("FilesFlowGrid keeps rows visible when scrolled through many entries") {
+  struct Root {
+    Reactive::Signal<std::vector<FileEntry>> entries;
+    Reactive::Signal<std::string> listingKey;
+    Reactive::Signal<Point> offset;
+
+    Element body() const {
+      return ScrollView{
+          .axis = ScrollAxis::Vertical,
+          .scrollOffset = offset,
+          .children = children(Element{FilesFlowGrid{
+              .entries = entries,
+              .listingKey = listingKey,
+              .selectedPath = Reactive::Signal<std::string>{},
+          }}),
+      };
+    }
+  };
+
+  int constexpr kEntryCount = 300;
+  FakeTextSystem textSystem;
+  Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(kEntryCount)};
+  Reactive::Signal<std::string> listingKey{"/test/downloads"};
+  Reactive::Signal<Point> offset{};
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<Root>>(
+                     std::in_place, Root{entries, listingKey, offset}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{kGridWidth, 320.f}};
+
+  root.mount(sceneGraph);
+  root.resize(Size{kGridWidth, 320.f}, sceneGraph);
+
+  scenegraph::SceneNode* viewport = findClippingViewport(sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  scenegraph::SceneNode* content = scrollContentGroup(*viewport);
+  float const contentHeight = kLayout.contentSizeFor(kGridWidth, kEntryCount).height;
+  REQUIRE(content->size().height == doctest::Approx(contentHeight).epsilon(1.f));
+  REQUIRE(content->size().height > viewport->size().height);
+
+  REQUIRE(content->children().size() == 1);
+  scenegraph::SceneNode const& forGroup = gridForGroup(*content->children()[0]);
+  FilesFlowGridLayout const kLayout{};
+  int const expectedColumns = kLayout.columnCountForWidth(kGridWidth);
+  int const expectedRows = kLayout.rowCountForEntries(kEntryCount, expectedColumns);
+  REQUIRE(expectedRows > 14);
+  REQUIRE(forGroup.children().size() == static_cast<std::size_t>(expectedRows));
+
+  float const rowStride = FilesTheme::kGridTileH + FilesTheme::kGridGapV;
+  float const midScroll =
+      std::max(0.f, content->size().height - viewport->size().height) * 0.45f;
+  offset.set(Point{0.f, midScroll});
+
+  float const bandTop = midScroll;
+  float const bandBottom = midScroll + viewport->size().height;
+  bool foundVisibleRow = false;
+  for (std::unique_ptr<scenegraph::SceneNode> const& row : forGroup.children()) {
+    if (!row) {
+      continue;
+    }
+    float const rowTop = row->position().y;
+    float const rowBottom = rowTop + row->size().height;
+    if (rowBottom >= bandTop && rowTop <= bandBottom) {
+      foundVisibleRow = true;
+      break;
+    }
+  }
+  REQUIRE(foundVisibleRow);
+
+  int const targetRow = 20;
+  float const targetScroll = static_cast<float>(targetRow) * rowStride;
+  offset.set(Point{0.f, targetScroll});
+  REQUIRE(static_cast<std::size_t>(targetRow) < forGroup.children().size());
+  scenegraph::SceneNode const& rowNode = *forGroup.children()[static_cast<std::size_t>(targetRow)];
+  float const rowTop = rowNode.position().y;
+  float const rowBottom = rowTop + rowNode.size().height;
+  CHECK(rowBottom >= targetScroll);
+  CHECK(rowTop <= targetScroll + viewport->size().height);
 }
 
 TEST_CASE("FilesFlowGrid ScrollView drops stale content height after shrink") {

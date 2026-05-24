@@ -30,6 +30,8 @@ struct ScrollView : ViewModifiers<ScrollView> {
     Signal<Point> scrollOffset {};
     /// Resolved viewport size written by the view during layout.
     Signal<Size> viewportSize {};
+    /// Optional app-provided content extent; when set, preferred over stale child measurements.
+    Signal<Size> declaredContentSize {};
     /// Resolved content size written by the view during layout.
     Signal<Size> contentSize {};
     /// Enables pointer drag-to-scroll in addition to wheel / trackpad scrolling.

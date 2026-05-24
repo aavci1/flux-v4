@@ -195,6 +195,10 @@ bool SceneNode::relayoutStoredConstraints() {
     return relayout(layoutConstraints_);
 }
 
+void SceneNode::invalidateSubtreeLayout() noexcept {
+    markSubtreeDirty();
+}
+
 bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstraints) {
     if (!relayout_) {
         return false;

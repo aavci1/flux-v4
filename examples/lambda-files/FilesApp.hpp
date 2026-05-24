@@ -361,12 +361,13 @@ struct FilesAppRoot {
 
     syncListing();
 
-    auto applyHistory = [history, activePlaceId, selectedPath, scrollOffset, syncListing](NavigationHistory next) {
+    auto applyHistory = [history, activePlaceId, selectedPath, scrollOffset, syncListing](
+                            NavigationHistory next) {
       history.set(std::move(next));
       activePlaceId.set(std::string{});
       selectedPath.set(std::string{});
-      scrollOffset.set(Point{});
       syncListing();
+      scrollOffset.set(Point{});
     };
 
     auto navigateToPath = [history, applyHistory](std::filesystem::path path) {
@@ -406,6 +407,13 @@ struct FilesAppRoot {
 
     auto chrome = useEnvironment<WindowChromeMetricsKey>();
     WindowChromeMetrics const metrics = chrome();
+
+    FilesFlowGrid filesGrid{
+        .entries = entries,
+        .listingKey = listingKey,
+        .selectedPath = selectedPath,
+        .activateEntry = activateEntry,
+    };
 
     auto root = VStack{
         .spacing = 0.f,
@@ -462,13 +470,8 @@ struct FilesAppRoot {
                                       .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
                                                FilesTheme::kContentPadV, FilesTheme::kContentPadH);
                                 },
-                                [entries, listingKey, selectedPath, activateEntry] {
-                                  return Element{FilesFlowGrid{
-                                      .entries = entries,
-                                      .listingKey = listingKey,
-                                      .selectedPath = selectedPath,
-                                      .activateEntry = activateEntry,
-                                  }}
+                                [filesGrid] {
+                                  return Element{filesGrid}
                                       .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
                                                FilesTheme::kContentPadV, FilesTheme::kContentPadH);
                                 }))}

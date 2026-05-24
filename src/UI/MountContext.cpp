@@ -115,19 +115,9 @@ LayoutConstraints fixedConstraints(Size size) {
   };
 }
 
-bool sameLayoutSize(Size const& a, Size const& b) noexcept {
-  constexpr float epsilon = 0.01f;
-  return std::fabs(a.width - b.width) <= epsilon &&
-         std::fabs(a.height - b.height) <= epsilon;
-}
-
 void relayoutToFixedSizeIfNeeded(scenegraph::SceneNode& node, Size const& size) {
   LayoutConstraints const constraints = fixedConstraints(size);
-  if (sameLayoutSize(node.size(), size)) {
-    node.setLayoutConstraints(constraints);
-    return;
-  }
-  node.relayout(constraints, false);
+  (void)node.relayout(constraints, false);
   node.setLayoutConstraints(constraints);
 }
 

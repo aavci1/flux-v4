@@ -85,6 +85,9 @@ class SceneNode {
     bool relayoutStoredConstraints();
     bool relayout(LayoutConstraints const& constraints, bool storeConstraints = true);
 
+    /// Marks this node and ancestors dirty so the next stored relayout cannot be skipped.
+    void invalidateSubtreeLayout() noexcept;
+
     SceneNode *parent() const noexcept;
     std::span<std::unique_ptr<SceneNode> const> children() const noexcept;
     std::span<std::unique_ptr<SceneNode>> children() noexcept;

@@ -7,7 +7,9 @@
 
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/UI/MeasureContext.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Layout.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -16,16 +18,114 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace lambda_files {
 
-/// Folder grid: `For` of rows (`HStack` of tiles) in a vertical stack. Scroll height comes from
-/// `FilesFlowGridLayout` so it stays aligned with the entry count (not overlay extents).
-struct FilesFlowGrid : flux::ViewModifiers<FilesFlowGrid> {
+namespace detail {
+
+struct RowDescriptor {
+  std::size_t rowIndex = 0;
+  int columns = 0;
+  std::string key;
+  std::vector<FileEntry> entries;
+
+  bool operator==(RowDescriptor const& other) const = default;
+};
+
+inline float resolvedLayoutWidth(flux::LayoutConstraints const& constraints) {
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    return constraints.maxWidth;
+  }
+  if (std::isfinite(constraints.minWidth) && constraints.minWidth > 0.f) {
+    return constraints.minWidth;
+  }
+  return 0.f;
+}
+
+inline std::vector<RowDescriptor> makeRows(std::vector<FileEntry> const& currentEntries,
+                                           std::string const& currentListingKey, float layoutWidth,
+                                           FilesFlowGridLayout const& metrics) {
+  if (layoutWidth <= 0.f) {
+    return {};
+  }
+  int const columns = metrics.columnCountForWidth(layoutWidth);
+  int const rowCount = metrics.rowCountForEntries(currentEntries.size(), columns);
+  std::vector<RowDescriptor> nextRows;
+  nextRows.reserve(static_cast<std::size_t>(rowCount));
+  for (int row = 0; row < rowCount; ++row) {
+    std::size_t const baseIndex = static_cast<std::size_t>(row) * static_cast<std::size_t>(columns);
+    std::size_t const endIndex =
+        std::min(baseIndex + static_cast<std::size_t>(columns), currentEntries.size());
+    std::vector<FileEntry> rowEntries;
+    rowEntries.reserve(endIndex - baseIndex);
+    std::string rowKey = currentListingKey + ":" + std::to_string(columns) + ":" + std::to_string(row);
+    for (std::size_t index = baseIndex; index < endIndex; ++index) {
+      FileEntry const& entry = currentEntries[index];
+      rowKey += "\x1f";
+      rowKey += entry.path.string();
+      rowKey += entry.isDirectory ? ":d:" : ":f:";
+      rowKey += std::to_string(static_cast<int>(entry.visualKind));
+      rowKey += ":";
+      rowKey += std::to_string(entry.size);
+      rowEntries.push_back(entry);
+    }
+    nextRows.push_back(RowDescriptor{
+        .rowIndex = static_cast<std::size_t>(row),
+        .columns = columns,
+        .key = std::move(rowKey),
+        .entries = std::move(rowEntries),
+    });
+  }
+  return nextRows;
+}
+
+struct GridState {
+  flux::Reactive::Signal<float> layoutWidth{0.f};
+  flux::Reactive::Signal<std::vector<RowDescriptor>> rows{};
+};
+
+/// Forwards relayout constraints into `layoutWidth` so row/column counts track the viewport.
+struct GridRelayoutBridge {
+  std::shared_ptr<GridState> state;
+  flux::Element content;
+
+  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const& constraints,
+                     flux::LayoutHints const& hints, flux::TextSystem& textSystem) const {
+    float const width = resolvedLayoutWidth(constraints);
+    if (width > 0.f) {
+      state->layoutWidth.set(width);
+    }
+    return content.measure(ctx, constraints, hints, textSystem);
+  }
+
+  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
+    auto wrapper = std::make_unique<flux::scenegraph::SceneNode>(flux::Rect{});
+    std::unique_ptr<flux::scenegraph::SceneNode> child = content.mount(ctx);
+    if (!child) {
+      return wrapper;
+    }
+    flux::scenegraph::SceneNode* rawChild = child.get();
+    flux::scenegraph::SceneNode* rawWrapper = wrapper.get();
+    wrapper->appendChild(std::move(child));
+    wrapper->setRelayout([state = state, rawChild, rawWrapper](flux::LayoutConstraints const& constraints) {
+      float const width = resolvedLayoutWidth(constraints);
+      if (width > 0.f) {
+        state->layoutWidth.set(width);
+      }
+      (void)rawChild->relayout(constraints);
+      rawWrapper->setSize(rawChild->size());
+    });
+    return wrapper;
+  }
+};
+
+} // namespace detail
+
+/// Composite grid: `For` of `HStack` rows.
+struct FilesFlowGrid {
   flux::Reactive::Signal<std::vector<FileEntry>> entries;
   flux::Reactive::Signal<std::string> listingKey;
   flux::Reactive::Signal<std::string> selectedPath;
@@ -36,6 +136,8 @@ struct FilesFlowGrid : flux::ViewModifiers<FilesFlowGrid> {
   float horizontalSpacing = FilesTheme::kGridGapH;
   float verticalSpacing = FilesTheme::kGridGapV;
 
+  mutable std::shared_ptr<detail::GridState> state = std::make_shared<detail::GridState>();
+
   FilesFlowGridLayout layoutMetrics() const {
     return FilesFlowGridLayout{
         .cellWidth = cellWidth,
@@ -45,195 +147,104 @@ struct FilesFlowGrid : flux::ViewModifiers<FilesFlowGrid> {
     };
   }
 
-  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const& constraints,
-                     flux::LayoutHints const&, flux::TextSystem&) const {
-    (void)ctx;
-    FilesFlowGridLayout const metrics = layoutMetrics();
-    std::size_t const count = entries.peek().size();
-    float const width = resolvedLayoutWidth(constraints);
-    return metrics.contentSizeFor(width, count);
-  }
+  flux::Size measure(flux::MeasureContext&, flux::LayoutConstraints const& constraints,
+                     flux::LayoutHints const&, flux::TextSystem&) const;
 
-  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const;
-
-private:
-  struct RowDescriptor {
-    std::size_t rowIndex = 0;
-    int columns = 0;
-    std::string key;
-    std::vector<FileEntry> entries;
-
-    bool operator==(RowDescriptor const& other) const = default;
-  };
-
-  static float resolvedLayoutWidth(flux::LayoutConstraints const& constraints) {
-    if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-      return constraints.maxWidth;
-    }
-    if (std::isfinite(constraints.minWidth) && constraints.minWidth > 0.f) {
-      return constraints.minWidth;
-    }
-    return 0.f;
-  }
-
-  struct LayoutState {
-    float layoutWidth = 0.f;
-    FilesFlowGridLayout metrics;
-
-    int columns() const { return metrics.columnCountForWidth(layoutWidth); }
-  };
-
-  flux::Element gridContentElement(flux::Reactive::Signal<std::vector<RowDescriptor>> const& rows) const;
+  flux::Element body() const;
 };
 
-inline flux::Element FilesFlowGrid::gridContentElement(
-    flux::Reactive::Signal<std::vector<RowDescriptor>> const& rows) const {
-  flux::Reactive::Signal<std::string> const selectedPathSignal = selectedPath;
+inline flux::Size FilesFlowGrid::measure(flux::MeasureContext&, flux::LayoutConstraints const& constraints,
+                                         flux::LayoutHints const&, flux::TextSystem&) const {
+  float const width = detail::resolvedLayoutWidth(constraints);
+  if (width > 0.f) {
+    state->layoutWidth.set(width);
+  }
+  float const layoutWidth =
+      width > 0.f ? width : std::max(0.f, state->layoutWidth.peek());
+  return layoutMetrics().contentSizeFor(layoutWidth, entries.peek().size());
+}
+
+inline flux::Size measureFilesFlowGrid(FilesFlowGrid const& grid,
+                                     flux::LayoutConstraints const& constraints) {
+  float const width = detail::resolvedLayoutWidth(constraints);
+  if (width > 0.f) {
+    grid.state->layoutWidth.set(width);
+  }
+  float const layoutWidth =
+      width > 0.f ? width : std::max(0.f, grid.state->layoutWidth.peek());
+  return grid.layoutMetrics().contentSizeFor(layoutWidth, grid.entries.peek().size());
+}
+
+inline flux::Element FilesFlowGrid::body() const {
+  using namespace flux;
+
+  FilesFlowGridLayout const metrics = layoutMetrics();
+  Reactive::Signal<std::vector<FileEntry>> const entriesSignal = entries;
+  Reactive::Signal<std::string> const listingKeySignal = listingKey;
+  Reactive::Signal<std::string> const selectedPathSignal = selectedPath;
   auto const activate = activateEntry;
   float const tileW = cellWidth;
   float const tileH = cellHeight;
   float const gapH = horizontalSpacing;
+  float const rowGap = verticalSpacing;
 
-  return flux::Element{flux::For(
-      rows,
-      [](RowDescriptor const& row) {
+  std::shared_ptr<detail::GridState> const gridState = state;
+  LayoutConstraints const* constraints = useLayoutConstraints();
+  if (constraints != nullptr) {
+    float const width = detail::resolvedLayoutWidth(*constraints);
+    if (width > 0.f) {
+      gridState->layoutWidth.set(width);
+    }
+  }
+
+  Reactive::Effect([entriesSignal, listingKeySignal, gridState, metrics] {
+    (void)entriesSignal();
+    (void)listingKeySignal();
+    (void)gridState->layoutWidth();
+    float const width = std::max(0.f, gridState->layoutWidth.peek());
+    gridState->rows.set(
+        detail::makeRows(entriesSignal.peek(), listingKeySignal.peek(), width, metrics));
+  });
+
+  return Element{detail::GridRelayoutBridge{
+      .state = gridState,
+      .content = Element{For(
+      gridState->rows,
+      [](detail::RowDescriptor const& row) {
         return row.key;
       },
-      [selectedPathSignal, activate, tileW, tileH, gapH](
-          RowDescriptor const& row, flux::Signal<std::size_t> const&) {
+      [selectedPathSignal, activate, tileW, tileH, gapH](detail::RowDescriptor const& row,
+                                                         Signal<std::size_t> const&) {
         int const colCount = std::max(1, row.columns);
-        std::vector<flux::Element> cells;
+        std::vector<Element> cells;
         cells.reserve(static_cast<std::size_t>(colCount));
         for (FileEntry const& entry : row.entries) {
-          flux::Reactive::Bindable<bool> selected{
+          Reactive::Bindable<bool> selected{
               [selectedPathSignal, entry] {
                 return selectedPathSignal() == entry.path.string();
               }};
-          cells.push_back(flux::Element{FileItemTile{
-                                            .entry = entry,
-                                            .selected = selected,
-                                            .onActivate = [activate, entry] { activate(entry); },
-                                        }}
+          cells.push_back(Element{FileItemTile{
+                                      .entry = entry,
+                                      .selected = selected,
+                                      .onActivate = [activate, entry] {
+                                        if (activate) {
+                                          activate(entry);
+                                        }
+                                      },
+                                  }}
                               .size(tileW, tileH)
                               .clipContent(true));
         }
-        return flux::HStack{
+        return HStack{
             .spacing = gapH,
-            .alignment = flux::Alignment::Start,
+            .alignment = Alignment::Start,
             .children = std::move(cells),
         };
       },
-      verticalSpacing,
-      flux::Alignment::Start,
-      flux::ForLayout::VerticalStack)};
-}
-
-inline std::unique_ptr<flux::scenegraph::SceneNode> FilesFlowGrid::mount(flux::MountContext& ctx) const {
-  auto layout = std::make_shared<LayoutState>();
-  layout->metrics = layoutMetrics();
-  layout->layoutWidth = resolvedLayoutWidth(ctx.constraints());
-
-  auto scope = std::make_shared<flux::Reactive::Scope>();
-  flux::Reactive::Signal<std::vector<RowDescriptor>> rows =
-      flux::Reactive::Signal<std::vector<RowDescriptor>>{};
-  flux::Reactive::Signal<std::vector<FileEntry>> entriesSignal = entries;
-  flux::Reactive::Signal<std::string> listingKeySignal = listingKey;
-
-  auto makeRows = [layout, entriesSignal, listingKeySignal]() {
-    std::vector<FileEntry> const& currentEntries = entriesSignal.peek();
-    std::string const& currentListingKey = listingKeySignal.peek();
-    int const columns = layout->columns();
-    std::vector<RowDescriptor> nextRows;
-    int const rowCount = layout->metrics.rowCountForEntries(currentEntries.size(), columns);
-    nextRows.reserve(static_cast<std::size_t>(rowCount));
-    for (int row = 0; row < rowCount; ++row) {
-      std::size_t const baseIndex = static_cast<std::size_t>(row) * static_cast<std::size_t>(columns);
-      std::size_t const endIndex =
-          std::min(baseIndex + static_cast<std::size_t>(columns), currentEntries.size());
-      std::vector<FileEntry> rowEntries;
-      rowEntries.reserve(endIndex - baseIndex);
-      std::string rowKey = currentListingKey + ":" + std::to_string(columns) + ":" + std::to_string(row);
-      for (std::size_t index = baseIndex; index < endIndex; ++index) {
-        FileEntry const& entry = currentEntries[index];
-        rowKey += "\x1f";
-        rowKey += entry.path.string();
-        rowKey += entry.isDirectory ? ":d:" : ":f:";
-        rowKey += std::to_string(static_cast<int>(entry.visualKind));
-        rowKey += ":";
-        rowKey += std::to_string(entry.size);
-        rowEntries.push_back(entry);
-      }
-      nextRows.push_back(RowDescriptor{
-          .rowIndex = static_cast<std::size_t>(row),
-          .columns = columns,
-          .key = std::move(rowKey),
-          .entries = std::move(rowEntries),
-      });
-    }
-    return nextRows;
-  };
-
-  auto syncRows = [rows, makeRows]() {
-    rows.set(makeRows());
-  };
-  syncRows();
-
-  flux::Element const content = gridContentElement(rows);
-
-  std::unique_ptr<flux::scenegraph::SceneNode> contentNode = flux::Reactive::withOwner(*scope, [&] {
-    flux::LayoutConstraints childConstraints = ctx.constraints();
-    childConstraints.maxWidth = layout->layoutWidth;
-    childConstraints.minHeight = 0.f;
-    childConstraints.maxHeight = std::numeric_limits<float>::infinity();
-    flux::MountContext childCtx = ctx.childWithOwnScope(childConstraints, ctx.hints());
-    return content.mount(childCtx);
-  });
-
-  flux::Size const initialSize =
-      layout->metrics.contentSizeFor(layout->layoutWidth, entries.peek().size());
-  auto group =
-      std::make_unique<flux::scenegraph::SceneNode>(flux::Rect{0.f, 0.f, initialSize.width, initialSize.height});
-  flux::scenegraph::SceneNode* rawContent = contentNode.get();
-  group->appendChild(std::move(contentNode));
-
-  ctx.owner().onCleanup([scope] { scope->dispose(); });
-
-  flux::scenegraph::SceneNode* rawGroup = group.get();
-  rawGroup->setLayoutConstraints(ctx.constraints());
-  rawGroup->setRelayout([rawGroup, rawContent, layout, entriesSignal, syncRows](
-                            flux::LayoutConstraints const& constraints) {
-    rawGroup->setLayoutConstraints(constraints);
-    float const nextLayoutWidth = resolvedLayoutWidth(constraints);
-    if (nextLayoutWidth > 0.f || layout->layoutWidth <= 0.f) {
-      layout->layoutWidth = nextLayoutWidth;
-    }
-    syncRows();
-
-    flux::LayoutConstraints childConstraints = constraints;
-    childConstraints.maxWidth = layout->layoutWidth;
-    childConstraints.minHeight = 0.f;
-    childConstraints.maxHeight = std::numeric_limits<float>::infinity();
-    if (rawContent) {
-      (void)rawContent->relayout(childConstraints);
-    }
-
-    flux::Size const contentSize =
-        layout->metrics.contentSizeFor(layout->layoutWidth, entriesSignal.peek().size());
-    rawGroup->setSize(contentSize);
-  });
-
-  flux::Reactive::withOwner(*scope, [rawGroup, entriesSignal, listingKeySignal, syncRows] {
-    flux::Reactive::Effect([rawGroup, entriesSignal, listingKeySignal, syncRows] {
-      (void)entriesSignal();
-      (void)listingKeySignal();
-      syncRows();
-      if (rawGroup) {
-        (void)rawGroup->relayoutStoredConstraints();
-      }
-    });
-  });
-
-  return group;
+      rowGap,
+      Alignment::Start,
+      ForLayout::VerticalStack)},
+  }};
 }
 
 } // namespace lambda_files
