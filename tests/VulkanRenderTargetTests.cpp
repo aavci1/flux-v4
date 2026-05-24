@@ -638,8 +638,8 @@ TEST_CASE("Compositor glass material does not fade client content") {
 
   flux::compositor::ChromeConfig chrome{};
   chrome.windowGlassEnabled = true;
-  chrome.windowGlassOpacity = 0.2f;
-  chrome.glassTint = Color{1.f, 1.f, 1.f, 0.9f};
+  chrome.glass.opacity = 0.2f;
+  chrome.glass.tintColor = Color{1.f, 1.f, 1.f, 0.9f};
 
   flux::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,

@@ -1944,6 +1944,7 @@ private:
         return;
       }
       ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(0.f));
+      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
       ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
       ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
       wl_region* region = wl_compositor_create_region(shared_->compositor);
@@ -1958,28 +1959,37 @@ private:
                                                                                  surface_);
     }
     if (wantsGlass) {
-      Color tint = background_.glass.tint;
-      tint.a *= std::clamp(background_.glass.tintOpacity, 0.f, 1.f);
+      float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
+      Color baseColor = background_.glass.baseColor;
+      baseColor.a *= opacity;
+      Color tint = background_.glass.tintColor;
+      tint.a *= opacity;
       ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
+      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
       ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
       ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
     } else if (chrome.style != LayerShellChromeStyle::None) {
-      Color tint = chrome.tint;
-      tint.a *= std::clamp(chrome.tintOpacity, 0.f, 1.f);
-      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(chrome.blurRadius));
+      float const opacity = std::clamp(chrome.glass.opacity, 0.f, 1.f);
+      Color baseColor = chrome.glass.baseColor;
+      baseColor.a *= opacity;
+      Color tint = chrome.glass.tintColor;
+      tint.a *= opacity;
+      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(chrome.glass.blurRadius));
+      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
       ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
       ext_background_effect_surface_v1_set_border(
           backgroundEffect_,
           colorToRgba(chrome.style == LayerShellChromeStyle::BlurPanelBorder
-                          ? chrome.borderColor
+                          ? chrome.glass.borderColor
                           : Color{0.f, 0.f, 0.f, 0.f}));
-      float const radius = 16.f;
+      CornerRadius const radius = chrome.cornerRadius;
       ext_background_effect_surface_v1_set_corner_radii(backgroundEffect_,
-                                                        wl_fixed_from_double(radius),
-                                                        wl_fixed_from_double(radius),
-                                                        wl_fixed_from_double(chrome.squareBottomCorners ? 0.f : radius),
-                                                        wl_fixed_from_double(chrome.squareBottomCorners ? 0.f : radius));
+                                                        wl_fixed_from_double(radius.topLeft),
+                                                        wl_fixed_from_double(radius.topRight),
+                                                        wl_fixed_from_double(radius.bottomRight),
+                                                        wl_fixed_from_double(radius.bottomLeft));
     } else {
+      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
       ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
       ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
     }
@@ -2271,7 +2281,7 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
 	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1));
 	  } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
 	    shared->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
-	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 2u)));
+	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 3u)));
 	  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;

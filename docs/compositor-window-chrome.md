@@ -32,7 +32,7 @@ cmake --build build --target lambda-window-manager-render-fixture
 
 The fixture renders synthetic Tier 1, Tier 2, and Tier 3 `CommittedSurfaceSnapshot`s through the same `drawCommittedSurfaceSnapshot` path used by the KMS compositor, reads back the offscreen render target, and writes a PNG for visual inspection or pixel checks.
 
-Chrome defaults live under `[chrome]` in the compositor config and match the SADE values. `[chrome.dark]` can override those values for a future dark theme path. The compositor also enables `window_glass` by default, which synthesizes a full-window blur region and applies `window_glass_opacity` to the glass material behind client buffers; set `window_glass = false` to disable that default while still allowing clients to request explicit `ext-background-effect-v1` blur regions.
+Chrome defaults live under `[chrome]` in the compositor config and match the SADE values. `[chrome.dark]` can override those values for a future dark theme path. The compositor also enables `window_glass` by default, which synthesizes a full-window blur region and uses `[chrome.glass]` for `blur_radius`, `base_color`, `tint_color`, `border_color`, and `opacity`; set `window_glass = false` to disable that default while still allowing clients to request explicit `ext-background-effect-v1` blur regions.
 
 The title bar and frame metrics are configurable from `[chrome]`. The commonly tuned values are:
 

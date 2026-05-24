@@ -20,10 +20,6 @@ StrokeStyle visibleStroke(Color color, float width) {
   return color.a > 0.f && width > 0.f ? StrokeStyle::solid(color, width) : StrokeStyle::none();
 }
 
-Color glassBorderColor() {
-  return Color{1.f, 1.f, 1.f, 0.34f};
-}
-
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   return ShadowStyle{
       .radius = focused ? 30.f : 18.f,
@@ -135,15 +131,20 @@ void drawDefaultChrome(Canvas& canvas,
   bool const titlebarCoveredBySurfaceMaterial = backgroundEffectCoversContent(surface);
   if (!titlebarCoveredBySurfaceMaterial) {
     bool const explicitEffect = !surface.backgroundBlurRects.empty();
-    float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glassBlurRadius;
+    float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glass.blurRadius;
+    Color const baseColor =
+        explicitEffect ? surface.backgroundEffect.baseColor : withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
     Color const titleTint =
         explicitEffect && surface.backgroundEffect.tint.a > 0.f
             ? surface.backgroundEffect.tint
             : (chrome.windowGlassEnabled
-                   ? withOpacity(chrome.glassTint, chrome.windowGlassOpacity)
-                   : Color{chrome.glassTint.r, chrome.glassTint.g, chrome.glassTint.b, 1.f});
+                   ? withOpacity(chrome.glass.tintColor, chrome.glass.opacity)
+                   : Color{chrome.glass.tintColor.r, chrome.glass.tintColor.g, chrome.glass.tintColor.b, 1.f});
     if (chrome.windowGlassEnabled && blurRadius > 0.f) {
       canvas.drawBackdropBlur(titleRect, blurRadius, Colors::transparent, titleRadius);
+    }
+    if (baseColor.a > 0.f) {
+      canvas.drawRect(titleRect, titleRadius, FillStyle::solid(baseColor), StrokeStyle::none(), ShadowStyle::none());
     }
     canvas.drawRect(titleRect, titleRadius, FillStyle::solid(titleTint), StrokeStyle::none(), ShadowStyle::none());
   }
@@ -252,19 +253,24 @@ void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeC
                                       static_cast<float>(preview.width),
                                       static_cast<float>(preview.height));
   CornerRadius const radius{10.f};
-  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
+  if (chrome.windowGlassEnabled && chrome.glass.blurRadius > 0.f) {
     Rect const cacheRect = preview.cacheWidth > 0 && preview.cacheHeight > 0
                                ? Rect::sharp(static_cast<float>(preview.cacheX),
                                              static_cast<float>(preview.cacheY),
                                              static_cast<float>(preview.cacheWidth),
                                              static_cast<float>(preview.cacheHeight))
                                : previewRect;
-    canvas.drawBackdropBlurCached(previewRect, cacheRect, chrome.glassBlurRadius, Colors::transparent, radius);
+    canvas.drawBackdropBlurCached(previewRect, cacheRect, chrome.glass.blurRadius, Colors::transparent, radius);
   }
   canvas.drawRect(previewRect,
                   radius,
-                  FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity)),
-                  StrokeStyle::solid(glassBorderColor(), 1.f),
+                  FillStyle::solid(withOpacity(chrome.glass.baseColor, chrome.glass.opacity)),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+  canvas.drawRect(previewRect,
+                  radius,
+                  FillStyle::solid(withOpacity(chrome.glass.tintColor, chrome.glass.opacity)),
+                  StrokeStyle::solid(chrome.glass.borderColor, 1.f),
                   ShadowStyle::none());
 }
 

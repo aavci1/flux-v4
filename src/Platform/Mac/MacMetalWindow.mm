@@ -1414,8 +1414,8 @@ void MacMetalWindow::applyBackground() {
       [d->materialView_ addSubview:d->tintView_];
     }
     d->tintView_.frame = d->materialView_.bounds;
-    Color tint = d->background_.glass.tint;
-    tint.a *= std::clamp(d->background_.glass.tintOpacity, 0.f, 1.f);
+    Color tint = d->background_.glass.tintColor;
+    tint.a *= std::clamp(d->background_.glass.opacity, 0.f, 1.f);
     d->tintView_.layer.backgroundColor =
         [[NSColor colorWithCalibratedRed:std::clamp(tint.r, 0.f, 1.f)
                                    green:std::clamp(tint.g, 0.f, 1.f)

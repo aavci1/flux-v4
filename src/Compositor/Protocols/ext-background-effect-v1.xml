@@ -26,7 +26,7 @@
     DEALINGS IN THE SOFTWARE.
   </copyright>
 
-  <interface name="ext_background_effect_manager_v1" version="2">
+  <interface name="ext_background_effect_manager_v1" version="3">
     <description summary="background effect factory">
       This protocol provides a way to improve visuals of translucent surfaces
       by applying effects like blur to the background behind them.
@@ -80,7 +80,7 @@
     </request>
   </interface>
 
-  <interface name="ext_background_effect_surface_v1" version="2">
+  <interface name="ext_background_effect_surface_v1" version="3">
     <description summary="background effects for a surface">
       The background effect object provides a way to specify a region behind
       a surface that should have background effects like blur applied.
@@ -173,6 +173,19 @@
       <arg name="top_right" type="fixed" summary="top-right corner radius"/>
       <arg name="bottom_right" type="fixed" summary="bottom-right corner radius"/>
       <arg name="bottom_left" type="fixed" summary="bottom-left corner radius"/>
+    </request>
+
+    <request name="set_base_color" since="3">
+      <description summary="set background effect base color">
+        This request sets the base material wash applied after the background
+        effect and before the tint. Colors are encoded as RGBA with the red
+        channel in the most significant byte and alpha in the least significant
+        byte.
+
+        The base color is double-buffered state, and will be applied on
+        the next wl_surface.commit.
+      </description>
+      <arg name="base_color" type="uint" summary="RGBA base material color"/>
     </request>
   </interface>
 </protocol>

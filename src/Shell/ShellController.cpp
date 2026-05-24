@@ -41,7 +41,7 @@ flux::WindowConfig topBarWindowConfig() {
   layer.anchorRight = true;
   layer.exclusiveZone = kTopBarHeight;
   layer.chrome.style = LayerShellChromeStyle::BlurPanelBorder;
-  layer.chrome.squareBottomCorners = true;
+  layer.chrome.cornerRadius = CornerRadius{};
   return WindowConfig{
       .size = {0.f, static_cast<float>(kTopBarHeight)},
       .title = "Lambda Top Bar",

@@ -16,12 +16,10 @@ namespace shell_preview {
 using flux::LayerShellChromeOptions;
 using flux::LayerShellChromeStyle;
 
-inline constexpr float kDockCornerRadius = 14.f;
-
 inline LayerShellChromeOptions defaultTopBarChrome() {
   LayerShellChromeOptions chrome{};
   chrome.style = LayerShellChromeStyle::BlurPanelBorder;
-  chrome.squareBottomCorners = true;
+  chrome.cornerRadius = flux::CornerRadius{};
   return chrome;
 }
 
@@ -32,19 +30,34 @@ inline LayerShellChromeOptions defaultDockChrome() {
 }
 
 inline flux::Color chromeTintFill(LayerShellChromeOptions const& chrome) {
-  flux::Color tint = chrome.tint;
-  tint.a *= chrome.tintOpacity;
+  flux::Color tint = chrome.glass.tintColor;
+  tint.a *= chrome.glass.opacity;
   return tint;
+}
+
+inline flux::Color chromeBaseFill(LayerShellChromeOptions const& chrome) {
+  flux::Color base = chrome.glass.baseColor;
+  base.a *= chrome.glass.opacity;
+  return base;
 }
 
 inline flux::Element backdropLayer(float width,
                                    float height,
                                    LayerShellChromeOptions const& chrome,
                                    flux::CornerRadius corners = {}) {
-  return flux::BackdropBlur{
-      .radius = chrome.blurRadius,
-      .tint = chromeTintFill(chrome),
-      .corners = corners,
+  return flux::ZStack{
+      .horizontalAlignment = flux::Alignment::Stretch,
+      .verticalAlignment = flux::Alignment::Stretch,
+      .children = flux::children(
+          flux::BackdropBlur{
+              .radius = chrome.glass.blurRadius,
+              .tint = chromeBaseFill(chrome),
+              .corners = corners,
+          }.size(width, height),
+          flux::Rectangle{}
+              .size(width, height)
+              .fill(chromeTintFill(chrome))
+              .cornerRadius(corners)),
   }.size(width, height);
 }
 
@@ -55,27 +68,26 @@ inline flux::Element wrapTopBar(flux::Element content, float width) {
       .horizontalAlignment = flux::Alignment::Stretch,
       .verticalAlignment = flux::Alignment::Stretch,
       .children = flux::children(
-          backdropLayer(width, height, chrome),
+          backdropLayer(width, height, chrome, chrome.cornerRadius),
           flux::Rectangle{}
               .size(width, 1.f)
               .position(0.f, height - 1.f)
-              .fill(chrome.borderColor),
+              .fill(chrome.glass.borderColor),
           std::move(content).size(width, height)),
   }.size(width, height);
 }
 
 inline flux::Element wrapDock(flux::Element content, float width, float height) {
   LayerShellChromeOptions const chrome = defaultDockChrome();
-  flux::CornerRadius const corners{kDockCornerRadius};
   return flux::ZStack{
       .horizontalAlignment = flux::Alignment::Stretch,
       .verticalAlignment = flux::Alignment::Stretch,
       .children = flux::children(
-          backdropLayer(width, height, chrome, corners),
+          backdropLayer(width, height, chrome, chrome.cornerRadius),
           flux::Rectangle{}
               .size(width, height)
-              .cornerRadius(kDockCornerRadius)
-              .stroke(flux::StrokeStyle::solid(chrome.borderColor, 1.f)),
+              .cornerRadius(chrome.cornerRadius)
+              .stroke(flux::StrokeStyle::solid(chrome.glass.borderColor, 1.f)),
           std::move(content)),
   }.size(width, height);
 }

@@ -442,7 +442,7 @@ struct LayerShellChromeOptions {
   - `Window` or root `Element` using `BackdropBlur` view (existing `src/UI/Views/BackdropBlur.cpp`) sized to bar/dock bounds, **or**
   - Layer-shell chrome options on a normal window when preview simulates shell (if preview stays single-window).
 - Map shell theme tokens from [lambda-shell-spec.md](lambda-shell-spec.md) to `LayerShellChromeOptions` / `Theme` keys.
-- Delete duplicated `glassTintColor` / `glassBorderColor` constants from `ShellPreviewChrome.hpp` once theme drives both paths.
+- Keep `ShellPreviewChrome.hpp` wired to the shared layer-shell glass options so preview chrome and compositor chrome stay visually aligned.
 - Keep `wrapTopBar` ZStack **stretch alignment** fix (layout); only replace fill/stroke source.
 
 **Key points.**

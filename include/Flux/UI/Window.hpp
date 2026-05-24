@@ -84,13 +84,22 @@ enum class LayerShellChromeStyle : std::uint8_t {
   BlurPanelBorder,
 };
 
+struct GlassEffectOptions {
+  /// Preferred blur radius for platforms that expose a tunable backdrop blur.
+  /// Some backends map this to the nearest native material instead.
+  float blurRadius = 46.f;
+  /// Base material wash applied over the blurred backdrop before the tint.
+  Color baseColor{1.f, 1.f, 1.f, 0.18f};
+  /// Color tint applied over the base glass material.
+  Color tintColor{0.86f, 0.96f, 1.f, 0.56f};
+  Color borderColor{1.f, 1.f, 1.f, 0.62f};
+  float opacity = 1.f;
+};
+
 struct LayerShellChromeOptions {
   LayerShellChromeStyle style = LayerShellChromeStyle::None;
-  float blurRadius = 46.f;
-  Color tint{0.86f, 0.96f, 1.f, 0.56f};
-  Color borderColor{1.f, 1.f, 1.f, 0.62f};
-  float tintOpacity = 1.f;
-  bool squareBottomCorners = false;
+  GlassEffectOptions glass{};
+  CornerRadius cornerRadius{16.f};
 };
 
 struct LayerShellOptions {
@@ -112,16 +121,6 @@ struct LayerShellOptions {
   LayerShellChromeOptions chrome{};
 };
 
-struct WindowGlassBackgroundOptions {
-  /// Preferred blur radius for platforms that expose a tunable backdrop blur.
-  /// Some backends map this to the nearest native material instead.
-  float blurRadius = 46.f;
-  /// Preferred tint for app chrome drawn over the material or compositor chrome that supports explicit tint metadata.
-  Color tint{0.86f, 0.96f, 1.f, 0.56f};
-  Color borderColor{1.f, 1.f, 1.f, 0.62f};
-  float tintOpacity = 1.f;
-};
-
 enum class WindowBackgroundKind : std::uint8_t {
   Transparent,
   Fill,
@@ -131,12 +130,12 @@ enum class WindowBackgroundKind : std::uint8_t {
 struct WindowBackground {
   WindowBackgroundKind kind = WindowBackgroundKind::Fill;
   FillStyle fill = FillStyle::solid(Color::windowBackground());
-  WindowGlassBackgroundOptions glass{};
+  GlassEffectOptions glass{};
 
   static WindowBackground transparent();
   static WindowBackground solid(Color color);
   static WindowBackground gradient(FillStyle fill);
-  static WindowBackground glassEffect(WindowGlassBackgroundOptions options = {});
+  static WindowBackground glassEffect(GlassEffectOptions options = {});
 };
 
 struct WindowConfig {

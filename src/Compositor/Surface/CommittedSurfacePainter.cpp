@@ -116,7 +116,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                CornerRadius const& contentCorners,
                                CornerRadius const& windowCorners) {
   bool const explicitEffect = !surface.backgroundBlurRects.empty();
-  float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glassBlurRadius;
+  float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glass.blurRadius;
   if (blurRadius <= 0.f) return;
 
   CommittedSurfaceSnapshot::RegionRect defaultRegion{
@@ -157,6 +157,13 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                             ? surface.backgroundEffect.cornerRadius
                                             : windowCorners;
       canvas.drawBackdropBlur(frameRect, blurRadius, Colors::transparent, frameCorners);
+      if (surface.backgroundEffect.baseColor.a > 0.f) {
+        canvas.drawRect(frameRect,
+                        frameCorners,
+                        FillStyle::solid(surface.backgroundEffect.baseColor),
+                        StrokeStyle::none(),
+                        ShadowStyle::none());
+      }
       if (surface.backgroundEffect.tint.a > 0.f) {
         canvas.drawRect(frameRect,
                         frameCorners,
@@ -167,16 +174,30 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
       continue;
     }
     canvas.drawBackdropBlur(rect, blurRadius, Colors::transparent, corners);
-    if (explicitEffect && surface.backgroundEffect.tint.a > 0.f) {
-      canvas.drawRect(rect,
-                      corners,
-                      FillStyle::solid(surface.backgroundEffect.tint),
-                      StrokeStyle::none(),
-                      ShadowStyle::none());
+    if (explicitEffect) {
+      if (surface.backgroundEffect.baseColor.a > 0.f) {
+        canvas.drawRect(rect,
+                        corners,
+                        FillStyle::solid(surface.backgroundEffect.baseColor),
+                        StrokeStyle::none(),
+                        ShadowStyle::none());
+      }
+      if (surface.backgroundEffect.tint.a > 0.f) {
+        canvas.drawRect(rect,
+                        corners,
+                        FillStyle::solid(surface.backgroundEffect.tint),
+                        StrokeStyle::none(),
+                        ShadowStyle::none());
+      }
     } else if (!explicitEffect && chrome.windowGlassEnabled && surface.defaultGlassEligible) {
       canvas.drawRect(rect,
                       corners,
-                      FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity)),
+                      FillStyle::solid(withOpacity(chrome.glass.baseColor, chrome.glass.opacity)),
+                      StrokeStyle::none(),
+                      ShadowStyle::none());
+      canvas.drawRect(rect,
+                      corners,
+                      FillStyle::solid(withOpacity(chrome.glass.tintColor, chrome.glass.opacity)),
                       StrokeStyle::none(),
                       ShadowStyle::none());
     }

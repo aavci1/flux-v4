@@ -157,7 +157,13 @@ animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
-window_glass_opacity = 0.84
+
+[chrome.glass]
+blur_radius = 46
+base_color = "#ffffff2e"
+tint_color = "#dbf5ff8f"
+border_color = "#ffffff9e"
+opacity = 0.84
 
 [keybindings]
 close = "super+q"
@@ -178,13 +184,12 @@ terminate = "ctrl+alt+backspace"
 Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
 the framework image loader supports stb_image formats, including JPEG and PNG.
 
-`window_glass` enables compositor-side blur behind every normal window by default. `window_glass_opacity`
-controls the opacity of the glass material behind client buffers from `0.0` to `1.0`; client content is
-rendered at the opacity the client submitted. `glass_tint` in `[chrome]` controls the material color and
-alpha, `glass_blur_radius` controls the blur radius, and `window_border_color` / `window_border_width`
-control the subtle rounded outline around the window frame. Clients that use `ext-background-effect-v1`
-can still request explicit blur regions; set `window_glass = false` to disable only the compositor's
-default full-window policy.
+`window_glass` enables compositor-side blur behind every normal window by default. `[chrome.glass]`
+uses the same shape as client-requested glass: `blur_radius`, `base_color`, `tint_color`, `border_color`,
+and `opacity`. Client content is rendered at the opacity the client submitted. `window_border_color` /
+`window_border_width` control the subtle rounded outline around the window frame. Clients that use
+`ext-background-effect-v1` can still request explicit blur regions; set `window_glass = false` to disable
+only the compositor's default full-window policy.
 
 ## Window Management
 

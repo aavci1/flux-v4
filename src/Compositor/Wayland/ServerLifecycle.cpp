@@ -136,7 +136,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
   cutoutsManagerGlobal_ = wl_global_create(display_, &xx_cutouts_manager_v1_interface, 1, this, bindCutoutsManager);
   backgroundEffectManagerGlobal_ =
-      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 2, this, bindBackgroundEffectManager);
+      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 3, this, bindBackgroundEffectManager);
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
@@ -230,7 +230,7 @@ void WaylandServer::Impl::refreshActiveChromeConfig() {
   if (shellThemeDark_ && chromeDarkConfig_) {
     ChromeConfig const& dark = *chromeDarkConfig_;
     chromeConfig_.titleTextColor = dark.titleTextColor;
-    chromeConfig_.glassTint = dark.glassTint;
+    chromeConfig_.glass = dark.glass;
     chromeConfig_.windowBorderColor = dark.windowBorderColor;
     chromeConfig_.borderLineColor = dark.borderLineColor;
     chromeConfig_.closeGlyphColor = dark.closeGlyphColor;

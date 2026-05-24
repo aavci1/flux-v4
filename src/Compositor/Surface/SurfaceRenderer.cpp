@@ -92,6 +92,7 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.activeSizing);
   hashValue(hash, surface.defaultGlassEligible);
   hashValue(hash, surface.backgroundEffect.blurRadius);
+  hashColor(hash, surface.backgroundEffect.baseColor);
   hashColor(hash, surface.backgroundEffect.tint);
   hashColor(hash, surface.backgroundEffect.borderColor);
   hashValue(hash, surface.backgroundEffect.cornerRadiusSet);
@@ -116,9 +117,11 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, chrome.buttonRadius);
   hashValue(hash, chrome.buttonGap);
   hashValue(hash, chrome.windowGlassEnabled);
-  hashValue(hash, chrome.windowGlassOpacity);
-  hashValue(hash, chrome.glassBlurRadius);
-  hashColor(hash, chrome.glassTint);
+  hashValue(hash, chrome.glass.opacity);
+  hashValue(hash, chrome.glass.blurRadius);
+  hashColor(hash, chrome.glass.baseColor);
+  hashColor(hash, chrome.glass.tintColor);
+  hashColor(hash, chrome.glass.borderColor);
   hashColor(hash, chrome.closeGlyphColor);
   hashColor(hash, chrome.closeGlyphHoverColor);
   hashColor(hash, chrome.closeHoverBackground);

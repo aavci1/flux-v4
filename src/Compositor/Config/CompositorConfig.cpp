@@ -376,6 +376,33 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       std::fprintf(stderr, "lambda-window-manager: ignoring non-string chrome.%s color in %s\n", key, path);
     }
   };
+  auto parseGlassConfig = [&](toml::table const& glassTable) {
+    auto parseGlassFloat = [&](char const* key, float& field, float minValue, float maxValue) {
+      if (!glassTable.contains(key)) return;
+      if (auto value = configNumber(glassTable, key); value && *value >= minValue && *value <= maxValue) {
+        field = *value;
+      } else {
+        std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.glass.%s value in %s\n", key, path);
+      }
+    };
+    auto parseGlassColor = [&](char const* key, Color& field) {
+      if (!glassTable.contains(key)) return;
+      if (auto value = configString(glassTable, key)) {
+        if (auto color = parseHexColor(*value)) {
+          field = *color;
+        } else {
+          std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.glass.%s color in %s\n", key, path);
+        }
+      } else {
+        std::fprintf(stderr, "lambda-window-manager: ignoring non-string chrome.glass.%s color in %s\n", key, path);
+      }
+    };
+    parseGlassFloat("blur_radius", chrome.glass.blurRadius, 0.f, 120.f);
+    parseGlassColor("base_color", chrome.glass.baseColor);
+    parseGlassColor("tint_color", chrome.glass.tintColor);
+    parseGlassColor("border_color", chrome.glass.borderColor);
+    parseGlassFloat("opacity", chrome.glass.opacity, 0.f, 1.f);
+  };
 
   parseIntField("title_bar_height", chrome.titleBarHeight, 16, 120);
   parseIntField("controls_width", chrome.controlsWidth, 32, 240);
@@ -396,10 +423,11 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseCornerRadiusField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
   parseIntField("resize_grip_size", chrome.resizeGripSize, 1, 24);
   parseBoolField("window_glass", chrome.windowGlassEnabled);
-  parseBoolField("window_glass_enabled", chrome.windowGlassEnabled);
-  parseFloatField("window_glass_opacity", chrome.windowGlassOpacity, 0.f, 1.f);
-  parseColorField("glass_tint", chrome.glassTint);
-  parseFloatField("glass_blur_radius", chrome.glassBlurRadius, 0.f, 120.f);
+  if (auto* glassTable = table["glass"].as_table()) {
+    parseGlassConfig(*glassTable);
+  } else if (table.contains("glass")) {
+    std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.glass value in %s\n", path);
+  }
   parseColorField("window_border_color", chrome.windowBorderColor);
   parseFloatField("window_border_width", chrome.windowBorderWidth, 0.f, 8.f);
   parseColorField("border_line_color", chrome.borderLineColor);
@@ -478,7 +506,6 @@ animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
-window_glass_opacity = 1.0
 
 [chrome]
 title_bar_height = 28
@@ -505,11 +532,16 @@ window_corner_radius = 14
 # bottom_right = 14
 # bottom_left = 14
 resize_grip_size = 4
-glass_tint = "#dbf5ff8f"
-glass_blur_radius = 46
 window_border_color = "#ffffff9e"
 window_border_width = 1
 border_line_color = "#ffffff9e"
+
+[chrome.glass]
+blur_radius = 46
+base_color = "#ffffff2e"
+tint_color = "#dbf5ff8f"
+border_color = "#ffffff9e"
+opacity = 1.0
 
 [keybindings]
 close = "super+q"
@@ -778,14 +810,6 @@ CompositorConfig loadConfig() {
       config.chrome.windowGlassEnabled = *enabled;
     } else {
       std::fprintf(stderr, "lambda-window-manager: ignoring invalid window_glass value in %s\n", path->c_str());
-    }
-  }
-
-  if (table.contains("window_glass_opacity")) {
-    if (auto opacity = configNumber(table, "window_glass_opacity"); opacity && *opacity >= 0.f && *opacity <= 1.f) {
-      config.chrome.windowGlassOpacity = *opacity;
-    } else {
-      std::fprintf(stderr, "lambda-window-manager: ignoring invalid window_glass_opacity value in %s\n", path->c_str());
     }
   }
 

@@ -87,6 +87,22 @@ void backgroundEffectSurfaceSetTint(wl_client*, wl_resource* resource, std::uint
   effect->surface->backgroundEffectStatePending = true;
 }
 
+void backgroundEffectSurfaceSetBaseColor(wl_client*, wl_resource* resource, std::uint32_t baseColor) {
+  auto* effect = resourceData<WaylandServer::Impl::BackgroundEffect>(resource);
+  if (!effect || !effect->surface) {
+    wl_resource_post_error(resource,
+                           EXT_BACKGROUND_EFFECT_SURFACE_V1_ERROR_SURFACE_DESTROYED,
+                           "associated wl_surface has been destroyed");
+    return;
+  }
+
+  if (!effect->surface->backgroundEffectStatePending) {
+    effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
+  }
+  effect->surface->pendingBackgroundEffectState.baseColor = colorFromRgba(baseColor);
+  effect->surface->backgroundEffectStatePending = true;
+}
+
 void backgroundEffectSurfaceSetBorder(wl_client*, wl_resource* resource, std::uint32_t border) {
   auto* effect = resourceData<WaylandServer::Impl::BackgroundEffect>(resource);
   if (!effect || !effect->surface) {
@@ -137,6 +153,7 @@ struct ext_background_effect_surface_v1_interface const backgroundEffectSurfaceI
     .set_tint = backgroundEffectSurfaceSetTint,
     .set_border = backgroundEffectSurfaceSetBorder,
     .set_corner_radii = backgroundEffectSurfaceSetCornerRadii,
+    .set_base_color = backgroundEffectSurfaceSetBaseColor,
 };
 
 void backgroundEffectManagerGetBackgroundEffect(wl_client* client,
@@ -184,7 +201,7 @@ struct ext_background_effect_manager_v1_interface const backgroundEffectManagerI
 
 void bindBackgroundEffectManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &ext_background_effect_manager_v1_interface, std::min(version, 2u), id);
+      wl_resource_create(client, &ext_background_effect_manager_v1_interface, std::min(version, 3u), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;

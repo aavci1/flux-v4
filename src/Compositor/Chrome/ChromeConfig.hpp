@@ -7,6 +7,14 @@
 
 namespace flux::compositor {
 
+struct GlassEffectConfig {
+  float blurRadius = 46.f;
+  Color baseColor = Color{1.f, 1.f, 1.f, 0.18f};
+  Color tintColor = Color{0.86f, 0.96f, 1.f, 0.56f};
+  Color borderColor = Color{1.f, 1.f, 1.f, 0.62f};
+  float opacity = 1.f;
+};
+
 struct ChromeConfig {
   std::int32_t titleBarHeight = 28;
   std::int32_t controlsWidth = 84;
@@ -27,9 +35,7 @@ struct ChromeConfig {
   CornerRadius windowCornerRadius = CornerRadius{14.f};
   std::int32_t resizeGripSize = 4;
   bool windowGlassEnabled = true;
-  float windowGlassOpacity = 1.f;
-  Color glassTint = Color{0.86f, 0.96f, 1.f, 0.56f};
-  float glassBlurRadius = 46.f;
+  GlassEffectConfig glass{};
   Color windowBorderColor = Color{1.f, 1.f, 1.f, 0.62f};
   float windowBorderWidth = 1.f;
   Color borderLineColor = Color{1.f, 1.f, 1.f, 0.62f};
