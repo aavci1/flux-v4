@@ -91,9 +91,11 @@ void postTextInput(FluxMetalView* view, std::string text);
   if (device) {
     metalLayer.device = device;
   }
-	  metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-	  metalLayer.framebufferOnly = NO;
-	  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+  metalLayer.framebufferOnly = NO;
+  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  metalLayer.opaque = NO;
+  metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
   // Match MetalCanvas in-flight limit; helps avoid main-thread stalls on nextDrawable during live resize.
   metalLayer.maximumDrawableCount = 3;
   metalLayer.allowsNextDrawableTimeout = YES;
@@ -176,6 +178,10 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 - (BOOL)acceptsFirstResponder {
   return YES;
+}
+
+- (BOOL)isOpaque {
+  return NO;
 }
 
 - (BOOL)isFlipped {
@@ -514,6 +520,7 @@ CVReturn displayLinkOutputCallback(CVDisplayLinkRef /*displayLink*/, CVTimeStamp
 
 struct MacMetalWindow::Impl {
   NSWindow* window_{nil};
+  NSVisualEffectView* materialView_{nil};
   FluxMetalView* metalView_{nil};
   FluxWindowDelegate* delegate_{nil};
   ::flux::Window* fluxWindow_{nullptr};
@@ -525,6 +532,7 @@ struct MacMetalWindow::Impl {
   std::atomic<bool> legacyDisplayLinkRunning_{false};
   Cursor currentCursor_{Cursor::Inherit};
   WindowDecorationMode decorationMode_{WindowDecorationMode::System};
+  WindowGlassOptions glassConfig_{};
   NSEvent* lastPointerDownEvent_{nil};
   std::vector<std::unique_ptr<MacPopoverSurface>> popovers_;
   std::uint64_t nextPopoverId_{1};
@@ -1339,8 +1347,10 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   d->fluxWindow_ = nullptr;
   d->window_ = nil;
   d->metalView_ = nil;
+  d->materialView_ = nil;
   d->delegate_ = nil;
   d->decorationMode_ = config.decorationMode;
+  d->glassConfig_ = config.glass;
 
   NSWindowStyleMask styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
   if (config.resizable) {
@@ -1361,6 +1371,11 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
                                           styleMask:styleMask
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
+  if (d->glassConfig_.enabled) {
+    [d->window_ setOpaque:NO];
+    [d->window_ setBackgroundColor:[NSColor clearColor]];
+    [d->window_ setHasShadow:YES];
+  }
   applyDecorationMode();
   [d->window_ setReleasedWhenClosed:NO];
   // Flux owns cursor state. Stops _NSTrackingAreaAKManager from running its
@@ -1381,7 +1396,18 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   d->metalView_ = [[FluxMetalView alloc] initWithFrame:[[d->window_ contentView] bounds]];
   d->metalView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   d->metalView_.fluxPlatform = this;
-  [d->window_ setContentView:d->metalView_];
+  if (d->glassConfig_.enabled) {
+    d->materialView_ = [[NSVisualEffectView alloc] initWithFrame:[[d->window_ contentView] bounds]];
+    d->materialView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    d->materialView_.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    d->materialView_.state = NSVisualEffectStateActive;
+    d->materialView_.material = NSVisualEffectMaterialUnderWindowBackground;
+    [d->window_ setContentView:d->materialView_];
+    d->metalView_.frame = d->materialView_.bounds;
+    [d->materialView_ addSubview:d->metalView_];
+  } else {
+    [d->window_ setContentView:d->metalView_];
+  }
 
   NSString* title = [NSString stringWithUTF8String:config.title.c_str()];
   if (!title) {
@@ -1444,6 +1470,7 @@ MacMetalWindow::~MacMetalWindow() {
     }
     d->delegate_ = nil;
     d->metalView_ = nil;
+    d->materialView_ = nil;
     d->window_ = nil;
   }
   d.reset();
@@ -1927,7 +1954,9 @@ void MacMetalWindow::setCursor(Cursor kind) {
 }
 
 PlatformWindowCapabilities MacMetalWindow::capabilities() const {
-  return {};
+  return {
+      .supportsWindowGlass = true,
+  };
 }
 
 namespace platform {

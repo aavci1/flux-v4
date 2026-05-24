@@ -18,9 +18,9 @@ struct FilesTheme {
   static constexpr flux::Color selectFill = flux::Color{0.16f, 0.50f, 1.f, 0.14f};
   static constexpr flux::Color selectBorder = flux::Color{0.16f, 0.50f, 1.f, 0.35f};
   static constexpr flux::Color hoverFill = flux::Color{0.f, 0.f, 0.f, 0.04f};
-  static constexpr flux::Color windowBg = flux::Color::hex(0xF4F6FB);
-  static constexpr flux::Color chromeBg = flux::Color{1.f, 1.f, 1.f, 0.92f};
-  static constexpr flux::Color sideBg = flux::Color{1.f, 1.f, 1.f, 0.35f};
+  static constexpr flux::Color windowBg = flux::Color{0.90f, 0.96f, 0.99f, 0.72f};
+  static constexpr flux::Color chromeBg = flux::Color{1.f, 1.f, 1.f, 0.44f};
+  static constexpr flux::Color sideBg = flux::Color{1.f, 1.f, 1.f, 0.28f};
   static constexpr flux::Color folderA = flux::Color::hex(0x4D94FF);
   static constexpr flux::Color folderB = flux::Color::hex(0x2A7FFF);
   static constexpr flux::Color filePaperTop = flux::Color::hex(0xFFFFFF);

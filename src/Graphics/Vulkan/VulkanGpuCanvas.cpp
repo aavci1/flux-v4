@@ -983,8 +983,12 @@ VulkanPathVertex makeVulkanPathVertex(PathVertex const &src, FillStyle const *fi
 
 class VulkanCanvas final : public Canvas {
 public:
-  VulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem &textSystem)
-      : handle_(handle), textSystem_(textSystem), surface_(surface) {
+  VulkanCanvas(VkSurfaceKHR surface,
+               unsigned int handle,
+               TextSystem &textSystem,
+               VulkanCanvasOptions options)
+      : handle_(handle), textSystem_(textSystem), surface_(surface),
+        transparentSurface_(options.transparentSurface) {
     instance_ = ensureSharedVulkanInstanceImpl();
     if (!surface_) {
       throw std::runtime_error("Vulkan canvas requires a valid platform surface");
@@ -2939,7 +2943,7 @@ private:
     info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.preTransform = caps.currentTransform;
-    info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    info.compositeAlpha = chooseCompositeAlpha(caps.supportedCompositeAlpha);
     info.presentMode = mode;
     info.clipped = VK_TRUE;
     info.oldSwapchain = oldSwapchain;
@@ -4521,6 +4525,31 @@ private:
     pendingScreenshotPath_.clear();
   }
 
+  VkCompositeAlphaFlagBitsKHR chooseCompositeAlpha(VkCompositeAlphaFlagsKHR supported) const {
+    auto supports = [supported](VkCompositeAlphaFlagBitsKHR mode) {
+      return (supported & mode) == mode;
+    };
+    if (!transparentSurface_) {
+      if (supports(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)) {
+        return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+      }
+      if (supports(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) {
+        return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+      }
+    } else {
+      if (supports(VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)) {
+        return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+      }
+      if (supports(VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)) {
+        return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+      }
+      if (supports(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) {
+        return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+      }
+    }
+    return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  }
+
   unsigned int handle_ = 0;
   TextSystem &textSystem_;
   VulkanRenderTargetSpec targetSpec_{};
@@ -4591,6 +4620,7 @@ private:
   bool debugScreenshotWritten_ = false;
   bool swapchainDirty_ = true;
   bool presentFenceRuntimeDisabled_ = false;
+  bool transparentSurface_ = false;
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
   std::vector<PendingTextureUpload> pendingTextureUploads_;
@@ -4644,8 +4674,11 @@ VkInstance ensureSharedVulkanInstance() {
   return ensureSharedVulkanInstanceImpl();
 }
 
-std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem &textSystem) {
-  return std::make_unique<VulkanCanvas>(surface, handle, textSystem);
+std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface,
+                                           unsigned int handle,
+                                           TextSystem &textSystem,
+                                           VulkanCanvasOptions options) {
+  return std::make_unique<VulkanCanvas>(surface, handle, textSystem, options);
 }
 
 std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,

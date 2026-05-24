@@ -13,7 +13,17 @@ int main(int argc, char* argv[]) {
       .title = "Files",
       .decorationMode = flux::WindowDecorationMode::IntegratedTitlebar,
       .resizable = true,
+      .glass = {
+          .enabled = true,
+          .blurRadius = 46.f,
+          .tint = {0.86f, 0.96f, 1.f, 0.56f},
+          .borderColor = {1.f, 1.f, 1.f, 0.62f},
+          .tintOpacity = 0.42f,
+      },
   });
+  if (window.platformCapabilities().supportsWindowGlass) {
+    window.setClearColor(flux::Colors::transparent);
+  }
   window.setView<lambda_files::FilesAppRoot>({.window = &window});
 
   return app.exec();

@@ -59,10 +59,11 @@ struct DisplayMode {
 /// Per-backend window feature support. Query with `Window::platformCapabilities()`.
 ///
 /// Backend matrix (config field → capability):
+/// - `glass` → native/compositor-backed window material where available
 /// - `layerShell` / `backgroundBlur` → Wayland compositor client only
 /// - `outputName` / `displayMode` → KMS only
-/// - Mac Metal → none of the above (normal xdg/Cocoa windows)
 struct PlatformWindowCapabilities {
+  bool supportsWindowGlass = false;
   bool supportsLayerShell = false;
   bool supportsBackgroundBlur = false;
   bool supportsOutputSelection = false;
@@ -110,6 +111,18 @@ struct LayerShellOptions {
   LayerShellChromeOptions chrome{};
 };
 
+struct WindowGlassOptions {
+  bool enabled = false;
+  /// Preferred blur radius for platforms that expose a tunable backdrop blur.
+  /// Some backends map this to the nearest native material instead.
+  float blurRadius = 42.f;
+  /// Preferred tint for app chrome drawn over the material or compositor chrome
+  /// that supports explicit tint metadata.
+  Color tint{1.f, 1.f, 1.f, 0.40f};
+  Color borderColor{1.f, 1.f, 1.f, 0.58f};
+  float tintOpacity = 0.30f;
+};
+
 struct WindowConfig {
   Size size = {1280, 720};
   std::string title = "Flux Application";
@@ -125,6 +138,9 @@ struct WindowConfig {
   /// On KMS, request a specific connector mode. Zero values use the output's preferred mode.
   /// Other backends currently ignore this value.
   DisplayMode displayMode{};
+  /// Request native/compositor-backed background glass for this window.
+  /// Unsupported backends ignore this; apps should still draw a readable fallback background.
+  WindowGlassOptions glass{};
   /// On Wayland, create this window as a layer-shell surface instead of an xdg_toplevel.
   /// Other backends currently ignore this value.
   LayerShellOptions layerShell{};

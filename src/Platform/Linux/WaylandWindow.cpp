@@ -628,7 +628,8 @@ class WaylandWindow final : public platform::Window {
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
-        fullscreen_(config.fullscreen), decorationMode_(config.decorationMode), layerShellConfig_(config.layerShell) {
+        fullscreen_(config.fullscreen), decorationMode_(config.decorationMode),
+        glassConfig_(config.glass), layerShellConfig_(config.layerShell) {
     if (pipe(wakePipe_) != 0) {
       throw std::runtime_error("Failed to create Wayland wake pipe");
     }
@@ -665,6 +666,7 @@ public:
       configureDecorationProtocol();
       if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
     }
+    updateBackgroundEffectRegion();
     wl_surface_commit(surface_);
     surfaceCommitted_ = true;
     while (!configured_) {
@@ -719,7 +721,10 @@ public:
                                  Application::instance().cacheDir());
     VkInstance instance = ensureSharedVulkanInstance();
     VkSurfaceKHR surface = Application::instance().platformApp().createVulkanSurface(instance, &nativeSurface_);
-    auto canvas = createVulkanCanvas(surface, handle_, Application::instance().textSystem());
+    auto canvas = createVulkanCanvas(surface,
+                                     handle_,
+                                     Application::instance().textSystem(),
+                                     {.transparentSurface = glassConfig_.enabled});
     setVulkanCanvasResizeBoundsHint(canvas.get(), configureBoundsWidth_, configureBoundsHeight_);
     canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
     canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
@@ -760,8 +765,9 @@ public:
 
   PlatformWindowCapabilities capabilities() const override {
     return {
+        .supportsWindowGlass = shared_ && shared_->backgroundEffectManager,
         .supportsLayerShell = true,
-        .supportsBackgroundBlur = true,
+        .supportsBackgroundBlur = shared_ && shared_->backgroundEffectManager,
         .supportsOutputSelection = false,
         .supportsDisplayMode = false,
     };
@@ -1344,7 +1350,10 @@ private:
       VkInstance instance = ensureSharedVulkanInstance();
       VkSurfaceKHR vkSurface = Application::instance().platformApp().createVulkanSurface(instance,
                                                                                         &state.nativeSurface);
-      state.canvas = createVulkanCanvas(vkSurface, handle_, Application::instance().textSystem());
+      state.canvas = createVulkanCanvas(vkSurface,
+                                        handle_,
+                                        Application::instance().textSystem(),
+                                        {.transparentSurface = true});
       state.canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
       state.canvas->resize(state.width, state.height);
       return true;
@@ -1927,7 +1936,9 @@ private:
 
   void updateBackgroundEffectRegion() {
     LayerShellChromeOptions const& chrome = layerShellConfig_.chrome;
-    bool const wantsBlur = layerShellConfig_.backgroundBlur || chrome.style != LayerShellChromeStyle::None;
+    bool const wantsBlur = glassConfig_.enabled ||
+                           layerShellConfig_.backgroundBlur ||
+                           chrome.style != LayerShellChromeStyle::None;
     if (!wantsBlur || !shared_ || !shared_->backgroundEffectManager || !shared_->compositor ||
         !surface_) {
       return;
@@ -2143,6 +2154,7 @@ private:
   float dpiScaleY_ = 1.f;
 	  bool fullscreen_ = false;
 	  WindowDecorationMode decorationMode_ = WindowDecorationMode::System;
+  WindowGlassOptions glassConfig_{};
 	  LayerShellOptions layerShellConfig_{};
   bool surfaceCommitted_ = false;
   bool configured_ = false;

@@ -39,12 +39,14 @@ namespace flux {
 namespace {
 
 void logUnsupportedWindowConfigOnce(char const* feature) {
+  static bool loggedGlass = false;
   static bool loggedLayerShell = false;
   static bool loggedBackgroundBlur = false;
   static bool loggedOutputName = false;
   static bool loggedDisplayMode = false;
   bool* slot = nullptr;
-  if (std::strcmp(feature, "layerShell") == 0) slot = &loggedLayerShell;
+  if (std::strcmp(feature, "glass") == 0) slot = &loggedGlass;
+  else if (std::strcmp(feature, "layerShell") == 0) slot = &loggedLayerShell;
   else if (std::strcmp(feature, "backgroundBlur") == 0) slot = &loggedBackgroundBlur;
   else if (std::strcmp(feature, "outputName") == 0) slot = &loggedOutputName;
   else if (std::strcmp(feature, "displayMode") == 0) slot = &loggedDisplayMode;
@@ -57,6 +59,9 @@ void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities
   char const* env = std::getenv("FLUX_LOG_WINDOW_CONFIG");
   if (!env || !*env || *env == '0') return;
 
+  if (config.glass.enabled && !capabilities.supportsWindowGlass) {
+    logUnsupportedWindowConfigOnce("glass");
+  }
   if (config.layerShell.enabled && !capabilities.supportsLayerShell) {
     logUnsupportedWindowConfigOnce("layerShell");
   }

@@ -16,6 +16,10 @@ class TextSystem;
 struct VulkanFrameRecorder;
 struct VulkanRenderTargetSpec;
 
+struct VulkanCanvasOptions {
+  bool transparentSurface = false;
+};
+
 struct VulkanPastPresentationTiming {
   std::uint32_t presentId = 0;
   std::uint64_t desiredPresentTime = 0;
@@ -27,7 +31,10 @@ struct VulkanPastPresentationTiming {
 void configureVulkanCanvasRuntime(std::span<char const* const> requiredInstanceExtensions,
                                   std::filesystem::path cacheDir);
 VkInstance ensureSharedVulkanInstance();
-std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem);
+std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface,
+                                           unsigned int handle,
+                                           TextSystem& textSystem,
+                                           VulkanCanvasOptions options = {});
 std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,
                                                        TextSystem& textSystem);
 bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec const& spec);
