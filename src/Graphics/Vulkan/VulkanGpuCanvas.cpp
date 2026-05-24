@@ -13,6 +13,7 @@
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
+#include "Graphics/Vulkan/generated/image_unpremultiply_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/path_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/path_vert_spv.hpp"
@@ -416,6 +417,7 @@ struct SharedVulkanCore {
     VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
     VkPipeline rectPipeline = VK_NULL_HANDLE;
     VkPipeline imagePipeline = VK_NULL_HANDLE;
+    VkPipeline imageUnpremultiplyPipeline = VK_NULL_HANDLE;
     VkPipeline backdropPipeline = VK_NULL_HANDLE;
     VkPipeline backdropBlurPipeline = VK_NULL_HANDLE;
     VkPipeline pathPipeline = VK_NULL_HANDLE;
@@ -828,6 +830,8 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
     vkDestroyPipeline(device, res.rectPipeline, nullptr);
   if (res.imagePipeline)
     vkDestroyPipeline(device, res.imagePipeline, nullptr);
+  if (res.imageUnpremultiplyPipeline)
+    vkDestroyPipeline(device, res.imageUnpremultiplyPipeline, nullptr);
   if (res.backdropPipeline)
     vkDestroyPipeline(device, res.backdropPipeline, nullptr);
   if (res.backdropBlurPipeline)
@@ -1041,6 +1045,12 @@ public:
 
   bool supportsDisplayTiming() const noexcept {
     return getPastPresentationTiming_ != nullptr && swapchain_ != VK_NULL_HANDLE;
+  }
+
+  bool setImagePremultipliedAlpha(bool enabled) {
+    bool const previous = imagePremultipliedAlpha_;
+    imagePremultipliedAlpha_ = enabled;
+    return previous;
   }
 
   bool setRenderTargetSpec(VulkanRenderTargetSpec const& spec) {
@@ -2010,7 +2020,9 @@ public:
     if (!captureTarget_) {
       batches_.push_back(ImageBatch{texture, first, 1});
     }
-    appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Image, texture, first, 1));
+    DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
+    op.premultipliedAlpha = imagePremultipliedAlpha_;
+    appendDrawOp(target.ops, op);
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }
 
@@ -2207,6 +2219,7 @@ private:
            sameRect(a.clip, b.clip) &&
            a.externalStorageDescriptor == b.externalStorageDescriptor &&
            a.externalVertexBuffer == b.externalVertexBuffer &&
+           a.premultipliedAlpha == b.premultipliedAlpha &&
            std::abs(a.externalTranslationX - b.externalTranslationX) <= 1e-4f &&
            std::abs(a.externalTranslationY - b.externalTranslationY) <= 1e-4f;
   }
@@ -2743,6 +2756,13 @@ private:
                                       flux_rect_frag_spv, flux_rect_frag_spv_len, {});
     res.imagePipeline = createPipeline(res.imagePipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
                                        flux_image_frag_spv, flux_image_frag_spv_len, {});
+    res.imageUnpremultiplyPipeline =
+        createPipeline(res.imagePipelineLayout,
+                       flux_image_vert_spv,
+                       flux_image_vert_spv_len,
+                       flux_image_unpremultiply_frag_spv,
+                       flux_image_unpremultiply_frag_spv_len,
+                       {});
     res.backdropPipeline = createPipeline(res.backdropPipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
                                           flux_backdrop_frag_spv, flux_backdrop_frag_spv_len, {});
     res.backdropBlurPipeline =
@@ -3427,6 +3447,7 @@ private:
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalVertexBuffer));
     hashValue(h, op.externalTranslationX);
     hashValue(h, op.externalTranslationY);
+    hashValue(h, op.premultipliedAlpha);
     hashTextureReference(h, op.texture);
 
     std::uint32_t const end = op.first + op.count;
@@ -3664,14 +3685,18 @@ private:
 
   void drawImageRange(VkCommandBuffer commandBuffer, VulkanCommandState &state, Texture *texture, std::uint32_t first, std::uint32_t count,
                       VkDescriptorSet descriptor = VK_NULL_HANDLE,
-                      float translationX = 0.f, float translationY = 0.f) {
+                      float translationX = 0.f, float translationY = 0.f,
+                      bool premultipliedAlpha = false) {
     if (!texture || !texture->descriptor || count == 0)
       return;
     auto const &res = resources();
     VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
     if (!storageDescriptor)
       return;
-    bindPipeline(commandBuffer, state, res.imagePipeline, res.imagePipelineLayout);
+    bindPipeline(commandBuffer,
+                 state,
+                 premultipliedAlpha ? res.imageUnpremultiplyPipeline : res.imagePipeline,
+                 res.imagePipelineLayout);
     bindDescriptorSet(commandBuffer, state, res.imagePipelineLayout, 0, storageDescriptor);
     pushDrawConstants(commandBuffer, state, res.imagePipelineLayout, translationX, translationY);
     bindDescriptorSet(commandBuffer, state, res.imagePipelineLayout, 1, texture->descriptor);
@@ -3945,7 +3970,7 @@ private:
         break;
       case DrawOp::Kind::Image:
         drawImageRange(commandBuffer, commandState, op.texture, op.first, op.count, op.externalStorageDescriptor,
-                       op.externalTranslationX, op.externalTranslationY);
+                       op.externalTranslationX, op.externalTranslationY, op.premultipliedAlpha);
         break;
       case DrawOp::Kind::BackdropBlur:
         drawBackdropRange(commandBuffer, commandState, backdropSource, op.first, op.count, op.externalStorageDescriptor,
@@ -4621,6 +4646,7 @@ private:
   bool swapchainDirty_ = true;
   bool presentFenceRuntimeDisabled_ = false;
   bool transparentSurface_ = false;
+  bool imagePremultipliedAlpha_ = false;
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
   std::vector<PendingTextureUpload> pendingTextureUploads_;
@@ -4738,6 +4764,11 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
   if (auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas)) {
     vulkan->setResizeBoundsHint(logicalWidth, logicalHeight);
   }
+}
+
+bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan ? vulkan->setImagePremultipliedAlpha(enabled) : false;
 }
 
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas) {

@@ -549,9 +549,6 @@ struct FilesAppRoot {
         .selectedPath = selectedPath,
         .activateEntry = activateEntry,
     };
-    bool const compositorBackedGlass =
-        window && window->platformCapabilities().supportsBackgroundBlur;
-
     auto root = VStack{
         .spacing = 0.f,
         .alignment = Alignment::Stretch,
@@ -613,7 +610,7 @@ struct FilesAppRoot {
                         .flex(1.f, 1.f, 0.f))}
                 .flex(1.f, 1.f, 0.f)),
     }
-        .fill(compositorBackedGlass ? Colors::transparent : FilesTheme::windowBg);
+        .fill(FilesTheme::windowBg);
 
     root = std::move(root).onKeyDown(
         [goBackNav, goForwardNav, goUpNav, selectedPath, entries, activateEntry](

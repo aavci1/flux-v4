@@ -2,6 +2,7 @@
 
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Detail/ResizeTrace.hpp"
+#include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -82,7 +83,18 @@ void drawContentPiece(Canvas& canvas,
   canvas.drawImage(image,
                    source,
                    destination,
-	                   cornerRadiusForPiece(fullDestination, destination, outerCorners));
+                   cornerRadiusForPiece(fullDestination, destination, outerCorners));
+}
+
+void drawClientSurfacePiece(Canvas& canvas,
+                            Image& image,
+                            Rect const& source,
+                            Rect const& destination,
+                            Rect const& fullDestination,
+                            CornerRadius const& outerCorners) {
+  bool const previousPremultiplied = setVulkanCanvasImagePremultipliedAlpha(&canvas, true);
+  drawContentPiece(canvas, image, source, destination, fullDestination, outerCorners);
+  setVulkanCanvasImagePremultipliedAlpha(&canvas, previousPremultiplied);
 }
 
 void drawSurfaceBackgroundBlur(Canvas& canvas,
@@ -258,70 +270,70 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                  : windowWidth;
   float const contentHeight = clientContentSmallerThanFrame
                                   ? static_cast<float>(surface.destinationHeight)
-	                                  : windowHeight;
+                                  : windowHeight;
   Rect const fullContentRect = Rect::sharp(windowX, windowY, windowWidth, windowHeight);
   drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
   canvas.clipRect(fullContentRect);
-  drawContentPiece(canvas,
-                   clientImage,
-                   Rect::sharp(surface.sourceX,
-                               surface.sourceY,
-                               sourceWidth,
-                               sourceHeight),
-                   Rect::sharp(windowX,
-                               windowY,
-                               contentWidth,
-                               contentHeight),
-                   fullContentRect,
-                   contentCorners);
+  drawClientSurfacePiece(canvas,
+                         clientImage,
+                         Rect::sharp(surface.sourceX,
+                                     surface.sourceY,
+                                     sourceWidth,
+                                     sourceHeight),
+                         Rect::sharp(windowX,
+                                     windowY,
+                                     contentWidth,
+                                     contentHeight),
+                         fullContentRect,
+                         contentCorners);
   if (clientContentSmallerThanFrame) {
     float const rightPad = std::max(0.f, windowWidth - contentWidth);
     float const bottomPad = std::max(0.f, windowHeight - contentHeight);
     float const edgeSourceWidth = std::max(1.f, sourceWidth);
     float const edgeSourceHeight = std::max(1.f, sourceHeight);
     if (rightPad > 0.f) {
-      drawContentPiece(canvas,
-                       clientImage,
-                       Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
-                                   surface.sourceY,
-                                   1.f,
-                                   edgeSourceHeight),
-                       Rect::sharp(windowX + contentWidth,
-                                   windowY,
-                                   rightPad,
-                                   contentHeight),
-                       fullContentRect,
-                       contentCorners);
+      drawClientSurfacePiece(canvas,
+                             clientImage,
+                             Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
+                                         surface.sourceY,
+                                         1.f,
+                                         edgeSourceHeight),
+                             Rect::sharp(windowX + contentWidth,
+                                         windowY,
+                                         rightPad,
+                                         contentHeight),
+                             fullContentRect,
+                             contentCorners);
     }
     if (bottomPad > 0.f) {
-      drawContentPiece(canvas,
-                       clientImage,
-                       Rect::sharp(surface.sourceX,
-                                   surface.sourceY + edgeSourceHeight - 1.f,
-                                   edgeSourceWidth,
-                                   1.f),
-                       Rect::sharp(windowX,
-                                   windowY + contentHeight,
-                                   contentWidth,
-                                   bottomPad),
-                       fullContentRect,
-                       contentCorners);
+      drawClientSurfacePiece(canvas,
+                             clientImage,
+                             Rect::sharp(surface.sourceX,
+                                         surface.sourceY + edgeSourceHeight - 1.f,
+                                         edgeSourceWidth,
+                                         1.f),
+                             Rect::sharp(windowX,
+                                         windowY + contentHeight,
+                                         contentWidth,
+                                         bottomPad),
+                             fullContentRect,
+                             contentCorners);
     }
     if (rightPad > 0.f && bottomPad > 0.f) {
-      drawContentPiece(canvas,
-                       clientImage,
-                       Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
-                                   surface.sourceY + edgeSourceHeight - 1.f,
-                                   1.f,
-                                   1.f),
-                       Rect::sharp(windowX + contentWidth,
-                                   windowY + contentHeight,
-                                   rightPad,
-                                   bottomPad),
-                       fullContentRect,
-                       contentCorners);
+      drawClientSurfacePiece(canvas,
+                             clientImage,
+                             Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
+                                         surface.sourceY + edgeSourceHeight - 1.f,
+                                         1.f,
+                                         1.f),
+                             Rect::sharp(windowX + contentWidth,
+                                         windowY + contentHeight,
+                                         rightPad,
+                                         bottomPad),
+                             fullContentRect,
+                             contentCorners);
     }
   }
   canvas.restore();

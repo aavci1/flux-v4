@@ -65,6 +65,7 @@ struct DrawOp {
   VkBuffer externalVertexBuffer = VK_NULL_HANDLE;
   float externalTranslationX = 0.f;
   float externalTranslationY = 0.f;
+  bool premultipliedAlpha = false;
 };
 
 struct VulkanPathVertex {
