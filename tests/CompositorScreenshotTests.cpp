@@ -2,6 +2,47 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unistd.h>
+
+namespace {
+
+struct ScopedEnv {
+  explicit ScopedEnv(char const* name)
+      : name(name) {
+    if (char const* value = std::getenv(name); value) {
+      hadOriginal = true;
+      original = value;
+    }
+  }
+
+  ~ScopedEnv() {
+    if (!hadOriginal) {
+      unsetenv(name);
+    } else {
+      setenv(name, original.c_str(), 1);
+    }
+  }
+
+  char const* name;
+  bool hadOriginal = false;
+  std::string original;
+};
+
+std::filesystem::path screenshotTempRoot() {
+  auto path = std::filesystem::temp_directory_path() /
+              ("lambda-window-manager-screenshot-test-" +
+               std::to_string(static_cast<unsigned long long>(getpid())));
+  std::filesystem::remove_all(path);
+  return path;
+}
+
+} // namespace
+
 TEST_CASE("screenshot regions normalize and clamp to bounds") {
   using flux::compositor::ScreenshotRegion;
   auto normalized = flux::compositor::normalizeScreenshotRegion(ScreenshotRegion{.x = 80, .y = 60, .width = -120, .height = -80},
@@ -81,4 +122,46 @@ TEST_CASE("screenshot rounded mask clears pixels outside active window corners")
   CHECK(pixels[center + 1u] == 255u);
   CHECK(pixels[center + 2u] == 255u);
   CHECK(pixels[center + 3u] == 255u);
+}
+
+TEST_CASE("screenshot default path uses home screenshots directory and avoids collisions") {
+  ScopedEnv home("HOME");
+  auto const root = screenshotTempRoot();
+  std::filesystem::create_directories(root);
+  setenv("HOME", root.c_str(), 1);
+
+  auto const first = flux::compositor::defaultScreenshotPath();
+  CHECK(first.parent_path() == root / "Pictures" / "Screenshots");
+  CHECK(first.extension() == ".png");
+
+  std::filesystem::create_directories(first.parent_path());
+  {
+    std::ofstream existing(first);
+    existing << "existing";
+  }
+
+  auto const second = flux::compositor::defaultScreenshotPath();
+  CHECK(second.parent_path() == first.parent_path());
+  CHECK(second.extension() == ".png");
+  CHECK(second != first);
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("screenshot PNG writer creates output file") {
+  auto const root = screenshotTempRoot();
+  auto const path = root / "nested" / "screenshot.png";
+  std::vector<std::uint8_t> const bgra{30u, 20u, 10u, 255u};
+
+  auto const result = flux::compositor::saveScreenshotPng(path, bgra, 1, 1);
+  CHECK(result.error.empty());
+  CHECK(result.path == path);
+  REQUIRE(std::filesystem::exists(path));
+
+  std::ifstream file(path, std::ios::binary);
+  std::array<unsigned char, 8> signature{};
+  file.read(reinterpret_cast<char*>(signature.data()), static_cast<std::streamsize>(signature.size()));
+  CHECK(signature == std::array<unsigned char, 8>{137u, 80u, 78u, 71u, 13u, 10u, 26u, 10u});
+
+  std::filesystem::remove_all(root);
 }
