@@ -239,14 +239,20 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
     color.a = alpha;
     if (color.a <= 0.f) continue;
 
-    Rect const layerRect = Rect::sharp(frameRect.x + shadow.offset.x - spread,
-                                      frameRect.y + shadow.offset.y - spread,
-                                      frameRect.width + spread * 2.f,
-                                      frameRect.height + spread * 2.f);
-    CornerRadius const layerRadius{chrome.windowCornerRadius.topLeft + spread,
-                                   chrome.windowCornerRadius.topRight + spread,
-                                   chrome.windowCornerRadius.bottomRight + spread,
-                                   chrome.windowCornerRadius.bottomLeft + spread};
+    float const leftSpread = std::max(0.f, spread - shadow.offset.x);
+    float const rightSpread = std::max(0.f, spread + shadow.offset.x);
+    float const topSpread = std::max(0.f, spread - shadow.offset.y);
+    float const bottomSpread = std::max(0.f, spread + shadow.offset.y);
+    Rect const layerRect = Rect::sharp(frameRect.x - leftSpread,
+                                      frameRect.y - topSpread,
+                                      frameRect.width + leftSpread + rightSpread,
+                                      frameRect.height + topSpread + bottomSpread);
+    CornerRadius const layerRadius{
+        chrome.windowCornerRadius.topLeft + std::max(leftSpread, topSpread),
+        chrome.windowCornerRadius.topRight + std::max(rightSpread, topSpread),
+        chrome.windowCornerRadius.bottomRight + std::max(rightSpread, bottomSpread),
+        chrome.windowCornerRadius.bottomLeft + std::max(leftSpread, bottomSpread),
+    };
     Path ring;
     ring.rect(layerRect, layerRadius);
     ring.rect(frameRect, chrome.windowCornerRadius);
