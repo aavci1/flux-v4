@@ -42,15 +42,13 @@ std::optional<ScreenshotRegion> selectedRegion(WaylandServer::Impl const* server
   if (!server || !server->screenshotSelection_.active) return std::nullopt;
   auto const& selection = server->screenshotSelection_;
   if (!selection.dragging) return std::nullopt;
-  ScreenshotRegion raw{
-      .x = static_cast<std::int32_t>(std::lround(selection.startX)),
-      .y = static_cast<std::int32_t>(std::lround(selection.startY)),
-      .width = static_cast<std::int32_t>(std::lround(selection.currentX - selection.startX)),
-      .height = static_cast<std::int32_t>(std::lround(selection.currentY - selection.startY)),
-  };
-  auto region = normalizeScreenshotRegion(raw, server->logicalOutputWidth(), server->logicalOutputHeight());
-  if (!region || region->width < kMinimumRegionSize || region->height < kMinimumRegionSize) return std::nullopt;
-  return region;
+  return screenshotSelectionRegion(selection.startX,
+                                   selection.startY,
+                                   selection.currentX,
+                                   selection.currentY,
+                                   server->logicalOutputWidth(),
+                                   server->logicalOutputHeight(),
+                                   kMinimumRegionSize);
 }
 
 void restorePointerRouting(WaylandServer::Impl* server, std::uint32_t timeMs) {

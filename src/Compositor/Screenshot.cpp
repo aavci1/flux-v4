@@ -185,6 +185,24 @@ std::optional<ScreenshotRegion> normalizeScreenshotRegion(ScreenshotRegion regio
   };
 }
 
+std::optional<ScreenshotRegion> screenshotSelectionRegion(float startX,
+                                                          float startY,
+                                                          float currentX,
+                                                          float currentY,
+                                                          std::int32_t boundsWidth,
+                                                          std::int32_t boundsHeight,
+                                                          std::int32_t minimumSize) {
+  ScreenshotRegion raw{
+      .x = static_cast<std::int32_t>(std::lround(startX)),
+      .y = static_cast<std::int32_t>(std::lround(startY)),
+      .width = static_cast<std::int32_t>(std::lround(currentX - startX)),
+      .height = static_cast<std::int32_t>(std::lround(currentY - startY)),
+  };
+  auto region = normalizeScreenshotRegion(raw, boundsWidth, boundsHeight);
+  if (!region || region->width < minimumSize || region->height < minimumSize) return std::nullopt;
+  return region;
+}
+
 std::optional<ScreenshotRegion> logicalRegionToFramebuffer(ScreenshotRegion region,
                                                            std::int32_t logicalWidth,
                                                            std::int32_t logicalHeight,

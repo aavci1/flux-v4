@@ -54,6 +54,13 @@ struct ScreenshotSaveResult {
 [[nodiscard]] std::optional<ScreenshotRegion> normalizeScreenshotRegion(ScreenshotRegion region,
                                                                          std::int32_t boundsWidth,
                                                                          std::int32_t boundsHeight);
+[[nodiscard]] std::optional<ScreenshotRegion> screenshotSelectionRegion(float startX,
+                                                                        float startY,
+                                                                        float currentX,
+                                                                        float currentY,
+                                                                        std::int32_t boundsWidth,
+                                                                        std::int32_t boundsHeight,
+                                                                        std::int32_t minimumSize = 2);
 [[nodiscard]] std::optional<ScreenshotRegion> logicalRegionToFramebuffer(ScreenshotRegion region,
                                                                          std::int32_t logicalWidth,
                                                                          std::int32_t logicalHeight,

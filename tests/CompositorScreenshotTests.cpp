@@ -81,6 +81,16 @@ TEST_CASE("screenshot logical regions convert to framebuffer coordinates") {
   CHECK(*fractional == expectedFractional);
 }
 
+TEST_CASE("screenshot selection regions normalize drag direction and reject tiny selections") {
+  using flux::compositor::ScreenshotRegion;
+  auto region = flux::compositor::screenshotSelectionRegion(80.f, 60.f, 10.f, 15.f, 100, 80);
+  REQUIRE(region);
+  CHECK(*region == ScreenshotRegion{.x = 10, .y = 15, .width = 70, .height = 45});
+
+  CHECK_FALSE(flux::compositor::screenshotSelectionRegion(10.f, 10.f, 11.f, 11.f, 100, 80));
+  CHECK_FALSE(flux::compositor::screenshotSelectionRegion(120.f, 120.f, 140.f, 140.f, 100, 80));
+}
+
 TEST_CASE("screenshot BGRA crop preserves selected pixels") {
   using flux::compositor::ScreenshotRegion;
   std::vector<std::uint8_t> pixels(4u * 3u * 4u);
