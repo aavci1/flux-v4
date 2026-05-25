@@ -46,6 +46,7 @@ bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, 
                                 std::uint32_t& height);
 bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, VulkanFrameRecorder* target);
 void endRecordedOpsCaptureForCanvas(Canvas* canvas);
+bool prepareRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder* recorded);
 bool replayRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 bool replayRecordedLocalOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight);

@@ -20,17 +20,8 @@ struct ShellTopBarView {
   std::function<void()> onOpenLauncher;
 
   flux::Element body() const {
-    auto timeText = flux::useState(ShellModel::formatTimeText());
-    std::string lastTimeText = timeText.peek();
-    flux::useFrame([timeText, lastTimeText](flux::AnimationTick const&) mutable {
-      std::string const next = ShellModel::formatTimeText();
-      if (next != lastTimeText) {
-        lastTimeText = next;
-        timeText.set(next);
-      }
-    });
-
     auto const activeTitle = model.activeTitleSignal();
+    auto const timeText = model.timeTextSignal();
     flux::Reactive::Bindable<float> barWidth{[] {
       flux::LayoutConstraints const* constraints = flux::useLayoutConstraints();
       if (constraints && std::isfinite(constraints->maxWidth) && constraints->maxWidth > 0.f) {

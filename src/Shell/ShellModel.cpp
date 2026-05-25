@@ -60,7 +60,7 @@ void ShellModel::resetDockItems() {
 
 bool ShellModel::appIdMatches(std::string_view requested, std::string_view actual) {
   if (requested == actual) return true;
-  if (requested == "terminal" && actual == "foot") return true;
+  if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
   if (requested == "browser" && actual == "firefox") return true;
   if (requested == "files" && (actual == "org.gnome.Nautilus" || actual == "nautilus" || actual == "thunar")) return true;
   return false;
@@ -75,7 +75,8 @@ bool ShellModel::dockItemsVisualStateEqual(std::vector<DockItem> const& a,
   return true;
 }
 
-void ShellModel::applySnapshot(std::string_view json) {
+ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
+  SnapshotChanges changes{};
   auto items = dockItems_.peek();
   for (auto& item : items) {
     item.running = false;
@@ -118,13 +119,24 @@ void ShellModel::applySnapshot(std::string_view json) {
   if (!dockItemsVisualStateEqual(items, dockItems_.peek())) {
     dockItems_.set(std::move(items));
     refreshLauncherResults();
+    changes.dockItems = true;
   }
   if (nextTitle != activeTitle_.peek()) {
     activeTitle_.set(std::move(nextTitle));
+    changes.activeTitle = true;
   }
   if (!(nextStatus == systemStatus_.peek())) {
     systemStatus_.set(std::move(nextStatus));
+    changes.systemStatus = true;
   }
+  return changes;
+}
+
+bool ShellModel::refreshTimeText() {
+  std::string next = formatTimeText();
+  if (next == timeText_.peek()) return false;
+  timeText_.set(std::move(next));
+  return true;
 }
 
 void ShellModel::openLauncher() {

@@ -13,6 +13,14 @@ namespace lambda_shell {
 
 class ShellModel {
 public:
+  struct SnapshotChanges {
+    bool dockItems = false;
+    bool activeTitle = false;
+    bool systemStatus = false;
+
+    [[nodiscard]] bool any() const { return dockItems || activeTitle || systemStatus; }
+  };
+
   std::vector<DockItem> const& dockItems() const { return dockItems_.peek(); }
   bool launcherOpen() const { return launcherOpen_.peek(); }
   bool launcherUiVisible() const { return launcherUiVisible_.peek(); }
@@ -21,6 +29,7 @@ public:
   std::string const& query() const { return query_.peek(); }
   int highlighted() const { return highlighted_.peek(); }
   std::string const& activeTitle() const { return activeTitle_.peek(); }
+  std::string const& timeText() const { return timeText_.peek(); }
   lambda_shell::SystemStatus const& systemStatus() const { return systemStatus_.peek(); }
   std::vector<DockItem> const& launcherResults() const { return launcherResults_.peek(); }
 
@@ -32,6 +41,7 @@ public:
   flux::Signal<std::string>& querySignal() { return query_; }
   flux::Signal<int>& highlightedSignal() { return highlighted_; }
   flux::Signal<std::string>& activeTitleSignal() { return activeTitle_; }
+  flux::Signal<std::string>& timeTextSignal() { return timeText_; }
   flux::Signal<SystemStatus>& systemStatusSignal() { return systemStatus_; }
   flux::Signal<std::vector<DockItem>>& launcherResultsSignal() { return launcherResults_; }
 
@@ -39,7 +49,8 @@ public:
 
   void resetDockItems();
   void setPreviewFocus(std::string_view appId);
-  void applySnapshot(std::string_view json);
+  [[nodiscard]] SnapshotChanges applySnapshot(std::string_view json);
+  [[nodiscard]] bool refreshTimeText();
   void openLauncher();
   void closeLauncher();
   void setLauncherUiVisible(bool visible);
@@ -66,6 +77,7 @@ private:
   flux::Signal<std::string> query_;
   flux::Signal<int> highlighted_{0};
   flux::Signal<std::string> activeTitle_;
+  flux::Signal<std::string> timeText_{formatTimeText()};
   flux::Signal<SystemStatus> systemStatus_;
   flux::Signal<std::vector<DockItem>> launcherResults_;
 };

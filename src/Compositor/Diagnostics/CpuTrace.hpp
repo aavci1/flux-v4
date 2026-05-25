@@ -21,6 +21,24 @@ struct CpuFrameTrace {
   double totalMs = 0.0;
 };
 
+struct CpuLoopDecisionTrace {
+  bool pollTimeoutZero = false;
+  bool forceRender = false;
+  bool animationFrameNeeded = false;
+  bool snapPreviewFrameNeeded = false;
+  bool renderAheadNeeded = false;
+  bool atomicFrameDirty = false;
+  bool atomicFrameBlocked = false;
+  bool atomicReadyFrame = false;
+  bool atomicPageFlipPending = false;
+  bool renderNeeded = false;
+  bool genericRenderWake = false;
+  bool hadInputActivity = false;
+  bool configReloaded = false;
+  bool pollInputOrSystem = false;
+  bool waylandWoke = false;
+};
+
 enum class CpuSurfaceCommitKind : std::uint8_t {
   State,
   Shm,
@@ -41,6 +59,7 @@ void recordCpuIdleSkip();
 void recordCpuPoll(double milliseconds, bool woke, int timeoutMs);
 void recordCpuWakeSources(bool inputOrSystem, bool wayland, bool pageFlip, bool renderReady);
 void recordCpuDispatch(double milliseconds);
+void recordCpuLoopDecision(CpuLoopDecisionTrace const &decision);
 void recordWaylandDispatch(bool contentChanged);
 void recordSurfaceDrawCache(bool hit, double recordMilliseconds);
 void recordSurfaceCommit(std::uint64_t surfaceId, CpuSurfaceCommitKind kind, std::int32_t width, std::int32_t height);

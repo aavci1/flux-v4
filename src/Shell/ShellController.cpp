@@ -92,6 +92,13 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
     requestLauncherRedraw();
   });
 
+  app_.eventQueue().on<flux::TimerEvent>([this](flux::TimerEvent const& event) {
+    if (clockTimerId_ == 0 || event.timerId != clockTimerId_) return;
+    if (model_.refreshTimeText()) {
+      requestTopBarRedraw();
+    }
+  });
+
   app_.eventQueue().on<flux::InputEvent>([this](flux::InputEvent const& event) {
     bool const forLauncher =
         (launcherHandle_ && event.handle == *launcherHandle_) || (previewHandle_ && event.handle == *previewHandle_);
@@ -140,6 +147,7 @@ void ShellController::createProductionWindows() {
   topBar.setBackground(flux::WindowBackground::transparent());
   topBarWindow_ = &topBar;
   topBarHandle_ = topBar.handle();
+  clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *topBarHandle_);
 
   int const dockWidthPx = dockWidth(model_.dockItems());
   auto& dock = app_.createWindow<flux::Window>(dockWindowConfig(dockWidthPx));
@@ -263,9 +271,11 @@ void ShellController::handleIpcLine(std::string_view line) {
     return;
   }
   if (message->kind == flux::shell::ShellMessageKind::WindowManagerSnapshot) {
-    model_.applySnapshot(line);
+    auto const changes = model_.applySnapshot(line);
     if (previewHandle_) {
-      requestLauncherRedraw();
+      if (changes.any()) {
+        requestLauncherRedraw();
+      }
       return;
     }
     int const width = dockWidth(model_.dockItems());
@@ -273,9 +283,13 @@ void ShellController::handleIpcLine(std::string_view line) {
       lastDockWidth_ = width;
       dockWindow_->resize({static_cast<float>(width), static_cast<float>(dockHeight())});
     }
-    requestTopBarRedraw();
-    requestDockRedraw();
-    if (model_.launcherOpen()) {
+    if (changes.activeTitle || changes.systemStatus) {
+      requestTopBarRedraw();
+    }
+    if (changes.dockItems) {
+      requestDockRedraw();
+    }
+    if (changes.dockItems && model_.launcherOpen()) {
       requestLauncherRedraw();
     }
   }

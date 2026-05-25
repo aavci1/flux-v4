@@ -55,6 +55,7 @@ private:
   bool lastLauncherOpen_ = false;
   int lastDockWidth_ = 0;
   std::uint64_t ipcPollId_ = 0;
+  std::uint64_t clockTimerId_ = 0;
 };
 
 flux::WindowConfig topBarWindowConfig();

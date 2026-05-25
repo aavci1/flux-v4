@@ -151,6 +151,7 @@ void WaylandServer::Impl::destroyXdgPositioner(XdgPositioner* positioner) {
 
 void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   Surface* surface = toplevel && toplevel->xdgSurface ? toplevel->xdgSurface->surface : nullptr;
+  bool const hadToplevel = surfaceIsXdgToplevel(surface);
   bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
   if (surfaceIsXdgToplevel(surface)) {
     removeSurfaceFromFocusOrder(this, surface);
@@ -170,6 +171,9 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
     wl_resource_destroy(cutouts->resource);
   }
   eraseResource(toplevels_, toplevel);
+  if (hadToplevel) {
+    notifyShellStateChanged();
+  }
   if (activatePrevious) activateMostRecentToplevel(this, 0);
 }
 

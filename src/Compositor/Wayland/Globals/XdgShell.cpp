@@ -483,6 +483,7 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   toplevel->resource = toplevelResource;
   auto* raw = toplevel.get();
   xdgSurface->server->toplevels_.push_back(std::move(toplevel));
+  xdgSurface->server->notifyShellStateChanged();
   wl_resource_set_implementation(toplevelResource,
                                  &xdgToplevelImpl,
                                  raw,
@@ -710,7 +711,12 @@ void xdgToplevelDestroy(wl_client*, wl_resource* resource) {
 
 void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  toplevel->title = title ? title : "";
+  std::string const nextTitle = title ? title : "";
+  if (toplevel->title == nextTitle) return;
+  toplevel->title = nextTitle;
+  if (toplevel->server) {
+    toplevel->server->notifyShellStateChanged();
+  }
   diagnostics::crashLog("xdg-toplevel-title surface=%llu title=%s",
                         static_cast<unsigned long long>(toplevel->xdgSurface && toplevel->xdgSurface->surface
                                                             ? toplevel->xdgSurface->surface->id
@@ -720,7 +726,12 @@ void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
 
 void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  toplevel->appId = appId ? appId : "";
+  std::string const nextAppId = appId ? appId : "";
+  if (toplevel->appId == nextAppId) return;
+  toplevel->appId = nextAppId;
+  if (toplevel->server) {
+    toplevel->server->notifyShellStateChanged();
+  }
   diagnostics::crashLog("xdg-toplevel-appid surface=%llu appId=%s",
                         static_cast<unsigned long long>(toplevel->xdgSurface && toplevel->xdgSurface->surface
                                                             ? toplevel->xdgSurface->surface->id

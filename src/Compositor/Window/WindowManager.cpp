@@ -311,9 +311,15 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       updateResize(this);
       traceResizeSurface("end-resize", resizeSurface_);
       Surface* resizedSurface = resizeSurface_;
+      std::int32_t const finalWidth = resizeLastWidth_;
+      std::int32_t const finalHeight = resizeLastHeight_;
       resizeSurface_ = nullptr;
       resizeEdges_ = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
-      sendToplevelStateConfigure(this, toplevelForSurface(this, resizedSurface));
+      if (finalWidth > 0 && finalHeight > 0) {
+        sendToplevelConfigure(this, toplevelForSurface(this, resizedSurface), finalWidth, finalHeight);
+      } else {
+        sendToplevelStateConfigure(this, toplevelForSurface(this, resizedSurface));
+      }
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;

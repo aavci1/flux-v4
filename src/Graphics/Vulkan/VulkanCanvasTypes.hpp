@@ -66,6 +66,7 @@ struct DrawOp {
   float externalTranslationX = 0.f;
   float externalTranslationY = 0.f;
   bool premultipliedAlpha = false;
+  std::uint64_t geometrySignature = 0;
 };
 
 struct VulkanPathVertex {

@@ -415,11 +415,16 @@ void updateDrag(WaylandServer::Impl* server) {
   if (!server->dragSurface_) return;
   WaylandServer::Impl::Surface* surface = server->dragSurface_;
   restoreSnappedForDrag(server, surface);
+  std::int32_t const oldX = surface->windowX;
+  std::int32_t const oldY = surface->windowY;
   std::int32_t const topInset = topInsetForSurface(server, surface);
   int const maxX = std::max(0, server->logicalOutputWidth() - displayWidth(surface));
   int const maxY = std::max(topInset, server->logicalOutputHeight() - displayHeight(surface));
   surface->windowX = std::clamp(static_cast<int>(server->pointerX_ - server->dragOffsetX_), 0, maxX);
   surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), topInset, maxY);
+  if (surface->windowX != oldX || surface->windowY != oldY) {
+    ++server->contentSerial_;
+  }
   activeDragSnapTarget(server, surface, monotonicMilliseconds());
 }
 
@@ -431,6 +436,10 @@ void updateResize(WaylandServer::Impl* server) {
   WaylandServer::Impl::Surface* surface = server->resizeSurface_;
   if (!surface) return;
   surface->geometryAnimationActive = false;
+  std::int32_t const oldX = surface->windowX;
+  std::int32_t const oldY = surface->windowY;
+  std::int32_t const oldWidth = displayWidth(surface);
+  std::int32_t const oldHeight = displayHeight(surface);
 
   float const dx = server->pointerX_ - server->resizeStartX_;
   float const dy = server->pointerY_ - server->resizeStartY_;
@@ -455,11 +464,19 @@ void updateResize(WaylandServer::Impl* server) {
 
   if (left) surface->windowX = next.x;
   if (top) surface->windowY = next.y;
-  if (next.width == server->resizeLastWidth_ && next.height == server->resizeLastHeight_) return;
+  if (next.width == server->resizeLastWidth_ && next.height == server->resizeLastHeight_) {
+    if (surface->windowX != oldX || surface->windowY != oldY) {
+      ++server->contentSerial_;
+    }
+    return;
+  }
   surface->lastResizeInputNsec = flux::detail::resizeTraceTimestampNanoseconds();
   server->resizeLastWidth_ = next.width;
   server->resizeLastHeight_ = next.height;
-  setConfiguredFrameSize(surface, next.width, next.height);
+  if (surface->windowX != oldX || surface->windowY != oldY ||
+      displayWidth(surface) != oldWidth || displayHeight(surface) != oldHeight) {
+    ++server->contentSerial_;
+  }
   flux::detail::resizeTrace("compositor",
                             "update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
                             "delta=%.1f,%.1f edges=%u\n",
@@ -473,8 +490,17 @@ void updateResize(WaylandServer::Impl* server) {
                             dx,
                             dy,
                             server->resizeEdges_);
-  sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
+  if (!surface->awaitingConfigureCommit) {
+    sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
+  } else {
+    flux::detail::resizeTrace("compositor",
+                              "coalesce-resize-configure surface=%llu pending=%dx%d awaiting=%dx%d\n",
+                              static_cast<unsigned long long>(surface->id),
+                              next.width,
+                              next.height,
+                              surface->awaitingConfigureWidth,
+                              surface->awaitingConfigureHeight);
+  }
 }
 
 } // namespace flux::compositor::wm
-

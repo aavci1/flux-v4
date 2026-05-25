@@ -1266,14 +1266,19 @@ public:
     if (!recordedGlyphAtlasCurrent(recorded) || !state_.transform.isTranslationOnly()) {
       return false;
     }
-    if (recordedOpsContainClipState(recorded)) {
-      return false;
-    }
     if (!prepareRecorderBuffers(recorded)) {
       return false;
     }
     appendRecordedOps(recorded, true);
     return true;
+  }
+
+  bool prepareRecordedOps(VulkanFrameRecorder *recorded) {
+    if (!recorded) {
+      return false;
+    }
+    prepareRecordedGeometrySignatures(*recorded);
+    return prepareRecorderBuffers(*recorded);
   }
 
   void beginFrame() override {
@@ -1285,6 +1290,7 @@ public:
     batches_.clear();
     ops_.clear();
     pathVerts_.clear();
+    backdropOpPrefixHashes_.clear();
     stateStack_.clear();
     state_ = {};
     state_.clip = Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_));
@@ -2277,10 +2283,29 @@ private:
     ops.push_back(op);
   }
 
-  bool recordedOpsContainClipState(VulkanFrameRecorder const &recorded) const {
-    return std::any_of(recorded.ops.begin(), recorded.ops.end(), [&recorded](DrawOp const &op) {
-      return !sameRect(op.clip, recorded.rootClip);
-    });
+  static Rect translatedRect(Rect rect, float dx, float dy) {
+    rect.x += dx;
+    rect.y += dy;
+    return rect;
+  }
+
+  static std::uint64_t nonZeroSignature(std::uint64_t value) {
+    return value != 0 ? value : 1;
+  }
+
+  static std::uint64_t translatedGeometrySignature(std::uint64_t baseSignature,
+                                                   float dx,
+                                                   float dy,
+                                                   float opacityScale) {
+    if (baseSignature == 0) {
+      return 0;
+    }
+    std::uint64_t h = 14695981039346656037ULL;
+    hashValue(h, baseSignature);
+    hashValue(h, dx);
+    hashValue(h, dy);
+    hashValue(h, opacityScale);
+    return nonZeroSignature(h);
   }
 
   bool recordedGlyphAtlasCurrent(VulkanFrameRecorder const &recorded) const {
@@ -2469,7 +2494,12 @@ private:
           break;
         }
         if (localReplay) {
-          op.clip = state_.clip;
+          op.geometrySignature =
+              translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
+          op.clip = translatedRect(op.clip, dx, dy);
+          if (op.hasBlurCacheClip) {
+            op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
+          }
           op.externalTranslationX = dx;
           op.externalTranslationY = dy;
         }
@@ -2539,7 +2569,12 @@ private:
         break;
       }
       if (localReplay) {
-        op.clip = state_.clip;
+        op.geometrySignature =
+            translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
+        op.clip = translatedRect(op.clip, dx, dy);
+        if (op.hasBlurCacheClip) {
+          op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
+        }
       }
       ops_.push_back(op);
     }
@@ -3478,9 +3513,13 @@ private:
     }
   }
 
-  void hashDrawOpGeometry(std::uint64_t &h, DrawOp const &op) const {
+  template <typename Rects, typename Quads, typename PathVerts>
+  std::uint64_t drawOpGeometrySignature(DrawOp const &op,
+                                        Rects const &rects,
+                                        Quads const &quads,
+                                        PathVerts const &pathVerts) const {
+    std::uint64_t h = 14695981039346656037ULL;
     hashValue(h, op.kind);
-    hashValue(h, op.first);
     hashValue(h, op.count);
     hashValue(h, op.clip);
     hashValue(h, op.blurRadius);
@@ -3496,21 +3535,51 @@ private:
     std::uint32_t const end = op.first + op.count;
     switch (op.kind) {
     case DrawOp::Kind::Rect:
-      for (std::uint32_t index = op.first; index < end && index < rects_.size(); ++index) {
-        hashValue(h, rects_[index]);
+      for (std::uint32_t index = op.first; index < end && index < rects.size(); ++index) {
+        hashValue(h, rects[index]);
       }
       break;
     case DrawOp::Kind::Path:
-      for (std::uint32_t index = op.first; index < end && index < pathVerts_.size(); ++index) {
-        hashValue(h, pathVerts_[index]);
+      for (std::uint32_t index = op.first; index < end && index < pathVerts.size(); ++index) {
+        hashValue(h, pathVerts[index]);
       }
       break;
     case DrawOp::Kind::Image:
     case DrawOp::Kind::BackdropBlur:
-      for (std::uint32_t index = op.first; index < end && index < quads_.size(); ++index) {
-        hashValue(h, quads_[index]);
+      for (std::uint32_t index = op.first; index < end && index < quads.size(); ++index) {
+        hashValue(h, quads[index]);
       }
       break;
+    }
+    return nonZeroSignature(h);
+  }
+
+  void prepareRecordedGeometrySignatures(VulkanFrameRecorder &recorded) const {
+    if (recorded.geometrySignaturesPrepared) {
+      return;
+    }
+    for (DrawOp &op : recorded.ops) {
+      op.geometrySignature =
+          drawOpGeometrySignature(op, recorded.rects, recorded.quads, recorded.pathVerts);
+    }
+    recorded.geometrySignaturesPrepared = true;
+  }
+
+  void hashDrawOpGeometry(std::uint64_t &h, DrawOp const &op) const {
+    if (op.geometrySignature != 0) {
+      hashValue(h, op.geometrySignature);
+      return;
+    }
+    hashValue(h, drawOpGeometrySignature(op, rects_, quads_, pathVerts_));
+  }
+
+  void rebuildBackdropOpPrefixHashes() {
+    backdropOpPrefixHashes_.resize(ops_.size() + 1u);
+    std::uint64_t h = 14695981039346656037ULL;
+    backdropOpPrefixHashes_[0] = h;
+    for (std::size_t index = 0; index < ops_.size(); ++index) {
+      hashDrawOpGeometry(h, ops_[index]);
+      backdropOpPrefixHashes_[index + 1u] = h;
     }
   }
 
@@ -3536,8 +3605,12 @@ private:
     }
     std::size_t const opEnd = std::min(run.start, ops_.size());
     hashValue(h, opEnd);
-    for (std::size_t index = 0; index < opEnd; ++index) {
-      hashDrawOpGeometry(h, ops_[index]);
+    if (opEnd < backdropOpPrefixHashes_.size()) {
+      hashValue(h, backdropOpPrefixHashes_[opEnd]);
+    } else {
+      for (std::size_t index = 0; index < opEnd; ++index) {
+        hashDrawOpGeometry(h, ops_[index]);
+      }
     }
     return h;
   }
@@ -3595,7 +3668,10 @@ private:
     while (cursor < ops_.size()) {
       std::size_t const start = nextBackdropBlurOp(cursor);
       if (start >= ops_.size()) break;
-      if (runs.empty()) ensureBackdropSceneTarget();
+      if (runs.empty()) {
+        ensureBackdropSceneTarget();
+        rebuildBackdropOpPrefixHashes();
+      }
       std::size_t const end = backdropBlurRunEnd(start);
       float const maxRadius = maxBackdropBlurRadius(start, end);
       float const effectiveRadius = maxRadius * kBackdropBlurRadiusBoost;
@@ -4738,6 +4814,7 @@ private:
   Texture backdropScratchTexture_;
   Texture backdropBlurTexture_;
   std::vector<CachedBackdropBlur> backdropBlurCache_;
+  std::vector<std::uint64_t> backdropOpPrefixHashes_;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;
@@ -4862,6 +4939,16 @@ void endRecordedOpsCaptureForCanvas(Canvas *canvas) {
   if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
     vulkan->endRecordedOpsCapture();
   }
+}
+
+bool prepareRecordedOpsForCanvas(Canvas *canvas, VulkanFrameRecorder *recorded) {
+  if (!canvas || !recorded) {
+    return false;
+  }
+  if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
+    return vulkan->prepareRecordedOps(recorded);
+  }
+  return false;
 }
 
 bool replayRecordedOpsForCanvas(Canvas *canvas, VulkanFrameRecorder const &recorded) {

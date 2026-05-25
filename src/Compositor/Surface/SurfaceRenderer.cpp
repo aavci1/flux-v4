@@ -66,8 +66,6 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.id);
   hashValue(hash, surface.serial);
   hashValue(hash, surface.dmabufBufferId);
-  hashValue(hash, surface.x);
-  hashValue(hash, surface.y);
   hashValue(hash, surface.width);
   hashValue(hash, surface.height);
   hashValue(hash, surface.bufferWidth);
@@ -361,12 +359,18 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
       !hasTransientChromeState(surface) &&
       surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
   std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(surface, cached, *cached.image, chrome) : 0;
-  if (canRecordSurface && cached.recordedOps && cached.recordedSignature == signature &&
-      replayRecordedOpsForCanvas(&canvas, *cached.recordedOps)) {
-    diagnostics::recordSurfaceDrawCache(true, 0.0);
-    visual.lastSnapshot = surface;
-    visual.hasLastSnapshot = true;
-    return;
+  if (canRecordSurface && cached.recordedOps && cached.recordedSignature == signature) {
+    canvas.save();
+    canvas.translate(static_cast<float>(surface.x - cached.recordedX),
+                     static_cast<float>(surface.y - cached.recordedY));
+    bool const replayed = replayRecordedLocalOpsForCanvas(&canvas, *cached.recordedOps);
+    canvas.restore();
+    if (replayed) {
+      diagnostics::recordSurfaceDrawCache(true, 0.0);
+      visual.lastSnapshot = surface;
+      visual.hasLastSnapshot = true;
+      return;
+    }
   }
 
   bool const signatureStable = canRecordSurface && cached.lastDrawSignature == signature;
@@ -383,19 +387,26 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
       drawCommittedSurfaceSnapshot(canvas, textSystem, surface, visual, *cached.image, frameTime, chrome,
                                    animationsEnabled);
       endRecordedOpsCaptureForCanvas(&canvas);
+      prepareRecordedOpsForCanvas(&canvas, recorder.get());
       double const recordMs = diagnostics::cpuTraceElapsedMilliseconds(recordStart);
       diagnostics::recordSurfaceDrawCache(false, recordMs);
       if (replayRecordedOpsForCanvas(&canvas, *recorder)) {
         cached.recordedSignature = signature;
+        cached.recordedX = surface.x;
+        cached.recordedY = surface.y;
         cached.recordedOps = std::move(recorder);
         return;
       }
       cached.recordedOps.reset();
       cached.recordedSignature = 0;
+      cached.recordedX = 0;
+      cached.recordedY = 0;
     }
   } else {
     cached.recordedOps.reset();
     cached.recordedSignature = 0;
+    cached.recordedX = 0;
+    cached.recordedY = 0;
     if (!canRecordSurface) {
       cached.lastDrawSignature = 0;
       cached.stableDrawSignatureFrames = 0;

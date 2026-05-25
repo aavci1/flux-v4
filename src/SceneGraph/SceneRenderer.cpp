@@ -240,6 +240,7 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
     if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
         node.render(*this);
         endRecordedOpsCaptureForCanvas(&canvas_);
+        prepareRecordedOpsForCanvas(&canvas_, &recorded);
         if (recordedOpsContainClipState(recorded)) {
             // Local replay retags cached ops with the caller's current clip. Until it can merge
             // recorded and caller clips, keep internally clipped leaves on the live render path.
@@ -438,6 +439,7 @@ struct SceneRenderer::Impl {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
             endRecordedOpsCaptureForCanvas(canvas);
+            prepareRecordedOpsForCanvas(canvas, &recorded);
             if (recordedOpsContainClipState(recorded)) {
                 // Group captures include clips from descendants. Replaying them as one local
                 // display list would drop those nested clips, so let the normal traversal render it.

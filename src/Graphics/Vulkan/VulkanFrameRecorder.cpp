@@ -52,7 +52,8 @@ VulkanFrameRecorder::VulkanFrameRecorder(VulkanFrameRecorder &&other) noexcept
       device(std::exchange(other.device, VK_NULL_HANDLE)),
       descriptorPool(std::exchange(other.descriptorPool, VK_NULL_HANDLE)),
       rootClip(other.rootClip),
-      glyphAtlasGeneration(std::exchange(other.glyphAtlasGeneration, 0)) {}
+      glyphAtlasGeneration(std::exchange(other.glyphAtlasGeneration, 0)),
+      geometrySignaturesPrepared(std::exchange(other.geometrySignaturesPrepared, false)) {}
 
 VulkanFrameRecorder &VulkanFrameRecorder::operator=(VulkanFrameRecorder &&other) noexcept {
   if (this == &other) {
@@ -79,6 +80,7 @@ VulkanFrameRecorder &VulkanFrameRecorder::operator=(VulkanFrameRecorder &&other)
   descriptorPool = std::exchange(other.descriptorPool, VK_NULL_HANDLE);
   rootClip = other.rootClip;
   glyphAtlasGeneration = std::exchange(other.glyphAtlasGeneration, 0);
+  geometrySignaturesPrepared = std::exchange(other.geometrySignaturesPrepared, false);
   return *this;
 }
 
@@ -117,6 +119,7 @@ void VulkanFrameRecorder::clear() {
   pathVerts.clear();
   rootClip = {};
   glyphAtlasGeneration = 0;
+  geometrySignaturesPrepared = false;
 }
 
 } // namespace flux

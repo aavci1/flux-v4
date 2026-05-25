@@ -49,6 +49,26 @@ struct CpuTraceState {
   std::uint64_t dispatches = 0;
   std::uint64_t waylandDispatches = 0;
   std::uint64_t waylandDispatchesChanged = 0;
+  std::uint64_t loopDecisions = 0;
+  std::uint64_t loopRenderNeeded = 0;
+  std::uint64_t loopRenderForce = 0;
+  std::uint64_t loopRenderAnimation = 0;
+  std::uint64_t loopRenderSnapPreview = 0;
+  std::uint64_t loopRenderAhead = 0;
+  std::uint64_t loopRenderAtomicDirty = 0;
+  std::uint64_t loopRenderGenericWake = 0;
+  std::uint64_t loopRenderInput = 0;
+  std::uint64_t loopRenderConfig = 0;
+  std::uint64_t loopRenderWaylandWake = 0;
+  std::uint64_t loopPollZeroForce = 0;
+  std::uint64_t loopPollZeroAnimation = 0;
+  std::uint64_t loopPollZeroSnapPreview = 0;
+  std::uint64_t loopPollZeroRenderAhead = 0;
+  std::uint64_t loopPollZeroAtomicDirty = 0;
+  std::uint64_t loopPollZeroBlocked = 0;
+  std::uint64_t loopAtomicBlocked = 0;
+  std::uint64_t loopAtomicReady = 0;
+  std::uint64_t loopAtomicPendingFlip = 0;
   std::uint64_t surfaces = 0;
   double pollMs = 0.0;
   double dispatchMs = 0.0;
@@ -277,6 +297,26 @@ void resetCounters(CpuTraceState &traceState, CpuTraceClock::time_point now, dou
   traceState.dispatches = 0;
   traceState.waylandDispatches = 0;
   traceState.waylandDispatchesChanged = 0;
+  traceState.loopDecisions = 0;
+  traceState.loopRenderNeeded = 0;
+  traceState.loopRenderForce = 0;
+  traceState.loopRenderAnimation = 0;
+  traceState.loopRenderSnapPreview = 0;
+  traceState.loopRenderAhead = 0;
+  traceState.loopRenderAtomicDirty = 0;
+  traceState.loopRenderGenericWake = 0;
+  traceState.loopRenderInput = 0;
+  traceState.loopRenderConfig = 0;
+  traceState.loopRenderWaylandWake = 0;
+  traceState.loopPollZeroForce = 0;
+  traceState.loopPollZeroAnimation = 0;
+  traceState.loopPollZeroSnapPreview = 0;
+  traceState.loopPollZeroRenderAhead = 0;
+  traceState.loopPollZeroAtomicDirty = 0;
+  traceState.loopPollZeroBlocked = 0;
+  traceState.loopAtomicBlocked = 0;
+  traceState.loopAtomicReady = 0;
+  traceState.loopAtomicPendingFlip = 0;
   traceState.surfaces = 0;
   traceState.pollMs = 0.0;
   traceState.dispatchMs = 0.0;
@@ -347,6 +387,11 @@ void maybeLog(CpuTraceState &traceState) {
         "wake_src input_system=%llu wayland=%llu pageflip=%llu render_ready=%llu unknown=%llu "
         "poll_ms=%.3f dispatches=%llu dispatch_ms=%.3f "
         "wayland_dispatches=%llu changed=%llu unchanged=%llu "
+        "decisions=%llu render_needed=%llu "
+        "render_reason force=%llu anim=%llu snap=%llu ahead=%llu dirty=%llu generic=%llu "
+        "input=%llu config=%llu wayland=%llu "
+        "zero_reason force=%llu anim=%llu snap=%llu ahead=%llu dirty=%llu blocked=%llu "
+        "atomic_state blocked=%llu ready=%llu pending_flip=%llu "
         "surfaces=%.2f/f "
         "phase_avg_ms total=%.3f bg=%.3f snapshot=%.3f surface=%.3f closing=%.3f "
         "cursor=%.3f present=%.3f canvas_present=%.3f kms_present=%.3f "
@@ -372,6 +417,26 @@ void maybeLog(CpuTraceState &traceState) {
         static_cast<unsigned long long>(traceState.waylandDispatches),
         static_cast<unsigned long long>(traceState.waylandDispatchesChanged),
         static_cast<unsigned long long>(traceState.waylandDispatches - traceState.waylandDispatchesChanged),
+        static_cast<unsigned long long>(traceState.loopDecisions),
+        static_cast<unsigned long long>(traceState.loopRenderNeeded),
+        static_cast<unsigned long long>(traceState.loopRenderForce),
+        static_cast<unsigned long long>(traceState.loopRenderAnimation),
+        static_cast<unsigned long long>(traceState.loopRenderSnapPreview),
+        static_cast<unsigned long long>(traceState.loopRenderAhead),
+        static_cast<unsigned long long>(traceState.loopRenderAtomicDirty),
+        static_cast<unsigned long long>(traceState.loopRenderGenericWake),
+        static_cast<unsigned long long>(traceState.loopRenderInput),
+        static_cast<unsigned long long>(traceState.loopRenderConfig),
+        static_cast<unsigned long long>(traceState.loopRenderWaylandWake),
+        static_cast<unsigned long long>(traceState.loopPollZeroForce),
+        static_cast<unsigned long long>(traceState.loopPollZeroAnimation),
+        static_cast<unsigned long long>(traceState.loopPollZeroSnapPreview),
+        static_cast<unsigned long long>(traceState.loopPollZeroRenderAhead),
+        static_cast<unsigned long long>(traceState.loopPollZeroAtomicDirty),
+        static_cast<unsigned long long>(traceState.loopPollZeroBlocked),
+        static_cast<unsigned long long>(traceState.loopAtomicBlocked),
+        static_cast<unsigned long long>(traceState.loopAtomicReady),
+        static_cast<unsigned long long>(traceState.loopAtomicPendingFlip),
         static_cast<double>(traceState.surfaces) * invFrames, traceState.totalMs * invFrames,
         traceState.backgroundMs * invFrames, traceState.snapshotMs * invFrames, traceState.surfaceMs * invFrames,
         traceState.closingMs * invFrames, traceState.cursorMs * invFrames,
@@ -519,6 +584,55 @@ void recordCpuDispatch(double milliseconds) {
   auto &traceState = state();
   ++traceState.dispatches;
   traceState.dispatchMs += milliseconds;
+}
+
+void recordCpuLoopDecision(CpuLoopDecisionTrace const &decision) {
+  if (!cpuTraceEnabled())
+    return;
+  std::scoped_lock lock(traceMutex());
+  auto &traceState = state();
+  ++traceState.loopDecisions;
+  if (decision.renderNeeded) {
+    ++traceState.loopRenderNeeded;
+    if (decision.forceRender)
+      ++traceState.loopRenderForce;
+    if (decision.animationFrameNeeded)
+      ++traceState.loopRenderAnimation;
+    if (decision.snapPreviewFrameNeeded)
+      ++traceState.loopRenderSnapPreview;
+    if (decision.renderAheadNeeded)
+      ++traceState.loopRenderAhead;
+    if (decision.atomicFrameDirty)
+      ++traceState.loopRenderAtomicDirty;
+    if (decision.genericRenderWake)
+      ++traceState.loopRenderGenericWake;
+    if (decision.hadInputActivity || decision.pollInputOrSystem)
+      ++traceState.loopRenderInput;
+    if (decision.configReloaded)
+      ++traceState.loopRenderConfig;
+    if (decision.waylandWoke)
+      ++traceState.loopRenderWaylandWake;
+  }
+  if (decision.pollTimeoutZero) {
+    if (decision.forceRender)
+      ++traceState.loopPollZeroForce;
+    if (decision.animationFrameNeeded)
+      ++traceState.loopPollZeroAnimation;
+    if (decision.snapPreviewFrameNeeded)
+      ++traceState.loopPollZeroSnapPreview;
+    if (decision.renderAheadNeeded)
+      ++traceState.loopPollZeroRenderAhead;
+    if (decision.atomicFrameDirty)
+      ++traceState.loopPollZeroAtomicDirty;
+    if (decision.atomicFrameBlocked)
+      ++traceState.loopPollZeroBlocked;
+  }
+  if (decision.atomicFrameBlocked)
+    ++traceState.loopAtomicBlocked;
+  if (decision.atomicReadyFrame)
+    ++traceState.loopAtomicReady;
+  if (decision.atomicPageFlipPending)
+    ++traceState.loopAtomicPendingFlip;
 }
 
 void recordWaylandDispatch(bool contentChanged) {

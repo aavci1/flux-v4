@@ -628,15 +628,20 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::optional<int> const snapPreviewDelayBeforePoll = wayland.snapPreviewWakeDelayMs();
       bool const snapPreviewFrameNeededBeforePoll =
           snapPreviewDelayBeforePoll && *snapPreviewDelayBeforePoll <= 0;
+      bool const snapPreviewCanRenderBeforePoll =
+          snapPreviewFrameNeededBeforePoll && !atomicFrameBlockedBeforePoll;
       bool const animationCanRenderBeforePoll =
-          (animationFrameNeeded || snapPreviewFrameNeededBeforePoll || (presenter->atomicPresenter() && atomicFrameDirty)) &&
+          (animationFrameNeeded || snapPreviewCanRenderBeforePoll || (presenter->atomicPresenter() && atomicFrameDirty)) &&
           !atomicFrameBlockedBeforePoll;
       int const renderAheadDelayBeforePoll = atomicRenderAheadDelayMs();
       int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
                               ? 0
                               : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
       if (snapPreviewDelayBeforePoll) {
-        pollTimeoutMs = std::min(pollTimeoutMs, std::max(0, *snapPreviewDelayBeforePoll));
+        int const snapPreviewDelayMs = std::max(0, *snapPreviewDelayBeforePoll);
+        if (snapPreviewDelayMs > 0 || snapPreviewCanRenderBeforePoll) {
+          pollTimeoutMs = std::min(pollTimeoutMs, snapPreviewDelayMs);
+        }
       }
       auto timingStart = LoopInstrumentation::Clock::now();
       auto const pollResult = device->pollEventDetails(pollTimeoutMs, eventFds);
@@ -672,7 +677,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         wayland.dispatch();
         loopStats.recordDispatch(timingStart);
         bool const contentChanged = noteContentSerialChange();
-        if (contentChanged) wayland.notifyShellStateChanged();
         diagnostics::recordWaylandDispatch(contentChanged);
       }
       wayland.dispatchShellIpc();
@@ -726,7 +730,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         wayland.dispatchShellIpc();
         loopStats.recordDispatch(timingStart);
         bool const contentChanged = noteContentSerialChange();
-        if (contentChanged) wayland.notifyShellStateChanged();
         diagnostics::recordWaylandDispatch(contentChanged);
         if (inputActivityThisLoop) {
           lastInputActivity = SteadyClock::now();
@@ -775,8 +778,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           presenter->atomicPresenter() && atomicFrameDirty && atomicPageFlipPending && !atomicReadyFrame.ready &&
           atomicRenderAheadDue();
       bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameBlocked;
+      bool const snapPreviewCanRenderNow = snapPreviewFrameNeeded && !atomicFrameBlocked;
       bool const renderNeeded =
-          forceRender || animationCanRenderNow || snapPreviewFrameNeeded || renderAheadNeeded || genericRenderWake ||
+          forceRender || animationCanRenderNow || snapPreviewCanRenderNow || renderAheadNeeded || genericRenderWake ||
           hadInputActivity || configReloaded ||
           (presenter->atomicPresenter() && atomicFrameDirty && !atomicReadyFrame.ready);
       if (pollWoke || renderNeeded) {
@@ -810,6 +814,23 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                     static_cast<unsigned long long>(atomicReadyFrame.contentSerial),
                     renderReadyUpdated ? 1 : 0);
       }
+      diagnostics::recordCpuLoopDecision({
+          .pollTimeoutZero = pollTimeoutMs == 0,
+          .forceRender = forceRender,
+          .animationFrameNeeded = animationFrameNeeded,
+          .snapPreviewFrameNeeded = snapPreviewFrameNeeded,
+          .renderAheadNeeded = renderAheadNeeded,
+          .atomicFrameDirty = atomicFrameDirty,
+          .atomicFrameBlocked = atomicFrameBlocked,
+          .atomicReadyFrame = atomicReadyFrame.ready,
+          .atomicPageFlipPending = atomicPageFlipPending,
+          .renderNeeded = renderNeeded,
+          .genericRenderWake = genericRenderWake,
+          .hadInputActivity = hadInputActivity,
+          .configReloaded = configReloaded,
+          .pollInputOrSystem = pollResult.inputOrSystem,
+          .waylandWoke = waylandWoke,
+      });
       if (presenter->atomicPresenter()) {
         if (atomicReadyFrame.ready && !presenter->atomicPresenter()->hasPendingPageFlip()) {
           if (device->isVtForeground() && scheduleAtomicFrame(atomicReadyFrame)) {
@@ -885,7 +906,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.dispatchShellIpc();
       loopStats.recordDispatch(timingStart);
       bool const contentChanged = noteContentSerialChange();
-      if (contentChanged) wayland.notifyShellStateChanged();
       diagnostics::recordWaylandDispatch(contentChanged);
 
       timingStart = LoopInstrumentation::Clock::now();
