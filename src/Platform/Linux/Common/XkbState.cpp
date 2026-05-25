@@ -113,6 +113,10 @@ std::string XkbState::utf8ForEvdevKey(std::uint32_t key) const {
   return utf8FromXkbKeysym(keysymForEvdevKey(key));
 }
 
+bool XkbState::keyRepeats(std::uint32_t key) const {
+  return keymap_ && xkb_keymap_key_repeats(keymap_, key + 8) > 0;
+}
+
 static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
   switch (sym) {
   case XKB_KEY_a:

@@ -12,6 +12,10 @@ void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceO
   presentation::traceTiming("apply-config", configStart);
   ctx.wayland.setShortcutBindings(ctx.appliedConfig.config.shortcutBindings);
   ctx.wayland.setChromeThemeConfig(ctx.appliedConfig.config.chrome, ctx.appliedConfig.config.darkChrome);
+  ctx.wayland.setInputConfig({
+      .popupGrabs = ctx.appliedConfig.config.popupGrabs,
+      .keyboard = ctx.appliedConfig.config.keyboard,
+  });
   ctx.applyOutputScale(forceOutputScale);
   if (ctx.wallpaperLoader && ctx.appliedConfig.config.wallpaperPath) {
     if (!tryLoadWallpaperFromCache(ctx)) {

@@ -10,6 +10,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -127,7 +128,7 @@ void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id)
     close(keymapFd);
   }
   if (wl_resource_get_version(keyboard) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION) {
-    wl_keyboard_send_repeat_info(keyboard, 25, 600);
+    wl_keyboard_send_repeat_info(keyboard, server->keyboardRepeatRate_, server->keyboardRepeatDelayMs_);
   }
 }
 
@@ -144,8 +145,26 @@ struct wl_seat_interface const seatImpl{
 
 } // namespace
 
+void sendKeyboardConfiguration(WaylandServer::Impl* server) {
+  if (!server) return;
+  for (wl_resource* keyboard : server->keyboardResources_) {
+    if (!keyboard) continue;
+    std::uint32_t keymapSize = 0;
+    int keymapFd = createKeymapFd(server, keymapSize);
+    if (keymapFd >= 0) {
+      wl_keyboard_send_keymap(keyboard, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, keymapFd, keymapSize);
+      close(keymapFd);
+    } else {
+      std::fprintf(stderr, "lambda-window-manager: failed to send updated keyboard keymap\n");
+    }
+    if (wl_resource_get_version(keyboard) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION) {
+      wl_keyboard_send_repeat_info(keyboard, server->keyboardRepeatRate_, server->keyboardRepeatDelayMs_);
+    }
+  }
+}
+
 void bindSeat(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 3u), id);
+  wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 7u), id);
   auto* server = static_cast<WaylandServer::Impl*>(data);
   server->seatResources_.push_back(resource);
   wl_resource_set_implementation(resource, &seatImpl, server, seatDestroyResource);

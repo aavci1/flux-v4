@@ -6,12 +6,26 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace flux::compositor {
 
+struct CompositorKeyboardConfig {
+  std::string rules;
+  std::string model;
+  std::string layout;
+  std::string variant;
+  std::string options;
+  int repeatRate = 25;
+  int repeatDelayMs = 600;
+
+  bool operator==(CompositorKeyboardConfig const&) const = default;
+};
+
 struct CompositorInputConfig {
   bool popupGrabs = false;
+  CompositorKeyboardConfig keyboard;
 };
 
 class WaylandServer {

@@ -68,6 +68,9 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
   CHECK(loaded.config.chrome.titleBarHeight == 28);
   CHECK(loaded.config.chrome.controlsWidth == 84);
+  CHECK(loaded.config.keyboard.layout.empty());
+  CHECK(loaded.config.keyboard.repeatRate == 25);
+  CHECK(loaded.config.keyboard.repeatDelayMs == 600);
 
   std::filesystem::remove_all(path.parent_path());
 }
@@ -300,6 +303,9 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   CHECK(config.scale == doctest::Approx(1.25f));
   CHECK_FALSE(config.animationsEnabled);
   CHECK(config.hardwareCursorEnabled);
+  CHECK(config.keyboard.layout.empty());
+  CHECK(config.keyboard.repeatRate == 25);
+  CHECK(config.keyboard.repeatDelayMs == 600);
 
   std::filesystem::remove(path);
 }
@@ -346,6 +352,10 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   file << "scale = 9.0\n";
   file << "animations = \"maybe\"\n";
   file << "hardware_cursor = \"sometimes\"\n";
+  file << "[input.keyboard]\n";
+  file << "layout = 3\n";
+  file << "repeat_rate = 500\n";
+  file << "repeat_delay_ms = 10\n";
   file << "[keybindings]\n";
   file << "snap_left = \"super+left+right\"\n";
   file << "snap_right = 42\n";
@@ -364,6 +374,9 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   CHECK(config.scale == doctest::Approx(2.0f));
   CHECK(config.animationsEnabled);
   CHECK(config.hardwareCursorEnabled);
+  CHECK(config.keyboard.layout.empty());
+  CHECK(config.keyboard.repeatRate == 25);
+  CHECK(config.keyboard.repeatDelayMs == 600);
 
   auto snapLeft = std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
     return binding.action == flux::compositor::WaylandServer::ShortcutAction::SnapLeft;
@@ -372,6 +385,36 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   CHECK(snapLeft->meta);
   CHECK_FALSE(snapLeft->ctrl);
   CHECK(snapLeft->key == KEY_LEFT);
+
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("compositor config parses keyboard input settings") {
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "[input]\n";
+  file << "popup_grabs = true\n";
+  file << "[input.keyboard]\n";
+  file << "layout = \"tr\"\n";
+  file << "variant = \"f\"\n";
+  file << "model = \"pc105\"\n";
+  file << "options = \"caps:escape\"\n";
+  file << "repeat_rate = 42\n";
+  file << "repeat_delay_ms = 320\n";
+  file.close();
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
+
+  auto const config = flux::compositor::loadConfigWithMetadata().config;
+  CHECK(config.popupGrabs);
+  CHECK(config.keyboard.layout == "tr");
+  CHECK(config.keyboard.variant == "f");
+  CHECK(config.keyboard.model == "pc105");
+  CHECK(config.keyboard.options == "caps:escape");
+  CHECK(config.keyboard.repeatRate == 42);
+  CHECK(config.keyboard.repeatDelayMs == 320);
 
   std::filesystem::remove(path);
 }

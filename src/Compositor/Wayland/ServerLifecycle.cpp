@@ -53,22 +53,70 @@
 namespace flux::compositor {
 namespace {
 
-void initializeKeyboard(WaylandServer::Impl* server) {
-  server->xkbContext_ = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  if (!server->xkbContext_) return;
-  xkb_rule_names names{};
-  server->xkbKeymap_ = xkb_keymap_new_from_names(server->xkbContext_, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-  if (!server->xkbKeymap_) {
-    xkb_context_unref(server->xkbContext_);
-    server->xkbContext_ = nullptr;
-    return;
-  }
-  server->xkbState_ = xkb_state_new(server->xkbKeymap_);
+char const* xkbName(std::string const& value) {
+  return value.empty() ? nullptr : value.c_str();
+}
 
+void refreshKeyboardModifierIndices(WaylandServer::Impl* server) {
+  if (!server || !server->xkbKeymap_) return;
   server->shiftModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_SHIFT);
   server->ctrlModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_CTRL);
   server->altModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_ALT);
   server->logoModifierIndex_ = xkb_keymap_mod_get_index(server->xkbKeymap_, XKB_MOD_NAME_LOGO);
+}
+
+bool installKeyboardKeymap(WaylandServer::Impl* server, xkb_keymap* keymap) {
+  if (!server || !keymap) return false;
+  xkb_state* state = xkb_state_new(keymap);
+  if (!state) {
+    xkb_keymap_unref(keymap);
+    return false;
+  }
+  if (server->xkbState_) xkb_state_unref(server->xkbState_);
+  if (server->xkbKeymap_) xkb_keymap_unref(server->xkbKeymap_);
+  server->xkbKeymap_ = keymap;
+  server->xkbState_ = state;
+  refreshKeyboardModifierIndices(server);
+  server->metaDown_ = false;
+  server->ctrlDown_ = false;
+  server->altDown_ = false;
+  server->shiftDown_ = false;
+  return true;
+}
+
+xkb_keymap* createKeyboardKeymap(WaylandServer::Impl* server, CompositorKeyboardConfig const& config) {
+  if (!server || !server->xkbContext_) return nullptr;
+  xkb_rule_names names{
+      .rules = xkbName(config.rules),
+      .model = xkbName(config.model),
+      .layout = xkbName(config.layout),
+      .variant = xkbName(config.variant),
+      .options = xkbName(config.options),
+  };
+  return xkb_keymap_new_from_names(server->xkbContext_, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+}
+
+bool applyKeyboardConfig(WaylandServer::Impl* server, CompositorKeyboardConfig const& config) {
+  if (!server || !server->xkbContext_) return false;
+  xkb_keymap* keymap = createKeyboardKeymap(server, config);
+  if (keymap && installKeyboardKeymap(server, keymap)) {
+    return true;
+  }
+
+  std::fprintf(stderr,
+               "lambda-window-manager: invalid input.keyboard keymap; falling back to xkb defaults\n");
+  xkb_rule_names fallbackNames{};
+  keymap = xkb_keymap_new_from_names(server->xkbContext_, &fallbackNames, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  return installKeyboardKeymap(server, keymap);
+}
+
+void initializeKeyboard(WaylandServer::Impl* server) {
+  server->xkbContext_ = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+  if (!server->xkbContext_) return;
+  if (!applyKeyboardConfig(server, server->keyboardConfig_)) {
+    xkb_context_unref(server->xkbContext_);
+    server->xkbContext_ = nullptr;
+  }
 }
 
 std::uint32_t preferredScale120(float scale) {
@@ -259,6 +307,17 @@ void WaylandServer::Impl::setChromeConfig(ChromeConfig config) {
 
 void WaylandServer::Impl::setInputConfig(CompositorInputConfig config) {
   popupGrabsEnabled_ = config.popupGrabs;
+  if (keyboardConfig_ == config.keyboard &&
+      keyboardRepeatRate_ == config.keyboard.repeatRate &&
+      keyboardRepeatDelayMs_ == config.keyboard.repeatDelayMs) {
+    return;
+  }
+  keyboardConfig_ = std::move(config.keyboard);
+  keyboardRepeatRate_ = keyboardConfig_.repeatRate;
+  keyboardRepeatDelayMs_ = keyboardConfig_.repeatDelayMs;
+  if (applyKeyboardConfig(this, keyboardConfig_)) {
+    sendKeyboardConfiguration(this);
+  }
 }
 
 void WaylandServer::Impl::setPreferredScale(float scale) {

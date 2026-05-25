@@ -297,6 +297,9 @@ struct WaylandServer::Impl {
   std::uint32_t nextConfigureSerial_ = 1;
   std::uint32_t nextInputSerial_ = 1;
   float preferredScale_ = 2.0f;
+  CompositorKeyboardConfig keyboardConfig_;
+  int keyboardRepeatRate_ = 25;
+  int keyboardRepeatDelayMs_ = 600;
   std::int32_t topBarExclusiveZone_ = 0;
   std::int32_t dockReservedZone_ = 0;
   Surface* lastActivationSurface_ = nullptr;

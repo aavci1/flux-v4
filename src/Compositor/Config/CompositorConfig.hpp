@@ -30,6 +30,7 @@ struct CompositorConfig {
   int idleBlankTimeoutSeconds = 0;
   ChromeConfig chrome;
   std::optional<ChromeConfig> darkChrome;
+  CompositorKeyboardConfig keyboard;
   std::vector<WaylandServer::ShortcutBinding> shortcutBindings;
   bool popupGrabs = false;
 };

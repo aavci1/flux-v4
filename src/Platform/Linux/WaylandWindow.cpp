@@ -202,6 +202,14 @@ struct SharedWaylandConnection {
   wl_surface* popupPointerSurface = nullptr;
   WaylandWindow* keyboardFocus = nullptr;
   wl_surface* keyboardSurface = nullptr;
+  int keyboardRepeatRate = 0;
+  int keyboardRepeatDelayMs = 0;
+  std::uint32_t repeatKey = 0;
+  wl_surface* repeatSurface = nullptr;
+  WaylandWindow* repeatWindow = nullptr;
+  std::uint64_t repeatTimerId = 0;
+  bool repeatDelayPhase = false;
+  EventQueue* repeatHandlerQueue = nullptr;
   unsigned int refs = 0;
   bool fatalError = false;
   bool shutdownRequested = false;
@@ -245,6 +253,8 @@ void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, s
 void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
                              std::uint32_t latched, std::uint32_t locked, std::uint32_t group);
 void sharedKeyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t);
+void stopKeyboardRepeat(SharedWaylandConnection* shared);
+void handleKeyboardRepeatTimer(SharedWaylandConnection* shared, TimerEvent const& event);
 
 wl_registry_listener const sharedRegistryListener{sharedRegistryGlobal, sharedRegistryRemove};
 xdg_wm_base_listener const sharedWmBaseListener{sharedWmPing};
@@ -354,6 +364,13 @@ void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
   shared.popupPointerSurface = nullptr;
   shared.keyboardFocus = nullptr;
   shared.keyboardSurface = nullptr;
+  shared.keyboardRepeatRate = 0;
+  shared.keyboardRepeatDelayMs = 0;
+  shared.repeatKey = 0;
+  shared.repeatSurface = nullptr;
+  shared.repeatWindow = nullptr;
+  shared.repeatTimerId = 0;
+  shared.repeatDelayPhase = false;
 }
 
 std::uint32_t layerShellLayer(LayerShellLayer layer) {
@@ -660,6 +677,7 @@ void releaseWaylandConnection() {
   if (gWaylandConnection.refs == 0) return;
   --gWaylandConnection.refs;
   if (gWaylandConnection.refs != 0) return;
+  stopKeyboardRepeat(&gWaylandConnection);
   bool const destroyProxies = canSendWaylandRequests(&gWaylandConnection);
   if (gWaylandConnection.keyboard) {
     if (destroyProxies) wl_keyboard_destroy(gWaylandConnection.keyboard);
@@ -813,6 +831,9 @@ public:
       if (shared_->keyboardFocus == this) {
         shared_->keyboardFocus = nullptr;
         shared_->keyboardSurface = nullptr;
+      }
+      if (shared_->repeatWindow == this) {
+        stopKeyboardRepeat(shared_);
       }
     }
     bool const destroyProxies = canSendWaylandRequests(shared_);
@@ -2418,6 +2439,82 @@ private:
 
 namespace {
 
+std::chrono::nanoseconds keyboardRepeatInterval(int repeatRate) {
+  std::int64_t const rate = std::max(1, repeatRate);
+  return std::chrono::nanoseconds{std::max<std::int64_t>(1'000'000, 1'000'000'000 / rate)};
+}
+
+void installKeyboardRepeatHandler(SharedWaylandConnection* shared) {
+  if (!shared || !Application::hasInstance()) {
+    return;
+  }
+  EventQueue& queue = Application::instance().eventQueue();
+  if (shared->repeatHandlerQueue == &queue) {
+    return;
+  }
+  queue.on<TimerEvent>([](TimerEvent const& event) {
+    handleKeyboardRepeatTimer(&gWaylandConnection, event);
+  });
+  shared->repeatHandlerQueue = &queue;
+}
+
+void stopKeyboardRepeat(SharedWaylandConnection* shared) {
+  if (!shared) {
+    return;
+  }
+  if (shared->repeatTimerId != 0 && Application::hasInstance()) {
+    Application::instance().cancelTimer(shared->repeatTimerId);
+  }
+  shared->repeatKey = 0;
+  shared->repeatSurface = nullptr;
+  shared->repeatWindow = nullptr;
+  shared->repeatTimerId = 0;
+  shared->repeatDelayPhase = false;
+}
+
+void startKeyboardRepeat(SharedWaylandConnection* shared, WaylandWindow* window,
+                         wl_surface* surface, std::uint32_t key) {
+  if (!shared || !window || !surface || !shared->xkb || !Application::hasInstance()) {
+    return;
+  }
+  if (shared->keyboardRepeatRate <= 0 || shared->keyboardRepeatDelayMs <= 0 ||
+      !shared->xkb->keyRepeats(key)) {
+    return;
+  }
+
+  installKeyboardRepeatHandler(shared);
+  stopKeyboardRepeat(shared);
+  shared->repeatKey = key;
+  shared->repeatSurface = surface;
+  shared->repeatWindow = window;
+  shared->repeatDelayPhase = true;
+  shared->repeatTimerId = Application::instance().scheduleRepeatingTimer(
+      std::chrono::milliseconds{shared->keyboardRepeatDelayMs}, window->handle());
+}
+
+void handleKeyboardRepeatTimer(SharedWaylandConnection* shared, TimerEvent const& event) {
+  if (!shared || shared->repeatTimerId == 0 || event.timerId != shared->repeatTimerId) {
+    return;
+  }
+  if (!shared->repeatWindow || !shared->xkb || shared->keyboardRepeatRate <= 0 ||
+      shared->keyboardFocus != shared->repeatWindow || shared->keyboardSurface != shared->repeatSurface) {
+    stopKeyboardRepeat(shared);
+    return;
+  }
+
+  if (shared->repeatDelayPhase) {
+    Application::instance().cancelTimer(shared->repeatTimerId);
+    shared->repeatTimerId =
+        Application::instance().scheduleRepeatingTimer(keyboardRepeatInterval(shared->keyboardRepeatRate),
+                                                       shared->repeatWindow->handle());
+    shared->repeatDelayPhase = false;
+  }
+
+  shared->repeatWindow->handleKeyboardKeyForSurface(shared->repeatSurface, shared->xkb.get(),
+                                                    shared->repeatKey,
+                                                    WL_KEYBOARD_KEY_STATE_PRESSED);
+}
+
 WaylandWindow* windowForSurface(SharedWaylandConnection* shared, wl_surface* surface) {
   if (!shared || !surface) return nullptr;
   for (WaylandWindow* window : shared->windows) {
@@ -2591,6 +2688,7 @@ void sharedPointerAxisRelativeDirection(void*, wl_pointer*, std::uint32_t, std::
 
 void sharedKeymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::uint32_t size) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  stopKeyboardRepeat(shared);
   if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
     close(fd);
     return;
@@ -2614,6 +2712,7 @@ void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* su
     window = windowForPopupSurface(shared, surface);
   }
   if (!surface || shared->keyboardFocus == window) {
+    stopKeyboardRepeat(shared);
     shared->keyboardFocus = nullptr;
     shared->keyboardSurface = nullptr;
   }
@@ -2621,8 +2720,14 @@ void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* su
 void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,
                        std::uint32_t state) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (state == WL_KEYBOARD_KEY_STATE_RELEASED && shared->repeatKey == key) {
+    stopKeyboardRepeat(shared);
+  }
   if (shared->keyboardFocus) {
     shared->keyboardFocus->handleKeyboardKeyForSurface(shared->keyboardSurface, shared->xkb.get(), key, state);
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+      startKeyboardRepeat(shared, shared->keyboardFocus, shared->keyboardSurface, key);
+    }
   }
 }
 void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
@@ -2632,7 +2737,20 @@ void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint3
     shared->keyboardFocus->handleKeyboardModifiers(shared->xkb.get(), depressed, latched, locked, group);
   }
 }
-void sharedKeyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t) {}
+void sharedKeyboardRepeatInfo(void* data, wl_keyboard*, std::int32_t rate, std::int32_t delay) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (!shared) {
+    return;
+  }
+  int const newRate = std::max(0, rate);
+  int const newDelay = std::max(0, delay);
+  bool const changed = shared->keyboardRepeatRate != newRate || shared->keyboardRepeatDelayMs != newDelay;
+  shared->keyboardRepeatRate = newRate;
+  shared->keyboardRepeatDelayMs = newDelay;
+  if (changed || shared->keyboardRepeatRate == 0 || shared->keyboardRepeatDelayMs == 0) {
+    stopKeyboardRepeat(shared);
+  }
+}
 
 } // namespace
 

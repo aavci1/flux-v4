@@ -107,9 +107,11 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    Status: implemented in code on 2026-05-25 and pending manual UI verification. Full-output capture is bound to `PrintScreen`, `SysRq`, and `Super+Shift+3`; region capture is bound to `Super+Shift+4`; active-window capture is bound to `Super+Shift+5`, `Alt+PrintScreen`, and `Alt+SysRq`. The compositor owns region-selection UI and hides it before the captured frame, so the overlay should not appear in saved images. Full-output and active-window modes include the cursor by forcing software cursor rendering for the captured frame; region mode excludes the cursor. Active-window capture uses the focused toplevel frame, including server-side titlebar/content/border and transparent rounded corners, and excludes the shadow. A short compositor flash confirms successful saves. Clipboard copy and the larger mode/options overlay are still future work.
 
-4. Keyboard configuration is absent.
+4. Keyboard configuration and repeat need live validation.
 
-   `CompositorConfig` has no keyboard layout/model/variant/options/repeat fields. The compositor server creates an xkb keymap from empty `xkb_rule_names`, KMS input uses `XkbState::createDefaultKeymap()`, and `wl_keyboard.repeat_info` is hard-coded to `25, 600`.
+   The compositor now owns `input.keyboard` config and advertises layout/model/variant/options plus repeat rate/delay to Wayland clients. Flux Wayland clients also consume `wl_keyboard.repeat_info` and synthesize repeat for xkb-repeatable keys.
+
+   Status: implemented and manually verified on 2026-05-26. `input.keyboard` config now parses layout, variant, model, options, repeat rate, and repeat delay, applies the xkb keymap to the compositor seat, sends updated keymap/repeat info to keyboard clients on config reload, falls back to xkb defaults when the configured keymap is invalid, and stops active repeats on focus/keymap/repeat-info changes.
 
 5. Core surface protocol state is advertised but partly ignored.
 
@@ -137,7 +139,7 @@ These are the concrete findings to resolve or validate before broad refactors.
 
 11. Config contract is not ready for Settings.
 
-    Existing config parsing covers background, wallpaper, output, scale, cursor, animations, hardware cursor, idle blanking, chrome, keybindings, and popup grabs. It does not yet cover keyboard config, screenshot options, or a canonical hot-reload/applies-next-window/restart-required matrix for every key.
+    Existing config parsing covers background, wallpaper, output, scale, cursor, animations, hardware cursor, idle blanking, chrome, keybindings, popup grabs, and keyboard config. It does not yet cover screenshot options or a canonical hot-reload/applies-next-window/restart-required matrix for every key.
 
 12. Existing compositor docs contain stale sections, but no whole document is clearly obsolete.
 
@@ -364,7 +366,7 @@ Acceptance:
 
 Implementation notes:
 
-- Current keymap creation uses xkb defaults. Add explicit config support unless there is a strong reason to defer it after this milestone.
+- Current keymap creation uses the `input.keyboard` config and falls back to xkb defaults when the requested keymap is invalid.
 - Preferred config shape:
 
   ```toml
@@ -380,6 +382,9 @@ Implementation notes:
 - Empty keyboard fields should mean xkb/system default for that field.
 - Invalid keymap configuration should fall back to a safe default and report a clear startup/config error without crashing.
 - Repeat configuration should be clamped to sensible ranges.
+- Config reload sends updated keymap and repeat info to existing `wl_keyboard` resources.
+- The compositor advertises a new enough `wl_seat` version for clients to receive `wl_keyboard.repeat_info`.
+- Flux Wayland clients consume `wl_keyboard.repeat_info`, synthesize repeat after the configured delay, and use xkb repeat metadata so modifier keys do not generate repeated text.
 - Input methods remain out of scope.
 - Touch remains out of scope and should not be advertised as supported until implemented.
 
@@ -527,6 +532,18 @@ Acceptance:
 - Setting `animations = false` disables Window Manager geometry animations.
 - Cursor theme and size config are documented and validated manually.
 - Keyboard layout and repeat config are documented and validated manually.
+
+Current keyboard config shape:
+
+```toml
+[input.keyboard]
+layout = "us"
+variant = ""
+model = ""
+options = ""
+repeat_rate = 25
+repeat_delay_ms = 600
+```
 
 Implementation notes:
 

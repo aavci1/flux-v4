@@ -322,6 +322,36 @@ void replaceShortcutBinding(std::vector<WaylandServer::ShortcutBinding>& binding
   bindings.push_back(binding);
 }
 
+void parseKeyboardConfig(toml::table const& table, CompositorKeyboardConfig& keyboard, char const* path) {
+  auto parseKeyboardString = [&](char const* key, std::string& field) {
+    if (!table.contains(key)) return;
+    if (auto value = configString(table, key)) {
+      field = trim(*value);
+    } else {
+      std::fprintf(stderr, "lambda-window-manager: ignoring non-string input.keyboard.%s value in %s\n", key, path);
+    }
+  };
+  auto parseRepeatInt = [&](char const* key, int& field, int minValue, int maxValue) -> bool {
+    if (!table.contains(key)) return false;
+    if (auto value = configInt(table, key); value && *value >= minValue && *value <= maxValue) {
+      field = *value;
+    } else {
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid input.keyboard.%s value in %s\n", key, path);
+    }
+    return true;
+  };
+
+  parseKeyboardString("rules", keyboard.rules);
+  parseKeyboardString("model", keyboard.model);
+  parseKeyboardString("layout", keyboard.layout);
+  parseKeyboardString("variant", keyboard.variant);
+  parseKeyboardString("options", keyboard.options);
+  parseRepeatInt("repeat_rate", keyboard.repeatRate, 0, 200);
+  if (!parseRepeatInt("repeat_delay_ms", keyboard.repeatDelayMs, 100, 5000)) {
+    parseRepeatInt("repeat_delay", keyboard.repeatDelayMs, 100, 5000);
+  }
+}
+
 void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char const* path) {
   auto parseIntField = [&](char const* key, std::int32_t& field, std::int32_t minValue, std::int32_t maxValue) {
     if (!table.contains(key)) return;
@@ -523,6 +553,15 @@ animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
+
+[input.keyboard]
+# Empty values use xkb/system defaults for that field.
+layout = ""
+variant = ""
+model = ""
+options = ""
+repeat_rate = 25
+repeat_delay_ms = 600
 
 [chrome]
 title_bar_height = 28
@@ -820,6 +859,13 @@ CompositorConfig loadConfig() {
         std::fprintf(stderr, "lambda-window-manager: ignoring invalid input.popup_grabs value in %s\n", path->c_str());
       }
     }
+    if (auto* keyboardTable = (*inputTable)["keyboard"].as_table()) {
+      parseKeyboardConfig(*keyboardTable, config.keyboard, path->c_str());
+    } else if (inputTable->contains("keyboard")) {
+      std::fprintf(stderr, "lambda-window-manager: ignoring invalid input.keyboard value in %s\n", path->c_str());
+    }
+  } else if (table.contains("input")) {
+    std::fprintf(stderr, "lambda-window-manager: ignoring invalid input value in %s\n", path->c_str());
   }
 
   if (table.contains("window_glass")) {

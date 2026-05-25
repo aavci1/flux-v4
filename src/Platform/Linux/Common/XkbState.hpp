@@ -27,6 +27,7 @@ public:
 
   KeyCode keyCodeForEvdevKey(std::uint32_t key) const;
   std::string utf8ForEvdevKey(std::uint32_t key) const;
+  bool keyRepeats(std::uint32_t key) const;
   Modifiers modifiers() const noexcept { return modifiers_; }
 
 private:
