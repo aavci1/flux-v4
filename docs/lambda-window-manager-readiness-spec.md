@@ -24,6 +24,7 @@ Beyond the short assessment item, these Window Manager areas still need explicit
 - Rendering stability for glass backgrounds, system titlebars, integrated titlebars, shadows, borders, snap previews, and shell panels under windows.
 - Resize/snap visual stability, including exposed newly-sized regions during animations.
 - Screenshot capture, options, and UI, because screenshots are a core compositor/window-manager feature.
+- Clean Wayland disconnect behavior for Flux clients when the Window Manager exits or crashes.
 - Real-app Wayland validation beyond the in-tree demos.
 - Config contract and hot-reload/restart boundaries, because Settings will edit these values later.
 - Protocol honesty and regression cleanup where current behavior is partially implemented or config-gated.
@@ -40,7 +41,8 @@ These are included below. Session lifecycle and new logging are not.
 6. Make cursor themes configurable and reliable enough before Settings exposes them.
 7. Make keyboard layout and repeat behavior explicit instead of depending on hidden host defaults.
 8. Make screenshots, screenshot options, and screenshot UI reliable enough for daily use and later visual regression tests.
-9. Establish a clear manual smoke checklist for this phase.
+9. Make Flux Wayland clients fail closed when the Window Manager exits or crashes instead of spinning in the background.
+10. Establish a clear manual smoke checklist for this phase.
 
 ## Non-goals
 
@@ -78,6 +80,7 @@ The Window Manager is ready for the next milestone when all of these are true:
 - Screenshots save correctly and match the visible frame.
 - Screenshot options and compositor-drawn screenshot UI support full output, active window, and region capture without relying on Shell.
 - Normal clients receive frame callbacks and presentation feedback at the right time under idle, animation, resize, and real app workloads.
+- Flux Wayland clients such as `lambda-terminal`, `lambda-settings`, and `lambda-files` exit cleanly when the Window Manager dies, matching `lambda-shell`'s current behavior through IPC disconnect.
 - The Window Manager exposes enough stable focus/restore behavior for the Shell milestone to build on.
 - The manual validation checklist is short, repeatable, and documented.
 
@@ -97,6 +100,7 @@ Scope:
 - Ensure transparent/glass windows do not defeat frame caching while idle.
 - Ensure cursor movement is the only expected high-frequency work while the pointer moves.
 - Ensure frame callbacks are not sent in a loop when clients are idle.
+- Ensure Flux Wayland clients treat compositor disconnect as fatal and request app shutdown exactly once.
 
 Acceptance:
 
@@ -104,12 +108,15 @@ Acceptance:
 - Leaving the system alone for several minutes does not produce visible changes, flicker, or periodic redraw artifacts.
 - Opening and closing one extra app does not leave the compositor in a busy state.
 - Client frame callbacks stop when clients stop requesting frames.
+- Killing or crashing `lambda-window-manager` does not leave `lambda-terminal`, `lambda-settings`, or `lambda-files` spinning at high CPU.
 
 Implementation notes:
 
 - Check `contentSerial_` increments in geometry, shell zones, config reload, animation, pointer, and surface commit paths.
 - Check `atomicFrameDirty` and render-ahead behavior in the KMS presenter path.
 - Check whether layer-shell surfaces with background effects invalidate blur caches while static.
+- In the Flux Linux Wayland backend, handle fatal `POLLHUP`/`POLLERR`, failed `wl_display_flush`, failed `wl_display_read_events`, and `wl_display_get_error()` by marking the shared display connection dead and calling `Application::quit()`.
+- Do not solve this per app. `lambda-shell` already exits through Window Manager IPC disconnect, but normal Flux apps need shared Wayland-client disconnect handling.
 - Keep any measurement tooling local to validation; do not add new logging features for this milestone.
 
 ### WM-2: Resize and snap visual stability
@@ -702,6 +709,7 @@ Do not require GPU screenshot comparison in this milestone unless it is straight
 ## Done checklist
 
 - [ ] Idle behavior is acceptable with shell and core Lambda apps open.
+- [ ] Flux Wayland apps exit cleanly when the Window Manager exits or crashes.
 - [ ] Resize/snap/maximize/restore visual artifacts are resolved on the target machine.
 - [ ] System-titlebar and integrated-titlebar glass are visually consistent.
 - [ ] Shell panels do not flicker during nearby window animations.
