@@ -158,12 +158,53 @@ hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
 
+[input]
+popup_grabs = false
+
+[input.keyboard]
+# Empty values use xkb/system defaults for that field.
+layout = ""
+variant = ""
+model = ""
+options = ""
+repeat_rate = 25
+repeat_delay_ms = 600
+
+[chrome]
+title_bar_height = 28
+controls_width = 84
+controls_inset_right = 8
+controls_inset_top = 6
+button_size = 16
+button_radius = 5
+close_glyph_color = "#5b6781"
+close_glyph_hover_color = "#ffffff"
+close_hover_background = "#e25555"
+minimize_glyph_color = "#5b6781"
+minimize_glyph_hover_color = "#16203a"
+minimize_hover_background = "#00000012"
+title_text_color = "#16203a"
+title_text_font_size = 11.5
+title_text_font_weight = 600
+window_corner_radius = 14
+# window_corner_radius can also be configured per corner:
+# [chrome.window_corner_radius]
+# all = 14
+# top_left = 14
+# top_right = 14
+# bottom_right = 14
+# bottom_left = 14
+resize_grip_size = 4
+window_border_color = "#ffffff9e"
+window_border_width = 1
+border_line_color = "#ffffff9e"
+
 [chrome.glass]
 blur_radius = 46
-base_color = "#ffffff2e"
+base_color = "#ffffff80"
 tint_color = "#dbf5ff8f"
 border_color = "#ffffff9e"
-opacity = 0.84
+opacity = 1.0
 
 [keybindings]
 close = "super+q"
@@ -173,6 +214,9 @@ snap_right = "super+right"
 maximize = "super+up"
 restore = "super+down"
 launch_command = "super+space"
+screenshot = ["super+shift+3", "printscreen", "sysrq"]
+screenshot_region = "super+shift+4"
+screenshot_active_window = ["super+shift+5", "alt+printscreen", "alt+sysrq"]
 terminate = "ctrl+alt+backspace"
 ```
 
@@ -191,6 +235,24 @@ and `opacity`. Client content is rendered at the opacity the client submitted. `
 `ext-background-effect-v1` can still request explicit blur regions; set `window_glass = false` to disable
 only the compositor's default full-window policy.
 
+Keybinding values can be a single shortcut string or an array of shortcut strings. Shortcut tokens use `+`
+separators, for example `super+shift+3`, `alt+printscreen`, or `ctrl+alt+backspace`.
+
+Config application policy:
+
+| Key or section | Policy |
+|----------------|--------|
+| `background`, `background_gradient` | Hot reload |
+| `wallpaper`, `wallpaper_mode` | Hot reload; image decoding is asynchronous |
+| `cursor_theme`, `cursor_size` | Hot reload for compositor-owned cursors |
+| `scale`, `[outputs.*].scale` | Hot reload for the selected output |
+| `output` | Restart required to move the compositor to another KMS output |
+| `animations`, `hardware_cursor`, `idle_blank_timeout_seconds` | Hot reload |
+| `[input] popup_grabs` | Hot reload |
+| `[input.keyboard]` | Hot reload; existing keyboard resources receive updated keymap/repeat info |
+| `window_glass`, `[chrome]`, `[chrome.glass]`, `[chrome.dark]` | Hot reload |
+| `[keybindings]` | Hot reload |
+
 ## Window Management
 
 Current shortcuts:
@@ -204,6 +266,9 @@ Current shortcuts:
 | `Super+Up` | Maximize focused window |
 | `Super+Down` | Restore a snapped or maximized window |
 | `Super+Space` | Open the command launcher |
+| `PrintScreen`, `SysRq`, `Super+Shift+3` | Capture the selected output |
+| `Super+Shift+4` | Select a screenshot region |
+| `Alt+PrintScreen`, `Alt+SysRq`, `Super+Shift+5` | Capture the active window |
 | `Ctrl+Alt+Backspace` | Terminate the compositor |
 
 Mouse behavior:

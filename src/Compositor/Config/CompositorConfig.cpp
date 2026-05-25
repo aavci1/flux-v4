@@ -236,6 +236,7 @@ std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
       {"printscreen", KEY_PRINT},
       {"print_screen", KEY_PRINT},
       {"prtsc", KEY_SYSRQ},
+      {"sysrq", KEY_SYSRQ},
       {"q", KEY_Q},
       {"r", KEY_R},
       {"right", KEY_RIGHT},
@@ -314,12 +315,14 @@ std::optional<WaylandServer::ShortcutAction> shortcutActionForKey(std::string co
   return found->second;
 }
 
-void replaceShortcutBinding(std::vector<WaylandServer::ShortcutBinding>& bindings,
-                            WaylandServer::ShortcutBinding binding) {
+void replaceShortcutBindings(std::vector<WaylandServer::ShortcutBinding>& bindings,
+                             WaylandServer::ShortcutAction action,
+                             std::vector<WaylandServer::ShortcutBinding> const& replacements) {
+  if (replacements.empty()) return;
   bindings.erase(std::remove_if(bindings.begin(), bindings.end(), [&](auto const& existing) {
-    return existing.action == binding.action;
+    return existing.action == action;
   }), bindings.end());
-  bindings.push_back(binding);
+  bindings.insert(bindings.end(), replacements.begin(), replacements.end());
 }
 
 void parseKeyboardConfig(toml::table const& table, CompositorKeyboardConfig& keyboard, char const* path) {
@@ -554,6 +557,9 @@ hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
 
+[input]
+popup_grabs = false
+
 [input.keyboard]
 # Empty values use xkb/system defaults for that field.
 layout = ""
@@ -607,6 +613,9 @@ snap_right = "super+right"
 maximize = "super+up"
 restore = "super+down"
 launch_command = "super+space"
+screenshot = ["super+shift+3", "printscreen", "sysrq"]
+screenshot_region = "super+shift+4"
+screenshot_active_window = ["super+shift+5", "alt+printscreen", "alt+sysrq"]
 terminate = "ctrl+alt+backspace"
 )";
 }
@@ -672,14 +681,30 @@ CompositorConfig loadConfig() {
     for (auto&& [key, node] : *keybindings) {
       std::string actionName = lowerAscii(std::string(key.str()));
       if (auto action = shortcutActionForKey(actionName)) {
-        if (auto value = node.value<std::string>(); value) {
-          if (auto binding = parseShortcut(*action, *value)) {
-            replaceShortcutBinding(config.shortcutBindings, *binding);
+        std::vector<WaylandServer::ShortcutBinding> replacements;
+        auto parseShortcutValue = [&](std::string const& value) {
+          if (auto binding = parseShortcut(*action, value)) {
+            replacements.push_back(*binding);
           } else {
             std::fprintf(stderr,
                          "lambda-window-manager: ignoring invalid keybinding %s in %s\n",
                          actionName.c_str(),
                          path->c_str());
+          }
+        };
+
+        if (auto value = node.value<std::string>(); value) {
+          parseShortcutValue(*value);
+        } else if (auto* values = node.as_array()) {
+          for (auto&& item : *values) {
+            if (auto value = item.value<std::string>(); value) {
+              parseShortcutValue(*value);
+            } else {
+              std::fprintf(stderr,
+                           "lambda-window-manager: ignoring non-string keybinding %s in %s\n",
+                           actionName.c_str(),
+                           path->c_str());
+            }
           }
         } else {
           std::fprintf(stderr,
@@ -687,6 +712,7 @@ CompositorConfig loadConfig() {
                        actionName.c_str(),
                        path->c_str());
         }
+        replaceShortcutBindings(config.shortcutBindings, *action, replacements);
       }
     }
   }

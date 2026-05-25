@@ -1,12 +1,12 @@
 # Flux Compositor
 
-**Status:** phases 1–5 are implemented for Flux demos and initial real-app testing. The compositor roadmap (P0–P3) is largely complete in tree; remaining validation and optional work are tracked in [roadmap.md](roadmap.md) §8.
+**Status:** phases 1–5 are implemented for Flux demos and initial real-app testing. This document is now the architecture/history reference; active daily-driver readiness work is tracked in [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md).
 **Repository:** `lambda-window-manager` is currently built from this repository as `lambda-window-manager` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
 
-**Next work:** see [roadmap.md](roadmap.md) for project status and the prioritized P0–P3 backlog.
+**Next work:** see [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md) for the current Window Manager readiness backlog and [roadmap.md](roadmap.md) for broader project status.
 
 ---
 

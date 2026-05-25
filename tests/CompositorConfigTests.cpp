@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <linux/input-event-codes.h>
 #include <string>
 #include <unistd.h>
@@ -68,9 +69,19 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
   CHECK(loaded.config.chrome.titleBarHeight == 28);
   CHECK(loaded.config.chrome.controlsWidth == 84);
+  CHECK_FALSE(loaded.config.popupGrabs);
   CHECK(loaded.config.keyboard.layout.empty());
   CHECK(loaded.config.keyboard.repeatRate == 25);
   CHECK(loaded.config.keyboard.repeatDelayMs == 600);
+
+  std::ifstream generated(path);
+  std::string const text((std::istreambuf_iterator<char>(generated)), std::istreambuf_iterator<char>());
+  CHECK(text.find("[input]") != std::string::npos);
+  CHECK(text.find("popup_grabs = false") != std::string::npos);
+  CHECK(text.find("screenshot = [\"super+shift+3\", \"printscreen\", \"sysrq\"]") != std::string::npos);
+  CHECK(text.find("screenshot_region = \"super+shift+4\"") != std::string::npos);
+  CHECK(text.find("screenshot_active_window = [\"super+shift+5\", \"alt+printscreen\", \"alt+sysrq\"]") !=
+        std::string::npos);
 
   std::filesystem::remove_all(path.parent_path());
 }
@@ -484,6 +495,49 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   CHECK(screenshotActiveWindow->alt);
   CHECK_FALSE(screenshotActiveWindow->meta);
   CHECK(screenshotActiveWindow->key == KEY_PRINT);
+
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("compositor config supports multiple shortcuts per action") {
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "[keybindings]\n";
+  file << "screenshot = [\"super+shift+3\", \"sysrq\"]\n";
+  file << "screenshot_active_window = [\"super+shift+5\", \"alt+printscreen\"]\n";
+  file.close();
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
+
+  auto const config = flux::compositor::loadConfigWithMetadata().config;
+  auto countAction = [&](flux::compositor::WaylandServer::ShortcutAction action) {
+    return std::count_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [&](auto const& binding) {
+      return binding.action == action;
+    });
+  };
+  CHECK(countAction(flux::compositor::WaylandServer::ShortcutAction::Screenshot) == 2);
+  CHECK(countAction(flux::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow) == 2);
+
+  auto const hasSysRqScreenshot =
+      std::any_of(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
+        return binding.action == flux::compositor::WaylandServer::ShortcutAction::Screenshot &&
+               binding.key == KEY_SYSRQ &&
+               !binding.meta &&
+               !binding.alt &&
+               !binding.shift;
+      });
+  CHECK(hasSysRqScreenshot);
+
+  auto const hasAltPrintWindow =
+      std::any_of(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
+        return binding.action == flux::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow &&
+               binding.key == KEY_PRINT &&
+               binding.alt &&
+               !binding.meta;
+      });
+  CHECK(hasAltPrintWindow);
 
   std::filesystem::remove(path);
 }

@@ -1,8 +1,8 @@
 # Flux project status and roadmap
 
-**Last updated:** 2026-05-23  
+**Last updated:** 2026-05-26
 **Purpose:** Single place for current project status, active work, and archived milestone notes.  
-**Architecture reference:** [compositor.md](compositor.md) (compositor design and framework log).  
+**Architecture reference:** [compositor.md](compositor.md) (compositor design and framework log). Current Window Manager readiness work is tracked in [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md).
 **How to run:** [compositor-user-guide.md](compositor-user-guide.md), [compositor-testing.md](compositor-testing.md), [linux-development.md](linux-development.md).
 
 ---
@@ -69,10 +69,10 @@ Executable: `lambda-window-manager` (`src/Compositor/`). Consumes Flux as a **re
 
 **Structure:** Runtime split (`CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`); WM split (`FocusStack`, `PointerRouter`, `InteractiveMoveResize`, …). Protocol codegen via `cmake/FluxWaylandProtocols.cmake`.
 
-**Remaining validation (see §8)**
+**Remaining validation**
 
-- Enable and hardware-validate **xdg-popup grabs** (`[input] popup_grabs = true`).
-- Real-app menus (GTK/Qt/browser), presentation timing under load, GBM/atomic-KMS path.
+- Follow [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md) for the current compositor/window-manager checklist.
+- Hardware-validate real-app menus (GTK/Qt/browser), presentation timing under load, selected-output scale behavior, and the GBM/atomic-KMS path.
 - Optional **tablet v2** (P3.5); legacy `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` debug presenter may be removed after smoke.
 
 ---

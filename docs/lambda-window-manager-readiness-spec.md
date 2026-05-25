@@ -153,9 +153,13 @@ These are the concrete findings to resolve or validate before broad refactors.
 
     Existing config parsing covers background, wallpaper, output, scale, cursor, animations, hardware cursor, idle blanking, chrome, keybindings, popup grabs, and keyboard config. It does not yet cover screenshot options or a canonical hot-reload/applies-next-window/restart-required matrix for every key.
 
+    Status: documentation and generated defaults aligned on 2026-05-26. The generated default config now includes popup-grab policy, keyboard config, chrome/glass config, and screenshot keybindings; keybindings support either a string or an array of strings. `docs/compositor-user-guide.md` now carries the canonical hot-reload/restart matrix for supported Window Manager config keys. Screenshot save/copy options remain fixed by current screenshot policy and should be added only when the screenshot options UI/backend is designed.
+
 12. Existing compositor docs contain stale sections, but no whole document is clearly obsolete.
 
     `docs/roadmap.md` already flags stale sections in `docs/compositor.md`. Treat that as a documentation alignment task: update or retire stale sections in place when this milestone lands. Do not delete architecture docs unless the readiness index fully replaces their current purpose.
+
+    Status: top-level doc roles aligned on 2026-05-26. `docs/compositor.md` is explicitly labeled as the architecture/history reference, `docs/roadmap.md` points current Window Manager readiness work at this spec, and `docs/compositor-user-guide.md` is the current run/config guide. Deep phase-history cleanup in `docs/compositor.md` can stay deferred unless it conflicts with the readiness index.
 
 ## Workstreams
 
@@ -532,11 +536,13 @@ Scope:
 - Border, shadow, and corner radius.
 - Keybindings.
 - Popup grab flag.
+- Screenshot shortcut bindings.
 
 Acceptance:
 
 - Default config generated on first run includes the supported keys.
 - User guide matches generated default config.
+- Keybinding config supports multiple shortcuts for one action where the default behavior exposes multiple shortcuts.
 - Invalid values are ignored safely.
 - Hot reload works for keys that are documented as hot-reloadable.
 - Keys that require restart are documented as requiring restart.
@@ -792,6 +798,7 @@ Add focused automated tests where behavior is deterministic:
 - Keyboard repeat config clamping.
 - Config invalid-value fallback.
 - Screenshot path generation if not already covered.
+- Keybinding array parsing.
 - Screenshot mode/option state transitions.
 - Screenshot region coordinate conversion.
 - Screenshot filename generation and collision handling.
