@@ -65,7 +65,7 @@ These areas should be included in the Shell milestone:
 - Add accessibility and keyboard navigation pass for top bar, dock, and launcher.
 - Add focused Shell tests for model behavior, app discovery, ranking, IPC parsing, and config parsing.
 
-Status update 2026-05-26: the first Shell app-registry helper is in place. It covers deterministic `.desktop` parsing for common fields, visibility filtering for hidden/no-display/TryExec, Exec token and field-code handling, Lambda app-id alias matching, local `./examples/APP_NAME` executable precedence, installed/local registry merging, and icon theme lookup fallback. Dock model, launcher ranking, notification model, clipboard history, quick settings providers, Shell config, and structured IPC request IDs remain open.
+Status update 2026-05-26: the first Shell app-registry and model helpers are in place. They cover deterministic `.desktop` parsing for common fields, visibility filtering for hidden/no-display/TryExec, Exec token and field-code handling, Lambda app-id alias matching, local `./examples/APP_NAME` executable precedence, installed/local registry merging, icon theme lookup fallback, dock state from pinned apps plus Window Manager snapshots, dock click decisions for stopped/running/minimized apps, launcher ranking for prefix/acronym/fuzzy/running/recent matches, notification grouping/dismissal/clear-all/do-not-disturb/history limits, and clipboard history dedupe/clear/disabled/limit behavior. Quick settings providers, Shell config, and structured IPC request IDs remain open.
 
 ## Goals
 

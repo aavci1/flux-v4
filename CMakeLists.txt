@@ -551,6 +551,7 @@ add_library(lambda-shell-ui STATIC
   src/Shell/ShellConnection.cpp
   src/Shell/ShellJson.cpp
   src/Shell/ShellModel.cpp
+  src/Shell/ShellModels.cpp
   src/Shell/UI/LambdaCommandLauncher.cpp
   src/Shell/UI/LambdaDock.cpp
   src/Shell/UI/LambdaShellTypes.cpp
@@ -912,8 +913,10 @@ if(FLUX_BUILD_TESTS)
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
     src/Shell/ShellAppRegistry.cpp
+    src/Shell/ShellModels.cpp
     tests/ShellAppRegistryTests.cpp
     tests/ShellIpcTests.cpp
+    tests/ShellModelsTests.cpp
     tests/SvgPathTests.cpp
     examples/lambda-terminal/TerminalCore.cpp
     tests/TerminalCoreTests.cpp

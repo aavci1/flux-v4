@@ -1,0 +1,111 @@
+#pragma once
+
+#include "Shell/ShellAppRegistry.hpp"
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace lambda_shell {
+
+struct ShellWindowSnapshot {
+  std::uint64_t id = 0;
+  std::string appId;
+  std::string title;
+  bool focused = false;
+  bool minimized = false;
+};
+
+struct DockModelEntry {
+  std::string appId;
+  std::string name;
+  std::string icon;
+  bool pinned = false;
+  bool running = false;
+  bool focused = false;
+  bool minimized = false;
+  std::vector<std::uint64_t> windowIds;
+
+  bool operator==(DockModelEntry const&) const = default;
+};
+
+enum class DockClickKind : std::uint8_t {
+  None,
+  LaunchApp,
+  FocusApp,
+  RestoreApp,
+};
+
+struct DockClickAction {
+  DockClickKind kind = DockClickKind::None;
+  std::string appId;
+
+  bool operator==(DockClickAction const&) const = default;
+};
+
+struct LauncherRankedResult {
+  AppRegistryEntry app;
+  int score = 0;
+  bool running = false;
+
+  bool operator==(LauncherRankedResult const&) const = default;
+};
+
+struct Notification {
+  std::uint64_t id = 0;
+  std::string appId;
+  std::string title;
+  std::string body;
+  bool dismissed = false;
+
+  bool operator==(Notification const&) const = default;
+};
+
+class NotificationCenterModel {
+public:
+  explicit NotificationCenterModel(std::size_t historyLimit = 50);
+
+  std::uint64_t add(std::string appId, std::string title, std::string body);
+  bool dismiss(std::uint64_t id);
+  void clearAll();
+  void setDoNotDisturb(bool enabled) noexcept { doNotDisturb_ = enabled; }
+
+  [[nodiscard]] bool doNotDisturb() const noexcept { return doNotDisturb_; }
+  [[nodiscard]] std::vector<Notification> visible() const;
+  [[nodiscard]] std::vector<Notification> history() const { return notifications_; }
+  [[nodiscard]] int groupCount(std::string_view appId) const;
+
+private:
+  std::uint64_t nextId_ = 1;
+  std::size_t historyLimit_ = 50;
+  bool doNotDisturb_ = false;
+  std::vector<Notification> notifications_;
+};
+
+class ClipboardHistoryModel {
+public:
+  explicit ClipboardHistoryModel(std::size_t limit = 20);
+
+  void setEnabled(bool enabled) noexcept { enabled_ = enabled; }
+  [[nodiscard]] bool enabled() const noexcept { return enabled_; }
+  void addText(std::string text);
+  void clear();
+  [[nodiscard]] std::vector<std::string> const& entries() const noexcept { return entries_; }
+
+private:
+  std::size_t limit_ = 20;
+  bool enabled_ = true;
+  std::vector<std::string> entries_;
+};
+
+[[nodiscard]] std::vector<DockModelEntry> buildDockModel(std::vector<AppRegistryEntry> const& pinnedApps,
+                                                         std::vector<ShellWindowSnapshot> const& windows);
+[[nodiscard]] DockClickAction dockClickAction(DockModelEntry const& entry);
+[[nodiscard]] std::vector<LauncherRankedResult> rankLauncherApps(std::vector<AppRegistryEntry> const& apps,
+                                                                 std::vector<ShellWindowSnapshot> const& windows,
+                                                                 std::vector<std::string> const& recentAppIds,
+                                                                 std::string_view query,
+                                                                 std::size_t limit = 8);
+
+} // namespace lambda_shell
