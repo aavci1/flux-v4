@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <map>
+#include <sstream>
 #include <system_error>
 
 #if defined(__APPLE__)
@@ -45,6 +47,49 @@ std::string shellQuote(std::string_view text) {
   }
   quoted.push_back('\'');
   return quoted;
+}
+
+std::string trim(std::string_view value) {
+  std::size_t begin = 0;
+  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+  std::size_t end = value.size();
+  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
+  return std::string(value.substr(begin, end - begin));
+}
+
+std::string unquoteXdgValue(std::string_view value) {
+  std::string stripped = trim(value);
+  value = stripped;
+  if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
+    value.remove_prefix(1);
+    value.remove_suffix(1);
+  }
+  std::string output;
+  output.reserve(value.size());
+  bool escaped = false;
+  for (char ch : value) {
+    if (escaped) {
+      output.push_back(ch);
+      escaped = false;
+      continue;
+    }
+    if (ch == '\\') {
+      escaped = true;
+      continue;
+    }
+    output.push_back(ch);
+  }
+  if (escaped) output.push_back('\\');
+  return output;
+}
+
+bool isInsideOrEqual(std::filesystem::path const& path, std::filesystem::path const& root) {
+  auto pathIt = path.begin();
+  auto rootIt = root.begin();
+  for (; rootIt != root.end(); ++rootIt, ++pathIt) {
+    if (pathIt == path.end() || *pathIt != *rootIt) return false;
+  }
+  return true;
 }
 
 int runShellCommand(std::string const& command) {
@@ -160,6 +205,43 @@ std::filesystem::path homeDirectory() {
   return std::filesystem::current_path();
 }
 
+std::map<std::string, std::filesystem::path> parseXdgUserDirs(std::string_view configText,
+                                                              std::filesystem::path const& home) {
+  std::map<std::string, std::filesystem::path> dirs;
+  std::istringstream input{std::string(configText)};
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto hash = view.find('#'); hash != std::string_view::npos) view = view.substr(0, hash);
+    std::string stripped = trim(view);
+    view = stripped;
+    if (view.empty()) continue;
+    auto equals = view.find('=');
+    if (equals == std::string_view::npos) continue;
+    std::string key = trim(view.substr(0, equals));
+    constexpr std::string_view prefix = "XDG_";
+    constexpr std::string_view suffix = "_DIR";
+    if (!key.starts_with(prefix) || !key.ends_with(suffix)) continue;
+    key = key.substr(prefix.size(), key.size() - prefix.size() - suffix.size());
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char ch) {
+      return static_cast<char>(std::tolower(ch));
+    });
+    std::string value = unquoteXdgValue(view.substr(equals + 1u));
+    if (value.empty()) continue;
+    std::filesystem::path path(value);
+    std::string pathText = path.string();
+    if (pathText == "$HOME") {
+      path = home;
+    } else if (pathText.starts_with("$HOME/")) {
+      path = home / pathText.substr(6u);
+    } else if (pathText.starts_with("~/")) {
+      path = home / pathText.substr(2u);
+    }
+    dirs[key] = path.lexically_normal();
+  }
+  return dirs;
+}
+
 std::vector<SidebarPlace> const& sidebarPlaces() {
   static std::vector<SidebarPlace> const places = [] {
     std::filesystem::path const home = homeDirectory();
@@ -255,22 +337,64 @@ ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool i
         size = 0;
       }
     }
+    std::filesystem::file_time_type modifiedAt{};
+    modifiedAt = entry.last_write_time(typeEc);
+    if (typeEc) {
+      modifiedAt = {};
+    }
     result.entries.push_back(FileEntry{
         .name = name,
         .path = entry.path(),
         .isDirectory = isDir,
         .size = size,
+        .modifiedAt = modifiedAt,
         .visualKind = visualKindForPath(entry.path(), isDir),
     });
   }
 
-  std::sort(result.entries.begin(), result.entries.end(), [](FileEntry const& a, FileEntry const& b) {
-    if (a.isDirectory != b.isDirectory) {
-      return a.isDirectory > b.isDirectory;
-    }
-    return ciLess(a.name, b.name);
-  });
+  result.entries = sortedEntries(std::move(result.entries));
   return result;
+}
+
+std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
+                                     FileSortKey key,
+                                     bool ascending,
+                                     bool directoriesFirst) {
+  auto compareField = [&](FileEntry const& a, FileEntry const& b) {
+    switch (key) {
+    case FileSortKey::Name:
+      if (ciLess(a.name, b.name)) return true;
+      if (ciLess(b.name, a.name)) return false;
+      return a.name < b.name;
+    case FileSortKey::Kind:
+      if (a.visualKind != b.visualKind) {
+        return static_cast<int>(a.visualKind) < static_cast<int>(b.visualKind);
+      }
+      if (ciLess(a.name, b.name)) return true;
+      if (ciLess(b.name, a.name)) return false;
+      return a.name < b.name;
+    case FileSortKey::Size:
+      if (a.size != b.size) return a.size < b.size;
+      if (ciLess(a.name, b.name)) return true;
+      if (ciLess(b.name, a.name)) return false;
+      return a.name < b.name;
+    case FileSortKey::ModifiedTime:
+      if (a.modifiedAt != b.modifiedAt) return a.modifiedAt < b.modifiedAt;
+      if (ciLess(a.name, b.name)) return true;
+      if (ciLess(b.name, a.name)) return false;
+      return a.name < b.name;
+    }
+    return false;
+  };
+
+  std::stable_sort(entries.begin(), entries.end(), [&](FileEntry const& a, FileEntry const& b) {
+    if (directoriesFirst && a.isDirectory != b.isDirectory) return a.isDirectory;
+    bool const less = compareField(a, b);
+    bool const greater = compareField(b, a);
+    if (!less && !greater) return false;
+    return ascending ? less : greater;
+  });
+  return entries;
 }
 
 std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path) {
@@ -282,21 +406,26 @@ std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path)
   }
 
   std::filesystem::path const home = homeDirectory();
-  crumbs.push_back({"Home", home});
-
-  if (current == home) {
+  if (isInsideOrEqual(current, home)) {
+    crumbs.push_back({"Home", home});
+    if (current == home) {
+      return crumbs;
+    }
+    std::filesystem::path accumulated = home;
+    std::filesystem::path relative = std::filesystem::relative(current, home, ec);
+    if (ec) relative = current.lexically_relative(home);
+    for (std::filesystem::path const& part : relative) {
+      if (part.empty() || part == ".") continue;
+      accumulated /= part;
+      crumbs.push_back({part.string(), accumulated});
+    }
     return crumbs;
   }
 
-  std::filesystem::path relative = current;
-  if (std::filesystem::path relFromHome = std::filesystem::relative(current, home, ec); !ec) {
-    relative = relFromHome;
-  } else if (current.has_root_path() && current.root_path() != current) {
-    relative = current.relative_path();
-  }
-
-  std::filesystem::path accumulated = home;
-  for (std::filesystem::path const& part : relative) {
+  std::filesystem::path accumulated = current.root_path();
+  crumbs.push_back({accumulated.empty() ? "/" : accumulated.string(), accumulated.empty() ? "/" : accumulated});
+  if (current == accumulated) return crumbs;
+  for (std::filesystem::path const& part : current.relative_path()) {
     if (part.empty() || part == ".") {
       continue;
     }

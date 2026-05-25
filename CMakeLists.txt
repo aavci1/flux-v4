@@ -899,6 +899,7 @@ if(FLUX_BUILD_TESTS)
     tests/EnvironmentKeyTests.cpp
     tests/FilesFlowGridTests.cpp
     examples/lambda-files/FilesStore.cpp
+    tests/FilesStoreTests.cpp
     tests/ForTests.cpp
     tests/MountRootTests.cpp
     tests/main.cpp
