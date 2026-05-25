@@ -325,3 +325,168 @@ TEST_CASE("FilesStore trash and restore avoid collisions") {
 
   std::filesystem::remove_all(root);
 }
+
+TEST_CASE("FilesStore resolves conflicts and undoes safe operations") {
+  auto root = tempRoot("lambda-files-undo-test");
+  auto source = root / "source";
+  auto destination = root / "destination";
+  std::filesystem::create_directories(source);
+  std::filesystem::create_directories(destination);
+  {
+    std::ofstream(root / "taken.txt") << "taken";
+    std::ofstream(source / "move.txt") << "move";
+  }
+
+  CHECK(lambda_files::resolveConflictPath(root / "free.txt", lambda_files::FileConflictDecision::KeepBoth) ==
+        root / "free.txt");
+  CHECK(lambda_files::resolveConflictPath(root / "taken.txt", lambda_files::FileConflictDecision::KeepBoth) ==
+        root / "taken 2.txt");
+  CHECK(lambda_files::resolveConflictPath(root / "taken.txt", lambda_files::FileConflictDecision::Replace) ==
+        root / "taken.txt");
+  CHECK(lambda_files::resolveConflictPath(root / "taken.txt", lambda_files::FileConflictDecision::Skip).empty());
+
+  auto created = lambda_files::createFile(root, "created.txt");
+  REQUIRE(created.ok);
+  auto undoCreate = lambda_files::undoFileOperation({
+      .kind = lambda_files::FileUndoKind::Create,
+      .afterPath = created.path,
+  });
+  CHECK(undoCreate.ok);
+  CHECK_FALSE(std::filesystem::exists(created.path));
+
+  auto renamed = lambda_files::renamePath(root / "taken.txt", "renamed.txt");
+  REQUIRE(renamed.ok);
+  auto undoRename = lambda_files::undoFileOperation({
+      .kind = lambda_files::FileUndoKind::Rename,
+      .beforePath = root / "taken.txt",
+      .afterPath = renamed.path,
+  });
+  CHECK(undoRename.ok);
+  CHECK(std::filesystem::exists(root / "taken.txt"));
+  CHECK_FALSE(std::filesystem::exists(root / "renamed.txt"));
+
+  auto moved = lambda_files::movePath(source / "move.txt", destination);
+  REQUIRE(moved.ok);
+  auto undoMove = lambda_files::undoFileOperation({
+      .kind = lambda_files::FileUndoKind::Move,
+      .beforePath = source / "move.txt",
+      .afterPath = moved.path,
+  });
+  CHECK(undoMove.ok);
+  CHECK(std::filesystem::exists(source / "move.txt"));
+  CHECK_FALSE(std::filesystem::exists(destination / "move.txt"));
+
+  auto copied = lambda_files::copyPath(source / "move.txt", destination);
+  REQUIRE(copied.ok);
+  auto undoCopy = lambda_files::undoFileOperation({
+      .kind = lambda_files::FileUndoKind::Copy,
+      .afterPath = copied.path,
+      .removeCopiedItem = true,
+  });
+  CHECK(undoCopy.ok);
+  CHECK_FALSE(std::filesystem::exists(copied.path));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore undo restores trashed items through metadata") {
+  ScopedEnv dataHome("XDG_DATA_HOME");
+  auto root = tempRoot("lambda-files-undo-trash-test");
+  auto data = root / "data";
+  auto source = root / "undo-trash.txt";
+  setenv("XDG_DATA_HOME", data.c_str(), 1);
+  {
+    std::ofstream(source) << "trash";
+  }
+
+  auto trashed = lambda_files::trashPath(source);
+  REQUIRE(trashed.ok);
+  auto restored = lambda_files::undoFileOperation({
+      .kind = lambda_files::FileUndoKind::Trash,
+      .beforePath = source,
+      .afterPath = trashed.path,
+  });
+  CHECK(restored.ok);
+  CHECK(std::filesystem::exists(source));
+  CHECK_FALSE(std::filesystem::exists(trashed.path));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore resolves open-with choices from MIME app fixtures") {
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "org.example.TextEditor",
+       .name = "Text Editor",
+       .icon = "text-editor",
+       .command = "text-editor --open %f",
+       .mimeTypes = {"text/plain"}},
+      {.appId = "org.example.ImageViewer",
+       .name = "Image Viewer",
+       .icon = "image-viewer",
+       .command = "image-viewer %f",
+       .mimeTypes = {"image/png", "image/jpeg"}},
+      {.appId = "lambda-files",
+       .name = "Files",
+       .icon = "lambda-files",
+       .command = "lambda-files %f",
+       .mimeTypes = {"inode/directory"}},
+      {.appId = "org.example.Hidden",
+       .name = "Hidden",
+       .command = "hidden %f",
+       .hidden = true,
+       .mimeTypes = {"text/plain"}},
+  };
+  auto mimeApps = lambda_files::parseMimeAppsList(R"(
+[Default Applications]
+text/plain=org.example.TextEditor.desktop;
+inode/directory=lambda-files.desktop;
+
+[Added Associations]
+text/plain=org.example.Hidden.desktop;org.example.ImageViewer.desktop;
+image/png=org.example.ImageViewer.desktop;
+)");
+
+  auto textChoices = lambda_files::openWithChoices("/tmp/readme.txt", false, apps, mimeApps);
+  REQUIRE(textChoices.size() == 1);
+  CHECK(textChoices[0].app.appId == "org.example.TextEditor");
+  CHECK(textChoices[0].isDefault);
+  CHECK(lambda_files::openCommandForChoice(textChoices[0], "/tmp/readme.txt") ==
+        std::vector<std::string>{"text-editor", "--open", "/tmp/readme.txt"});
+
+  auto imageDefault = lambda_files::defaultOpenWithChoice("/tmp/photo.png", false, apps, mimeApps);
+  REQUIRE(imageDefault);
+  CHECK(imageDefault->app.appId == "org.example.ImageViewer");
+  CHECK_FALSE(imageDefault->isDefault);
+
+  auto directoryDefault = lambda_files::defaultOpenWithChoice("/tmp", true, apps, mimeApps);
+  REQUIRE(directoryDefault);
+  CHECK(directoryDefault->app.appId == "lambda-files");
+  CHECK(directoryDefault->isDefault);
+}
+
+TEST_CASE("FilesStore looks up file icons through icon theme fallback data") {
+  auto root = tempRoot("lambda-files-icon-test");
+  std::filesystem::create_directories(root / "48x48" / "mimetypes");
+  std::filesystem::create_directories(root / "48x48" / "places");
+  {
+    std::ofstream(root / "48x48" / "mimetypes" / "text-x-generic.svg") << "text";
+    std::ofstream(root / "48x48" / "places" / "folder.png") << "folder";
+  }
+
+  auto text = lambda_files::lookupFileIcon(root, "/tmp/readme.txt", false, 48);
+  CHECK(text.iconName == "text-x-generic");
+  CHECK(text.themePath == root / "48x48" / "mimetypes" / "text-x-generic.svg");
+  CHECK_FALSE(text.fallback);
+
+  auto folder = lambda_files::lookupFileIcon(root, "/tmp", true, 48);
+  CHECK(folder.iconName == "folder");
+  CHECK(folder.themePath == root / "48x48" / "places" / "folder.png");
+  CHECK_FALSE(folder.fallback);
+
+  auto unknown = lambda_files::lookupFileIcon(root, "/tmp/archive.unknown", false, 48);
+  CHECK(unknown.iconName == "application-octet-stream");
+  CHECK(unknown.themePath.empty());
+  CHECK(unknown.fallback);
+
+  std::filesystem::remove_all(root);
+}

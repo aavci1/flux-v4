@@ -122,13 +122,17 @@ TEST_CASE("Shell app registry prefers local example executables") {
 TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   auto root = tempRoot("lambda-shell-icon-test");
   std::filesystem::create_directories(root / "48x48" / "apps");
+  std::filesystem::create_directories(root / "48x48" / "mimetypes");
   std::filesystem::create_directories(root / "scalable" / "apps");
   {
     std::ofstream(root / "48x48" / "apps" / "files.png") << "png";
+    std::ofstream(root / "48x48" / "mimetypes" / "text-x-generic.svg") << "svg";
     std::ofstream(root / "scalable" / "apps" / "settings.svg") << "svg";
   }
 
   CHECK(lambda_shell::lookupIconThemePath(root, "files", 48) == root / "48x48" / "apps" / "files.png");
+  CHECK(lambda_shell::lookupIconThemePath(root, "text-x-generic", 48) ==
+        root / "48x48" / "mimetypes" / "text-x-generic.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "settings", 48) == root / "scalable" / "apps" / "settings.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "missing", 48).empty());
 

@@ -279,8 +279,16 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
   std::vector<std::filesystem::path> candidates{
       themeRoot / std::to_string(preferredSize) / "apps",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "apps",
+      themeRoot / std::to_string(preferredSize) / "mimetypes",
+      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "mimetypes",
+      themeRoot / std::to_string(preferredSize) / "places",
+      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "places",
       themeRoot / "scalable" / "apps",
+      themeRoot / "scalable" / "mimetypes",
+      themeRoot / "scalable" / "places",
       themeRoot / "apps",
+      themeRoot / "mimetypes",
+      themeRoot / "places",
       themeRoot,
   };
   for (auto const& dir : candidates) {

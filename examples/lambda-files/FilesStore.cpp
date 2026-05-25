@@ -7,6 +7,7 @@
 #include <ctime>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <system_error>
 
@@ -63,6 +64,14 @@ std::string trim(std::string_view value) {
   std::size_t end = value.size();
   while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
   return std::string(value.substr(begin, end - begin));
+}
+
+std::string lowerAscii(std::string_view value) {
+  std::string output(value);
+  std::transform(output.begin(), output.end(), output.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return output;
 }
 
 std::string unquoteXdgValue(std::string_view value) {
@@ -190,6 +199,27 @@ bool copyRecursive(std::filesystem::path const& source, std::filesystem::path co
   return !ec;
 }
 
+FileOperationResult moveReplacing(std::filesystem::path const& source, std::filesystem::path const& target) {
+  std::error_code ec;
+  if (!std::filesystem::exists(source, ec) || ec) {
+    return {.ok = false, .path = source, .error = "Source does not exist."};
+  }
+  if (std::filesystem::exists(target, ec) && !ec) {
+    return {.ok = false, .path = target, .error = "Destination already exists."};
+  }
+  std::filesystem::create_directories(target.parent_path(), ec);
+  if (ec) return {.ok = false, .path = target.parent_path(), .error = ec.message()};
+  std::filesystem::rename(source, target, ec);
+  if (!ec) return {.ok = true, .path = target};
+  std::error_code copyEc;
+  if (!copyRecursive(source, target, copyEc)) {
+    return {.ok = false, .path = target, .error = copyEc.message()};
+  }
+  std::filesystem::remove_all(source, copyEc);
+  if (copyEc) return {.ok = false, .path = target, .error = copyEc.message()};
+  return {.ok = true, .path = target};
+}
+
 int runShellCommand(std::string const& command) {
   if (command.empty()) {
     return -1;
@@ -292,6 +322,46 @@ FileVisualKind visualKindForPath(std::filesystem::path const& path, bool isDirec
     return FileVisualKind::Sketch;
   }
   return FileVisualKind::Generic;
+}
+
+std::vector<std::string> splitDesktopIdList(std::string_view value) {
+  std::vector<std::string> list;
+  std::size_t start = 0;
+  while (start <= value.size()) {
+    std::size_t end = value.find(';', start);
+    std::string item = trim(value.substr(start, end == std::string_view::npos ? value.size() - start : end - start));
+    if (!item.empty()) {
+      if (item.ends_with(".desktop")) item.resize(item.size() - 8u);
+      list.push_back(item);
+    }
+    if (end == std::string_view::npos) break;
+    start = end + 1u;
+  }
+  return list;
+}
+
+bool appIdMatchesDesktopId(lambda_shell::AppRegistryEntry const& app, std::string_view desktopId) {
+  std::string id = std::string(desktopId);
+  if (id.ends_with(".desktop")) id.resize(id.size() - 8u);
+  return lambda_shell::shellAppIdMatches(app.appId, id) || lambda_shell::shellAppIdMatches(id, app.appId);
+}
+
+bool appSupportsMime(lambda_shell::AppRegistryEntry const& app, std::string const& mimeType) {
+  if (app.hidden) return false;
+  return std::find(app.mimeTypes.begin(), app.mimeTypes.end(), mimeType) != app.mimeTypes.end();
+}
+
+std::string iconNameForMime(std::string const& mimeType) {
+  if (mimeType == "inode/directory") return "folder";
+  if (mimeType == "application/pdf") return "application-pdf";
+  if (mimeType == "application/zip" || mimeType == "application/gzip" || mimeType == "application/x-tar") {
+    return "package-x-generic";
+  }
+  if (mimeType.starts_with("image/")) return "image-x-generic";
+  if (mimeType.starts_with("audio/")) return "audio-x-generic";
+  if (mimeType.starts_with("video/")) return "video-x-generic";
+  if (mimeType.starts_with("text/")) return "text-x-generic";
+  return "application-octet-stream";
 }
 
 } // namespace
@@ -865,6 +935,179 @@ FileOperationResult restoreTrashedPath(std::filesystem::path const& trashedPath)
   }
   std::filesystem::remove(infoPath, ec);
   return {.ok = true, .path = target};
+}
+
+std::filesystem::path resolveConflictPath(std::filesystem::path const& destination,
+                                          FileConflictDecision decision) {
+  std::error_code ec;
+  bool const exists = std::filesystem::exists(destination, ec) && !ec;
+  if (!exists) return destination;
+  switch (decision) {
+  case FileConflictDecision::KeepBoth:
+    return collisionFreePath(destination.parent_path(), destination.filename().string());
+  case FileConflictDecision::Replace:
+    return destination;
+  case FileConflictDecision::Skip:
+    return {};
+  }
+  return {};
+}
+
+FileOperationResult undoFileOperation(FileUndoAction const& action) {
+  std::error_code ec;
+  switch (action.kind) {
+  case FileUndoKind::Create: {
+    if (!std::filesystem::exists(action.afterPath, ec) || ec) {
+      return {.ok = false, .path = action.afterPath, .error = "Created item no longer exists."};
+    }
+    if (std::filesystem::is_directory(action.afterPath, ec) && !ec && !std::filesystem::is_empty(action.afterPath, ec)) {
+      return {.ok = false, .path = action.afterPath, .error = "Created folder is not empty."};
+    }
+    std::filesystem::remove(action.afterPath, ec);
+    if (ec) return {.ok = false, .path = action.afterPath, .error = ec.message()};
+    return {.ok = true, .path = action.afterPath};
+  }
+  case FileUndoKind::Rename:
+  case FileUndoKind::Move:
+    return moveReplacing(action.afterPath, action.beforePath);
+  case FileUndoKind::Trash:
+    return restoreTrashedPath(action.afterPath);
+  case FileUndoKind::Copy:
+    if (!action.removeCopiedItem) {
+      return {.ok = false, .path = action.afterPath, .error = "Copied item is not marked safe to remove."};
+    }
+    if (!std::filesystem::exists(action.afterPath, ec) || ec) {
+      return {.ok = false, .path = action.afterPath, .error = "Copied item no longer exists."};
+    }
+    std::filesystem::remove_all(action.afterPath, ec);
+    if (ec) return {.ok = false, .path = action.afterPath, .error = ec.message()};
+    return {.ok = true, .path = action.afterPath};
+  }
+  return {.ok = false, .error = "Unsupported undo action."};
+}
+
+std::string mimeTypeForPath(std::filesystem::path const& path, bool isDirectory) {
+  if (isDirectory) return "inode/directory";
+  std::string ext = lowerAscii(path.extension().string());
+  if (ext == ".txt" || ext == ".md" || ext == ".log" || ext == ".toml" || ext == ".json" ||
+      ext == ".cpp" || ext == ".hpp" || ext == ".c" || ext == ".h" || ext == ".sh") {
+    return "text/plain";
+  }
+  if (ext == ".html" || ext == ".htm") return "text/html";
+  if (ext == ".png") return "image/png";
+  if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+  if (ext == ".gif") return "image/gif";
+  if (ext == ".webp") return "image/webp";
+  if (ext == ".svg") return "image/svg+xml";
+  if (ext == ".pdf") return "application/pdf";
+  if (ext == ".zip") return "application/zip";
+  if (ext == ".gz") return "application/gzip";
+  if (ext == ".tar") return "application/x-tar";
+  if (ext == ".mp3") return "audio/mpeg";
+  if (ext == ".wav") return "audio/wav";
+  if (ext == ".mp4") return "video/mp4";
+  return "application/octet-stream";
+}
+
+MimeAppsList parseMimeAppsList(std::string_view text) {
+  MimeAppsList parsed;
+  std::string section;
+  std::istringstream input{std::string(text)};
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
+    std::string stripped = trim(view);
+    if (stripped.empty()) continue;
+    if (stripped.front() == '[' && stripped.back() == ']') {
+      section = stripped.substr(1u, stripped.size() - 2u);
+      continue;
+    }
+    auto equals = stripped.find('=');
+    if (equals == std::string::npos) continue;
+    std::string mime = trim(stripped.substr(0, equals));
+    std::vector<std::string> ids = splitDesktopIdList(stripped.substr(equals + 1u));
+    if (mime.empty() || ids.empty()) continue;
+    if (section == "Default Applications") {
+      parsed.defaults[mime] = std::move(ids);
+    } else if (section == "Added Associations") {
+      parsed.associations[mime] = std::move(ids);
+    }
+  }
+  return parsed;
+}
+
+std::vector<OpenWithChoice> openWithChoices(std::filesystem::path const& path,
+                                            bool isDirectory,
+                                            std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                                            MimeAppsList const& mimeApps) {
+  std::string const mime = mimeTypeForPath(path, isDirectory);
+  std::vector<OpenWithChoice> choices;
+  std::set<std::string> added;
+
+  auto addApp = [&](lambda_shell::AppRegistryEntry const& app, bool isDefault) {
+    if (!appSupportsMime(app, mime) || added.contains(app.appId)) return;
+    added.insert(app.appId);
+    choices.push_back({.app = app, .isDefault = isDefault});
+  };
+
+  if (auto defaults = mimeApps.defaults.find(mime); defaults != mimeApps.defaults.end()) {
+    for (auto const& id : defaults->second) {
+      auto found = std::find_if(apps.begin(), apps.end(), [&](auto const& app) {
+        return appIdMatchesDesktopId(app, id);
+      });
+      if (found != apps.end()) addApp(*found, true);
+    }
+  }
+  if (auto associations = mimeApps.associations.find(mime); associations != mimeApps.associations.end()) {
+    for (auto const& id : associations->second) {
+      auto found = std::find_if(apps.begin(), apps.end(), [&](auto const& app) {
+        return appIdMatchesDesktopId(app, id);
+      });
+      if (found != apps.end()) addApp(*found, false);
+    }
+  }
+
+  std::vector<lambda_shell::AppRegistryEntry> remaining = apps;
+  std::stable_sort(remaining.begin(), remaining.end(), [](auto const& a, auto const& b) {
+    return ciLess(a.name, b.name);
+  });
+  for (auto const& app : remaining) {
+    addApp(app, false);
+  }
+  return choices;
+}
+
+std::optional<OpenWithChoice> defaultOpenWithChoice(std::filesystem::path const& path,
+                                                    bool isDirectory,
+                                                    std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                                                    MimeAppsList const& mimeApps) {
+  auto choices = openWithChoices(path, isDirectory, apps, mimeApps);
+  if (choices.empty()) return std::nullopt;
+  return choices.front();
+}
+
+std::vector<std::string> openCommandForChoice(OpenWithChoice const& choice, std::filesystem::path const& path) {
+  return lambda_shell::parseDesktopExec(choice.app.command, path);
+}
+
+FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
+                              std::filesystem::path const& path,
+                              bool isDirectory,
+                              int preferredSize) {
+  std::string const mime = mimeTypeForPath(path, isDirectory);
+  std::string iconName = iconNameForMime(mime);
+  if (auto themePath = lambda_shell::lookupIconThemePath(themeRoot, iconName, preferredSize); !themePath.empty()) {
+    return {.iconName = iconName, .themePath = themePath, .fallback = false};
+  }
+  std::string fallback = isDirectory ? "folder" : "text-x-generic";
+  if (mime == "application/octet-stream") fallback = "application-octet-stream";
+  if (fallback != iconName) {
+    if (auto themePath = lambda_shell::lookupIconThemePath(themeRoot, fallback, preferredSize); !themePath.empty()) {
+      return {.iconName = fallback, .themePath = themePath, .fallback = true};
+    }
+  }
+  return {.iconName = fallback, .fallback = true};
 }
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths) {

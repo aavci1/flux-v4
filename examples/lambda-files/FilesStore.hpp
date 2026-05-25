@@ -2,6 +2,8 @@
 
 #include <Flux/UI/IconName.hpp>
 
+#include "Shell/ShellAppRegistry.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -72,6 +74,27 @@ struct FileOperationResult {
   std::string error;
 };
 
+enum class FileConflictDecision {
+  KeepBoth,
+  Replace,
+  Skip,
+};
+
+enum class FileUndoKind {
+  Create,
+  Rename,
+  Move,
+  Trash,
+  Copy,
+};
+
+struct FileUndoAction {
+  FileUndoKind kind = FileUndoKind::Create;
+  std::filesystem::path beforePath;
+  std::filesystem::path afterPath;
+  bool removeCopiedItem = false;
+};
+
 struct FileSelectionState {
   std::vector<std::filesystem::path> selected;
   int anchorIndex = -1;
@@ -84,6 +107,22 @@ struct TrashInfo {
   std::string deletionDate;
 
   bool operator==(TrashInfo const&) const = default;
+};
+
+struct MimeAppsList {
+  std::map<std::string, std::vector<std::string>> defaults;
+  std::map<std::string, std::vector<std::string>> associations;
+};
+
+struct OpenWithChoice {
+  lambda_shell::AppRegistryEntry app;
+  bool isDefault = false;
+};
+
+struct FileIconLookup {
+  std::string iconName;
+  std::filesystem::path themePath;
+  bool fallback = false;
 };
 
 std::filesystem::path homeDirectory();
@@ -129,6 +168,25 @@ FileOperationResult duplicatePath(std::filesystem::path const& source);
 FileOperationResult trashPath(std::filesystem::path const& source);
 FileOperationResult restoreTrashedPath(std::filesystem::path const& trashedPath);
 std::optional<TrashInfo> parseTrashInfo(std::filesystem::path const& infoPath);
+std::filesystem::path resolveConflictPath(std::filesystem::path const& destination,
+                                          FileConflictDecision decision);
+FileOperationResult undoFileOperation(FileUndoAction const& action);
+
+std::string mimeTypeForPath(std::filesystem::path const& path, bool isDirectory);
+MimeAppsList parseMimeAppsList(std::string_view text);
+std::vector<OpenWithChoice> openWithChoices(std::filesystem::path const& path,
+                                            bool isDirectory,
+                                            std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                                            MimeAppsList const& mimeApps);
+std::optional<OpenWithChoice> defaultOpenWithChoice(std::filesystem::path const& path,
+                                                    bool isDirectory,
+                                                    std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                                                    MimeAppsList const& mimeApps);
+std::vector<std::string> openCommandForChoice(OpenWithChoice const& choice, std::filesystem::path const& path);
+FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
+                              std::filesystem::path const& path,
+                              bool isDirectory,
+                              int preferredSize = 48);
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths);
 std::vector<std::filesystem::path> parseUriList(std::string_view text);
