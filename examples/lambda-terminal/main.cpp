@@ -135,7 +135,8 @@ public:
     vterm_output_set_callback(vterm_, &TerminalSession::writeToPty, this);
     screen_ = vterm_obtain_screen(vterm_);
     vterm_screen_enable_altscreen(screen_, 1);
-    vterm_screen_enable_reflow(screen_, true);
+    // Reflow needs terminal-owned scrollback to be robust during rapid resizes.
+    vterm_screen_enable_reflow(screen_, false);
     vterm_screen_set_damage_merge(screen_, VTERM_DAMAGE_ROW);
     vterm_screen_set_callbacks(screen_, &screenCallbacks(), this);
     vterm_screen_reset(screen_, 1);
@@ -169,23 +170,21 @@ public:
   Reactive::Signal<std::vector<TerminalRow>> rows() const { return rows_; }
   Reactive::Signal<VTermPos> cursor() const { return cursor_; }
 
-  void resizeForFrame(Rect frame) {
+  void scheduleResizeForFrame(Rect frame) {
     int const nextCols = std::max(20, static_cast<int>(std::floor((frame.width - kContentInset * 2.f) / kCellWidth)));
     int const nextRows = std::max(6, static_cast<int>(std::floor((frame.height - kContentInset * 2.f) / kLineHeight)));
-    if (nextCols == cols_ && nextRows == rowsCount_) {
+    if (!pendingResize_ && nextCols == cols_ && nextRows == rowsCount_) {
       return;
     }
-    cols_ = nextCols;
-    rowsCount_ = nextRows;
-    vterm_set_size(vterm_, rowsCount_, cols_);
-    if (ptyFd_ >= 0) {
-      winsize size{};
-      size.ws_col = static_cast<unsigned short>(cols_);
-      size.ws_row = static_cast<unsigned short>(rowsCount_);
-      ioctl(ptyFd_, TIOCSWINSZ, &size);
+    if (pendingResize_ && nextCols == pendingCols_ && nextRows == pendingRowsCount_) {
+      return;
     }
-    markAllRowsDirty();
-    refreshDirtyRows();
+    pendingCols_ = nextCols;
+    pendingRowsCount_ = nextRows;
+    pendingResize_ = true;
+    if (window_) {
+      window_->requestRedraw();
+    }
   }
 
   void sendText(std::string const& text) {
@@ -229,11 +228,11 @@ public:
   }
 
   void drawBackground(Canvas& canvas, Rect frame) {
-    resizeForFrame(frame);
     canvas.drawRect(frame, CornerRadius{}, FillStyle::solid(Color{0.f, 0.f, 0.f, 0.12f}), StrokeStyle::none());
   }
 
   void drawTerminal(Canvas& canvas, Rect frame) {
+    scheduleResizeForFrame(frame);
     drawBackground(canvas, frame);
     canvas.save();
     canvas.clipRect(frame);
@@ -263,7 +262,6 @@ public:
   }
 
   void drawCursor(Canvas& canvas, Rect frame) {
-    resizeForFrame(frame);
     VTermPos const cursor = cursor_.evaluate();
     if (cursor.row >= 0 && cursor.row < rowsCount_ && cursor.col >= 0 && cursor.col < cols_) {
       Rect const cursorRect{
@@ -423,10 +421,45 @@ private:
   }
 
   void flushPendingRowsForFrame() {
+    applyPendingResize();
     if (!hasDirtyRows()) {
       return;
     }
     refreshDirtyRows();
+  }
+
+  void applyPendingResize() {
+    if (!pendingResize_) {
+      return;
+    }
+
+    pendingResize_ = false;
+    int const nextRows = pendingRowsCount_;
+    int const nextCols = pendingCols_;
+    if (nextCols == cols_ && nextRows == rowsCount_) {
+      return;
+    }
+
+    cols_ = nextCols;
+    rowsCount_ = nextRows;
+    vterm_set_size(vterm_, rowsCount_, cols_);
+    if (ptyFd_ >= 0) {
+      winsize size{};
+      size.ws_col = static_cast<unsigned short>(cols_);
+      size.ws_row = static_cast<unsigned short>(rowsCount_);
+      ioctl(ptyFd_, TIOCSWINSZ, &size);
+    }
+    vterm_screen_flush_damage(screen_);
+    markAllRowsDirty();
+
+    VTermPos cursor{};
+    vterm_state_get_cursorpos(vterm_obtain_state(vterm_), &cursor);
+    cursor.row = std::clamp(cursor.row, 0, rowsCount_ - 1);
+    cursor.col = std::clamp(cursor.col, 0, cols_ - 1);
+    VTermPos const previous = cursor_.peek();
+    if (cursor.row != previous.row || cursor.col != previous.col) {
+      cursor_.set(cursor);
+    }
   }
 
   void markRowsDirty(int startRow, int endRow) {
@@ -835,6 +868,9 @@ private:
   ObserverHandle frameObserver_{};
   int rowsCount_ = kInitialRows;
   int cols_ = kInitialCols;
+  int pendingRowsCount_ = kInitialRows;
+  int pendingCols_ = kInitialCols;
+  bool pendingResize_ = false;
   std::uint64_t revision_ = 0;
   int dirtyStartRow_ = kInitialRows;
   int dirtyEndRow_ = -1;

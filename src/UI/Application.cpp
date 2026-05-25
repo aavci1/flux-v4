@@ -188,6 +188,7 @@ struct Application::Impl {
     bool redrawRequested = false;
     bool frameReady = false;
     bool frameBudgetPending = false;
+    bool deferTraceLogged = false;
     std::chrono::steady_clock::time_point frameBudgetStartedAt{};
   };
 
@@ -551,7 +552,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
   }
   bool const alreadyRequested = stateIt->second.redrawRequested;
   stateIt->second.redrawRequested = true;
-  if (detail::resizeTraceEnabled()) {
+  if (!alreadyRequested && detail::resizeTraceEnabled()) {
     detail::resizeTrace("app-render",
                         "request window=%u already=%d frameReady=%d\n",
                         handle,
@@ -588,16 +589,18 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
       continue;
     }
     if (requireFrameReady && state.redrawRequested && !hasFrameReady) {
-      if (detail::resizeTraceEnabled()) {
+      if (!state.deferTraceLogged && detail::resizeTraceEnabled()) {
         detail::resizeTrace("app-render",
                             "defer window=%u requireFrameReady=1 redraw=1 frameReady=0\n",
                             w->handle());
+        state.deferTraceLogged = true;
       }
       continue;
     }
     bool rendered = false;
     if (state.redrawRequested && (!requireFrameReady || hasFrameReady)) {
       state.redrawRequested = false;
+      state.deferTraceLogged = false;
       if (hasFrameReady) {
         state.frameReady = false;
       }

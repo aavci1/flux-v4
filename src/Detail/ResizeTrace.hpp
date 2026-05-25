@@ -25,6 +25,11 @@ inline std::uint64_t resizeTraceTimestampNanoseconds() {
          static_cast<std::uint64_t>(now.tv_nsec);
 }
 
+inline bool resizeTraceMirrorStderr() {
+  char const* value = std::getenv("FLUX_RESIZE_TRACE_STDERR");
+  return !value || debug::envNonZero(value);
+}
+
 inline void resizeTrace(char const* prefix, char const* format, ...) {
   if (!resizeTraceEnabled()) return;
   if (!prefix || !*prefix) prefix = "resize";
@@ -37,10 +42,12 @@ inline void resizeTrace(char const* prefix, char const* format, ...) {
 
   va_list args;
   va_start(args, format);
-  va_list stderrArgs;
-  va_copy(stderrArgs, args);
-  write(stderr, stderrArgs);
-  va_end(stderrArgs);
+  if (resizeTraceMirrorStderr()) {
+    va_list stderrArgs;
+    va_copy(stderrArgs, args);
+    write(stderr, stderrArgs);
+    va_end(stderrArgs);
+  }
 
   char const* path = std::getenv("FLUX_RESIZE_TRACE_LOG");
   if (!path || !*path) {

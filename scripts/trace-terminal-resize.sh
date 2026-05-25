@@ -23,6 +23,7 @@ Environment overrides:
   LAMBDA_TERMINAL_TEST_ROWS              Grid rows drawn by workload. Default: 48
   LAMBDA_TERMINAL_TEST_SEGMENTS          Color runs per row in grid mode. Default: 14
   LAMBDA_TERMINAL_FRAME_SLEEP            Workload frame sleep. Default: 0.016
+  FLUX_RESIZE_TRACE_STDERR               Mirror resize trace to stderr. Default: 0
 EOF
   exit 0
 fi
@@ -43,12 +44,28 @@ export LAMBDA_TERMINAL_RENDER_LOG="$RENDER_LOG"
 export LAMBDA_TERMINAL_RESIZE_LOG="$RESIZE_LOG"
 export FLUX_DEBUG_PERF="${FLUX_DEBUG_PERF:-2}"
 export FLUX_RESIZE_TRACE=1
+export FLUX_RESIZE_TRACE_STDERR="${FLUX_RESIZE_TRACE_STDERR:-0}"
 
+set +e
 "$ROOT/scripts/trace-terminal-rendering.sh"
+render_status=$?
+set -e
+
+if [[ "$render_status" -ne 0 ]]; then
+  echo
+  echo "Terminal render test exited with status $render_status; summarizing captured resize log anyway."
+fi
 
 if [[ ! -s "$RESIZE_LOG" ]]; then
   echo "No resize trace entries were captured. Resize the window during the run and try again."
-  exit 0
+  exit "$render_status"
+fi
+
+resize_event_count="$(grep -Ec 'toplevel-configure|request-resize-redraw|flush-deferred' "$RESIZE_LOG" || true)"
+if [[ "$resize_event_count" == "0" ]]; then
+  echo "No interactive resize events were captured."
+  echo "Run this again and drag-resize the terminal window while the workload is active."
+  exit "$render_status"
 fi
 
 echo
@@ -88,3 +105,5 @@ awk '
 echo
 echo "Recent resize trace entries:"
 tail -n 20 "$RESIZE_LOG"
+
+exit "$render_status"
