@@ -22,6 +22,7 @@
 | Document | Contents |
 |----------|----------|
 | [compositor.md](compositor.md) | Compositor architecture, phases, framework boundary, change log |
+| [lambda-desktop-assessment.md](lambda-desktop-assessment.md) | Daily-driver readiness assessment for Lambda desktop, shell, compositor, and apps |
 | [lambda-shell-spec.md](lambda-shell-spec.md) | Shell vs window-manager boundary, surfaces, IPC |
 | [compositor-window-chrome.md](compositor-window-chrome.md) | Hybrid chrome tiers and cutouts |
 | [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, run on a TTY |
