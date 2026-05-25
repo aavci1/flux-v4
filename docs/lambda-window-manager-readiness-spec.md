@@ -135,6 +135,8 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    The runtime has `contentSerial`, `atomicFrameDirty`, frame callback dispatch, idle skips, render-ahead, and CPU trace instrumentation. Static review did not show a single obvious redraw loop, but the acceptance criteria require a live idle run with shell, Files, Settings, Terminal, and at least one external app.
 
+   Status: manually verified on 2026-05-26. With the normal desktop session idle, the compositor does not continuously redraw.
+
 9. Geometry tests cover pure geometry, not the full Window Manager state machine.
 
    `CompositorWindowGeometryTests` covers snap, popup, restore-drag, and resize geometry helpers. There are no focused tests for `minimizeToplevel`, Shell IPC focus/restore, focus order after close/minimize, or minimized-window snapshot behavior.
