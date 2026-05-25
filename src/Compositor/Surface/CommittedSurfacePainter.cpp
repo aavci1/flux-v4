@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <span>
 
 namespace flux::compositor {
@@ -35,8 +36,11 @@ bool renderSnapshotChanged(CommittedSurfaceSnapshot const& current,
   auto const& previous = visual.lastSnapshot;
   return current.x != previous.x || current.y != previous.y ||
          current.width != previous.width || current.height != previous.height ||
+         current.committedWidth != previous.committedWidth ||
+         current.committedHeight != previous.committedHeight ||
          current.bufferWidth != previous.bufferWidth || current.bufferHeight != previous.bufferHeight ||
          current.activeSizing != previous.activeSizing ||
+         current.geometryAnimationGrowing != previous.geometryAnimationGrowing ||
          current.serial != previous.serial ||
          current.sourceX != previous.sourceX || current.sourceY != previous.sourceY ||
          current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight ||
@@ -75,6 +79,20 @@ bool sameRect(Rect const& a, Rect const& b) {
          reachesEdge(a.y, b.y) &&
          reachesEdge(a.x + a.width, b.x + b.width) &&
          reachesEdge(a.y + a.height, b.y + b.height);
+}
+
+std::optional<Rect> reservedWindowClip(CommittedSurfaceSnapshot const& surface) {
+  float top = -100000.f;
+  float bottom = 100000.f;
+  if (surface.windowClipTop > 0) {
+    top = static_cast<float>(surface.windowClipTop);
+  }
+  if (surface.windowClipBottom > 0) {
+    bottom = static_cast<float>(surface.windowClipBottom);
+  }
+  if (bottom <= top) return std::nullopt;
+  if (surface.windowClipTop <= 0 && surface.windowClipBottom <= 0) return std::nullopt;
+  return Rect::sharp(-100000.f, top, 200000.f, bottom - top);
 }
 
 void drawContentPiece(Canvas& canvas,
@@ -367,6 +385,9 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   float const outerHeight = windowHeight + titleBarHeight;
   Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
   canvas.save();
+  if (auto const windowClip = reservedWindowClip(surface)) {
+    canvas.clipRect(*windowClip);
+  }
   canvas.setOpacity(canvas.opacity() * openOpacity);
   if (openScale < 1.f) {
     canvas.translate(pivot.x, pivot.y);
@@ -384,12 +405,23 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
       surface.destinationHeight > 0 &&
       (surface.destinationWidth != static_cast<int>(std::lround(windowWidth)) ||
        surface.destinationHeight != static_cast<int>(std::lround(windowHeight)));
-  float const contentWidth = clientContentSmallerThanFrame
-                                 ? static_cast<float>(surface.destinationWidth)
-                                 : windowWidth;
-  float const contentHeight = clientContentSmallerThanFrame
-                                  ? static_cast<float>(surface.destinationHeight)
-                                  : windowHeight;
+  bool const geometryAnimationContentSizeMismatch =
+      surface.pacingSizing &&
+      surface.geometryAnimationGrowing &&
+      surface.committedWidth > 0 &&
+      surface.committedHeight > 0 &&
+      (surface.committedWidth != surface.width ||
+       surface.committedHeight != surface.height);
+  float const contentWidth = geometryAnimationContentSizeMismatch
+                                 ? std::min(windowWidth, static_cast<float>(surface.committedWidth))
+                                 : clientContentSmallerThanFrame
+                                       ? static_cast<float>(surface.destinationWidth)
+                                       : windowWidth;
+  float const contentHeight = geometryAnimationContentSizeMismatch
+                                  ? std::min(windowHeight, static_cast<float>(surface.committedHeight))
+                                  : clientContentSmallerThanFrame
+                                        ? static_cast<float>(surface.destinationHeight)
+                                        : windowHeight;
   Rect const fullContentRect = Rect::sharp(windowX, windowY, windowWidth, windowHeight);
   drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners, windowCorners);
   drawWindowFrameShadow(canvas, surface, chrome);
@@ -408,7 +440,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                      contentHeight),
                          fullContentRect,
                          contentCorners);
-  if (clientContentSmallerThanFrame) {
+  if (clientContentSmallerThanFrame && !geometryAnimationContentSizeMismatch) {
     float const rightPad = std::max(0.f, windowWidth - contentWidth);
     float const bottomPad = std::max(0.f, windowHeight - contentHeight);
     float const edgeSourceWidth = std::max(1.f, sourceWidth);

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace flux::compositor {
 namespace {
@@ -19,6 +20,19 @@ Color withOpacity(Color color, float opacity) {
 
 StrokeStyle visibleStroke(Color color, float width) {
   return color.a > 0.f && width > 0.f ? StrokeStyle::solid(color, width) : StrokeStyle::none();
+}
+
+std::optional<Rect> clippedShadowRect(Rect const& layerRect, CommittedSurfaceSnapshot const& surface) {
+  float top = layerRect.y;
+  float bottom = layerRect.y + layerRect.height;
+  if (surface.shadowClipTop > 0) {
+    top = std::max(top, static_cast<float>(surface.shadowClipTop));
+  }
+  if (surface.shadowClipBottom > 0) {
+    bottom = std::min(bottom, static_cast<float>(surface.shadowClipBottom));
+  }
+  if (bottom <= top) return std::nullopt;
+  return Rect::sharp(layerRect.x, top, layerRect.width, bottom - top);
 }
 
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
@@ -258,7 +272,18 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
     ring.rect(frameRect, chrome.windowCornerRadius);
     FillStyle fill = FillStyle::solid(color);
     fill.fillRule = FillRule::EvenOdd;
-    canvas.drawPath(ring, fill, StrokeStyle::none(), ShadowStyle::none());
+    if (auto const shadowClip = clippedShadowRect(layerRect, surface)) {
+      bool const clipNeeded = std::abs(shadowClip->y - layerRect.y) > 0.5f ||
+                              std::abs(shadowClip->height - layerRect.height) > 0.5f;
+      if (!clipNeeded) {
+        canvas.drawPath(ring, fill, StrokeStyle::none(), ShadowStyle::none());
+        continue;
+      }
+      canvas.save();
+      canvas.clipRect(*shadowClip);
+      canvas.drawPath(ring, fill, StrokeStyle::none(), ShadowStyle::none());
+      canvas.restore();
+    }
   }
 }
 

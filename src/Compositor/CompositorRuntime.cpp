@@ -24,18 +24,434 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "presentation-time-server-protocol.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <cstring>
 #include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <vulkan/vulkan.h>
 
 namespace flux::compositor {
 using namespace presentation;
+
+namespace {
+
+int positiveEnvInt(char const* name, int fallback, int maxValue) {
+  char const* raw = std::getenv(name);
+  if (!raw || !*raw) return fallback;
+  char* end = nullptr;
+  long const value = std::strtol(raw, &end, 10);
+  if (end == raw || value <= 0) return fallback;
+  return static_cast<int>(std::min<long>(value, maxValue));
+}
+
+bool envEnabled(char const* name) {
+  char const* raw = std::getenv(name);
+  if (!raw || !*raw) return false;
+  return std::strcmp(raw, "0") != 0 && std::strcmp(raw, "false") != 0 && std::strcmp(raw, "FALSE") != 0;
+}
+
+std::filesystem::path snapCaptureRoot() {
+  if (char const* raw = std::getenv("LWM_SNAP_CAPTURE_DIR"); raw && *raw) {
+    return raw;
+  }
+  return ".debug-logs/snap-capture";
+}
+
+std::filesystem::path snapTraceRoot() {
+  if (char const* raw = std::getenv("LWM_SNAP_TRACE_DIR"); raw && *raw) {
+    return raw;
+  }
+  return ".debug-logs/snap-trace";
+}
+
+std::string captureTimestamp() {
+  auto const now = std::chrono::system_clock::now();
+  std::time_t const time = std::chrono::system_clock::to_time_t(now);
+  std::tm local{};
+  localtime_r(&time, &local);
+  char buffer[64]{};
+  if (std::strftime(buffer, sizeof(buffer), "%Y%m%d-%H%M%S", &local) == 0) {
+    return "capture";
+  }
+  return buffer;
+}
+
+struct CaptureRegion {
+  std::string name;
+  std::int32_t x = 0;
+  std::int32_t y = 0;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+};
+
+struct RegionStats {
+  double meanLuma = 0.0;
+  double meanAlpha = 0.0;
+  std::uint64_t pixels = 0;
+};
+
+std::optional<RegionStats> captureRegionStats(std::vector<std::uint8_t> const& bgra,
+                                              std::uint32_t width,
+                                              std::uint32_t height,
+                                              CaptureRegion const& region,
+                                              std::int32_t logicalWidth,
+                                              std::int32_t logicalHeight) {
+  if (width == 0 || height == 0 || logicalWidth <= 0 || logicalHeight <= 0) return std::nullopt;
+  double const scaleX = static_cast<double>(width) / static_cast<double>(logicalWidth);
+  double const scaleY = static_cast<double>(height) / static_cast<double>(logicalHeight);
+  std::int32_t const x0 = std::clamp(static_cast<std::int32_t>(std::floor(region.x * scaleX)),
+                                     0,
+                                     static_cast<std::int32_t>(width));
+  std::int32_t const y0 = std::clamp(static_cast<std::int32_t>(std::floor(region.y * scaleY)),
+                                     0,
+                                     static_cast<std::int32_t>(height));
+  std::int32_t const x1 = std::clamp(static_cast<std::int32_t>(std::ceil((region.x + region.width) * scaleX)),
+                                     0,
+                                     static_cast<std::int32_t>(width));
+  std::int32_t const y1 = std::clamp(static_cast<std::int32_t>(std::ceil((region.y + region.height) * scaleY)),
+                                     0,
+                                     static_cast<std::int32_t>(height));
+  if (x1 <= x0 || y1 <= y0) return std::nullopt;
+
+  double luma = 0.0;
+  double alpha = 0.0;
+  std::uint64_t count = 0;
+  for (std::int32_t y = y0; y < y1; ++y) {
+    for (std::int32_t x = x0; x < x1; ++x) {
+      std::size_t const offset = (static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x)) * 4u;
+      if (offset + 3u >= bgra.size()) continue;
+      double const b = bgra[offset + 0u];
+      double const g = bgra[offset + 1u];
+      double const r = bgra[offset + 2u];
+      luma += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      alpha += bgra[offset + 3u];
+      ++count;
+    }
+  }
+  if (count == 0) return std::nullopt;
+  return RegionStats{
+      .meanLuma = luma / static_cast<double>(count),
+      .meanAlpha = alpha / static_cast<double>(count),
+      .pixels = count,
+  };
+}
+
+std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland) {
+  std::vector<CaptureRegion> regions;
+  bool dockAdded = false;
+  bool topBandAdded = false;
+  for (auto const& surface : wayland.committedSurfaces()) {
+    if (surface.pacingSizing && surface.titleBarHeight > 0) {
+      regions.push_back(CaptureRegion{
+          .name = "titlebar:" + std::to_string(surface.id),
+          .x = surface.x,
+          .y = surface.y - surface.titleBarHeight,
+          .width = surface.width,
+          .height = surface.titleBarHeight,
+      });
+    }
+    if (!topBandAdded && surface.windowClipTop > 0) {
+      regions.push_back(CaptureRegion{
+          .name = "top-reserved-band",
+          .x = 0,
+          .y = 0,
+          .width = wayland.logicalOutputWidth(),
+          .height = surface.windowClipTop,
+      });
+      topBandAdded = true;
+    }
+    if (!dockAdded && surface.windowClipBottom > 0) {
+      regions.push_back(CaptureRegion{
+          .name = "dock-reserved-band",
+          .x = 0,
+          .y = surface.windowClipBottom,
+          .width = wayland.logicalOutputWidth(),
+          .height = std::max(0, wayland.logicalOutputHeight() - surface.windowClipBottom),
+      });
+      dockAdded = true;
+    }
+  }
+  return regions;
+}
+
+struct SnapFrameCapture {
+  bool enabled = false;
+  int maxFrames = 0;
+  int tailFrames = 8;
+  int frames = 0;
+  int remainingTail = 0;
+  bool started = false;
+  bool loggedStart = false;
+  std::filesystem::path directory;
+  std::ofstream csv;
+  std::unordered_map<std::string, double> previousLuma;
+
+  static SnapFrameCapture fromEnvironment() {
+    int const requestedFrames = positiveEnvInt("LWM_SNAP_CAPTURE_FRAMES", 0, 600);
+    if (requestedFrames <= 0) return {};
+    SnapFrameCapture capture;
+    capture.enabled = true;
+    capture.maxFrames = requestedFrames;
+    capture.tailFrames = positiveEnvInt("LWM_SNAP_CAPTURE_TAIL_FRAMES", 8, 120);
+    capture.directory = snapCaptureRoot() / captureTimestamp();
+    return capture;
+  }
+
+  [[nodiscard]] bool wantsFrame(WaylandServer const& wayland) {
+    if (!enabled || frames >= maxFrames) return false;
+    bool const active = wayland.hasActiveAnimations() || wayland.snapPreviewWakeDelayMs().has_value();
+    if (active) {
+      started = true;
+      remainingTail = tailFrames;
+    } else if (started && remainingTail > 0) {
+      --remainingTail;
+    } else {
+      return false;
+    }
+    ensureOpen();
+    return csv.is_open();
+  }
+
+  void ensureOpen() {
+    if (loggedStart) return;
+    loggedStart = true;
+    std::filesystem::create_directories(directory);
+    csv.open(directory / "metrics.csv", std::ios::out | std::ios::trunc);
+    if (!csv) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: failed to open snap capture metrics at %s\n",
+                   (directory / "metrics.csv").string().c_str());
+      enabled = false;
+      return;
+    }
+    csv << "frame,region,x,y,width,height,mean_luma,mean_alpha,delta_luma,pixels\n";
+    std::fprintf(stderr,
+                 "lambda-window-manager: snap frame capture writing to %s\n",
+                 directory.string().c_str());
+  }
+
+  void recordFrame(std::vector<std::uint8_t> const& bgra,
+                   std::uint32_t width,
+                   std::uint32_t height,
+                   WaylandServer const& wayland) {
+    if (!enabled || !csv || frames >= maxFrames) return;
+    std::filesystem::path const path = directory / ("frame-" + std::to_string(frames) + ".png");
+    auto saved = saveScreenshotPng(path, bgra, width, height);
+    if (!saved.error.empty()) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: failed to save snap capture frame to %s: %s\n",
+                   saved.path.string().c_str(),
+                   saved.error.c_str());
+    }
+    for (auto const& region : snapCaptureRegions(wayland)) {
+      auto stats = captureRegionStats(bgra,
+                                      width,
+                                      height,
+                                      region,
+                                      wayland.logicalOutputWidth(),
+                                      wayland.logicalOutputHeight());
+      if (!stats) continue;
+      auto const previous = previousLuma.find(region.name);
+      double const delta = previous == previousLuma.end() ? 0.0 : stats->meanLuma - previous->second;
+      previousLuma[region.name] = stats->meanLuma;
+      csv << frames << ','
+          << region.name << ','
+          << region.x << ','
+          << region.y << ','
+          << region.width << ','
+          << region.height << ','
+          << std::fixed << std::setprecision(3)
+          << stats->meanLuma << ','
+          << stats->meanAlpha << ','
+          << delta << ','
+          << stats->pixels << '\n';
+    }
+    csv.flush();
+    ++frames;
+    if (frames >= maxFrames) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: snap frame capture complete: %s (%d frames)\n",
+                   directory.string().c_str(),
+                   frames);
+    }
+  }
+};
+
+double ageMilliseconds(std::uint64_t nowNsec, std::uint64_t thenNsec) {
+  return thenNsec > 0 && nowNsec >= thenNsec ? static_cast<double>(nowNsec - thenNsec) / 1'000'000.0 : 0.0;
+}
+
+struct SnapAnimationTrace {
+  bool enabled = false;
+  int maxFrames = 0;
+  int tailFrames = 12;
+  int frames = 0;
+  int remainingTail = 0;
+  bool started = false;
+  bool loggedStart = false;
+  std::filesystem::path directory;
+  std::ofstream csv;
+
+  static SnapAnimationTrace fromEnvironment() {
+    if (!envEnabled("LWM_SNAP_TRACE")) return {};
+    SnapAnimationTrace trace;
+    trace.enabled = true;
+    trace.maxFrames = positiveEnvInt("LWM_SNAP_TRACE_FRAMES", 600, 10'000);
+    trace.tailFrames = positiveEnvInt("LWM_SNAP_TRACE_TAIL_FRAMES", 12, 240);
+    trace.directory = snapTraceRoot() / captureTimestamp();
+    return trace;
+  }
+
+  [[nodiscard]] bool wantsFrame(WaylandServer const& wayland) {
+    if (!enabled || frames >= maxFrames) return false;
+    bool const active = wayland.hasActiveAnimations() || wayland.snapPreviewWakeDelayMs().has_value();
+    if (active) {
+      started = true;
+      remainingTail = tailFrames;
+    } else if (started && remainingTail > 0) {
+      --remainingTail;
+    } else {
+      return false;
+    }
+    ensureOpen();
+    return csv.is_open();
+  }
+
+  void ensureOpen() {
+    if (loggedStart) return;
+    loggedStart = true;
+    try {
+      std::filesystem::create_directories(directory);
+    } catch (std::exception const& error) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: failed to create snap trace directory %s: %s\n",
+                   directory.string().c_str(),
+                   error.what());
+      enabled = false;
+      return;
+    }
+    csv.open(directory / "snap.csv", std::ios::out | std::ios::trunc);
+    if (!csv) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: failed to open snap trace at %s\n",
+                   (directory / "snap.csv").string().c_str());
+      enabled = false;
+      return;
+    }
+    csv << "frame,event,monotonic_ms,content_serial,output_width,output_height,surface_count,"
+           "snap_preview,active_animations,surface_id,x,y,width,height,buffer_width,buffer_height,"
+           "committed_width,committed_height,titlebar_height,server_side,focused,active_sizing,pacing_sizing,"
+           "geometry_animation_growing,default_glass,"
+           "window_clip_top,window_clip_bottom,shadow_clip_top,shadow_clip_bottom,"
+           "last_configure_serial,last_configure_width,last_configure_height,"
+           "input_to_render_ms,configure_to_render_ms,ack_to_render_ms,commit_to_render_ms,"
+           "configure_to_commit_ms,render_ahead,total_ms,background_ms,snapshot_ms,surface_ms,present_ms\n";
+    std::fprintf(stderr,
+                 "lambda-window-manager: snap trace writing to %s\n",
+                 directory.string().c_str());
+  }
+
+  void recordFrame(WaylandServer const& wayland, AtomicReadyFrame const* readyFrame, bool renderAheadFrame) {
+    if (!enabled || !csv || frames >= maxFrames) return;
+    std::uint64_t const nowNsec = monotonicNanoseconds();
+    double const nowMs = static_cast<double>(nowNsec) / 1'000'000.0;
+    auto surfaces = wayland.committedSurfaces();
+    bool const snapPreview = wayland.snapPreview().has_value();
+    bool const activeAnimations = wayland.hasActiveAnimations();
+    auto const writeCommon = [&](char const* event, std::uint64_t surfaceId) {
+      csv << frames << ','
+          << event << ','
+          << std::fixed << std::setprecision(3)
+          << nowMs << ','
+          << wayland.contentSerial() << ','
+          << wayland.logicalOutputWidth() << ','
+          << wayland.logicalOutputHeight() << ','
+          << surfaces.size() << ','
+          << (snapPreview ? 1 : 0) << ','
+          << (activeAnimations ? 1 : 0) << ','
+          << surfaceId << ',';
+    };
+
+    presentation::AtomicFrameProfile const profile = readyFrame ? readyFrame->profile : presentation::AtomicFrameProfile{};
+    writeCommon("frame", 0);
+    for (int i = 0; i < 27; ++i) {
+      csv << "0,";
+    }
+    csv << (readyFrame ? (readyFrame->renderedAhead ? 1 : 0) : (renderAheadFrame ? 1 : 0)) << ','
+        << profile.totalMs << ','
+        << profile.backgroundMs << ','
+        << profile.snapshotMs << ','
+        << profile.surfaceMs << ','
+        << profile.presentMs << '\n';
+
+    for (auto const& surface : surfaces) {
+      double const configureToCommitMs =
+          surface.lastConfigureSentNsec > 0 && surface.lastCommitNsec >= surface.lastConfigureSentNsec
+              ? static_cast<double>(surface.lastCommitNsec - surface.lastConfigureSentNsec) / 1'000'000.0
+              : 0.0;
+      writeCommon("surface", surface.id);
+      csv << surface.x << ','
+          << surface.y << ','
+          << surface.width << ','
+          << surface.height << ','
+          << surface.bufferWidth << ','
+          << surface.bufferHeight << ','
+          << surface.committedWidth << ','
+          << surface.committedHeight << ','
+          << surface.titleBarHeight << ','
+          << (surface.serverSideDecorated ? 1 : 0) << ','
+          << (surface.focused ? 1 : 0) << ','
+          << (surface.activeSizing ? 1 : 0) << ','
+          << (surface.pacingSizing ? 1 : 0) << ','
+          << (surface.geometryAnimationGrowing ? 1 : 0) << ','
+          << (surface.defaultGlassEligible ? 1 : 0) << ','
+          << surface.windowClipTop << ','
+          << surface.windowClipBottom << ','
+          << surface.shadowClipTop << ','
+          << surface.shadowClipBottom << ','
+          << surface.lastConfigureSerial << ','
+          << surface.lastConfigureWidth << ','
+          << surface.lastConfigureHeight << ','
+          << ageMilliseconds(nowNsec, surface.lastResizeInputNsec) << ','
+          << ageMilliseconds(nowNsec, surface.lastConfigureSentNsec) << ','
+          << ageMilliseconds(nowNsec, surface.lastConfigureAckNsec) << ','
+          << ageMilliseconds(nowNsec, surface.lastCommitNsec) << ','
+          << configureToCommitMs << ','
+          << (readyFrame ? (readyFrame->renderedAhead ? 1 : 0) : (renderAheadFrame ? 1 : 0)) << ','
+          << profile.totalMs << ','
+          << profile.backgroundMs << ','
+          << profile.snapshotMs << ','
+          << profile.surfaceMs << ','
+          << profile.presentMs << '\n';
+    }
+    if ((frames & 31) == 0) csv.flush();
+    ++frames;
+    if (frames >= maxFrames) {
+      csv.flush();
+      std::fprintf(stderr,
+                   "lambda-window-manager: snap trace complete: %s (%d frames)\n",
+                   directory.string().c_str(),
+                   frames);
+    }
+  }
+};
+
+} // namespace
 
 int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
   try {
@@ -180,7 +596,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     LoopInstrumentation loopStats;
     CompositorFrameProfile frameProfile;
     bool const detailedFrameProfile =
-        diagnostics::cpuTraceEnabled() || frameProfile.enabled || pacingTraceEnabled();
+        diagnostics::cpuTraceEnabled() || frameProfile.enabled || pacingTraceEnabled() || envEnabled("LWM_SNAP_TRACE");
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
@@ -190,6 +606,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 
     bool forceRender = true;
     bool screenshotPending = false;
+    SnapFrameCapture snapFrameCapture = SnapFrameCapture::fromEnvironment();
+    SnapAnimationTrace snapAnimationTrace = SnapAnimationTrace::fromEnvironment();
+    if (snapAnimationTrace.enabled) snapAnimationTrace.ensureOpen();
     bool skipNextVblank = true;
     bool wasVtForeground = device->isVtForeground();
     bool vtAcquireFramePending = false;
@@ -534,9 +953,20 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      LoopInstrumentation::Clock::time_point renderStart,
                                      PresentationTiming presentationTiming,
                                      bool renderAheadFrame) {
-      if (screenshotPending && !flux::requestNextFrameCaptureForCanvas(canvas)) {
+      bool snapTraceThisFrame = snapAnimationTrace.wantsFrame(wayland);
+      bool snapCaptureThisFrame = snapFrameCapture.wantsFrame(wayland);
+      bool frameCapturePending = screenshotPending || snapCaptureThisFrame;
+      if (frameCapturePending && !flux::requestNextFrameCaptureForCanvas(canvas)) {
+        if (screenshotPending) {
+          std::fprintf(stderr, "lambda-window-manager: screenshots are not supported by this presenter\n");
+        }
+        if (snapCaptureThisFrame) {
+          std::fprintf(stderr, "lambda-window-manager: snap frame capture is not supported by this presenter\n");
+          snapFrameCapture.enabled = false;
+        }
         screenshotPending = false;
-        std::fprintf(stderr, "lambda-window-manager: screenshots are not supported by this presenter\n");
+        snapCaptureThisFrame = false;
+        frameCapturePending = false;
       }
       renderFrameCtx.idleBlanked = idleBlanked;
       renderFrameCtx.vulkanDisplayTimingSupportLogged = displayTimingSupportLogged;
@@ -544,19 +974,27 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       flux::compositor::renderCompositorFrame(renderFrameCtx, frameTime, renderStart, presentationTiming, renderAheadFrame);
       displayTimingSupportLogged = renderFrameCtx.vulkanDisplayTimingSupportLogged;
       useVulkanPresentationCompletion = renderFrameCtx.useVulkanPresentationCompletion;
-      if (screenshotPending) {
+      if (snapTraceThisFrame) {
+        snapAnimationTrace.recordFrame(wayland, atomicReadyFrame.ready ? &atomicReadyFrame : nullptr, renderAheadFrame);
+      }
+      if (frameCapturePending) {
         std::vector<std::uint8_t> pixels;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
         if (flux::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
-          auto saved = saveScreenshotPng(pixels, width, height);
-          if (saved.error.empty()) {
-            std::fprintf(stderr, "lambda-window-manager: saved screenshot to %s\n",
-                         saved.path.string().c_str());
-          } else {
-            std::fprintf(stderr, "lambda-window-manager: failed to save screenshot to %s: %s\n",
-                         saved.path.string().c_str(),
-                         saved.error.c_str());
+          if (screenshotPending) {
+            auto saved = saveScreenshotPng(pixels, width, height);
+            if (saved.error.empty()) {
+              std::fprintf(stderr, "lambda-window-manager: saved screenshot to %s\n",
+                           saved.path.string().c_str());
+            } else {
+              std::fprintf(stderr, "lambda-window-manager: failed to save screenshot to %s: %s\n",
+                           saved.path.string().c_str(),
+                           saved.error.c_str());
+            }
+          }
+          if (snapCaptureThisFrame) {
+            snapFrameCapture.recordFrame(pixels, width, height, wayland);
           }
         } else {
           std::fprintf(stderr, "lambda-window-manager: screenshot capture did not produce a frame\n");

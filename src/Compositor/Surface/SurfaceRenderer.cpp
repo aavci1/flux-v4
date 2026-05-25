@@ -68,6 +68,8 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.dmabufBufferId);
   hashValue(hash, surface.width);
   hashValue(hash, surface.height);
+  hashValue(hash, surface.committedWidth);
+  hashValue(hash, surface.committedHeight);
   hashValue(hash, surface.bufferWidth);
   hashValue(hash, surface.bufferHeight);
   hashValue(hash, surface.sourceX);
@@ -88,7 +90,12 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.minimizeButtonPressed);
   hashValue(hash, surface.focused);
   hashValue(hash, surface.activeSizing);
+  hashValue(hash, surface.geometryAnimationGrowing);
   hashValue(hash, surface.defaultGlassEligible);
+  hashValue(hash, surface.shadowClipTop);
+  hashValue(hash, surface.shadowClipBottom);
+  hashValue(hash, surface.windowClipTop);
+  hashValue(hash, surface.windowClipBottom);
   hashValue(hash, surface.backgroundEffect.blurRadius);
   hashColor(hash, surface.backgroundEffect.baseColor);
   hashColor(hash, surface.backgroundEffect.tint);
@@ -356,6 +363,8 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
   }
   bool const canRecordSurface =
       canvas.backend() == Backend::Vulkan &&
+      surface.windowClipTop <= 0 &&
+      surface.windowClipBottom <= 0 &&
       !hasTransientChromeState(surface) &&
       surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
   std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(surface, cached, *cached.image, chrome) : 0;

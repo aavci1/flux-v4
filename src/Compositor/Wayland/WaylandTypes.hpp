@@ -77,6 +77,8 @@ struct CommittedSurfaceSnapshot {
   std::int32_t y = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
+  std::int32_t committedWidth = 0;
+  std::int32_t committedHeight = 0;
   std::int32_t bufferWidth = 0;
   std::int32_t bufferHeight = 0;
   float sourceX = 0.f;
@@ -99,7 +101,12 @@ struct CommittedSurfaceSnapshot {
   bool focused = false;
   bool activeSizing = false;
   bool pacingSizing = false;
+  bool geometryAnimationGrowing = false;
   bool defaultGlassEligible = false;
+  std::int32_t shadowClipTop = 0;
+  std::int32_t shadowClipBottom = 0;
+  std::int32_t windowClipTop = 0;
+  std::int32_t windowClipBottom = 0;
   SurfaceBackgroundEffectSnapshot backgroundEffect{};
   std::uint64_t serial = 0;
   std::uint32_t lastConfigureSerial = 0;

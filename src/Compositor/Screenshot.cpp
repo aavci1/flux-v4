@@ -7,6 +7,7 @@
 #include <ctime>
 #include <fstream>
 #include <stdexcept>
+#include <utility>
 
 namespace flux::compositor {
 namespace {
@@ -131,7 +132,14 @@ std::filesystem::path defaultScreenshotPath() {
 ScreenshotSaveResult saveScreenshotPng(std::vector<std::uint8_t> const& bgra,
                                        std::uint32_t width,
                                        std::uint32_t height) {
-  ScreenshotSaveResult result{.path = defaultScreenshotPath(), .error = {}};
+  return saveScreenshotPng(defaultScreenshotPath(), bgra, width, height);
+}
+
+ScreenshotSaveResult saveScreenshotPng(std::filesystem::path path,
+                                       std::vector<std::uint8_t> const& bgra,
+                                       std::uint32_t width,
+                                       std::uint32_t height) {
+  ScreenshotSaveResult result{.path = std::move(path), .error = {}};
   try {
     writePng(result.path, bgra, width, height);
     return result;

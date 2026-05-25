@@ -348,8 +348,7 @@ struct WaylandServer::Impl::Surface {
   std::int32_t geometryAnimationTargetY = 0;
   std::int32_t geometryAnimationTargetWidth = 0;
   std::int32_t geometryAnimationTargetHeight = 0;
-  std::int32_t geometryAnimationLastConfigureWidth = 0;
-  std::int32_t geometryAnimationLastConfigureHeight = 0;
+  bool geometryAnimationConfigureSent = false;
   bool awaitingConfigureCommit = false;
   std::int32_t awaitingConfigureWidth = 0;
   std::int32_t awaitingConfigureHeight = 0;

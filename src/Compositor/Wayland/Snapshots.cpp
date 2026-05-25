@@ -37,6 +37,20 @@ bool surfaceContentFullyOpaque(WaylandServer::Impl::Surface const* surface) {
   return false;
 }
 
+std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  if (surface->destinationSet) return surface->destinationWidth;
+  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceWidth);
+  return std::max(1, surface->width / std::max(1, surface->scale));
+}
+
+std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  if (surface->destinationSet) return surface->destinationHeight;
+  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceHeight);
+  return std::max(1, surface->height / std::max(1, surface->scale));
+}
+
 WaylandServer::Impl::XdgToplevel const* toplevelForSurface(WaylandServer::Impl const* server,
                                                            WaylandServer::Impl::Surface const* surface) {
   auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
@@ -104,21 +118,41 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   bool const rejected = withChrome && surfaceIsXdgToplevel(surface) && cutoutsRejected(server, surface);
   bool const cutoutMode = decorated && bound && !rejected;
   ChromeButton const hovered = chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode);
+  bool const xdgToplevel = surfaceIsXdgToplevel(surface);
+  std::int32_t const width = displayWidth(surface);
+  std::int32_t const height = displayHeight(surface);
+  std::int32_t const committedWidth = committedDisplayWidthForSurface(surface);
+  std::int32_t const committedHeight = committedDisplayHeightForSurface(surface);
+  std::int32_t const titleBarHeight = decorated && !cutoutMode ? server->chromeConfig_.titleBarHeight : 0;
+  std::int32_t const workTop = server ? server->topBarExclusiveZone_ : 0;
+  std::int32_t const workBottom = server
+                                      ? std::max(0, server->logicalOutputHeight() - server->dockReservedZone_)
+                                      : 0;
+  std::int32_t const frameTop = y - titleBarHeight;
+  std::int32_t const frameBottom = y + height;
+  std::int32_t const windowClipTop = xdgToplevel && workTop > frameTop ? workTop : 0;
+  std::int32_t const windowClipBottom = xdgToplevel && workBottom > 0 && workBottom < frameBottom ? workBottom : 0;
+  bool const geometryAnimationGrowing =
+      surface->geometryAnimationActive &&
+      (surface->geometryAnimationTargetWidth > surface->geometryAnimationStartWidth ||
+       surface->geometryAnimationTargetHeight > surface->geometryAnimationStartHeight);
   CommittedSurfaceSnapshot snapshot{
       .id = surface->id,
       .x = x,
       .y = y,
-      .width = displayWidth(surface),
-      .height = displayHeight(surface),
+      .width = width,
+      .height = height,
+      .committedWidth = committedWidth,
+      .committedHeight = committedHeight,
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
       .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
       .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
       .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
       .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
-      .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
-      .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
-      .titleBarHeight = decorated && !cutoutMode ? server->chromeConfig_.titleBarHeight : 0,
+      .destinationWidth = surface->destinationSet ? surface->destinationWidth : width,
+      .destinationHeight = surface->destinationSet ? surface->destinationHeight : height,
+      .titleBarHeight = titleBarHeight,
       .title = decorated && !cutoutMode ? titleForSurface(server, surface) : std::string{},
       .serverSideDecorated = decorated,
       .cutoutsBound = bound,
@@ -135,7 +169,14 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	                      surface->awaitingConfigureCommit,
 	      .pacingSizing = server->resizeSurface_ == surface ||
 	                      surface->geometryAnimationActive,
+	      .geometryAnimationGrowing = geometryAnimationGrowing,
 	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !surfaceContentFullyOpaque(surface),
+	      .shadowClipTop = server ? server->topBarExclusiveZone_ : 0,
+	      .shadowClipBottom = server
+	                              ? std::max(0, server->logicalOutputHeight() - server->dockReservedZone_)
+	                              : 0,
+	      .windowClipTop = windowClipTop,
+	      .windowClipBottom = windowClipBottom,
 	      .backgroundEffect = surface->backgroundEffectState,
 	      .serial = surface->serial,
 	      .lastConfigureSerial = surface->lastConfigureSerial,
@@ -243,6 +284,8 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
       .y = static_cast<std::int32_t>(pointerY_) - cursorHotspotY_,
       .width = displayWidth(surface),
       .height = displayHeight(surface),
+      .committedWidth = committedDisplayWidthForSurface(surface),
+      .committedHeight = committedDisplayHeightForSurface(surface),
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
       .sourceX = surface->sourceSet ? surface->sourceX : 0.f,

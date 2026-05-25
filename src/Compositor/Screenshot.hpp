@@ -13,6 +13,10 @@ struct ScreenshotSaveResult {
 };
 
 [[nodiscard]] std::filesystem::path defaultScreenshotPath();
+[[nodiscard]] ScreenshotSaveResult saveScreenshotPng(std::filesystem::path path,
+                                                     std::vector<std::uint8_t> const& bgra,
+                                                     std::uint32_t width,
+                                                     std::uint32_t height);
 [[nodiscard]] ScreenshotSaveResult saveScreenshotPng(std::vector<std::uint8_t> const& bgra,
                                                      std::uint32_t width,
                                                      std::uint32_t height);

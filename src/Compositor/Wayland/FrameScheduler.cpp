@@ -19,8 +19,6 @@ namespace {
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
-constexpr std::uint32_t kFallbackConfigureLeadMs = 16;
-constexpr std::uint32_t kGeometryAnimationConfigureLeadFrames = 2;
 constexpr std::uint32_t kPresentationCompletionFallbackMs = 500;
 
 float clamp01(float value) {
@@ -37,12 +35,6 @@ float easeInOutCubic(float value) {
 std::int32_t lerpInt(std::int32_t from, std::int32_t to, float t) {
   return static_cast<std::int32_t>(std::lround(static_cast<float>(from) +
                                                static_cast<float>(to - from) * t));
-}
-
-std::uint32_t refreshIntervalMs(std::uint32_t refreshMilliHz) {
-  if (refreshMilliHz == 0) return kFallbackConfigureLeadMs;
-  std::uint64_t const interval = 1'000'000ull / static_cast<std::uint64_t>(refreshMilliHz);
-  return static_cast<std::uint32_t>(std::clamp<std::uint64_t>(interval, 1ull, 33ull));
 }
 
 wl_resource* outputResourceForClient(WaylandServer::Impl const& server, wl_client* client) {
@@ -96,10 +88,12 @@ void sendPresentationFeedback(WaylandServer::Impl& server,
 
 void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
   bool sentConfigure = false;
-  std::uint32_t const configureLeadMs =
-      refreshIntervalMs(output_.refreshMilliHz) * kGeometryAnimationConfigureLeadFrames;
   for (auto const& surface : surfaces_) {
     if (!surface->geometryAnimationActive) continue;
+    std::int32_t const oldX = surface->windowX;
+    std::int32_t const oldY = surface->windowY;
+    std::int32_t const oldWidth = displayWidth(surface.get());
+    std::int32_t const oldHeight = displayHeight(surface.get());
 
     float const linearProgress =
         animationsEnabled
@@ -107,11 +101,6 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
                   static_cast<float>(kGeometryAnimationMs)
             : 1.f;
     float const progress = easeInOutCubic(linearProgress);
-    float const configureProgress =
-        animationsEnabled
-            ? easeInOutCubic(static_cast<float>(timeMs + configureLeadMs - surface->geometryAnimationStartedAtMs) /
-                             static_cast<float>(kGeometryAnimationMs))
-            : 1.f;
     std::int32_t const nextX = lerpInt(surface->geometryAnimationStartX, surface->geometryAnimationTargetX, progress);
     std::int32_t const nextY = lerpInt(surface->geometryAnimationStartY, surface->geometryAnimationTargetY, progress);
     std::int32_t const nextWidth =
@@ -120,28 +109,10 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
     std::int32_t const nextHeight =
         std::max(kMinWindowHeight,
                  lerpInt(surface->geometryAnimationStartHeight, surface->geometryAnimationTargetHeight, progress));
-    std::int32_t const configureWidth =
-        std::max(kMinWindowWidth,
-                 lerpInt(surface->geometryAnimationStartWidth,
-                         surface->geometryAnimationTargetWidth,
-                         configureProgress));
-    std::int32_t const configureHeight =
-        std::max(kMinWindowHeight,
-                 lerpInt(surface->geometryAnimationStartHeight,
-                         surface->geometryAnimationTargetHeight,
-                         configureProgress));
-
     surface->windowX = nextX;
     surface->windowY = nextY;
     setConfiguredFrameSize(surface.get(), nextWidth, nextHeight);
     traceResizeSurface("animation-frame", surface.get());
-    if (configureWidth != surface->geometryAnimationLastConfigureWidth ||
-        configureHeight != surface->geometryAnimationLastConfigureHeight) {
-      surface->geometryAnimationLastConfigureWidth = configureWidth;
-      surface->geometryAnimationLastConfigureHeight = configureHeight;
-      sendToplevelConfigure(this, toplevelForSurface(this, surface.get()), configureWidth, configureHeight);
-      sentConfigure = true;
-    }
 
     if (linearProgress >= 1.f) {
       surface->windowX = surface->geometryAnimationTargetX;
@@ -150,13 +121,20 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
                              surface->geometryAnimationTargetWidth,
                              surface->geometryAnimationTargetHeight);
       surface->geometryAnimationActive = false;
-      if (surface->frameWidth != surface->geometryAnimationLastConfigureWidth ||
-          surface->frameHeight != surface->geometryAnimationLastConfigureHeight) {
-        surface->geometryAnimationLastConfigureWidth = surface->frameWidth;
-        surface->geometryAnimationLastConfigureHeight = surface->frameHeight;
-        sendToplevelConfigure(this, toplevelForSurface(this, surface.get()), surface->frameWidth, surface->frameHeight);
+      if (!surface->geometryAnimationConfigureSent) {
+        sendToplevelConfigure(this,
+                              toplevelForSurface(this, surface.get()),
+                              surface->geometryAnimationTargetWidth,
+                              surface->geometryAnimationTargetHeight);
+        surface->geometryAnimationConfigureSent = true;
         sentConfigure = true;
       }
+    }
+    if (surface->windowX != oldX ||
+        surface->windowY != oldY ||
+        displayWidth(surface.get()) != oldWidth ||
+        displayHeight(surface.get()) != oldHeight) {
+      ++contentSerial_;
     }
   }
   if (sentConfigure) flushClients();

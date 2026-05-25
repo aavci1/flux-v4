@@ -406,7 +406,7 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
   bool const matchedConfigure = surface->awaitingConfigureCommit &&
                                 committedDisplayWidth(surface) == surface->awaitingConfigureWidth &&
                                 committedDisplayHeight(surface) == surface->awaitingConfigureHeight;
-  if (interactiveSizing || matchedConfigure) {
+  if (interactiveSizing || (matchedConfigure && !animationSizing)) {
     std::int32_t const committedWidth = committedDisplayWidth(surface);
     std::int32_t const committedHeight = committedDisplayHeight(surface);
     if (committedWidth > 0 && committedHeight > 0) {
@@ -617,7 +617,9 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-shm", surface);
-        if (matchedConfigureCommit) sendPendingResizeConfigureIfNeeded(surface);
+        if (matchedConfigureCommit) {
+          sendPendingResizeConfigureIfNeeded(surface);
+        }
         traceCrashSurfaceCommit(surface, "shm", 1u, static_cast<std::uint32_t>(shmBuffer->format));
         releaseCurrentBufferImmediately = true;
       }
@@ -637,7 +639,9 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-dmabuf", surface);
-        if (matchedConfigureCommit) sendPendingResizeConfigureIfNeeded(surface);
+        if (matchedConfigureCommit) {
+          sendPendingResizeConfigureIfNeeded(surface);
+        }
         traceCrashSurfaceCommit(surface, "dmabuf", 2u, dmabufBuffer->format);
       }
     } else {

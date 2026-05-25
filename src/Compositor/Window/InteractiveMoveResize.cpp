@@ -237,10 +237,12 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationTargetY = targetY;
   surface->geometryAnimationTargetWidth = targetWidth;
   surface->geometryAnimationTargetHeight = targetHeight;
-  surface->geometryAnimationLastConfigureWidth = displayWidth(surface);
-  surface->geometryAnimationLastConfigureHeight = displayHeight(surface);
+  surface->geometryAnimationConfigureSent = false;
   surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
   surface->lastResizeInputNsec = flux::detail::resizeTraceTimestampNanoseconds();
+  surface->awaitingConfigureCommit = false;
+  surface->awaitingConfigureWidth = 0;
+  surface->awaitingConfigureHeight = 0;
   surface->geometryAnimationActive = true;
   if (surface->geometryAnimationStartX == targetX && surface->geometryAnimationStartY == targetY &&
       surface->geometryAnimationStartWidth == targetWidth &&
@@ -248,6 +250,13 @@ void startGeometryAnimation(WaylandServer::Impl* server,
     surface->geometryAnimationActive = false;
     return;
   }
+  bool const grows = targetWidth > surface->geometryAnimationStartWidth ||
+                     targetHeight > surface->geometryAnimationStartHeight;
+  if (grows) {
+    sendToplevelConfigure(server, toplevelForSurface(server, surface), targetWidth, targetHeight);
+    surface->geometryAnimationConfigureSent = true;
+  }
+  ++server->contentSerial_;
   server->flushClients();
 }
 
