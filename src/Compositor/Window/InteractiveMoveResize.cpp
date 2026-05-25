@@ -266,7 +266,7 @@ namespace flux::compositor::wm {
 
 void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, SnapTarget target) {
   if (!isManagedToplevel(surface)) return;
-  if (!surface->snapped && !surface->maximized) {
+  if (!surface->snapped && !surface->maximized && !surface->fullscreen) {
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
     surface->restoreWidth = displayWidth(surface);
@@ -276,6 +276,7 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
       snapTargetGeometry(snapOutputGeometryFor(server), target, topInsetForSurface(server, surface));
   surface->snapped = true;
   surface->maximized = false;
+  surface->fullscreen = false;
   startGeometryAnimation(server,
                          surface,
                          geometry.x,
@@ -304,7 +305,7 @@ using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
 
 bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
-  if (!isManagedToplevel(surface) || (!surface->snapped && !surface->maximized)) return false;
+  if (!isManagedToplevel(surface) || (!surface->snapped && !surface->maximized && !surface->fullscreen)) return false;
   std::int32_t const restoreWidth =
       std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
   std::int32_t const restoreHeight =
@@ -318,6 +319,7 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
                  std::max(topInsetForSurface(server, surface), restoreOutput.height - restoreHeight));
   surface->maximized = false;
   surface->snapped = false;
+  surface->fullscreen = false;
   startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
   return true;
 }
@@ -333,7 +335,7 @@ using wm::topInsetForSurface;
 
 void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!isManagedToplevel(surface)) return;
-  if (surface->maximized) return;
+  if (surface->maximized || surface->fullscreen) return;
   if (!surface->snapped) {
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
@@ -344,6 +346,7 @@ void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
                                                         topInsetForSurface(server, surface));
   surface->maximized = true;
   surface->snapped = false;
+  surface->fullscreen = false;
   startGeometryAnimation(server, surface, target.x, target.y, target.width, target.height);
 }
 
@@ -375,8 +378,34 @@ bool restoreFocusedToplevel(WaylandServer::Impl* server) {
 
 namespace flux::compositor::wm {
 
+void fullscreenToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!isManagedToplevel(surface) || surface->fullscreen) return;
+  if (!surface->snapped && !surface->maximized) {
+    surface->restoreX = surface->windowX;
+    surface->restoreY = surface->windowY;
+    surface->restoreWidth = displayWidth(surface);
+    surface->restoreHeight = displayHeight(surface);
+  }
+  std::int32_t const topInset = topInsetForSurface(server, surface);
+  std::int32_t const targetHeight = std::max(kMinWindowHeight, server->logicalOutputHeight() - topInset);
+  surface->fullscreen = true;
+  surface->maximized = false;
+  surface->snapped = false;
+  surface->minimized = false;
+  startGeometryAnimation(server,
+                         surface,
+                         0,
+                         topInset,
+                         std::max(kMinWindowWidth, server->logicalOutputWidth()),
+                         targetHeight);
+}
+
+} // namespace flux::compositor::wm
+
+namespace flux::compositor::wm {
+
 void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
-  if (!surface || (!surface->snapped && !surface->maximized)) return;
+  if (!surface || (!surface->snapped && !surface->maximized && !surface->fullscreen)) return;
   WindowGeometry const restored = restoredDragGeometry({
       .pointerX = server->pointerX_,
       .pointerY = server->pointerY_,
@@ -396,6 +425,7 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
   setConfiguredFrameSize(surface, restored.width, restored.height);
   surface->snapped = false;
   surface->maximized = false;
+  surface->fullscreen = false;
   surface->geometryAnimationActive = false;
   clearSnapPreview(server);
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
@@ -455,7 +485,7 @@ void updateResize(WaylandServer::Impl* server) {
   ResizeEdge const edges = resizeEdgesFromXdg(server->resizeEdges_);
   bool const left = hasResizeEdge(edges, ResizeEdge::Left);
   bool const top = hasResizeEdge(edges, ResizeEdge::Top);
-  WindowGeometry const next = resizedWindowGeometry({
+  WindowGeometry next = resizedWindowGeometry({
       .startPointerX = server->resizeStartX_,
       .startPointerY = server->resizeStartY_,
       .pointerX = server->pointerX_,
@@ -470,6 +500,7 @@ void updateResize(WaylandServer::Impl* server) {
       .output = outputGeometryFor(server),
       .topInset = topInsetForSurface(server, surface),
   });
+  next = clampToplevelGeometryToSizeHints(next, committedSizeHints(toplevelForSurface(server, surface)), edges);
 
   if (left) surface->windowX = next.x;
   if (top) surface->windowY = next.y;

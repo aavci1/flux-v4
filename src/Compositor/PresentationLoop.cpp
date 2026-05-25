@@ -1,30 +1,11 @@
 #include "Compositor/PresentationLoop.hpp"
+#include "Compositor/OutputSelector.hpp"
 
-#include <charconv>
-#include <cctype>
 #include <cstdio>
 #include <string>
-#include <string_view>
+#include <vector>
 
 namespace flux::compositor::presentation {
-namespace {
-
-std::string lowerAscii(std::string_view value) {
-  std::string result(value);
-  for (char& c : result) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  return result;
-}
-
-std::optional<std::size_t> parseOutputIndex(std::string_view selector, std::size_t count) {
-  std::size_t index = 0;
-  auto const* begin = selector.data();
-  auto const* end = selector.data() + selector.size();
-  auto [ptr, error] = std::from_chars(begin, end, index);
-  if (error != std::errc{} || ptr != end || index >= count) return std::nullopt;
-  return index;
-}
-
-} // namespace
 
 PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTiming const& vblank,
                                                 std::uint32_t refreshMilliHz,
@@ -55,20 +36,10 @@ void printOutputs(std::vector<flux::platform::KmsOutput> const& outputs) {
 
 std::optional<std::size_t> selectOutputIndex(std::vector<flux::platform::KmsOutput> const& outputs,
                                              std::optional<std::string> const& selector) {
-  if (outputs.empty()) return std::nullopt;
-  if (!selector || selector->empty()) return 0u;
-
-  for (std::size_t i = 0; i < outputs.size(); ++i) {
-    if (outputs[i].name() == *selector) return i;
-  }
-
-  std::string const normalized = lowerAscii(*selector);
-  for (std::size_t i = 0; i < outputs.size(); ++i) {
-    if (lowerAscii(outputs[i].name()) == normalized) return i;
-  }
-  if (normalized == "primary" || normalized == "first") return 0u;
-  if ((normalized == "secondary" || normalized == "second") && outputs.size() > 1u) return 1u;
-  return parseOutputIndex(*selector, outputs.size());
+  std::vector<std::string> names;
+  names.reserve(outputs.size());
+  for (auto const& output : outputs) names.push_back(output.name());
+  return selectOutputNameIndex(std::span<std::string const>(names.data(), names.size()), selector);
 }
 
 } // namespace flux::compositor::presentation

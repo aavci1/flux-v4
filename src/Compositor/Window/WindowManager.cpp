@@ -236,6 +236,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         sendPointerFocus(this, nullptr, timeMs);
         chromeControlTarget->snapped = false;
         chromeControlTarget->maximized = false;
+        chromeControlTarget->fullscreen = false;
         chromeControlTarget->geometryAnimationActive = false;
         clearSnapPreview(this);
         resizeSurface_ = chromeControlTarget;

@@ -121,11 +121,15 @@ These are the concrete findings to resolve or validate before broad refactors.
 
 6. Several xdg-shell toplevel requests are no-ops.
 
-   `set_window_geometry`, `set_parent`, `show_window_menu`, `set_min_size`, `set_max_size`, `set_fullscreen`, and `unset_fullscreen` are currently ignored. Real GTK/Qt/browser validation should decide which of these must be implemented for daily-driver use and which remain documented limitations.
+   The audit found that `set_window_geometry`, `set_parent`, `show_window_menu`, `set_min_size`, `set_max_size`, `set_fullscreen`, and `unset_fullscreen` were ignored. Real GTK/Qt/browser validation should still decide whether the basic behavior below is enough for daily-driver use.
+
+   Status: partially implemented and covered by focused state tests on 2026-05-26. The compositor now validates and stores `set_window_geometry`, tracks parent relationships with cycle rejection and destroy cleanup, applies double-buffered min/max size hints, clamps interactive resize configures to client size hints, advertises fullscreen capability, sends fullscreen configure state, and supports basic fullscreen/unfullscreen geometry. `show_window_menu` is intentionally accepted without drawing a menu for now because the compositor-owned window-menu UI is not designed yet.
 
 7. Output and scale support exists, but selector behavior needs test coverage.
 
    Output listing, selector parsing, per-output scale, `wl_output`, xdg-output, and fractional-scale paths are present. The missing piece is deterministic tests for selector parsing and restart/hot-reload boundaries, especially invalid selectors and `secondary`.
+
+   Status: selector parsing covered by deterministic tests on 2026-05-26. The test path covers default/empty selection, exact and case-insensitive connector names, `primary`/`first`, `secondary`/`second`, numeric indexes, empty output lists, out-of-range indexes, malformed numeric selectors, and missing connector names. Live KMS listing and restart/hot-reload behavior still require manual validation on real hardware.
 
 8. Idle and frame scheduling have the right structure but still need live validation.
 

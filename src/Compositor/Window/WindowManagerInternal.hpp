@@ -44,6 +44,61 @@ enum class ChromeButton {
 ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y);
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface);
+struct ToplevelSizeHints {
+  std::int32_t minWidth = 0;
+  std::int32_t minHeight = 0;
+  std::int32_t maxWidth = 0;
+  std::int32_t maxHeight = 0;
+};
+inline bool xdgWindowGeometrySizeValid(std::int32_t width, std::int32_t height) {
+  return width > 0 && height > 0;
+}
+inline bool toplevelSizeHintsValid(ToplevelSizeHints const& hints) {
+  if (hints.minWidth < 0 || hints.minHeight < 0 || hints.maxWidth < 0 || hints.maxHeight < 0) {
+    return false;
+  }
+  if (hints.maxWidth > 0 && hints.minWidth > 0 && hints.minWidth > hints.maxWidth) {
+    return false;
+  }
+  if (hints.maxHeight > 0 && hints.minHeight > 0 && hints.minHeight > hints.maxHeight) {
+    return false;
+  }
+  return true;
+}
+inline ToplevelSizeHints committedSizeHints(WaylandServer::Impl::XdgToplevel const* toplevel) {
+  return toplevel ? ToplevelSizeHints{
+                        .minWidth = toplevel->minWidth,
+                        .minHeight = toplevel->minHeight,
+                        .maxWidth = toplevel->maxWidth,
+                        .maxHeight = toplevel->maxHeight,
+                    }
+                  : ToplevelSizeHints{};
+}
+inline ToplevelSizeHints pendingSizeHints(WaylandServer::Impl::XdgToplevel const* toplevel) {
+  if (!toplevel) return {};
+  return {
+      .minWidth = toplevel->pendingMinSizeSet ? toplevel->pendingMinWidth : toplevel->minWidth,
+      .minHeight = toplevel->pendingMinSizeSet ? toplevel->pendingMinHeight : toplevel->minHeight,
+      .maxWidth = toplevel->pendingMaxSizeSet ? toplevel->pendingMaxWidth : toplevel->maxWidth,
+      .maxHeight = toplevel->pendingMaxSizeSet ? toplevel->pendingMaxHeight : toplevel->maxHeight,
+  };
+}
+inline WindowGeometry clampToplevelGeometryToSizeHints(WindowGeometry geometry,
+                                                      ToplevelSizeHints const& hints,
+                                                      ResizeEdge anchoredEdges = ResizeEdge::None) {
+  if (!toplevelSizeHintsValid(hints)) return geometry;
+  std::int32_t const originalRight = geometry.x + geometry.width;
+  std::int32_t const originalBottom = geometry.y + geometry.height;
+  std::int32_t const minWidth = hints.minWidth > 0 ? hints.minWidth : kMinWindowWidth;
+  std::int32_t const minHeight = hints.minHeight > 0 ? hints.minHeight : kMinWindowHeight;
+  geometry.width = std::max(minWidth, geometry.width);
+  geometry.height = std::max(minHeight, geometry.height);
+  if (hints.maxWidth > 0) geometry.width = std::min(hints.maxWidth, geometry.width);
+  if (hints.maxHeight > 0) geometry.height = std::min(hints.maxHeight, geometry.height);
+  if (hasResizeEdge(anchoredEdges, ResizeEdge::Left)) geometry.x = originalRight - geometry.width;
+  if (hasResizeEdge(anchoredEdges, ResizeEdge::Top)) geometry.y = originalBottom - geometry.height;
+  return geometry;
+}
 inline bool markToplevelMinimized(WaylandServer::Impl::Surface* surface) {
   if (!surfaceIsXdgToplevel(surface) || surface->minimized) {
     return false;
@@ -150,6 +205,7 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
 void snapFocusedToplevel(WaylandServer::Impl* server, bool leftHalf);
 void maximizeFocusedToplevel(WaylandServer::Impl* server);
 bool restoreFocusedToplevel(WaylandServer::Impl* server);
+void fullscreenToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void toggleMaximizedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void updateDrag(WaylandServer::Impl* server);

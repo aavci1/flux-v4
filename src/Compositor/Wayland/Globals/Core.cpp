@@ -4,6 +4,7 @@
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
 #include "viewporter-server-protocol.h"
@@ -549,6 +550,42 @@ bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
   return changed;
 }
 
+bool applyXdgProtocolState(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->server) return false;
+  bool renderStateChanged = false;
+  for (auto const& xdgSurface : surface->server->xdgSurfaces_) {
+    if (!xdgSurface || xdgSurface->surface != surface || !xdgSurface->pendingWindowGeometrySet) continue;
+    if (!xdgSurface->windowGeometrySet ||
+        xdgSurface->windowGeometryX != xdgSurface->pendingWindowGeometryX ||
+        xdgSurface->windowGeometryY != xdgSurface->pendingWindowGeometryY ||
+        xdgSurface->windowGeometryWidth != xdgSurface->pendingWindowGeometryWidth ||
+        xdgSurface->windowGeometryHeight != xdgSurface->pendingWindowGeometryHeight) {
+      renderStateChanged = true;
+    }
+    xdgSurface->windowGeometryX = xdgSurface->pendingWindowGeometryX;
+    xdgSurface->windowGeometryY = xdgSurface->pendingWindowGeometryY;
+    xdgSurface->windowGeometryWidth = xdgSurface->pendingWindowGeometryWidth;
+    xdgSurface->windowGeometryHeight = xdgSurface->pendingWindowGeometryHeight;
+    xdgSurface->windowGeometrySet = true;
+    xdgSurface->pendingWindowGeometrySet = false;
+  }
+
+  if (auto* toplevel = toplevelForSurface(surface->server, surface)) {
+    if (toplevel->pendingMinSizeSet) {
+      toplevel->minWidth = toplevel->pendingMinWidth;
+      toplevel->minHeight = toplevel->pendingMinHeight;
+      toplevel->pendingMinSizeSet = false;
+    }
+    if (toplevel->pendingMaxSizeSet) {
+      toplevel->maxWidth = toplevel->pendingMaxWidth;
+      toplevel->maxHeight = toplevel->pendingMaxHeight;
+      toplevel->pendingMaxSizeSet = false;
+    }
+  }
+
+  return renderStateChanged;
+}
+
 bool surfaceHasPendingDamage(WaylandServer::Impl::Surface const* surface) {
   return surface &&
          (!surface->pendingSurfaceDamageRects.empty() || !surface->pendingBufferDamageRects.empty());
@@ -731,13 +768,14 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   bool inputRegionChanged = false;
   bool const protocolRenderStateChanged =
       applySurfaceProtocolState(surface, hasBufferAttach, inputRegionChanged);
+  bool const xdgRenderStateChanged = applyXdgProtocolState(surface);
   bool const viewportChanged = pendingViewportStateChanged(surface);
   bool const damagePending = surfaceHasPendingDamage(surface);
 
   if (!hasBufferAttach) {
     bool serialBumped = false;
     bool const needsBufferRefresh = damagePending && surface->currentBuffer;
-    if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged &&
+    if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged && !xdgRenderStateChanged &&
         !inputRegionChanged && !needsBufferRefresh &&
         surface->presentationFeedbacks.empty()) {
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
@@ -785,7 +823,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
-    if ((backgroundBlurChanged || protocolRenderStateChanged || viewportChanged) && !serialBumped) {
+    if ((backgroundBlurChanged || protocolRenderStateChanged || xdgRenderStateChanged || viewportChanged) && !serialBumped) {
       bumpSurfaceSerial(surface);
     }
     clearPendingDamage(surface);

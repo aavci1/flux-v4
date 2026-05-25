@@ -4,6 +4,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -33,6 +34,7 @@ void fillToplevelStates(WaylandServer::Impl* server,
   if (!server || !toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface || !states) return;
   WaylandServer::Impl::Surface* surface = toplevel->xdgSurface->surface;
   if (surface->maximized) appendToplevelState(states, XDG_TOPLEVEL_STATE_MAXIMIZED);
+  if (surface->fullscreen) appendToplevelState(states, XDG_TOPLEVEL_STATE_FULLSCREEN);
   if (server->resizeSurface_ == surface) appendToplevelState(states, XDG_TOPLEVEL_STATE_RESIZING);
   if (server->keyboardFocus_ == surface) appendToplevelState(states, XDG_TOPLEVEL_STATE_ACTIVATED);
 }
@@ -45,6 +47,7 @@ void sendToplevelWmCapabilities(WaylandServer::Impl::XdgToplevel* toplevel) {
   wl_array capabilities;
   wl_array_init(&capabilities);
   appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE);
+  appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
   appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE);
   xdg_toplevel_send_wm_capabilities(toplevel->resource, &capabilities);
   wl_array_release(&capabilities);
@@ -251,6 +254,26 @@ WindowGeometry initialToplevelPlacement(WaylandServer::Impl* server) {
       .width = 0,
       .height = 0,
   };
+}
+
+bool toplevelParentWouldCycle(WaylandServer::Impl::XdgToplevel* child,
+                              WaylandServer::Impl::XdgToplevel* parent) {
+  for (auto* current = parent; current; current = current->parent) {
+    if (current == child) return true;
+  }
+  return false;
+}
+
+bool postInvalidToplevelSize(wl_resource* resource, wm::ToplevelSizeHints const& hints) {
+  if (wm::toplevelSizeHintsValid(hints)) return false;
+  wl_resource_post_error(resource,
+                         XDG_TOPLEVEL_ERROR_INVALID_SIZE,
+                         "invalid xdg_toplevel size hints min=%dx%d max=%dx%d",
+                         hints.minWidth,
+                         hints.minHeight,
+                         hints.maxWidth,
+                         hints.maxHeight);
+  return true;
 }
 
 std::uint32_t monotonicMilliseconds() {
@@ -701,7 +724,28 @@ struct xdg_surface_interface const xdgSurfaceImpl{
     .destroy = xdgSurfaceDestroy,
     .get_toplevel = xdgSurfaceGetToplevel,
     .get_popup = xdgSurfaceGetPopup,
-    .set_window_geometry = [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
+    .set_window_geometry = [](wl_client*,
+                              wl_resource* resource,
+                              std::int32_t x,
+                              std::int32_t y,
+                              std::int32_t width,
+                              std::int32_t height) {
+      auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
+      if (!xdgSurface) return;
+      if (!wm::xdgWindowGeometrySizeValid(width, height)) {
+        wl_resource_post_error(resource,
+                               XDG_SURFACE_ERROR_INVALID_SIZE,
+                               "invalid xdg_surface window geometry %dx%d",
+                               width,
+                               height);
+        return;
+      }
+      xdgSurface->pendingWindowGeometryX = x;
+      xdgSurface->pendingWindowGeometryY = y;
+      xdgSurface->pendingWindowGeometryWidth = width;
+      xdgSurface->pendingWindowGeometryHeight = height;
+      xdgSurface->pendingWindowGeometrySet = true;
+    },
     .ack_configure = xdgSurfaceAckConfigure,
 };
 
@@ -739,6 +783,37 @@ void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
                         toplevel->appId.c_str());
 }
 
+void xdgToplevelSetParent(wl_client*, wl_resource* resource, wl_resource* parentResource) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel) return;
+  auto* parent = parentResource ? resourceData<WaylandServer::Impl::XdgToplevel>(parentResource) : nullptr;
+  if (parent && toplevelParentWouldCycle(toplevel, parent)) {
+    wl_resource_post_error(resource,
+                           XDG_TOPLEVEL_ERROR_INVALID_PARENT,
+                           "xdg_toplevel parent would create a cycle");
+    return;
+  }
+  toplevel->parent = parent;
+  if (toplevel->server) toplevel->server->notifyShellStateChanged();
+}
+
+void xdgToplevelShowWindowMenu(wl_client*,
+                               wl_resource* resource,
+                               wl_resource*,
+                               std::uint32_t serial,
+                               std::int32_t,
+                               std::int32_t) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  auto* surface = toplevel->xdgSurface->surface;
+  if (serial == 0 ||
+      serial != toplevel->server->lastPointerButtonSerial_ ||
+      toplevel->server->lastPointerButtonSurface_ != surface) {
+    return;
+  }
+  focusSurface(toplevel->server, surface, monotonicMilliseconds());
+}
+
 void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t serial, std::uint32_t edges) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
@@ -751,7 +826,10 @@ void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uin
       server->lastPointerButtonSurface_ != surface) {
     return;
   }
-  if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE || width <= 0 || height <= 0) return;
+  if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE || width <= 0 || height <= 0 ||
+      surface->fullscreen || surface->maximized) {
+    return;
+  }
   server->resizeSurface_ = surface;
   server->resizeStartX_ = server->pointerX_;
   server->resizeStartY_ = server->pointerY_;
@@ -770,6 +848,7 @@ void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint3
   if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
+  if (surface->fullscreen) return;
   if (serial == 0 ||
       serial != server->lastPointerButtonSerial_ ||
       server->lastPointerButtonSurface_ != surface) {
@@ -792,13 +871,62 @@ void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint3
 void xdgToplevelSetMaximized(wl_client*, wl_resource* resource) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  if (toplevel->xdgSurface->surface && toplevel->xdgSurface->surface->fullscreen) {
+    sendToplevelStateConfigure(toplevel->server, toplevel);
+    return;
+  }
   maximizeToplevel(toplevel->server, toplevel->xdgSurface->surface);
 }
 
 void xdgToplevelUnsetMaximized(wl_client*, wl_resource* resource) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  if (toplevel->xdgSurface->surface && toplevel->xdgSurface->surface->fullscreen) {
+    sendToplevelStateConfigure(toplevel->server, toplevel);
+    return;
+  }
   restoreToplevel(toplevel->server, toplevel->xdgSurface->surface);
+}
+
+void xdgToplevelSetMaxSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel) return;
+  wm::ToplevelSizeHints hints = wm::pendingSizeHints(toplevel);
+  hints.maxWidth = width;
+  hints.maxHeight = height;
+  if (postInvalidToplevelSize(resource, hints)) return;
+  toplevel->pendingMaxWidth = width;
+  toplevel->pendingMaxHeight = height;
+  toplevel->pendingMaxSizeSet = true;
+}
+
+void xdgToplevelSetMinSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel) return;
+  wm::ToplevelSizeHints hints = wm::pendingSizeHints(toplevel);
+  hints.minWidth = width;
+  hints.minHeight = height;
+  if (postInvalidToplevelSize(resource, hints)) return;
+  toplevel->pendingMinWidth = width;
+  toplevel->pendingMinHeight = height;
+  toplevel->pendingMinSizeSet = true;
+}
+
+void xdgToplevelSetFullscreen(wl_client*, wl_resource* resource, wl_resource*) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  wm::fullscreenToplevel(toplevel->server, toplevel->xdgSurface->surface);
+}
+
+void xdgToplevelUnsetFullscreen(wl_client*, wl_resource* resource) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  auto* surface = toplevel->xdgSurface->surface;
+  if (!surface->fullscreen) {
+    sendToplevelStateConfigure(toplevel->server, toplevel);
+    return;
+  }
+  restoreToplevel(toplevel->server, surface);
 }
 
 void xdgToplevelSetMinimized(wl_client*, wl_resource* resource) {
@@ -809,18 +937,18 @@ void xdgToplevelSetMinimized(wl_client*, wl_resource* resource) {
 
 struct xdg_toplevel_interface const xdgToplevelImpl{
     .destroy = xdgToplevelDestroy,
-    .set_parent = [](wl_client*, wl_resource*, wl_resource*) {},
+    .set_parent = xdgToplevelSetParent,
     .set_title = xdgToplevelSetTitle,
     .set_app_id = xdgToplevelSetAppId,
-    .show_window_menu = [](wl_client*, wl_resource*, wl_resource*, std::uint32_t, std::int32_t, std::int32_t) {},
+    .show_window_menu = xdgToplevelShowWindowMenu,
     .move = xdgToplevelMove,
     .resize = xdgToplevelResize,
-    .set_max_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
-    .set_min_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
+    .set_max_size = xdgToplevelSetMaxSize,
+    .set_min_size = xdgToplevelSetMinSize,
     .set_maximized = xdgToplevelSetMaximized,
     .unset_maximized = xdgToplevelUnsetMaximized,
-    .set_fullscreen = [](wl_client*, wl_resource*, wl_resource*) {},
-    .unset_fullscreen = [](wl_client*, wl_resource*) {},
+    .set_fullscreen = xdgToplevelSetFullscreen,
+    .unset_fullscreen = xdgToplevelUnsetFullscreen,
     .set_minimized = xdgToplevelSetMinimized,
 };
 

@@ -51,6 +51,7 @@ std::string windowStateJson(WaylandServer::Impl const* server, WaylandServer::Im
                                       const_cast<WaylandServer::Impl::Surface*>(surface));
   std::string state = "normal";
   if (surface->minimized) state = "minimized";
+  else if (surface->fullscreen) state = "fullscreen";
   else if (surface->maximized) state = "maximized";
   std::string const appId = toplevel && !toplevel->appId.empty() ? toplevel->appId : "unknown";
   std::string const title = toplevel && !toplevel->title.empty() ? toplevel->title : appId;

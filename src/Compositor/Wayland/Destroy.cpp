@@ -170,6 +170,11 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
     }
     wl_resource_destroy(cutouts->resource);
   }
+  for (auto& child : toplevels_) {
+    if (child && child.get() != toplevel && child->parent == toplevel) {
+      child->parent = toplevel->parent;
+    }
+  }
   eraseResource(toplevels_, toplevel);
   if (hadToplevel) {
     notifyShellStateChanged();

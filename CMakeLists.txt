@@ -928,6 +928,7 @@ if(FLUX_BUILD_TESTS)
       tests/CompositorWindowGeometryTests.cpp
       tests/CompositorConfigHotReloadTests.cpp
       tests/CompositorLayerShellZoneTests.cpp
+      tests/CompositorOutputSelectorTests.cpp
       tests/CompositorPresentationFeedbackTests.cpp
       tests/CompositorScreenshotTests.cpp
       tests/CompositorSnapshotBuilderTests.cpp

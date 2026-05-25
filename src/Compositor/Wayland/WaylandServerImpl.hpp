@@ -361,6 +361,7 @@ struct WaylandServer::Impl::Surface {
   bool pendingDestinationSet = false;
   bool snapped = false;
   bool maximized = false;
+  bool fullscreen = false;
   bool minimized = false;
   std::int32_t geometryAnimationStartX = 0;
   std::int32_t geometryAnimationStartY = 0;
@@ -672,14 +673,35 @@ struct WaylandServer::Impl::XdgSurface {
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
   bool configured = false;
+  bool windowGeometrySet = false;
+  std::int32_t windowGeometryX = 0;
+  std::int32_t windowGeometryY = 0;
+  std::int32_t windowGeometryWidth = 0;
+  std::int32_t windowGeometryHeight = 0;
+  bool pendingWindowGeometrySet = false;
+  std::int32_t pendingWindowGeometryX = 0;
+  std::int32_t pendingWindowGeometryY = 0;
+  std::int32_t pendingWindowGeometryWidth = 0;
+  std::int32_t pendingWindowGeometryHeight = 0;
 };
 
 struct WaylandServer::Impl::XdgToplevel {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   XdgSurface* xdgSurface = nullptr;
+  XdgToplevel* parent = nullptr;
   std::string title;
   std::string appId;
+  std::int32_t minWidth = 0;
+  std::int32_t minHeight = 0;
+  std::int32_t maxWidth = 0;
+  std::int32_t maxHeight = 0;
+  std::int32_t pendingMinWidth = 0;
+  std::int32_t pendingMinHeight = 0;
+  std::int32_t pendingMaxWidth = 0;
+  std::int32_t pendingMaxHeight = 0;
+  bool pendingMinSizeSet = false;
+  bool pendingMaxSizeSet = false;
   XxCutouts* cutouts = nullptr;
   bool cutoutsRejected = false;
 };
