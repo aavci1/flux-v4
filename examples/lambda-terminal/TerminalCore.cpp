@@ -852,6 +852,54 @@ std::filesystem::path terminalConfigPath() {
   return std::filesystem::current_path() / "lambda-terminal.toml";
 }
 
+TerminalPreferencesSaveResult saveTerminalPreferences(TerminalPreferences const& preferences, std::filesystem::path path) {
+  if (path.empty()) path = terminalConfigPath();
+  std::error_code ec;
+  if (!path.parent_path().empty()) {
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) {
+      return {
+          .path = path,
+          .error = "Could not create terminal config directory: " + ec.message(),
+      };
+    }
+  }
+
+  std::filesystem::path const temp =
+      path.parent_path().empty() ? std::filesystem::path{"." + path.filename().string() + ".tmp"}
+                                 : path.parent_path() / ("." + path.filename().string() + ".tmp");
+  {
+    std::ofstream out(temp, std::ios::trunc);
+    if (!out) {
+      return {
+          .path = path,
+          .error = "Could not open temporary terminal config.",
+      };
+    }
+    out << writeTerminalPreferencesToml(preferences);
+    if (!out) {
+      std::filesystem::remove(temp, ec);
+      return {
+          .path = path,
+          .error = "Could not write temporary terminal config.",
+      };
+    }
+  }
+
+  std::filesystem::rename(temp, path, ec);
+  if (ec) {
+    std::filesystem::remove(temp, ec);
+    return {
+        .path = path,
+        .error = "Could not replace terminal config: " + ec.message(),
+    };
+  }
+  return {
+      .ok = true,
+      .path = path,
+  };
+}
+
 TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path) {
   if (path.empty()) path = terminalConfigPath();
   TerminalPreferencesLoadResult result{
@@ -868,12 +916,11 @@ TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path
         return result;
       }
     }
-    std::ofstream out(path);
-    if (!out) {
-      result.error = "Could not create terminal config.";
+    auto saved = saveTerminalPreferences(result.preferences, path);
+    if (!saved.ok) {
+      result.error = saved.error.empty() ? "Could not create terminal config." : saved.error;
       return result;
     }
-    out << writeTerminalPreferencesToml(result.preferences);
     result.createdDefault = true;
     return result;
   }

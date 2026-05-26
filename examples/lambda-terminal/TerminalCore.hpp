@@ -114,6 +114,14 @@ struct TerminalPreferencesLoadResult {
   bool operator==(TerminalPreferencesLoadResult const&) const = default;
 };
 
+struct TerminalPreferencesSaveResult {
+  bool ok = false;
+  std::filesystem::path path;
+  std::string error;
+
+  bool operator==(TerminalPreferencesSaveResult const&) const = default;
+};
+
 struct TerminalBufferCoordinate {
   int line = 0;
   int column = 0;
@@ -238,5 +246,7 @@ private:
 [[nodiscard]] TerminalProfile activeTerminalProfile(TerminalPreferences const& preferences);
 [[nodiscard]] std::filesystem::path terminalConfigPath();
 [[nodiscard]] TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path = {});
+[[nodiscard]] TerminalPreferencesSaveResult saveTerminalPreferences(TerminalPreferences const& preferences,
+                                                                   std::filesystem::path path = {});
 
 } // namespace lambda_terminal

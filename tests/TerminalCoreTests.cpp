@@ -300,6 +300,17 @@ tint = "#222222ff"
   CHECK(activeTerminalProfile(loaded.preferences).shell == "/bin/fish");
   CHECK_FALSE(activeTerminalProfile(loaded.preferences).config.blackGlassBackground);
 
+  TerminalPreferences changed = loaded.preferences;
+  changed.defaultProfile = "alt";
+  changed.profiles[0].config.scrollbackLimit = 3210;
+  changed.profiles[0].config.bracketedPaste = false;
+  auto saved = saveTerminalPreferences(changed);
+  REQUIRE(saved.ok);
+  auto reloaded = loadTerminalPreferences();
+  CHECK(reloaded.loaded);
+  CHECK(activeTerminalProfile(reloaded.preferences).config.scrollbackLimit == 3210);
+  CHECK_FALSE(activeTerminalProfile(reloaded.preferences).config.bracketedPaste);
+
   std::filesystem::remove_all(root);
 }
 
