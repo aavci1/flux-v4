@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <string_view>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -38,6 +39,17 @@ void sendAll(int fd, std::string const& line) {
     data += written;
     remaining -= static_cast<std::size_t>(written);
   }
+}
+
+std::string errnoMessage(std::string_view action, std::string_view target, int error) {
+  std::string message(action);
+  if (!target.empty()) {
+    message.push_back(' ');
+    message.append(target);
+  }
+  message.append(": ");
+  message.append(std::strerror(error));
+  return message;
 }
 
 } // namespace
@@ -76,14 +88,28 @@ ShellConnection::~ShellConnection() {
 
 bool ShellConnection::connect() {
   if (fd_ >= 0) return true;
+  lastErrorNumber_ = 0;
+  lastErrorMessage_.clear();
   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (fd < 0) return false;
+  if (fd < 0) {
+    lastErrorNumber_ = errno;
+    lastErrorMessage_ = errnoMessage("socket", {}, lastErrorNumber_);
+    return false;
+  }
   fcntl(fd, F_SETFD, FD_CLOEXEC);
   sockaddr_un addr{};
   addr.sun_family = AF_UNIX;
   std::string const path = shellSocketPath();
+  if (path.size() >= sizeof(addr.sun_path)) {
+    close(fd);
+    lastErrorNumber_ = ENAMETOOLONG;
+    lastErrorMessage_ = errnoMessage("connect", path, lastErrorNumber_);
+    return false;
+  }
   std::snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path.c_str());
   if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+    lastErrorNumber_ = errno;
+    lastErrorMessage_ = errnoMessage("connect", path, lastErrorNumber_);
     close(fd);
     return false;
   }
@@ -92,6 +118,8 @@ bool ShellConnection::connect() {
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
   }
   fd_ = fd;
+  lastErrorNumber_ = 0;
+  lastErrorMessage_.clear();
   return true;
 }
 
@@ -118,11 +146,15 @@ void ShellConnection::dispatchReadable(LineHandler handler) {
     ssize_t const n = read(fd_, buffer, sizeof(buffer));
     if (n < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) break;
+      lastErrorNumber_ = errno;
+      lastErrorMessage_ = errnoMessage("read", "lambda-window-manager shell IPC", lastErrorNumber_);
       close(fd_);
       fd_ = -1;
       break;
     }
     if (n == 0) {
+      lastErrorNumber_ = 0;
+      lastErrorMessage_ = "lambda-window-manager shell IPC disconnected";
       close(fd_);
       fd_ = -1;
       break;
@@ -137,5 +169,17 @@ void ShellConnection::dispatchReadable(LineHandler handler) {
     }
   }
 }
+
+#ifdef FLUX_TESTING
+void ShellConnection::adoptFdForTesting(int fd) {
+  if (fd_ >= 0) {
+    close(fd_);
+  }
+  fd_ = fd;
+  lastErrorNumber_ = 0;
+  lastErrorMessage_.clear();
+  readBuffer_.clear();
+}
+#endif
 
 } // namespace lambda_shell

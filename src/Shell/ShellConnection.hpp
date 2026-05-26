@@ -21,6 +21,8 @@ public:
   bool connect();
   int fd() const noexcept { return fd_; }
   bool connected() const noexcept { return fd_ >= 0; }
+  int lastErrorNumber() const noexcept { return lastErrorNumber_; }
+  std::string const& lastErrorMessage() const noexcept { return lastErrorMessage_; }
 
   void sendLine(std::string const& line) const;
   void sendHello(std::uint64_t requestId = 0) const;
@@ -30,8 +32,14 @@ public:
   /// Drains readable bytes and invokes `handler` for each newline-delimited message.
   void dispatchReadable(LineHandler handler);
 
+#ifdef FLUX_TESTING
+  void adoptFdForTesting(int fd);
+#endif
+
 private:
   int fd_ = -1;
+  int lastErrorNumber_ = 0;
+  std::string lastErrorMessage_;
   std::string readBuffer_;
 };
 
