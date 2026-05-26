@@ -101,7 +101,7 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::optional<ScreenshotRequest> consumeScreenshotRequest();
   [[nodiscard]] std::optional<ScreenshotSelectionOverlay> screenshotSelectionOverlay() const;
   void notifyShellStateChanged();
-  void launchShellApp(std::string const& appId);
+  bool launchShellApp(std::string const& appId);
   bool focusShellApp(std::string const& appId, std::uint32_t timeMs);
   bool focusShellWindow(std::uint64_t windowId, std::uint32_t timeMs);
   bool claimCommandLauncherModal(std::uint32_t timeMs);

@@ -71,7 +71,9 @@ public:
   void moveQueryCursorToStart();
   void moveQueryCursorToEnd();
 
-  void activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc);
+  void activateItem(DockItem const& item,
+                    std::function<void(std::string const& line)> sendIpc,
+                    std::uint64_t requestId = 0);
 
 private:
   void refreshLauncherResults();

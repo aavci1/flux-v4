@@ -2,6 +2,7 @@
 
 #include "Shell/ShellModel.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -22,9 +23,9 @@ public:
   bool connected() const noexcept { return fd_ >= 0; }
 
   void sendLine(std::string const& line) const;
-  void sendHello() const;
-  void claimLauncherModal() const;
-  void releaseLauncherModal() const;
+  void sendHello(std::uint64_t requestId = 0) const;
+  void claimLauncherModal(std::uint64_t requestId = 0) const;
+  void releaseLauncherModal(std::uint64_t requestId = 0) const;
 
   /// Drains readable bytes and invokes `handler` for each newline-delimited message.
   void dispatchReadable(LineHandler handler);

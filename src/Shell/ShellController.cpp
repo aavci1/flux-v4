@@ -119,7 +119,7 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
 
 std::function<void(DockItem const&)> ShellController::makeActivateCallback() {
   return [this](DockItem const& item) {
-    model_.activateItem(item, [this](std::string const& line) { ipc_.sendLine(line); });
+    model_.activateItem(item, [this](std::string const& line) { ipc_.sendLine(line); }, nextRequestId());
     if (model_.launcherOpen()) {
       closeLauncher();
     }
@@ -130,7 +130,7 @@ bool ShellController::connectIpc() {
   if (!ipc_.connect()) {
     return false;
   }
-  ipc_.sendHello();
+  ipc_.sendHello(nextRequestId());
   ipcPollId_ = app_.registerEventPollSource(ipc_.fd(), [this] {
     ipc_.dispatchReadable([this](std::string_view line) {
       app_.eventQueue().post(flux::CustomEvent{.type = 0x4c534850u, .payload = std::string(line)});
@@ -250,12 +250,12 @@ void ShellController::syncLauncherWindow() {
     launcherWindow_->resize({0.f, 0.f});
     launcherWindow_->setLayerShellKeyboardInteractive(true);
     if (ipc_.connected() && !launcherModalClaimed_) {
-      ipc_.claimLauncherModal();
+      ipc_.claimLauncherModal(nextRequestId());
       launcherModalClaimed_ = true;
     }
   } else {
     if (ipc_.connected() && launcherModalClaimed_) {
-      ipc_.releaseLauncherModal();
+      ipc_.releaseLauncherModal(nextRequestId());
       launcherModalClaimed_ = false;
     }
     launcherWindow_->setLayerShellKeyboardInteractive(false);
@@ -346,7 +346,8 @@ void ShellController::handleLauncherKey(flux::InputEvent const& event) {
       if (!results.empty()) {
         int const index = std::clamp(model_.highlighted(), 0, static_cast<int>(results.size()) - 1);
         model_.activateItem(results[static_cast<std::size_t>(index)],
-                            [this](std::string const& line) { ipc_.sendLine(line); });
+                            [this](std::string const& line) { ipc_.sendLine(line); },
+                            nextRequestId());
         closeLauncher();
       }
       return;
@@ -356,6 +357,10 @@ void ShellController::handleLauncherKey(flux::InputEvent const& event) {
     model_.appendQueryText(event.text);
     requestLauncherRedraw();
   }
+}
+
+std::uint64_t ShellController::nextRequestId() {
+  return nextRequestId_++;
 }
 
 } // namespace lambda_shell

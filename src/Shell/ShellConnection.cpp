@@ -99,16 +99,16 @@ void ShellConnection::sendLine(std::string const& line) const {
   sendAll(fd_, line);
 }
 
-void ShellConnection::sendHello() const {
-  sendLine(flux::shell::serializeShellHello(1, "0.2.0", {"topbar", "dock", "command-launcher"}));
+void ShellConnection::sendHello(std::uint64_t requestId) const {
+  sendLine(flux::shell::serializeShellHello(1, "0.2.0", {"topbar", "dock", "command-launcher"}, requestId));
 }
 
-void ShellConnection::claimLauncherModal() const {
-  sendLine(flux::shell::serializeClaimCommandLauncherModal());
+void ShellConnection::claimLauncherModal(std::uint64_t requestId) const {
+  sendLine(flux::shell::serializeClaimCommandLauncherModal(requestId));
 }
 
-void ShellConnection::releaseLauncherModal() const {
-  sendLine(flux::shell::serializeReleaseCommandLauncherModal());
+void ShellConnection::releaseLauncherModal(std::uint64_t requestId) const {
+  sendLine(flux::shell::serializeReleaseCommandLauncherModal(requestId));
 }
 
 void ShellConnection::dispatchReadable(LineHandler handler) {

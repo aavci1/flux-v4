@@ -36,6 +36,7 @@ private:
   void handleIpcLine(std::string_view line);
   void syncLauncherWindow();
   void handleLauncherKey(flux::InputEvent const& event);
+  std::uint64_t nextRequestId();
 
   std::function<void(DockItem const&)> makeActivateCallback();
 
@@ -56,6 +57,7 @@ private:
   int lastDockWidth_ = 0;
   std::uint64_t ipcPollId_ = 0;
   std::uint64_t clockTimerId_ = 0;
+  std::uint64_t nextRequestId_ = 1;
 };
 
 flux::WindowConfig topBarWindowConfig();

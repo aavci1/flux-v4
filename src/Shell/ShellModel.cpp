@@ -269,12 +269,14 @@ void ShellModel::moveQueryCursorToEnd() {
   queryCursor_.set(static_cast<int>(query_.peek().size()));
 }
 
-void ShellModel::activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc) {
+void ShellModel::activateItem(DockItem const& item,
+                              std::function<void(std::string const& line)> sendIpc,
+                              std::uint64_t requestId) {
   if (!sendIpc) return;
   if (item.running) {
-    sendIpc(flux::shell::serializeFocusApp(item.appId));
+    sendIpc(flux::shell::serializeFocusApp(item.appId, requestId));
   } else if (item.kind == "app") {
-    sendIpc(flux::shell::serializeLaunchApp(item.appId));
+    sendIpc(flux::shell::serializeLaunchApp(item.appId, requestId));
   }
 }
 

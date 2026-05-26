@@ -413,12 +413,12 @@ std::optional<std::string> commandForAppId(std::string const& appId) {
   return lambda_shell::resolveAppLaunchCommand(appId, registry);
 }
 
-void spawnShellCommand(std::string const& command, std::string const& waylandDisplay) {
-  if (command.empty()) return;
+bool spawnShellCommand(std::string const& command, std::string const& waylandDisplay) {
+  if (command.empty()) return false;
   pid_t const child = fork();
   if (child < 0) {
     std::fprintf(stderr, "lambda-window-manager: fork failed while launching %s\n", command.c_str());
-    return;
+    return false;
   }
   if (child == 0) {
     if (setsid() < 0) _exit(126);
@@ -431,16 +431,17 @@ void spawnShellCommand(std::string const& command, std::string const& waylandDis
   }
   int status = 0;
   while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+  return true;
 }
 
 } // namespace
-void WaylandServer::Impl::launchShellApp(std::string const& appId) {
+bool WaylandServer::Impl::launchShellApp(std::string const& appId) {
   std::optional<std::string> const command = commandForAppId(appId);
   if (!command) {
     std::fprintf(stderr, "lambda-window-manager: refusing unknown shell app id %s\n", appId.c_str());
-    return;
+    return false;
   }
-  spawnShellCommand(*command, socketName_);
+  return spawnShellCommand(*command, socketName_);
 }
 bool WaylandServer::Impl::focusShellApp(std::string const& appId, std::uint32_t timeMs) {
   for (auto it = surfaces_.rbegin(); it != surfaces_.rend(); ++it) {

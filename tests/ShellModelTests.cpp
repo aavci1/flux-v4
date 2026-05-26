@@ -101,13 +101,14 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   std::vector<std::string> sent;
   for (auto const& item : model.dockItems()) {
     if (item.appId == "lambda-terminal") {
-      model.activateItem(item, [&](std::string const& line) { sent.push_back(line); });
+      model.activateItem(item, [&](std::string const& line) { sent.push_back(line); }, 42);
     }
   }
   REQUIRE(sent.size() == 1);
   auto message = flux::shell::parseLine(sent[0]);
   REQUIRE(message);
   CHECK(message->kind == flux::shell::ShellMessageKind::WindowManagerFocusApp);
+  CHECK(message->requestId == 42);
   CHECK(message->focusApp.appId == "lambda-terminal");
 }
 
@@ -130,6 +131,15 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
   CHECK(appIds == std::vector<std::string>{"lambda-terminal", "browser", "lambda-files"});
   CHECK(model.dockItems().back().kind == "trash");
   CHECK(model.dockItems().back().disabled);
+
+  std::vector<std::string> sent;
+  model.activateItem(model.dockItems()[2], [&](std::string const& line) { sent.push_back(line); }, 7);
+  REQUIRE(sent.size() == 1);
+  auto launch = flux::shell::parseLine(sent[0]);
+  REQUIRE(launch);
+  CHECK(launch->kind == flux::shell::ShellMessageKind::WindowManagerLaunchApp);
+  CHECK(launch->requestId == 7);
+  CHECK(launch->launchApp.appId == "lambda-terminal");
 
   model.resetDockItems();
   for (auto const& item : model.dockItems()) {
