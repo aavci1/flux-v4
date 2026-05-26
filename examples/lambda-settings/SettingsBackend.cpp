@@ -32,6 +32,27 @@ bool validHexColor(std::string const& value) {
   });
 }
 
+std::filesystem::path pathFromEnv(char const* name) {
+  if (char const* value = std::getenv(name); value && *value) {
+    return std::filesystem::path(value);
+  }
+  return {};
+}
+
+std::filesystem::path configHomeDirectory() {
+  if (auto env = pathFromEnv("XDG_CONFIG_HOME"); !env.empty()) return env;
+  if (auto home = pathFromEnv("HOME"); !home.empty()) return home / ".config";
+  return std::filesystem::current_path();
+}
+
+std::map<std::string, std::string> nonEmptyDefaults(std::vector<SettingSchema> const& schema) {
+  std::map<std::string, std::string> defaults;
+  for (auto const& setting : schema) {
+    if (!setting.defaultValue.empty()) defaults[setting.id] = setting.defaultValue;
+  }
+  return defaults;
+}
+
 std::optional<double> parseDouble(std::string const& value) {
   char* end = nullptr;
   double parsed = std::strtod(value.c_str(), &end);
@@ -530,6 +551,84 @@ bool atomicWriteFile(std::filesystem::path const& path, std::string_view content
     return false;
   }
   return true;
+}
+
+std::filesystem::path windowManagerSettingsPath() {
+  if (auto env = pathFromEnv("LAMBDA_WINDOW_MANAGER_CONFIG"); !env.empty()) return env;
+  return configHomeDirectory() / "lambda-window-manager" / "config.toml";
+}
+
+std::filesystem::path shellSettingsPath() {
+  if (auto env = pathFromEnv("LAMBDA_SHELL_CONFIG"); !env.empty()) return env;
+  return configHomeDirectory() / "lambda-shell" / "config.toml";
+}
+
+SettingsFileLoadResult loadWindowManagerSettingsFile(std::filesystem::path path) {
+  if (path.empty()) path = windowManagerSettingsPath();
+  SettingsFileLoadResult result{.path = path};
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    std::string const defaults = writeWindowManagerSettings("", nonEmptyDefaults(windowManagerSettingsSchema()));
+    if (!atomicWriteFile(path, defaults, result.error)) return result;
+    result.createdDefault = true;
+    result.document = loadWindowManagerSettings(defaults);
+    return result;
+  }
+
+  std::ifstream in(path);
+  if (!in) {
+    result.error = "Could not read settings file.";
+    return result;
+  }
+  std::string const contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  result.document = loadWindowManagerSettings(contents);
+  result.loaded = true;
+  return result;
+}
+
+SettingsFileLoadResult loadShellSettingsFile(std::filesystem::path path) {
+  if (path.empty()) path = shellSettingsPath();
+  SettingsFileLoadResult result{.path = path};
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    std::string const defaults = writeShellSettings("", nonEmptyDefaults(shellSettingsSchema()));
+    if (!atomicWriteFile(path, defaults, result.error)) return result;
+    result.createdDefault = true;
+    result.document = loadShellSettings(defaults);
+    return result;
+  }
+
+  std::ifstream in(path);
+  if (!in) {
+    result.error = "Could not read settings file.";
+    return result;
+  }
+  std::string const contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  result.document = loadShellSettings(contents);
+  result.loaded = true;
+  return result;
+}
+
+SettingsFileSaveResult saveWindowManagerSettingsFile(std::map<std::string, std::string> const& updates,
+                                                     std::filesystem::path path) {
+  if (path.empty()) path = windowManagerSettingsPath();
+  SettingsFileLoadResult loaded = loadWindowManagerSettingsFile(path);
+  if (!loaded.error.empty()) return {.path = path, .error = loaded.error};
+  std::string error;
+  std::string const contents = writeWindowManagerSettings(loaded.document.originalToml, updates);
+  if (!atomicWriteFile(path, contents, error)) return {.path = path, .error = error};
+  return {.ok = true, .path = path};
+}
+
+SettingsFileSaveResult saveShellSettingsFile(std::map<std::string, std::string> const& updates,
+                                             std::filesystem::path path) {
+  if (path.empty()) path = shellSettingsPath();
+  SettingsFileLoadResult loaded = loadShellSettingsFile(path);
+  if (!loaded.error.empty()) return {.path = path, .error = loaded.error};
+  std::string error;
+  std::string const contents = writeShellSettings(loaded.document.originalToml, updates);
+  if (!atomicWriteFile(path, contents, error)) return {.path = path, .error = error};
+  return {.ok = true, .path = path};
 }
 
 std::vector<std::string> discoverThemeNames(std::vector<std::filesystem::path> const& roots) {

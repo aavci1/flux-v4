@@ -3,12 +3,35 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <unistd.h>
 
 namespace {
+
+struct ScopedEnv {
+  explicit ScopedEnv(char const* name)
+      : name(name) {
+    if (char const* value = std::getenv(name); value) {
+      hadOriginal = true;
+      original = value;
+    }
+  }
+
+  ~ScopedEnv() {
+    if (hadOriginal) {
+      setenv(name, original.c_str(), 1);
+    } else {
+      unsetenv(name);
+    }
+  }
+
+  char const* name = nullptr;
+  bool hadOriginal = false;
+  std::string original;
+};
 
 std::filesystem::path tempRoot(char const* name) {
   auto path = std::filesystem::temp_directory_path() /
@@ -185,6 +208,57 @@ TEST_CASE("Settings atomic write failure leaves original file intact") {
   file >> contents;
   CHECK(contents == "original");
   CHECK(std::filesystem::is_directory(root / "config.toml.tmp"));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Settings file helpers resolve create load and save owner configs") {
+  ScopedEnv wmConfig("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv shellConfig("LAMBDA_SHELL_CONFIG");
+  ScopedEnv xdgConfig("XDG_CONFIG_HOME");
+  auto root = tempRoot("lambda-settings-file-helper-test");
+  auto wmPath = root / "wm" / "config.toml";
+  auto shellPath = root / "shell" / "config.toml";
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", wmPath.c_str(), 1);
+  setenv("LAMBDA_SHELL_CONFIG", shellPath.c_str(), 1);
+  setenv("XDG_CONFIG_HOME", (root / "xdg").c_str(), 1);
+
+  CHECK(lambda_settings::windowManagerSettingsPath() == wmPath);
+  CHECK(lambda_settings::shellSettingsPath() == shellPath);
+
+  auto createdWm = lambda_settings::loadWindowManagerSettingsFile();
+  CHECK(createdWm.createdDefault);
+  CHECK(createdWm.path == wmPath);
+  CHECK(createdWm.error.empty());
+  CHECK(std::filesystem::exists(wmPath));
+  CHECK(createdWm.document.values.at("background") == "#3380f2");
+
+  auto savedWm = lambda_settings::saveWindowManagerSettingsFile({
+      {"scale", "1.5"},
+      {"input.keyboard.repeat_rate", "42"},
+  });
+  CHECK(savedWm.ok);
+  auto loadedWm = lambda_settings::loadWindowManagerSettingsFile();
+  CHECK(loadedWm.loaded);
+  CHECK(loadedWm.document.values.at("scale").find("1.5") == 0);
+  CHECK(loadedWm.document.values.at("input.keyboard.repeat_rate") == "42");
+
+  auto createdShell = lambda_settings::loadShellSettingsFile();
+  CHECK(createdShell.createdDefault);
+  CHECK(createdShell.path == shellPath);
+  CHECK(createdShell.error.empty());
+  CHECK(std::filesystem::exists(shellPath));
+  CHECK(createdShell.document.values.at("dock.position") == "bottom");
+
+  auto savedShell = lambda_settings::saveShellSettingsFile({
+      {"dock.show_running_unpinned", "false"},
+      {"launcher.max_results", "8"},
+  });
+  CHECK(savedShell.ok);
+  auto loadedShell = lambda_settings::loadShellSettingsFile();
+  CHECK(loadedShell.loaded);
+  CHECK(loadedShell.document.values.at("dock.show_running_unpinned") == "false");
+  CHECK(loadedShell.document.values.at("launcher.max_results") == "8");
 
   std::filesystem::remove_all(root);
 }

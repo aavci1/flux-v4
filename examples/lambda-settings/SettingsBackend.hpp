@@ -44,6 +44,24 @@ struct SettingsDocument {
   std::map<std::string, std::string> values;
 };
 
+struct SettingsFileLoadResult {
+  SettingsDocument document;
+  std::filesystem::path path;
+  std::string error;
+  bool loaded = false;
+  bool createdDefault = false;
+
+  bool operator==(SettingsFileLoadResult const&) const = default;
+};
+
+struct SettingsFileSaveResult {
+  bool ok = false;
+  std::filesystem::path path;
+  std::string error;
+
+  bool operator==(SettingsFileSaveResult const&) const = default;
+};
+
 class SettingsState {
 public:
   explicit SettingsState(std::map<std::string, std::string> defaults = {});
@@ -98,6 +116,14 @@ struct ThemeSelectionStatus {
 [[nodiscard]] std::string writeShellSettings(std::string_view originalToml,
                                              std::map<std::string, std::string> const& updates);
 [[nodiscard]] bool atomicWriteFile(std::filesystem::path const& path, std::string_view contents, std::string& error);
+[[nodiscard]] std::filesystem::path windowManagerSettingsPath();
+[[nodiscard]] std::filesystem::path shellSettingsPath();
+[[nodiscard]] SettingsFileLoadResult loadWindowManagerSettingsFile(std::filesystem::path path = {});
+[[nodiscard]] SettingsFileLoadResult loadShellSettingsFile(std::filesystem::path path = {});
+[[nodiscard]] SettingsFileSaveResult saveWindowManagerSettingsFile(std::map<std::string, std::string> const& updates,
+                                                                   std::filesystem::path path = {});
+[[nodiscard]] SettingsFileSaveResult saveShellSettingsFile(std::map<std::string, std::string> const& updates,
+                                                           std::filesystem::path path = {});
 
 [[nodiscard]] std::vector<std::string> discoverThemeNames(std::vector<std::filesystem::path> const& roots);
 [[nodiscard]] ThemeSelectionStatus resolveThemeSelection(std::vector<std::filesystem::path> const& roots,
