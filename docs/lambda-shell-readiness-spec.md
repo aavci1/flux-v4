@@ -1122,23 +1122,23 @@ Add focused automated tests where behavior is deterministic:
 
 ## Done checklist
 
-- [ ] Shell IPC uses request IDs and structured errors.
-- [ ] Shell snapshot parsing is structured and tested.
-- [ ] Shared app registry exists and is used by Shell and Window Manager launch path.
-- [ ] Local Lambda example apps are discovered with `./examples/APP_NAME` precedence.
-- [ ] Installed `.desktop` apps are discovered.
-- [ ] Dock pins load from Shell config.
-- [ ] Running unpinned apps appear in the dock.
-- [ ] Dock click launches, focuses, or restores correctly.
+- [x] Shell IPC uses request IDs and structured errors.
+- [x] Shell snapshot parsing is structured and tested.
+- [x] Shared app registry exists and is used by Shell and Window Manager launch path.
+- [x] Local Lambda example apps are discovered with `./examples/APP_NAME` precedence.
+- [x] Installed `.desktop` apps are discovered.
+- [x] Dock pins load from Shell config.
+- [x] Running unpinned apps appear in the dock.
+- [x] Dock click launches, focuses, or restores correctly.
 - [x] Icon theme provider is used by dock and launcher.
 - [x] Missing icons have a consistent fallback.
-- [ ] Command launcher supports app, window, Settings-panel, and Shell-action providers.
-- [ ] Launcher ranking and keyboard navigation are tested.
+- [x] Command launcher supports app, window, Settings-panel, and Shell-action providers.
+- [x] Launcher ranking and keyboard navigation are tested.
 - [x] Top-bar status values are real or explicitly unavailable.
 - [ ] Quick settings/status controls are real or explicitly unavailable.
 - [ ] Notifications support banners, notification center/history, dismissal, clear-all, and do-not-disturb.
 - [ ] Clipboard history supports text entries, picker, paste, clear, limits, and privacy policy.
-- [ ] Shell config is generated and documented.
+- [x] Shell config is generated and documented.
 - [x] Shell handles missing/disconnected IPC cleanly without adding session management.
 - [ ] Manual validation passes with Lambda apps and selected external apps.
 - [ ] User guide and Shell spec are updated to match actual behavior.

@@ -817,12 +817,12 @@ Add focused automated tests where behavior is deterministic:
 
 ## Done checklist
 
-- [ ] Settings backend loads Window Manager config.
-- [ ] Settings backend loads Shell config.
+- [x] Settings backend loads Window Manager config.
+- [x] Settings backend loads Shell config.
 - [ ] Settings app has generated/default config support if app-specific preferences are needed.
-- [ ] Schema metadata exists for every displayed real setting.
-- [ ] Config writes are atomic and validated.
-- [ ] Unknown config keys are preserved where practical.
+- [x] Schema metadata exists for every displayed real setting.
+- [x] Config writes are atomic and validated.
+- [x] Unknown config keys are preserved where practical.
 - [ ] Appearance page edits real config.
 - [ ] Display page edits real selected-output/scale config.
 - [ ] Keyboard page edits real keyboard and shortcut config.
@@ -832,7 +832,7 @@ Add focused automated tests where behavior is deterministic:
 - [ ] Save/revert/reset/error UX is implemented.
 - [ ] Restart-required changes are visible.
 - [ ] Hot-reloadable changes apply live where supported.
-- [ ] Tests cover schema, config, validation, model state, and system provider fixtures.
+- [x] Tests cover schema, config, validation, model state, and system provider fixtures.
 - [ ] User guide and Settings docs are updated to match actual behavior.
 
 ## Deferred to later milestones

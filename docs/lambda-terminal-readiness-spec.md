@@ -934,21 +934,21 @@ Add focused automated tests where behavior is deterministic:
 - [ ] Terminal implementation is split into testable components.
 - [x] Canonical app id is `lambda-terminal`.
 - [ ] Shell lifecycle and child cleanup are robust.
-- [ ] Scrollback works with configurable limit.
-- [ ] Normal and alternate screen behavior is correct.
-- [ ] Selection works across visible screen and scrollback.
+- [x] Scrollback works with configurable limit.
+- [x] Normal and alternate screen behavior is correct.
+- [x] Selection works across visible screen and scrollback.
 - [ ] Copy and paste work through desktop clipboard.
-- [ ] Bracketed paste works.
-- [ ] Key encoding covers common terminal apps.
-- [ ] Mouse reporting covers common terminal apps.
-- [ ] Unicode wide/combining text is handled correctly enough for daily use.
-- [ ] ANSI/256/truecolor and common attributes render correctly.
-- [ ] Resize remains responsive and accurate.
-- [ ] Search works across visible screen and scrollback.
+- [x] Bracketed paste works.
+- [x] Key encoding covers common terminal apps.
+- [x] Mouse reporting covers common terminal apps.
+- [x] Unicode wide/combining text is handled correctly enough for daily use.
+- [x] ANSI/256/truecolor and common attributes render correctly.
+- [x] Resize remains responsive and accurate.
+- [x] Search works across visible screen and scrollback.
 - [x] Preferences/profiles exist and persist.
-- [ ] Black glass background is configurable, not hard-coded only.
-- [ ] Desktop integration with Shell app registry works.
-- [ ] Tests cover model, input, scrollback, selection, Unicode, color, resize, config, and pty smoke behavior.
+- [x] Black glass background is configurable, not hard-coded only.
+- [x] Desktop integration with Shell app registry works.
+- [x] Tests cover model, input, scrollback, selection, Unicode, color, resize, config, and pty smoke behavior.
 - [ ] User guide and app docs match actual behavior.
 
 ## Deferred to later milestones

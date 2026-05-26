@@ -965,27 +965,27 @@ Add focused automated tests where behavior is deterministic:
 
 ## Done checklist
 
-- [ ] Files has a testable model outside the view body.
-- [ ] Directory browsing, history, breadcrumbs, and path entry are robust.
+- [x] Files has a testable model outside the view body.
+- [x] Directory browsing, history, breadcrumbs, and path entry are robust.
 - [ ] Multi-select and keyboard selection work.
-- [ ] Create folder/file works.
-- [ ] Rename works.
-- [ ] Copy/cut/paste/move works.
-- [ ] Duplicate works.
-- [ ] Trash-first delete works.
-- [ ] Restore from trash works or Trash restore is explicitly deferred with delete still trash-first.
-- [ ] Undo works for supported safe operations.
+- [x] Create folder/file works.
+- [x] Rename works.
+- [x] Copy/cut/paste/move works.
+- [x] Duplicate works.
+- [x] Trash-first delete works.
+- [x] Restore from trash works or Trash restore is explicitly deferred with delete still trash-first.
+- [x] Undo works for supported safe operations.
 - [ ] Context menus expose real commands.
 - [ ] Clipboard file operations work internally and with compatible clients.
 - [ ] Basic drag/drop works or unsupported portions are clearly documented.
 - [ ] Current folder refreshes after external changes.
-- [ ] Operation progress/errors/cancel states exist.
+- [x] Operation progress/errors/cancel states exist.
 - [ ] Grid and list/detail views exist.
-- [ ] Sorting and current-folder search work.
-- [ ] Open-with uses shared app/MIME registry.
+- [x] Sorting and current-folder search work.
+- [x] Open-with uses shared app/MIME registry.
 - [ ] Icons use shared icon theme provider with fallback.
 - [x] Files preferences persist.
-- [ ] Tests cover model, operations, trash, selection, and open-with fixtures.
+- [x] Tests cover model, operations, trash, selection, and open-with fixtures.
 - [ ] User guide and app docs match actual behavior.
 
 ## Deferred to later milestones
