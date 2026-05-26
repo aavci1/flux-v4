@@ -68,6 +68,17 @@ struct SystemInfo {
   long memoryTotalKb = 0;
 };
 
+struct ThemeSelectionStatus {
+  std::vector<std::string> available;
+  std::string requested;
+  std::string effective;
+  bool requestedAvailable = false;
+  bool missingRequested = false;
+  bool usingFallback = false;
+
+  bool operator==(ThemeSelectionStatus const&) const = default;
+};
+
 [[nodiscard]] std::vector<SettingSchema> windowManagerSettingsSchema();
 [[nodiscard]] std::vector<SettingSchema> shellSettingsSchema();
 [[nodiscard]] std::map<std::string, std::string> schemaDefaults(std::vector<SettingSchema> const& schema);
@@ -88,6 +99,9 @@ struct SystemInfo {
 [[nodiscard]] bool atomicWriteFile(std::filesystem::path const& path, std::string_view contents, std::string& error);
 
 [[nodiscard]] std::vector<std::string> discoverThemeNames(std::vector<std::filesystem::path> const& roots);
+[[nodiscard]] ThemeSelectionStatus resolveThemeSelection(std::vector<std::filesystem::path> const& roots,
+                                                        std::string requested,
+                                                        std::string fallback = {});
 [[nodiscard]] SystemInfo parseSystemInfo(std::string_view unameText, std::string_view meminfoText);
 
 } // namespace lambda_settings

@@ -540,6 +540,32 @@ std::vector<std::string> discoverThemeNames(std::vector<std::filesystem::path> c
   return {names.begin(), names.end()};
 }
 
+ThemeSelectionStatus resolveThemeSelection(std::vector<std::filesystem::path> const& roots,
+                                           std::string requested,
+                                           std::string fallback) {
+  ThemeSelectionStatus status;
+  status.available = discoverThemeNames(roots);
+  status.requested = std::move(requested);
+  auto contains = [&](std::string const& name) {
+    return std::find(status.available.begin(), status.available.end(), name) != status.available.end();
+  };
+
+  if (!status.requested.empty() && contains(status.requested)) {
+    status.effective = status.requested;
+    status.requestedAvailable = true;
+    return status;
+  }
+
+  status.missingRequested = !status.requested.empty();
+  if (!fallback.empty() && contains(fallback)) {
+    status.effective = std::move(fallback);
+    status.usingFallback = true;
+  } else {
+    status.usingFallback = status.missingRequested && !fallback.empty();
+  }
+  return status;
+}
+
 SystemInfo parseSystemInfo(std::string_view unameText, std::string_view meminfoText) {
   SystemInfo info;
   std::istringstream uname{std::string(unameText)};

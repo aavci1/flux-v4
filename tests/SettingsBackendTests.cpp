@@ -217,6 +217,26 @@ TEST_CASE("Settings theme discovery and system info parsing use fixtures") {
   auto themes = lambda_settings::discoverThemeNames({root});
   CHECK(themes == std::vector<std::string>{"Adwaita", "Lambda"});
 
+  auto selected = lambda_settings::resolveThemeSelection({root}, "Lambda", "Adwaita");
+  CHECK(selected.available == themes);
+  CHECK(selected.requested == "Lambda");
+  CHECK(selected.effective == "Lambda");
+  CHECK(selected.requestedAvailable);
+  CHECK_FALSE(selected.missingRequested);
+  CHECK_FALSE(selected.usingFallback);
+
+  auto missing = lambda_settings::resolveThemeSelection({root}, "Missing", "Adwaita");
+  CHECK(missing.effective == "Adwaita");
+  CHECK_FALSE(missing.requestedAvailable);
+  CHECK(missing.missingRequested);
+  CHECK(missing.usingFallback);
+
+  auto noFallback = lambda_settings::resolveThemeSelection({root / "absent"}, "Missing", "Adwaita");
+  CHECK(noFallback.available.empty());
+  CHECK(noFallback.effective.empty());
+  CHECK(noFallback.missingRequested);
+  CHECK(noFallback.usingFallback);
+
   auto info = lambda_settings::parseSystemInfo("Linux 6.9.1 x86_64\n", "MemTotal:       16384000 kB\n");
   CHECK(info.kernelName == "Linux");
   CHECK(info.kernelRelease == "6.9.1");
