@@ -11,6 +11,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 
@@ -49,13 +50,14 @@ std::string icon(flux::IconName name) {
   return utf8(static_cast<char32_t>(name));
 }
 
-std::shared_ptr<flux::Image> iconImage(std::string const& path) {
+std::shared_ptr<flux::Image> iconImage(std::string const& path, int pixelSize) {
   if (path.empty()) return nullptr;
   static std::unordered_map<std::string, std::shared_ptr<flux::Image>> cache;
-  auto found = cache.find(path);
+  std::string const key = path + "@" + std::to_string(std::max(1, pixelSize));
+  auto found = cache.find(key);
   if (found != cache.end()) return found->second;
-  auto image = flux::loadImage(path);
-  cache.emplace(path, image);
+  auto image = flux::loadImage(path, nullptr, static_cast<std::uint32_t>(std::max(1, pixelSize)));
+  cache.emplace(key, image);
   return image;
 }
 
@@ -99,7 +101,7 @@ flux::Element resultTile(DockItem item,
       }})
       .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f))
       .cornerRadius(11.f));
-  if (auto image = iconImage(item.iconPath)) {
+  if (auto image = iconImage(item.iconPath, item.iconPixelSize)) {
     layers.push_back(flux::Element{flux::views::Image{
         .source = std::move(image),
         .fillMode = flux::ImageFillMode::Fit,

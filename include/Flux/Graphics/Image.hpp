@@ -110,6 +110,8 @@ struct DecodedImageRgba {
 
 /// Decodes an image file to tightly packed RGBA pixels without creating a GPU image.
 [[nodiscard]] std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path);
+[[nodiscard]] std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path,
+                                                                       std::uint32_t maxLongEdge);
 
 /// Creates a GPU image from decoded RGBA pixels. Must run on the render thread.
 [[nodiscard]] std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded,
@@ -118,5 +120,6 @@ struct DecodedImageRgba {
 /// Loads an image from disk into a backend image.
 /// `gpuDevice` must match the target canvas device when the backend requires it.
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice = nullptr);
+std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::uint32_t maxLongEdge);
 
 } // namespace flux

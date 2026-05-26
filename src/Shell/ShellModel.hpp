@@ -56,6 +56,7 @@ public:
 
   void resetDockItems();
   void setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config);
+  [[nodiscard]] bool setDockDpiScale(float scale);
   void setPreviewFocus(std::string_view appId);
   [[nodiscard]] SnapshotChanges applySnapshot(std::string_view json);
   [[nodiscard]] bool refreshTimeText();
@@ -99,6 +100,7 @@ private:
   bool showRunningUnpinned_ = true;
   std::string iconTheme_;
   int iconSize_ = 48;
+  float dockDpiScale_ = 1.f;
 };
 
 } // namespace lambda_shell

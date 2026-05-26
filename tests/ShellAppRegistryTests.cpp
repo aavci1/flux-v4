@@ -289,6 +289,12 @@ TEST_CASE("Image loader decodes SVG theme icons on Linux") {
   REQUIRE(decoded->pixels.size() == 64);
   CHECK(decoded->pixels[3] == 255);
 
+  auto scaled = flux::decodeImageRgbaFromFile(icon.string(), 24);
+  REQUIRE(scaled);
+  CHECK(scaled->width == 24);
+  CHECK(scaled->height == 24);
+  CHECK(scaled->pixels.size() == 24u * 24u * 4u);
+
   std::filesystem::remove_all(root);
 }
 #endif

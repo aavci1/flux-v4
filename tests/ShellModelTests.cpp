@@ -269,3 +269,32 @@ TEST_CASE("Shell model merges alias app ids into pinned dock items") {
   CHECK(filesRunning);
   CHECK(settingsRunning);
 }
+
+TEST_CASE("Shell model updates dock icon physical size from DPI scale") {
+  lambda_shell::ShellModel model;
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.iconSize = 48;
+  config.dockPinned = {"lambda-terminal"};
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-terminal", .name = "Terminal", .icon = "/tmp/lambda-terminal-test-icon.png",
+       .command = "lambda-terminal"},
+  };
+
+  model.setDockItems(apps, config);
+  bool sawIcon = false;
+  for (auto const& item : model.dockItems()) {
+    if (item.kind == "app" || item.kind == "trash") {
+      CHECK(item.iconPixelSize == 48);
+      sawIcon = true;
+    }
+  }
+  CHECK(sawIcon);
+
+  CHECK(model.setDockDpiScale(1.5f));
+  for (auto const& item : model.dockItems()) {
+    if (item.kind == "app" || item.kind == "trash") {
+      CHECK(item.iconPixelSize == 72);
+    }
+  }
+  CHECK_FALSE(model.setDockDpiScale(1.5f));
+}

@@ -80,7 +80,8 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromBytes(std::span<std::uint8_t 
 }
 
 #if defined(FLUX_PLATFORM_LINUX_WAYLAND) || defined(FLUX_PLATFORM_LINUX_KMS)
-std::optional<DecodedImageRgba> decodeSvgRgbaFromFile(std::filesystem::path const& path) {
+std::optional<DecodedImageRgba> decodeSvgRgbaFromFile(std::filesystem::path const& path,
+                                                      std::uint32_t maxLongEdge) {
   GError* error = nullptr;
   RsvgHandle* handle = rsvg_handle_new_from_file(path.string().c_str(), &error);
   if (!handle) {
@@ -96,8 +97,13 @@ std::optional<DecodedImageRgba> decodeSvgRgbaFromFile(std::filesystem::path cons
     return std::nullopt;
   }
 
-  std::uint32_t const width = std::min<std::uint32_t>(4096u, std::max(1u, static_cast<std::uint32_t>(std::ceil(intrinsicWidth))));
-  std::uint32_t const height = std::min<std::uint32_t>(4096u, std::max(1u, static_cast<std::uint32_t>(std::ceil(intrinsicHeight))));
+  double const scale = maxLongEdge > 0
+                           ? static_cast<double>(maxLongEdge) / std::max(intrinsicWidth, intrinsicHeight)
+                           : 1.0;
+  std::uint32_t const width = std::min<std::uint32_t>(
+      4096u, std::max(1u, static_cast<std::uint32_t>(std::ceil(intrinsicWidth * scale))));
+  std::uint32_t const height = std::min<std::uint32_t>(
+      4096u, std::max(1u, static_cast<std::uint32_t>(std::ceil(intrinsicHeight * scale))));
   if (static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) >
       static_cast<std::uint64_t>(std::numeric_limits<int>::max() / 4)) {
     g_object_unref(handle);
@@ -278,11 +284,11 @@ bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat forma
   return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
 }
 
-std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path) {
+std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path, std::uint32_t maxLongEdge) {
   std::filesystem::path const imagePath{std::string(path)};
 #if defined(FLUX_PLATFORM_LINUX_WAYLAND) || defined(FLUX_PLATFORM_LINUX_KMS)
   if (isSvgPath(imagePath)) {
-    return decodeSvgRgbaFromFile(imagePath);
+    return decodeSvgRgbaFromFile(imagePath, maxLongEdge);
   }
 #endif
   std::ifstream in(imagePath, std::ios::binary);
@@ -302,7 +308,15 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path) {
     return std::nullopt;
   }
 
-  return decodeImageRgbaFromBytes(data);
+  auto decoded = decodeImageRgbaFromBytes(data);
+  if (decoded && maxLongEdge > 0 && std::max(decoded->width, decoded->height) > maxLongEdge) {
+    *decoded = downscaleDecodedImageRgba(std::move(*decoded), maxLongEdge);
+  }
+  return decoded;
+}
+
+std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path) {
+  return decodeImageRgbaFromFile(path, 0);
 }
 
 std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, void* gpuDevice) {
@@ -315,6 +329,14 @@ std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, voi
 
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path);
+  if (!decoded) {
+    return nullptr;
+  }
+  return imageFromDecodedRgba(*decoded, gpuDevice);
+}
+
+std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::uint32_t maxLongEdge) {
+  std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path, maxLongEdge);
   if (!decoded) {
     return nullptr;
   }

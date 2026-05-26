@@ -11,6 +11,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 
@@ -43,13 +44,14 @@ std::string icon(IconName name) {
   return utf8(static_cast<char32_t>(name));
 }
 
-std::shared_ptr<Image> iconImage(std::string const& path) {
+std::shared_ptr<Image> iconImage(std::string const& path, int pixelSize) {
   if (path.empty()) return nullptr;
   static std::unordered_map<std::string, std::shared_ptr<Image>> cache;
-  auto found = cache.find(path);
+  std::string const key = path + "@" + std::to_string(std::max(1, pixelSize));
+  auto found = cache.find(key);
   if (found != cache.end()) return found->second;
-  auto image = loadImage(path);
-  cache.emplace(path, image);
+  auto image = loadImage(path, nullptr, static_cast<std::uint32_t>(std::max(1, pixelSize)));
+  cache.emplace(key, image);
   return image;
 }
 
@@ -106,7 +108,7 @@ Element dockIconAt(std::size_t index,
   float const iconInsetX = (slotWidth - iconSize) * 0.5f;
 
   std::vector<Element> iconLayers;
-  auto image = item.kind == "launcher" ? nullptr : iconImage(item.iconPath);
+  auto image = item.kind == "launcher" ? nullptr : iconImage(item.iconPath, item.iconPixelSize);
   if (item.kind == "launcher") {
     iconLayers.push_back(lambdaLauncherIcon(iconSize, iconInsetX, lift));
   } else if (image) {

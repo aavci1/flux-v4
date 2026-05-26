@@ -15,6 +15,7 @@
 #include <Flux/UI/KeyCodes.hpp>
 
 #include <any>
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -93,6 +94,16 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
   lastDockWidth_ = dockWidth(model_.dockItems());
 
   app_.eventQueue().on<flux::WindowEvent>([this](flux::WindowEvent const& event) {
+    if (event.kind == flux::WindowEvent::Kind::DpiChanged) {
+      if (dockHandle_ && event.handle == *dockHandle_) {
+        float const scale = std::max(event.dpiX > 0.f ? event.dpiX : event.dpi, 0.5f);
+        if (model_.setDockDpiScale(scale)) {
+          requestDockRedraw();
+          if (model_.launcherOpen()) requestLauncherRedraw();
+        }
+      }
+      return;
+    }
     if (event.kind != flux::WindowEvent::Kind::Resize) return;
     if (topBarHandle_ && event.handle == *topBarHandle_) {
       if (model_.setTopBarWidth(event.size.width)) {

@@ -42,6 +42,7 @@ struct DockItem {
   bool pinned = false;
   std::string icon;
   std::string iconPath;
+  int iconPixelSize = kDockIconSize;
 
   bool operator==(DockItem const& other) const = default;
 };
