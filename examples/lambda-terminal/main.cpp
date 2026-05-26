@@ -58,6 +58,9 @@ struct TerminalRun {
   std::shared_ptr<TextLayout const> layout;
   bool hasBackground = false;
   bool bold = false;
+  bool italic = false;
+  bool underline = false;
+  bool strikethrough = false;
 
   bool operator==(TerminalRun const&) const = default;
 };
@@ -114,8 +117,8 @@ Color terminalDefaultForeground(bool bold) {
   return bold ? Color{0.95f, 0.98f, 1.f, 1.f} : Color{0.84f, 0.90f, 0.98f, 0.96f};
 }
 
-Font terminalFont(bool bold) {
-  return Font{.family = "monospace", .size = 14.f, .weight = bold ? 700.f : 500.f};
+Font terminalFont(bool bold, bool italic = false) {
+  return Font{.family = "monospace", .size = 14.f, .weight = bold ? 700.f : 500.f, .italic = italic};
 }
 
 TextLayoutOptions terminalTextOptions() {
@@ -232,16 +235,54 @@ public:
         if (run.hasBackground) {
           canvas.drawRect(runRect, CornerRadius{}, FillStyle::solid(run.background), StrokeStyle::none());
         }
-        if (!row.layout && run.layout) {
-          canvas.drawTextLayout(*run.layout, Point{runRect.x, runRect.y});
-        }
       }
       if (row.layout) {
         canvas.drawTextLayout(*row.layout, Point{frame.x + kContentInset, y});
+      } else {
+        for (TerminalRun const& run : row.runs) {
+          Rect const runRect{
+              frame.x + kContentInset + static_cast<float>(run.startCell) * kCellWidth,
+              y,
+              static_cast<float>(run.cellCount) * kCellWidth,
+              kLineHeight,
+          };
+          if (run.layout) {
+            canvas.drawTextLayout(*run.layout, Point{runRect.x, runRect.y});
+          }
+        }
+      }
+      for (TerminalRun const& run : row.runs) {
+        Rect const runRect{
+            frame.x + kContentInset + static_cast<float>(run.startCell) * kCellWidth,
+            y,
+            static_cast<float>(run.cellCount) * kCellWidth,
+            kLineHeight,
+        };
+        drawRunDecorations(canvas, run, runRect);
       }
     }
     drawCursor(canvas, frame);
     canvas.restore();
+  }
+
+  void drawRunDecorations(Canvas& canvas, TerminalRun const& run, Rect runRect) const {
+    if (!run.underline && !run.strikethrough) {
+      return;
+    }
+    Color color = run.foreground;
+    color.a = std::min(1.f, color.a * 0.85f);
+    if (run.underline) {
+      canvas.drawRect(Rect{runRect.x, runRect.y + kLineHeight - 3.f, runRect.width, 1.f},
+                      CornerRadius{},
+                      FillStyle::solid(color),
+                      StrokeStyle::none());
+    }
+    if (run.strikethrough) {
+      canvas.drawRect(Rect{runRect.x, runRect.y + kLineHeight * 0.54f, runRect.width, 1.f},
+                      CornerRadius{},
+                      FillStyle::solid(color),
+                      StrokeStyle::none());
+    }
   }
 
   void drawCursor(Canvas& canvas, Rect frame) {
@@ -525,6 +566,9 @@ private:
         cell.bg.type = VTERM_COLOR_DEFAULT_BG;
       }
       bool const bold = cell.attrs.bold != 0;
+      bool const italic = cell.attrs.italic != 0;
+      bool const underline = cell.attrs.underline != 0;
+      bool const strikethrough = cell.attrs.strike != 0;
       VTermColor fg = cell.fg;
       VTermColor bg = cell.bg;
       if (cell.attrs.reverse) {
@@ -535,6 +579,9 @@ private:
       bool const hasBackground = background.a > 0.f;
       bool const sameRun = hasCurrent &&
                            current.bold == bold &&
+                           current.italic == italic &&
+                           current.underline == underline &&
+                           current.strikethrough == strikethrough &&
                            current.hasBackground == hasBackground &&
                            current.foreground == foreground &&
                            current.background == background;
@@ -551,6 +598,9 @@ private:
             .background = background,
             .hasBackground = hasBackground,
             .bold = bold,
+            .italic = italic,
+            .underline = underline,
+            .strikethrough = strikethrough,
         };
         hasCurrent = true;
       }
@@ -567,10 +617,10 @@ private:
     if (!app_ || run.text.empty()) {
       return nullptr;
     }
-    if (isFastAscii(run.text)) {
+    if (isFastAscii(run.text) && !run.italic) {
       return asciiLayoutForRun(run);
     }
-    return app_->textSystem().layout(run.text, terminalFont(run.bold), run.foreground, 0.f, terminalTextOptions());
+    return app_->textSystem().layout(run.text, terminalFont(run.bold, run.italic), run.foreground, 0.f, terminalTextOptions());
   }
 
   std::shared_ptr<TextLayout const> asciiLayoutForRun(TerminalRun const& run) const {
@@ -759,7 +809,10 @@ private:
            a.foreground == b.foreground &&
            a.background == b.background &&
            a.hasBackground == b.hasBackground &&
-           a.bold == b.bold;
+           a.bold == b.bold &&
+           a.italic == b.italic &&
+           a.underline == b.underline &&
+           a.strikethrough == b.strikethrough;
   }
 
   static bool sameRowContent(TerminalRow const& a, TerminalRow const& b) {
@@ -776,7 +829,7 @@ private:
 
   static bool isFastAsciiRow(TerminalRow const& row) {
     return std::all_of(row.runs.begin(), row.runs.end(), [](TerminalRun const& run) {
-      return isFastAscii(run.text);
+      return isFastAscii(run.text) && !run.italic;
     });
   }
 

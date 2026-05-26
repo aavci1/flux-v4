@@ -156,13 +156,23 @@ TEST_CASE("terminal indexed and truecolor conversion is deterministic") {
   CHECK(trueColor.b == doctest::Approx(56.f / 255.f));
 }
 
-TEST_CASE("terminal attributes resolve dim and reverse") {
+TEST_CASE("terminal attributes resolve dim reverse and common style flags") {
   flux::Color fg{0.8f, 0.6f, 0.4f, 1.f};
   flux::Color bg{0.1f, 0.2f, 0.3f, 1.f};
-  auto normal = resolveTerminalCellStyle(fg, bg, TerminalAttributes{.bold = true});
+  auto normal = resolveTerminalCellStyle(fg,
+                                         bg,
+                                         TerminalAttributes{
+                                             .bold = true,
+                                             .italic = true,
+                                             .underline = true,
+                                             .strikethrough = true,
+                                         });
   CHECK(normal.foreground == fg);
   CHECK(normal.background == bg);
   CHECK(normal.attributes.bold);
+  CHECK(normal.attributes.italic);
+  CHECK(normal.attributes.underline);
+  CHECK(normal.attributes.strikethrough);
 
   auto dimReverse = resolveTerminalCellStyle(fg, bg, TerminalAttributes{.dim = true, .reverse = true});
   CHECK(dimReverse.foreground == bg);
