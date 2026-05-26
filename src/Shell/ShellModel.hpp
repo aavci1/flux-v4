@@ -92,6 +92,7 @@ private:
   flux::Signal<std::string> timeText_{formatTimeText()};
   flux::Signal<SystemStatus> systemStatus_;
   flux::Signal<std::vector<DockItem>> launcherResults_;
+  bool showRunningUnpinned_ = true;
 };
 
 } // namespace lambda_shell

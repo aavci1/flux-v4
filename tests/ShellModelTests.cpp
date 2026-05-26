@@ -163,4 +163,16 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
     CHECK(item.appId != "mail");
     CHECK(item.appId != "music");
   }
+
+  config.showRunningUnpinned = false;
+  model.setDockItems(apps, config);
+  auto hiddenUnpinned = model.applySnapshot(R"({
+    "type":"lambda.windowManager.snapshot",
+    "windows":[{"id":9,"appId":"org.example.Editor","title":"Notes","state":"normal","focused":true}],
+    "system":{}
+  })");
+  CHECK_FALSE(hiddenUnpinned.dockItems);
+  for (auto const& item : model.dockItems()) {
+    CHECK(item.appId != "org.example.Editor");
+  }
 }

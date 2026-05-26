@@ -77,6 +77,7 @@ void ShellModel::resetDockItems() {
 }
 
 void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config) {
+  showRunningUnpinned_ = config.showRunningUnpinned;
   std::vector<DockItem> items{
       {"launcher", "launcher", "Launcher", {}, false, false, false},
       {"sep1", "separator", "", {}, false, false, false},
@@ -142,7 +143,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
         break;
       }
     }
-    if (represented) continue;
+    if (represented || !showRunningUnpinned_) continue;
     DockItem item{
         .id = window.appId,
         .kind = "app",
