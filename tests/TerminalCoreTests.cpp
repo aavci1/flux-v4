@@ -353,6 +353,14 @@ TEST_CASE("terminal text buffer enforces scrollback limit and viewport movement"
   buffer.scrollViewport(-1);
   CHECK(buffer.viewportOffset() == 1);
   CHECK(buffer.viewportLines() == std::vector<std::string>{"two", "three", "four"});
+
+  buffer.pushLine("six");
+  CHECK(buffer.viewportOffset() == 2);
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"two", "three", "four"});
+
+  buffer.scrollViewport(-50);
+  CHECK(buffer.viewportOffset() == 0);
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"four", "five", "six"});
 }
 
 TEST_CASE("terminal text buffer keeps alternate screen separate from scrollback") {

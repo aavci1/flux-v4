@@ -204,11 +204,15 @@ public:
     if (text.empty() || ptyFd_ < 0) {
       return;
     }
+    jumpToBottom();
     writeAll(text.data(), text.size());
   }
 
   void sendKey(KeyCode key, Modifiers modifiers) {
     std::string const encoded = encodeTerminalKey(key, modifiers);
+    if (!encoded.empty()) {
+      jumpToBottom();
+    }
     writeAll(encoded.data(), encoded.size());
   }
 
@@ -253,6 +257,14 @@ public:
       if (window_) {
         window_->requestRedraw();
       }
+      return true;
+    }
+    if (any(modifiers & Modifiers::Shift) && key == keys::PageUp) {
+      scrollViewportLines(std::max(1, rowsCount_ - 1));
+      return true;
+    }
+    if (any(modifiers & Modifiers::Shift) && key == keys::PageDown) {
+      scrollViewportLines(-std::max(1, rowsCount_ - 1));
       return true;
     }
     sendKey(key, modifiers);
@@ -308,8 +320,18 @@ public:
         drawRunDecorations(canvas, run, runRect);
       }
     }
-    drawCursor(canvas, frame);
+    if (viewportOffset_ == 0) {
+      drawCursor(canvas, frame);
+    }
     canvas.restore();
+  }
+
+  void scrollViewport(Vec2 delta) {
+    if (alternateScreen_ || delta.y == 0.f) {
+      return;
+    }
+    int const lines = std::max(1, static_cast<int>(std::ceil(std::abs(delta.y) / 40.f)));
+    scrollViewportLines(delta.y > 0.f ? lines : -lines);
   }
 
   void beginSelection(Point point, MouseButton button) {
@@ -374,17 +396,18 @@ public:
     if (!selection_) {
       return;
     }
+    int const logicalLine = logicalLineForVisualRow(row);
     TerminalSelection selection = *selection_;
     TerminalBufferCoordinate start = selection.anchor;
     TerminalBufferCoordinate end = selection.focus;
     if (std::pair{end.line, end.column} < std::pair{start.line, start.column}) {
       std::swap(start, end);
     }
-    if (row < start.line || row > end.line) {
+    if (logicalLine < start.line || logicalLine > end.line) {
       return;
     }
-    int from = row == start.line ? start.column : 0;
-    int to = row == end.line ? end.column : cols_;
+    int from = logicalLine == start.line ? start.column : 0;
+    int to = logicalLine == end.line ? end.column : cols_;
     from = std::clamp(from, 0, cols_);
     to = std::clamp(to, 0, cols_);
     if (to <= from) {
@@ -414,6 +437,102 @@ public:
   }
 
 private:
+  int logicalLineCount() const {
+    return static_cast<int>(historyRows_.size()) + static_cast<int>(screenRows_.size());
+  }
+
+  int maxViewportOffset() const {
+    return alternateScreen_ ? 0 : static_cast<int>(historyRows_.size());
+  }
+
+  int viewportLogicalStart() const {
+    int const count = logicalLineCount();
+    if (count <= 0) {
+      return 0;
+    }
+    int const end = std::clamp(count - viewportOffset_, 0, count);
+    return std::max(0, end - rowsCount_);
+  }
+
+  int logicalLineForVisualRow(int visualRow) const {
+    return viewportLogicalStart() + std::clamp(visualRow, 0, std::max(0, rowsCount_ - 1));
+  }
+
+  void scrollViewportLines(int delta) {
+    if (alternateScreen_ || delta == 0) {
+      return;
+    }
+    int const nextOffset = std::clamp(viewportOffset_ + delta, 0, maxViewportOffset());
+    if (nextOffset == viewportOffset_) {
+      return;
+    }
+    viewportOffset_ = nextOffset;
+    publishViewportRows();
+  }
+
+  void jumpToBottom() {
+    if (viewportOffset_ == 0) {
+      return;
+    }
+    viewportOffset_ = 0;
+    publishViewportRows();
+  }
+
+  std::vector<TerminalRow> logicalRows() const {
+    std::vector<TerminalRow> rows;
+    rows.reserve(historyRows_.size() + screenRows_.size());
+    rows.insert(rows.end(), historyRows_.begin(), historyRows_.end());
+    rows.insert(rows.end(), screenRows_.begin(), screenRows_.end());
+    return rows;
+  }
+
+  static TerminalRow visualRowCopy(TerminalRow row, int visualRow) {
+    row.row = visualRow;
+    return row;
+  }
+
+  void publishViewportRows() {
+    std::vector<TerminalRow> logical = logicalRows();
+    std::vector<TerminalRow> visible;
+    visible.reserve(static_cast<std::size_t>(rowsCount_));
+    int const count = static_cast<int>(logical.size());
+    int const end = std::clamp(count - viewportOffset_, 0, count);
+    int const begin = std::max(0, end - rowsCount_);
+    for (int index = begin; index < end; ++index) {
+      visible.push_back(visualRowCopy(logical[static_cast<std::size_t>(index)],
+                                      static_cast<int>(visible.size())));
+    }
+    if (visible == rows_.peek()) {
+      return;
+    }
+    rows_.set(std::move(visible));
+    if (window_) {
+      window_->requestRedraw();
+    }
+  }
+
+  void appendHistoryRow(TerminalRow row) {
+    bool const pinnedToBottom = viewportOffset_ == 0;
+    prepareRowForDisplay(row);
+    row.row = static_cast<int>(historyRows_.size());
+    historyRows_.push_back(std::move(row));
+    int const limit = std::max(0, config_.scrollbackLimit);
+    if (static_cast<int>(historyRows_.size()) > limit) {
+      int const excess = static_cast<int>(historyRows_.size()) - limit;
+      historyRows_.erase(historyRows_.begin(), historyRows_.begin() + excess);
+      if (selection_) {
+        selection_->anchor.line = std::max(0, selection_->anchor.line - excess);
+        selection_->focus.line = std::max(0, selection_->focus.line - excess);
+      }
+    } else if (!pinnedToBottom) {
+      viewportOffset_ = std::clamp(viewportOffset_ + 1, 0, maxViewportOffset());
+    }
+    if (pinnedToBottom) {
+      viewportOffset_ = 0;
+    }
+    publishViewportRows();
+  }
+
   TerminalBufferCoordinate coordinateForPoint(Point point) const {
     TerminalBufferCoordinate const cell = terminalMouseCell(point.x,
                                                            point.y,
@@ -424,8 +543,9 @@ private:
                                                                .minColumns = 20,
                                                                .minRows = 6,
                                                            });
+    int const visualLine = std::clamp(cell.line - 1, 0, std::max(0, rowsCount_ - 1));
     return TerminalBufferCoordinate{
-        .line = std::clamp(cell.line - 1, 0, std::max(0, rowsCount_ - 1)),
+        .line = std::clamp(logicalLineForVisualRow(visualLine), 0, std::max(0, logicalLineCount() - 1)),
         .column = std::clamp(cell.column - 1, 0, cols_),
     };
   }
@@ -449,15 +569,9 @@ private:
     if (!selection_) {
       return {};
     }
-    TerminalTextBuffer buffer{rowsCount_, 0};
-    std::vector<TerminalRow> rows = rows_.peek();
-    std::sort(rows.begin(), rows.end(), [](TerminalRow const& a, TerminalRow const& b) {
-      return a.row < b.row;
-    });
-    for (TerminalRow const& row : rows) {
-      if (row.row >= 0 && row.row < rowsCount_) {
-        buffer.replaceVisibleLine(row.row, textForRow(row));
-      }
+    TerminalTextBuffer buffer{std::max(1, logicalLineCount()), config_.scrollbackLimit};
+    for (TerminalRow const& row : logicalRows()) {
+      buffer.pushLine(textForRow(row));
     }
     return terminalCopyPayload(buffer, *selection_);
   }
@@ -470,9 +584,9 @@ private:
         .settermprop = &TerminalSession::onTermProp,
         .bell = nullptr,
         .resize = nullptr,
-        .sb_pushline = nullptr,
+        .sb_pushline = &TerminalSession::onScrollbackPushLine,
         .sb_popline = nullptr,
-        .sb_clear = nullptr,
+        .sb_clear = &TerminalSession::onScrollbackClear,
     };
     return callbacks;
   }
@@ -492,13 +606,36 @@ private:
   }
 
   static int onTermProp(VTermProp prop, VTermValue* value, void* user) {
+    auto* session = static_cast<TerminalSession*>(user);
+    if (prop == VTERM_PROP_ALTSCREEN && value) {
+      session->alternateScreen_ = value->boolean != 0;
+      session->viewportOffset_ = 0;
+      session->publishViewportRows();
+      return 1;
+    }
     if (prop != VTERM_PROP_TITLE || !value || !value->string.str) {
       return 1;
     }
-    auto* session = static_cast<TerminalSession*>(user);
     if (session->window_) {
       session->window_->setTitle(std::string(value->string.str, value->string.len));
     }
+    return 1;
+  }
+
+  static int onScrollbackPushLine(int cols, VTermScreenCell const* cells, void* user) {
+    auto* session = static_cast<TerminalSession*>(user);
+    if (!session->alternateScreen_) {
+      session->appendHistoryRow(session->buildRowFromCells(0, cols, cells));
+    }
+    return 1;
+  }
+
+  static int onScrollbackClear(void* user) {
+    auto* session = static_cast<TerminalSession*>(user);
+    session->historyRows_.clear();
+    session->viewportOffset_ = 0;
+    session->selection_.reset();
+    session->publishViewportRows();
     return 1;
   }
 
@@ -627,6 +764,7 @@ private:
 
     cols_ = nextCols;
     rowsCount_ = nextRows;
+    viewportOffset_ = std::clamp(viewportOffset_, 0, maxViewportOffset());
     vterm_set_size(vterm_, rowsCount_, cols_);
     if (ptyFd_ >= 0) {
       winsize size{};
@@ -674,7 +812,7 @@ private:
     dirtyStartRow_ = rowsCount_;
     dirtyEndRow_ = -1;
 
-    std::vector<TerminalRow> next = rows_.peek();
+    std::vector<TerminalRow> next = screenRows_;
     bool changed = false;
     if (static_cast<int>(next.size()) != rowsCount_) {
       next.resize(static_cast<std::size_t>(rowsCount_));
@@ -691,16 +829,7 @@ private:
         continue;
       }
 
-      std::uint64_t const revision = ++revision_;
-      built.revision = revision;
-      if (isFastAsciiRow(built)) {
-        built.layout = layoutForRow(built);
-      } else {
-        for (auto& run : built.runs) {
-          run.revision = revision;
-          run.layout = layoutForRun(run);
-        }
-      }
+      prepareRowForDisplay(built);
       next[static_cast<std::size_t>(row)] = std::move(built);
       changed = true;
     }
@@ -708,23 +837,32 @@ private:
     if (!changed) {
       return;
     }
-    rows_.set(std::move(next));
-    if (window_) {
-      window_->requestRedraw();
-    }
+    screenRows_ = std::move(next);
+    publishViewportRows();
   }
 
   TerminalRow buildRow(int row) const {
-    TerminalRow terminalRow{.row = row, .revision = 0, .runs = {}};
-    TerminalRun current;
-    bool hasCurrent = false;
+    std::vector<VTermScreenCell> cells(static_cast<std::size_t>(cols_));
     for (int col = 0; col < cols_; ++col) {
-      VTermScreenCell cell{};
-      if (!vterm_screen_get_cell(screen_, VTermPos{row, col}, &cell)) {
+      if (!vterm_screen_get_cell(screen_, VTermPos{row, col}, &cells[static_cast<std::size_t>(col)])) {
+        VTermScreenCell& cell = cells[static_cast<std::size_t>(col)];
         cell.chars[0] = ' ';
         cell.width = 1;
         cell.fg.type = VTERM_COLOR_DEFAULT_FG;
         cell.bg.type = VTERM_COLOR_DEFAULT_BG;
+      }
+    }
+    return buildRowFromCells(row, cols_, cells.data());
+  }
+
+  TerminalRow buildRowFromCells(int row, int cols, VTermScreenCell const* cells) const {
+    TerminalRow terminalRow{.row = row, .revision = 0, .runs = {}};
+    TerminalRun current;
+    bool hasCurrent = false;
+    for (int col = 0; col < cols; ++col) {
+      VTermScreenCell cell = cells ? cells[col] : VTermScreenCell{};
+      if (cell.width <= 0) {
+        cell.width = 1;
       }
       bool const bold = cell.attrs.bold != 0;
       bool const italic = cell.attrs.italic != 0;
@@ -772,6 +910,24 @@ private:
       terminalRow.runs.push_back(std::move(current));
     }
     return terminalRow;
+  }
+
+  void prepareRowForDisplay(TerminalRow& row) {
+    std::uint64_t const revision = ++revision_;
+    row.revision = revision;
+    row.layout.reset();
+    if (isFastAsciiRow(row)) {
+      row.layout = layoutForRow(row);
+      for (auto& run : row.runs) {
+        run.revision = revision;
+        run.layout.reset();
+      }
+      return;
+    }
+    for (auto& run : row.runs) {
+      run.revision = revision;
+      run.layout = layoutForRun(run);
+    }
   }
 
   std::shared_ptr<TextLayout const> layoutForRun(TerminalRun const& run) const {
@@ -1076,6 +1232,8 @@ private:
   int pendingRowsCount_ = kInitialRows;
   int pendingCols_ = kInitialCols;
   bool pendingResize_ = false;
+  bool alternateScreen_ = false;
+  int viewportOffset_ = 0;
   std::uint64_t revision_ = 0;
   int dirtyStartRow_ = kInitialRows;
   int dirtyEndRow_ = -1;
@@ -1084,6 +1242,8 @@ private:
   std::thread wakeThread_;
   std::optional<TerminalSelection> selection_;
   bool selecting_ = false;
+  std::vector<TerminalRow> historyRows_;
+  std::vector<TerminalRow> screenRows_;
   mutable std::array<std::array<CachedGlyph, 128>, 2> asciiGlyphs_{};
   Reactive::Signal<std::vector<TerminalRow>> rows_;
   Reactive::Signal<VTermPos> cursor_;
@@ -1105,6 +1265,9 @@ struct TerminalApp {
         })
         .onPointerUp([session = session](Point point, MouseButton button) {
           session->endSelection(point, button);
+        })
+        .onScroll([session = session](Vec2 delta) {
+          session->scrollViewport(delta);
         })
         .onTextInput([session = session](std::string const& text) { session->sendText(text); })
         .onKeyDown([session = session](KeyCode key, Modifiers modifiers) {

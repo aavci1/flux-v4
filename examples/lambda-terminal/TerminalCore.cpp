@@ -320,15 +320,22 @@ void TerminalTextBuffer::setScrollbackLimit(int limit) {
 void TerminalTextBuffer::pushLine(std::string line) {
   auto& visible = alternateScreen_ ? alternateVisible_ : visible_;
   if (visibleRows_ <= 0) visibleRows_ = 1;
+  bool const pinnedToBottom = viewportOffset_ == 0;
+  bool addedHistoryLine = false;
   if (static_cast<int>(visible.size()) >= visibleRows_) {
     if (!alternateScreen_) {
       history_.push_back(std::move(visible.front()));
       setScrollbackLimit(scrollbackLimit_);
+      addedHistoryLine = true;
     }
     visible.erase(visible.begin());
   }
   visible.push_back(std::move(line));
-  viewportOffset_ = 0;
+  if (pinnedToBottom || alternateScreen_) {
+    viewportOffset_ = 0;
+  } else if (addedHistoryLine) {
+    scrollViewport(1);
+  }
 }
 
 void TerminalTextBuffer::replaceVisibleLine(int row, std::string line) {
