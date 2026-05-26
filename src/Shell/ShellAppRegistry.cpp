@@ -274,6 +274,10 @@ struct IconThemeDir {
   std::string type = "Threshold";
 };
 
+int iconDirNominalSize(IconThemeDir const& dir) {
+  return std::max(1, dir.size * std::max(1, dir.scale));
+}
+
 std::optional<int> parseInteger(std::string_view value) {
   std::string text = trim(value);
   char* end = nullptr;
@@ -366,6 +370,52 @@ int iconDirDistance(IconThemeDir const& dir, int preferredSize) {
   int const distance = std::abs(size - preferredSize);
   if (dir.type == "Threshold" && distance <= std::max(0, dir.threshold * scale)) return 0;
   return distance;
+}
+
+bool betterIconMatch(IconThemeDir const& candidateDir,
+                     int candidateDistance,
+                     IconThemeDir const& currentDir,
+                     int currentDistance,
+                     int preferredSize) {
+  if (candidateDistance == 0 || currentDistance == 0) {
+    return candidateDistance < currentDistance;
+  }
+  bool const candidateUndersized = iconDirNominalSize(candidateDir) < preferredSize;
+  bool const currentUndersized = iconDirNominalSize(currentDir) < preferredSize;
+  if (candidateUndersized != currentUndersized) {
+    return !candidateUndersized;
+  }
+  return candidateDistance < currentDistance;
+}
+
+IconThemeDir fallbackIconDirForSize(std::string const& size) {
+  IconThemeDir dir;
+  dir.relativePath = size;
+  if (size == "scalable") {
+    dir.size = 64;
+    dir.minSize = 16;
+    dir.maxSize = 512;
+    dir.type = "Scalable";
+    return dir;
+  }
+  if (size == "symbolic") {
+    dir.size = 16;
+    dir.minSize = 16;
+    dir.maxSize = 16;
+    dir.type = "Fixed";
+    return dir;
+  }
+  std::string numeric = size;
+  if (auto x = numeric.find('x'); x != std::string::npos) {
+    numeric = numeric.substr(0, x);
+  }
+  if (auto parsed = parseInteger(numeric)) {
+    dir.size = *parsed;
+    dir.minSize = *parsed;
+    dir.maxSize = *parsed;
+  }
+  dir.type = "Fixed";
+  return dir;
 }
 
 } // namespace
@@ -701,21 +751,23 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
 
   struct Match {
     std::filesystem::path path;
+    IconThemeDir dir;
     int distance = 0;
   };
   std::optional<Match> best;
-  for (auto const& dir : iconThemeDirs(themeRoot)) {
-    std::filesystem::path const path = iconCandidate(themeRoot / dir.relativePath, iconName);
-    if (path.empty()) continue;
+  std::set<std::string> seenCandidatePaths;
+  auto consider = [&](std::filesystem::path const& path, IconThemeDir const& dir) {
+    if (path.empty()) return;
+    if (!seenCandidatePaths.insert(path.string()).second) return;
     int const distance = iconDirDistance(dir, preferredSize);
-    if (!best || distance < best->distance) {
-      best = Match{.path = path, .distance = distance};
-      if (distance == 0) break;
+    if (!best || betterIconMatch(dir, distance, best->dir, best->distance, preferredSize)) {
+      best = Match{.path = path, .dir = dir, .distance = distance};
     }
+  };
+  for (auto const& dir : iconThemeDirs(themeRoot)) {
+    consider(iconCandidate(themeRoot / dir.relativePath, iconName), dir);
   }
-  if (best) return best->path;
 
-  std::vector<std::filesystem::path> candidates;
   std::string const size = std::to_string(preferredSize);
   std::string const sizePair = size + "x" + size;
   std::vector<std::string> sizes{size, sizePair, "scalable", "256", "256x256", "128", "128x128", "96", "96x96",
@@ -726,18 +778,20 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
   };
   for (char const* category : categories) {
     for (auto const& candidateSize : sizes) {
-      candidates.push_back(themeRoot / candidateSize / category);
-      candidates.push_back(themeRoot / category / candidateSize);
+      IconThemeDir dir = fallbackIconDirForSize(candidateSize);
+      consider(iconCandidate(themeRoot / candidateSize / category, iconName), dir);
+      dir.relativePath = std::filesystem::path{category} / candidateSize;
+      consider(iconCandidate(themeRoot / dir.relativePath, iconName), dir);
     }
   }
   for (char const* category : categories) {
-    candidates.push_back(themeRoot / category);
+    IconThemeDir dir;
+    dir.relativePath = category;
+    consider(iconCandidate(themeRoot / dir.relativePath, iconName), dir);
   }
-  candidates.push_back(themeRoot);
-  for (auto const& dir : candidates) {
-    if (auto candidate = iconCandidate(dir, iconName); !candidate.empty()) return candidate;
-  }
-  return {};
+  IconThemeDir rootDir;
+  consider(iconCandidate(themeRoot, iconName), rootDir);
+  return best ? best->path : std::filesystem::path{};
 }
 
 std::string configuredIconThemeName() {

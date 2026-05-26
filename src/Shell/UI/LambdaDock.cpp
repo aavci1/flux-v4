@@ -84,21 +84,17 @@ IconName dockIconName(DockItem const& item) {
   return IconName::Apps;
 }
 
-Element dockIconAt(std::size_t index,
-                         DockItem const& item,
-                         Signal<std::vector<DockItem>> const& items,
-                         bool hover,
-                         std::function<void()> onTap) {
+Element dockIconAt(Reactive::Signal<std::size_t> indexSignal,
+                   DockItem const& item,
+                   Signal<std::vector<DockItem>> const& items,
+                   bool hover,
+                   std::function<void()> onTap) {
   float const lift = hover ? -5.f : 0.f;
-  Reactive::Bindable<bool> running{[items, index] {
+  Reactive::Bindable<bool> running{[items, indexSignal] {
     auto const& dockItems = items();
+    std::size_t const index = indexSignal();
     return index < dockItems.size() && dockItems[index].running;
   }};
-  Reactive::Bindable<bool> focused{[items, index] {
-    auto const& dockItems = items();
-    return index < dockItems.size() && dockItems[index].focused;
-  }};
-
   float const slotWidth = static_cast<float>(kDockCell);
   float const slotHeight = static_cast<float>(kDockSlotHeight);
   float const iconSize = static_cast<float>(kDockIconSize);
@@ -131,11 +127,8 @@ Element dockIconAt(std::size_t index,
   Element dotLayer = Element{Rectangle{}}
       .width(dotSize)
       .height(dotSize)
-      .fill(Reactive::Bindable<FillStyle>{[focused] {
-        return focused.evaluate() ? FillStyle::solid(Color(0.35f, 0.72f, 1.f, 1.f))
-                                  : FillStyle::solid(Color(1.f, 1.f, 1.f, 0.72f));
-      }})
-      .cornerRadius(3.f)
+      .fill(FillStyle::solid(Color(0.f, 0.f, 0.f, 1.f)))
+      .cornerRadius(dotSize * 0.5f)
       .opacity(dotOpacity);
 
   auto element = VStack{
@@ -156,12 +149,22 @@ Element dockIconAt(std::size_t index,
   return element;
 }
 
+std::string dockRowKey(DockItem const& item) {
+  if (item.kind == "separator") return item.id;
+  return item.id + "|" + item.kind + "|" + item.icon + "|" + item.iconPath + "|" +
+         std::to_string(item.iconPixelSize);
+}
+
 Element dockSeparator() {
   float const thickness = static_cast<float>(kDockSeparatorWidth);
   float const height = static_cast<float>(kDockIconSize);
-  return Rectangle{}
-      .size(thickness, height)
-      .fill(FillStyle::solid(Color{1.f, 1.f, 1.f, 0.30f}));
+  float const slotHeight = static_cast<float>(kDockSlotHeight);
+  float const y = (slotHeight - height) * 0.5f;
+  return ZStack{.children = children(Rectangle{}
+                                         .size(thickness, height)
+                                         .position(0.f, y)
+                                         .fill(FillStyle::solid(Color{1.f, 1.f, 1.f, 0.30f})))}
+      .size(thickness, slotHeight);
 }
 
 } // namespace
@@ -173,30 +176,32 @@ Element LambdaDock::body() const {
   auto const onActivateItem = props.onActivateItem;
   int const hoverIndex = props.hoverIndex;
 
-  std::vector<Element> children;
-  std::vector<DockItem> const snapshot = items.peek();
-  children.reserve(snapshot.size());
-  for (std::size_t i = 0; i < snapshot.size(); ++i) {
-    DockItem const& item = snapshot[i];
-    if (item.kind == "separator") {
-      children.push_back(dockSeparator());
-      continue;
-    }
-    std::function<void()> onTap;
-        if (item.kind == "launcher") {
-            onTap = onOpenLauncher;
-        } else if (onActivateItem) {
-            onTap = [callback = onActivateItem, item] { callback(item); };
+  return Element{For(
+      items,
+      dockRowKey,
+      [items, onOpenLauncher, onActivateItem, hoverIndex](
+          DockItem const& item, Reactive::Signal<std::size_t> const& indexSignal) {
+        if (item.kind == "separator") {
+          return dockSeparator();
         }
-        bool const hover = hoverIndex >= 0 && static_cast<int>(i) == hoverIndex;
-    children.push_back(dockIconAt(i, item, items, hover, std::move(onTap)));
-  }
-
-  return HStack{
-      .spacing = static_cast<float>(kDockGap),
-      .alignment = Alignment::Center,
-      .children = std::move(children),
-  }
+        std::function<void()> onTap;
+        if (item.kind == "launcher") {
+          onTap = onOpenLauncher;
+        } else if (onActivateItem) {
+          onTap = [items, indexSignal, callback = onActivateItem] {
+            auto const& currentItems = items();
+            std::size_t const index = indexSignal();
+            if (index < currentItems.size()) {
+              callback(currentItems[index]);
+            }
+          };
+        }
+        bool const hover = hoverIndex >= 0 && static_cast<int>(indexSignal.peek()) == hoverIndex;
+        return dockIconAt(indexSignal, item, items, hover, std::move(onTap));
+      },
+      static_cast<float>(kDockGap),
+      Alignment::Center,
+      ForLayout::HorizontalStack)}
       .padding(kDockPaddingTop, kDockPaddingX, kDockPaddingBottom, kDockPaddingX)
       .size(Reactive::Bindable<float>{[width] { return static_cast<float>(width.evaluate()); }},
             static_cast<float>(dockHeight()));

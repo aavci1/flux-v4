@@ -18,16 +18,16 @@ inline constexpr int kTopBarHeight = 36;
 inline constexpr int kDockBottom = 12;
 inline constexpr int kDockCell = 56;
 inline constexpr int kDockIconSize = 48;
-inline constexpr int kDockDotSize = 6;
-inline constexpr int kDockIconDotGap = 4;
-inline constexpr int kDockDotBelowPad = 2;
+inline constexpr int kDockDotSize = 4;
+inline constexpr int kDockIconDotGap = 2;
+inline constexpr int kDockDotBelowPad = 1;
 /// Space above the icon; equals gap + dot + padding below the dot.
 inline constexpr int kDockSlotMargin = kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
 inline constexpr int kDockSlotHeight =
     kDockSlotMargin + kDockIconSize + kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
 inline constexpr float kDockPaddingX = 12.f;
-inline constexpr float kDockPaddingTop = 8.f;
-inline constexpr float kDockPaddingBottom = 8.f;
+inline constexpr float kDockPaddingTop = 5.f;
+inline constexpr float kDockPaddingBottom = 5.f;
 inline constexpr int kDockGap = 6;
 inline constexpr int kDockSeparatorWidth = 1;
 

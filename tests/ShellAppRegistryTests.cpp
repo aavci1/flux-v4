@@ -386,3 +386,41 @@ Type=Fixed
 
   std::filesystem::remove_all(root);
 }
+
+TEST_CASE("Shell app registry prefers downsampling larger fixed icons over upscaling smaller icons") {
+  ScopedEnv homeEnv("HOME");
+  ScopedEnv dataHomeEnv("XDG_DATA_HOME");
+  ScopedEnv dataDirsEnv("XDG_DATA_DIRS");
+  ScopedEnv shellConfigEnv("LAMBDA_SHELL_CONFIG");
+  ScopedEnv iconThemeEnv("LAMBDA_ICON_THEME");
+
+  auto root = tempRoot("lambda-shell-larger-icon-theme-test");
+  auto dataHome = root / "data-home";
+  auto themeRoot = dataHome / "icons" / "Lambda";
+  auto smallIcon = themeRoot / "apps" / "64" / "lambda-terminal.png";
+  auto largeIcon = themeRoot / "apps" / "96" / "lambda-terminal.png";
+  std::filesystem::create_directories(smallIcon.parent_path());
+  std::filesystem::create_directories(largeIcon.parent_path());
+  std::ofstream(themeRoot / "index.theme") << R"(
+[Icon Theme]
+Name=Lambda
+Directories=apps/64
+
+[apps/64]
+Size=64
+Type=Fixed
+)";
+  std::ofstream(smallIcon) << "png";
+  std::ofstream(largeIcon) << "png";
+
+  auto const dataHomeString = dataHome.string();
+  setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
+  unsetenv("XDG_DATA_DIRS");
+  unsetenv("LAMBDA_SHELL_CONFIG");
+  unsetenv("LAMBDA_ICON_THEME");
+  unsetenv("HOME");
+
+  CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "Lambda", 72) == largeIcon);
+
+  std::filesystem::remove_all(root);
+}

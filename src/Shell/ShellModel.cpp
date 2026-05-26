@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <filesystem>
 #include <set>
 #include <utility>
 
@@ -46,6 +47,57 @@ bool appIdsMatch(std::string_view a, std::string_view b) {
 std::string resolvedIconPath(std::string const& icon, std::string const& theme, int size) {
   auto path = resolveIconThemePath(icon, theme, size);
   return path.empty() ? std::string{} : path.string();
+}
+
+std::vector<std::string> dockIconCandidates(std::string const& icon,
+                                            std::string const& appId,
+                                            std::string const& kind) {
+  std::vector<std::string> candidates;
+  auto add = [&](std::string value) {
+    if (value.empty()) return;
+    if (std::find(candidates.begin(), candidates.end(), value) == candidates.end()) {
+      candidates.push_back(std::move(value));
+    }
+  };
+
+  if (std::filesystem::path iconPath{icon}; iconPath.is_absolute()) {
+    add(icon);
+  }
+
+  if (kind == "trash") {
+    add("user-trash");
+    add("user-trash-full");
+    add("folder-trash");
+    add("trash-empty");
+    return candidates;
+  }
+
+  if (shellAppIdMatches("settings", appId)) {
+    add("systemsettings");
+    add("breeze-settings");
+    add("preferences-system");
+  } else if (shellAppIdMatches("files", appId)) {
+    add("system-file-manager");
+    add("folder");
+  } else if (shellAppIdMatches("terminal", appId)) {
+    add("utilities-terminal");
+    add("terminal");
+  }
+  add(icon);
+  add(appId);
+  return candidates;
+}
+
+std::string resolvedDockIconPath(std::string const& icon,
+                                 std::string const& appId,
+                                 std::string const& kind,
+                                 std::string const& theme,
+                                 int size) {
+  for (auto const& candidate : dockIconCandidates(icon, appId, kind)) {
+    std::string path = resolvedIconPath(candidate, theme, size);
+    if (!path.empty()) return path;
+  }
+  return {};
 }
 
 int scaledIconPixelSize(int logicalSize, float dpiScale) {
@@ -137,7 +189,7 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
     item.pinned = true;
     item.icon = found->icon;
     item.iconPixelSize = iconPixelSize;
-    item.iconPath = resolvedIconPath(found->icon, iconTheme_, iconPixelSize);
+    item.iconPath = resolvedDockIconPath(found->icon, item.appId, item.kind, iconTheme_, iconPixelSize);
     items.push_back(std::move(item));
   }
   DockItem secondSeparator;
@@ -153,7 +205,7 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
   trash.disabled = true;
   trash.icon = "user-trash";
   trash.iconPixelSize = iconPixelSize;
-  trash.iconPath = resolvedIconPath("user-trash", iconTheme_, iconPixelSize);
+  trash.iconPath = resolvedDockIconPath(trash.icon, trash.appId, trash.kind, iconTheme_, iconPixelSize);
   items.push_back(std::move(trash));
   dockItems_.set(std::move(items));
   refreshLauncherResults();
@@ -169,7 +221,7 @@ bool ShellModel::setDockDpiScale(float scale) {
   bool changed = false;
   for (auto& item : items) {
     if (item.kind == "separator" || item.kind == "launcher") continue;
-    std::string const nextPath = resolvedIconPath(item.icon, iconTheme_, iconPixelSize);
+    std::string const nextPath = resolvedDockIconPath(item.icon, item.appId, item.kind, iconTheme_, iconPixelSize);
     if (item.iconPixelSize != iconPixelSize || item.iconPath != nextPath) {
       item.iconPixelSize = iconPixelSize;
       item.iconPath = nextPath;
@@ -235,7 +287,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     item.focused = window.focused;
     item.icon = icon;
     item.iconPixelSize = scaledIconPixelSize(iconSize_, dockDpiScale_);
-    item.iconPath = resolvedIconPath(icon, iconTheme_, item.iconPixelSize);
+    item.iconPath = resolvedDockIconPath(icon, item.appId, item.kind, iconTheme_, item.iconPixelSize);
     if (item.focused) nextTitle = item.label;
     items.insert(unpinnedInsertPosition(items), std::move(item));
   }

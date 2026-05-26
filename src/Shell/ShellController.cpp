@@ -345,7 +345,7 @@ void ShellController::handleIpcLine(std::string_view line) {
 void ShellController::checkShellConfigReload() {
   if (configPath_.empty()) return;
   auto const nextWrite = configLastWriteTime(configPath_);
-  if (!nextWrite || (configLastWrite_ && *configLastWrite_ == *nextWrite)) return;
+  bool const writeChanged = nextWrite && (!configLastWrite_ || *configLastWrite_ != *nextWrite);
 
   ShellConfigLoadResult const loaded = loadShellConfig(configPath_);
   if (!loaded.error.empty()) {
@@ -353,6 +353,10 @@ void ShellController::checkShellConfigReload() {
                  "lambda-shell: ignoring shell config reload from %s: %s\n",
                  configPath_.string().c_str(),
                  loaded.error.c_str());
+    return;
+  }
+
+  if (!writeChanged && loaded.config == shellConfig_) {
     return;
   }
 

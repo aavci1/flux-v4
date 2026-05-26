@@ -369,3 +369,53 @@ TEST_CASE("Shell model refreshes dock icon paths when icon theme changes") {
 
   std::filesystem::remove_all(root);
 }
+
+TEST_CASE("Shell model resolves dock-specific themed icon fallbacks") {
+  ScopedEnv homeEnv("HOME");
+  ScopedEnv dataHomeEnv("XDG_DATA_HOME");
+  ScopedEnv dataDirsEnv("XDG_DATA_DIRS");
+  ScopedEnv shellConfigEnv("LAMBDA_SHELL_CONFIG");
+  ScopedEnv iconThemeEnv("LAMBDA_ICON_THEME");
+
+  auto root = tempRoot("lambda-shell-model-icon-fallback-test");
+  auto dataHome = root / "data-home";
+  auto settingsSmallIcon = dataHome / "icons" / "Lambda" / "32x32" / "apps" / "preferences-system.png";
+  auto settingsLargeIcon = dataHome / "icons" / "Lambda" / "48x48" / "apps" / "systemsettings.png";
+  auto trashIcon = dataHome / "icons" / "Lambda" / "48x48" / "places" / "user-trash.png";
+  std::filesystem::create_directories(settingsSmallIcon.parent_path());
+  std::filesystem::create_directories(settingsLargeIcon.parent_path());
+  std::filesystem::create_directories(trashIcon.parent_path());
+  std::ofstream(settingsSmallIcon) << "png";
+  std::ofstream(settingsLargeIcon) << "png";
+  std::ofstream(trashIcon) << "png";
+
+  auto const dataHomeString = dataHome.string();
+  setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
+  unsetenv("XDG_DATA_DIRS");
+  unsetenv("LAMBDA_SHELL_CONFIG");
+  unsetenv("LAMBDA_ICON_THEME");
+  unsetenv("HOME");
+
+  lambda_shell::ShellModel model;
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.iconTheme = "Lambda";
+  config.dockPinned = {"lambda-settings"};
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-settings", .name = "Settings", .icon = "preferences-system", .command = "lambda-settings"},
+  };
+
+  model.setDockItems(apps, config);
+  auto settingsItem = std::find_if(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
+    return item.appId == "lambda-settings";
+  });
+  REQUIRE(settingsItem != model.dockItems().end());
+  CHECK(settingsItem->iconPath == settingsLargeIcon.string());
+
+  auto trashItem = std::find_if(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
+    return item.kind == "trash";
+  });
+  REQUIRE(trashItem != model.dockItems().end());
+  CHECK(trashItem->iconPath == trashIcon.string());
+
+  std::filesystem::remove_all(root);
+}
