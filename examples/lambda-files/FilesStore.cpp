@@ -841,6 +841,22 @@ NavigationHistory navigateTo(NavigationHistory history, std::filesystem::path pa
   return history;
 }
 
+NavigationResult navigateToDirectory(NavigationHistory history, std::filesystem::path path) {
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    return {.history = std::move(history), .error = "Folder does not exist."};
+  }
+  if (!std::filesystem::is_directory(path, ec) || ec) {
+    return {.history = std::move(history), .error = "Not a folder."};
+  }
+  std::filesystem::directory_iterator probe(path, ec);
+  if (ec) {
+    return {.history = std::move(history), .error = ec.message()};
+  }
+  (void)probe;
+  return {.history = navigateTo(std::move(history), std::move(path)), .ok = true};
+}
+
 NavigationHistory goBack(NavigationHistory history) {
   if (history.back.empty()) {
     return history;

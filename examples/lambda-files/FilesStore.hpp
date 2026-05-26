@@ -91,6 +91,16 @@ struct NavigationHistory {
 
   bool canGoBack() const { return !back.empty(); }
   bool canGoForward() const { return !forward.empty(); }
+
+  bool operator==(NavigationHistory const&) const = default;
+};
+
+struct NavigationResult {
+  NavigationHistory history;
+  bool ok = false;
+  std::string error;
+
+  bool operator==(NavigationResult const&) const = default;
 };
 
 struct FileOperationResult {
@@ -248,6 +258,7 @@ bool revealEntryInSystem(FileEntry const& entry, std::string& error);
 
 std::string normalizeDirectoryPath(std::filesystem::path path);
 NavigationHistory navigateTo(NavigationHistory history, std::filesystem::path path);
+NavigationResult navigateToDirectory(NavigationHistory history, std::filesystem::path path);
 NavigationHistory goBack(NavigationHistory history);
 NavigationHistory goForward(NavigationHistory history);
 NavigationHistory goUp(NavigationHistory history);

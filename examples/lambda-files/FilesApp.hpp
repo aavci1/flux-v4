@@ -498,8 +498,13 @@ struct FilesAppRoot {
       scrollOffset.set(Point{});
     };
 
-    auto navigateToPath = [history, applyHistory](std::filesystem::path path) {
-      applyHistory(navigateTo(history(), std::move(path)));
+    auto navigateToPath = [history, applyHistory, listError](std::filesystem::path path) {
+      NavigationResult result = navigateToDirectory(history(), std::move(path));
+      if (!result.ok) {
+        listError.set(std::move(result.error));
+        return;
+      }
+      applyHistory(std::move(result.history));
     };
 
     auto goBackNav = [history, applyHistory] {

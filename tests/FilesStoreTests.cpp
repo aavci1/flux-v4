@@ -100,6 +100,37 @@ TEST_CASE("FilesStore breadcrumbs handle home root and outside home") {
   std::filesystem::remove_all(root);
 }
 
+TEST_CASE("FilesStore validated navigation keeps previous directory on invalid paths") {
+  auto root = tempRoot("lambda-files-navigation-test");
+  auto first = root / "first";
+  auto second = root / "second";
+  std::filesystem::create_directories(first);
+  std::filesystem::create_directories(second);
+  {
+    std::ofstream(root / "not-a-folder.txt") << "file";
+  }
+
+  lambda_files::NavigationHistory history{.current = lambda_files::normalizeDirectoryPath(first)};
+  auto missing = lambda_files::navigateToDirectory(history, root / "missing");
+  CHECK_FALSE(missing.ok);
+  CHECK(missing.error == "Folder does not exist.");
+  CHECK(missing.history == history);
+
+  auto file = lambda_files::navigateToDirectory(history, root / "not-a-folder.txt");
+  CHECK_FALSE(file.ok);
+  CHECK(file.error == "Not a folder.");
+  CHECK(file.history == history);
+
+  auto valid = lambda_files::navigateToDirectory(history, second);
+  CHECK(valid.ok);
+  CHECK(valid.error.empty());
+  CHECK(valid.history.current == lambda_files::normalizeDirectoryPath(second));
+  CHECK(valid.history.back == std::vector<std::string>{lambda_files::normalizeDirectoryPath(first)});
+  CHECK(valid.history.forward.empty());
+
+  std::filesystem::remove_all(root);
+}
+
 TEST_CASE("FilesStore sorts entries by name kind size and modified time") {
   using lambda_files::FileEntry;
   using lambda_files::FileSortKey;
