@@ -22,9 +22,9 @@ bool subsurfaceTreeContains(float x,
 } // namespace
 
 TEST_CASE("subsurface hit testing uses parent offset and child size") {
-  CHECK(subsurfaceTreeContains(30.f, 40.f, 100.f, 50.f, 10.f, 20.f, 40.f, 30.f));
-  CHECK_FALSE(subsurfaceTreeContains(5.f, 40.f, 100.f, 50.f, 10.f, 20.f, 40.f, 30.f));
-  CHECK_FALSE(subsurfaceTreeContains(30.f, 10.f, 100.f, 50.f, 10.f, 20.f, 40.f, 30.f));
+  CHECK(subsurfaceTreeContains(130.f, 80.f, 100.f, 50.f, 10.f, 20.f, 40.f, 30.f));
+  CHECK_FALSE(subsurfaceTreeContains(105.f, 80.f, 100.f, 50.f, 10.f, 20.f, 40.f, 30.f));
+  CHECK_FALSE(subsurfaceTreeContains(130.f, 65.f, 100.f, 50.f, 10.f, 20.f, 40.f, 30.f));
 }
 
 TEST_CASE("nested subsurface coordinates accumulate") {
