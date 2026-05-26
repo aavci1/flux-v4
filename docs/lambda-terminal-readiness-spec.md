@@ -29,33 +29,26 @@ Implemented today:
 - Tracks libvterm row damage and refreshes only dirty rows.
 - Caches rows and fast ASCII glyph layouts.
 - Handles resize by updating libvterm size and `TIOCSWINSZ`.
-- Renders foreground colors, background colors, bold text, cursor, and a black translucent/glass background.
+- Renders foreground colors, background colors, bold/italic/underline/strikethrough text, cursor, and a configurable black translucent/glass background.
 - Updates the window title from terminal title escape sequences.
 - Shows a status line when shell startup, exit, or pty read fails.
+- Supports paste from desktop clipboard with `Meta+V` and `Ctrl+Shift+V`, preserving plain `Ctrl+V` for terminal programs.
+- Supports visible-screen pointer selection and copies selected text to the desktop clipboard with `Meta+C` or `Ctrl+Shift+C`, preserving plain `Ctrl+C` for terminal programs.
+- Supports bracketed paste policy through the terminal profile config.
+- Has a testable `TerminalCore` for input encoding, paste/copy payloads, scrollback model behavior, Unicode width, color/attributes, resize calculation, preferences/profiles, search, URL detection, and PTY smoke behavior.
 - Has trace scripts for terminal rendering and terminal resize scenarios.
 
 Important limitations:
 
-- No scrollback.
-- No selection.
-- No copy.
-- No paste.
-- No bracketed paste handling.
+- Live app scrollback, search UI, and URL opening UI are not fully integrated yet, even though the deterministic core model exists.
+- Pointer selection currently covers the visible terminal screen; selection across the core scrollback model is tested but not fully surfaced in the live app UI.
 - No primary selection behavior.
 - No OSC 52 clipboard handling.
-- No mouse reporting.
-- No URL detection or opening.
-- No search.
+- Live terminal-app mouse reporting is still incomplete, even though SGR mouse encoding exists in `TerminalCore`.
 - No tabs or splits.
-- No preferences or profiles.
-- No configurable font, font size, line height, color scheme, shell, working directory, cursor shape, or glass background.
-- Key handling covers only a small subset of terminal keys.
-- Modifier encoding is incomplete.
-- Function keys, keypad keys, application cursor mode, and application keypad mode are incomplete.
-- Unicode rendering is incomplete. The current renderer uses `VTermScreenCell::chars[0]`, which does not fully handle combining marks, wide characters, emoji sequences, or grapheme clusters.
-- Scrollback, selection, and resize behavior are not represented in a testable model.
-- The app id/name should be standardized with Shell app discovery as `lambda-terminal`.
-- The implementation is mostly in one file.
+- Cursor shape and color scheme preferences are not fully surfaced.
+- Unicode rendering still uses `VTermScreenCell::chars[0]` in the live renderer, so complex grapheme clusters remain limited even though codepoint width helpers are tested.
+- PTY/session, renderer, and UI are still mostly in `main.cpp`; deterministic core helpers are split out, but the live session/rendering split is not complete.
 
 ## Additional Terminal work identified
 
@@ -929,6 +922,36 @@ Add focused automated tests where behavior is deterministic:
 - Config defaults, parsing, validation, and invalid fallback.
 - PTY smoke test with a controlled child process.
 
+## Current user guide
+
+Launch `lambda-terminal` from the Shell dock, launcher, or `./build/lambda-terminal`. It starts the configured profile shell, falling back to `$SHELL` and then `/bin/sh`, sets `TERM=xterm-256color`, and uses a black glass background by default.
+
+Input and clipboard:
+
+- Type normally to send text to the pty.
+- Plain `Ctrl+C` and `Ctrl+V` are sent to terminal programs.
+- Use `Meta+C` or `Ctrl+Shift+C` to copy the current visible-screen selection to the desktop clipboard.
+- Use `Meta+V` or `Ctrl+Shift+V` to paste from the desktop clipboard.
+- Pasted text uses bracketed paste wrapping when the active profile has bracketed paste enabled.
+- Press `Escape` while a selection exists to clear that selection instead of sending Escape.
+
+Selection:
+
+- Drag with the left pointer button to select visible terminal text.
+- Releasing without a range clears the selection.
+- Selection across scrollback is covered in the core text model, but the live scrollback UI is not finished.
+
+Configuration:
+
+- Terminal preferences are stored in the Lambda Terminal config file and support profiles, shell, working directory, font metrics, scrollback limit, bracketed paste, and glass/solid background choice.
+- The default profile uses a configurable black glass tint. A solid background profile can be selected through config.
+
+Current limitations visible to users:
+
+- No tabs, splits, live scrollback UI, search UI, URL opening UI, OSC 52, or primary selection yet.
+- Mouse reporting is not fully wired into the live terminal app.
+- Complex grapheme rendering remains limited.
+
 ## Done checklist
 
 - [ ] Terminal implementation is split into testable components.
@@ -949,7 +972,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Black glass background is configurable, not hard-coded only.
 - [x] Desktop integration with Shell app registry works.
 - [x] Tests cover model, input, scrollback, selection, Unicode, color, resize, config, and pty smoke behavior.
-- [ ] User guide and app docs match actual behavior.
+- [x] User guide and app docs match actual behavior.
 
 ## Deferred to later milestones
 
