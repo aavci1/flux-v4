@@ -210,6 +210,30 @@ bool copyRecursive(std::filesystem::path const& source, std::filesystem::path co
   return !ec;
 }
 
+std::filesystem::path temporaryCopyPathFor(std::filesystem::path const& target) {
+  std::string const name = "." + target.filename().string() + ".copying";
+  return collisionFreePath(target.parent_path(), name);
+}
+
+bool copyRecursiveToFinalPath(std::filesystem::path const& source,
+                              std::filesystem::path const& target,
+                              std::error_code& ec) {
+  ec.clear();
+  std::filesystem::path const temporary = temporaryCopyPathFor(target);
+  if (!copyRecursive(source, temporary, ec)) {
+    std::error_code cleanupEc;
+    std::filesystem::remove_all(temporary, cleanupEc);
+    return false;
+  }
+  std::filesystem::rename(temporary, target, ec);
+  if (ec) {
+    std::error_code cleanupEc;
+    std::filesystem::remove_all(temporary, cleanupEc);
+    return false;
+  }
+  return true;
+}
+
 FileOperationResult moveReplacing(std::filesystem::path const& source, std::filesystem::path const& target) {
   std::error_code ec;
   if (!std::filesystem::exists(source, ec) || ec) {
@@ -223,7 +247,7 @@ FileOperationResult moveReplacing(std::filesystem::path const& source, std::file
   std::filesystem::rename(source, target, ec);
   if (!ec) return {.ok = true, .path = target};
   std::error_code copyEc;
-  if (!copyRecursive(source, target, copyEc)) {
+  if (!copyRecursiveToFinalPath(source, target, copyEc)) {
     return {.ok = false, .path = target, .error = copyEc.message()};
   }
   std::filesystem::remove_all(source, copyEc);
@@ -1023,7 +1047,7 @@ FileOperationResult copyPath(std::filesystem::path const& source, std::filesyste
     return {.ok = false, .path = destinationDirectory, .error = "Destination is not a folder."};
   }
   std::filesystem::path target = copyTargetPath(source, destinationDirectory);
-  if (!copyRecursive(source, target, ec)) {
+  if (!copyRecursiveToFinalPath(source, target, ec)) {
     return {.ok = false, .path = target, .error = ec.message()};
   }
   return {.ok = true, .path = target};
@@ -1039,7 +1063,7 @@ FileOperationResult movePath(std::filesystem::path const& source, std::filesyste
   std::filesystem::rename(source, target, ec);
   if (!ec) return {.ok = true, .path = target};
   std::error_code copyEc;
-  if (!copyRecursive(source, target, copyEc)) {
+  if (!copyRecursiveToFinalPath(source, target, copyEc)) {
     return {.ok = false, .path = target, .error = copyEc.message()};
   }
   std::filesystem::remove_all(source, copyEc);
@@ -1052,7 +1076,7 @@ FileOperationResult duplicatePath(std::filesystem::path const& source) {
   if (!std::filesystem::exists(source, ec) || ec) return {.ok = false, .path = source, .error = "Source does not exist."};
   std::filesystem::path target =
       collisionFreePath(source.parent_path(), source.stem().string() + " copy" + source.extension().string());
-  if (!copyRecursive(source, target, ec)) {
+  if (!copyRecursiveToFinalPath(source, target, ec)) {
     return {.ok = false, .path = target, .error = ec.message()};
   }
   return {.ok = true, .path = target};

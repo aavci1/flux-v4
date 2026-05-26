@@ -41,6 +41,15 @@ std::filesystem::path tempRoot(char const* name) {
   return path;
 }
 
+bool hasStagingCopyPath(std::filesystem::path const& root) {
+  std::error_code ec;
+  for (auto const& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
+    if (ec) return true;
+    if (entry.path().filename().string().find(".copying") != std::string::npos) return true;
+  }
+  return false;
+}
+
 } // namespace
 
 TEST_CASE("FilesStore parses XDG user directories") {
@@ -458,20 +467,24 @@ TEST_CASE("FilesStore copies moves and duplicates files and folders") {
   auto copiedDir = lambda_files::copyPath(sourceDir, destination);
   CHECK(copiedDir.ok);
   CHECK(std::filesystem::exists(destination / "source" / "nested" / "file.txt"));
+  CHECK_FALSE(hasStagingCopyPath(root));
 
   auto copiedAgain = lambda_files::copyPath(sourceDir, destination);
   CHECK(copiedAgain.ok);
   CHECK(copiedAgain.path.filename() == "source 2");
+  CHECK_FALSE(hasStagingCopyPath(root));
 
   auto duplicate = lambda_files::duplicatePath(root / "single.txt");
   CHECK(duplicate.ok);
   CHECK(duplicate.path.filename() == "single copy.txt");
   CHECK(std::filesystem::exists(duplicate.path));
+  CHECK_FALSE(hasStagingCopyPath(root));
 
   auto moved = lambda_files::movePath(root / "single.txt", destination);
   CHECK(moved.ok);
   CHECK(std::filesystem::exists(destination / "single.txt"));
   CHECK_FALSE(std::filesystem::exists(root / "single.txt"));
+  CHECK_FALSE(hasStagingCopyPath(root));
 
   std::filesystem::remove_all(root);
 }
