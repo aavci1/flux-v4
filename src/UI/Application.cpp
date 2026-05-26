@@ -244,7 +244,7 @@ struct Application::Impl {
       }
       pollfd pfd{.fd = source.fd, .events = POLLIN, .revents = 0};
       int const ready = poll(&pfd, 1, 0);
-      if (ready > 0 && (pfd.revents & POLLIN)) {
+      if (ready > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) {
         source.onReadable();
       }
     }

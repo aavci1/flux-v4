@@ -528,7 +528,7 @@ private:
     size.ws_row = static_cast<unsigned short>(rowsCount_);
     childPid_ = forkpty(&ptyFd_, nullptr, nullptr, &size);
     if (childPid_ < 0) {
-      appendStatusLine("lambda-terminal: failed to start shell");
+      quitAfterShellExit();
       return;
     }
     if (childPid_ == 0) {
@@ -559,16 +559,14 @@ private:
         continue;
       }
       if (n == 0) {
-        wakeQueued_.store(false, std::memory_order_release);
-        appendStatusLine("lambda-terminal: shell exited");
+        quitAfterShellExit();
         return;
       }
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
       }
       if (errno != EINTR) {
-        wakeQueued_.store(false, std::memory_order_release);
-        appendStatusLine("lambda-terminal: pty read failed");
+        quitAfterShellExit();
         return;
       }
     }
@@ -1019,6 +1017,13 @@ private:
     wakeThreadStop_.store(true, std::memory_order_release);
     if (wakeThread_.joinable()) {
       wakeThread_.join();
+    }
+  }
+
+  void quitAfterShellExit() {
+    wakeQueued_.store(false, std::memory_order_release);
+    if (app_) {
+      app_->quit();
     }
   }
 
