@@ -41,6 +41,18 @@ if [[ "$RESIZE_TRACE" != "0" ]]; then
   rm -f "$RESIZE_LOG_PATH"
 fi
 
+if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+  display_file="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lambda-window-manager-display"
+  if [[ -r "$display_file" ]]; then
+    export WAYLAND_DISPLAY="$(cat "$display_file")"
+  fi
+fi
+if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+  echo "WAYLAND_DISPLAY is not set and lambda-window-manager-display was not found." >&2
+  echo "Start lambda-window-manager first, or export WAYLAND_DISPLAY before running this script." >&2
+  exit 1
+fi
+
 cat >"$WORKLOAD_PATH" <<'WORKLOAD'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -98,6 +110,7 @@ echo "Writing terminal render log to: $LOG_PATH"
 if [[ "$RESIZE_TRACE" != "0" ]]; then
   echo "Writing resize trace to: $RESIZE_LOG_PATH"
 fi
+echo "Using WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
 echo "Run this while lambda-window-manager is active; resize the terminal during the test if needed."
 
 export LAMBDA_TERMINAL_TEST_MODE="$TEST_MODE"
@@ -134,6 +147,12 @@ set -e
 if [[ "$status" -eq 124 ]]; then
   echo "Terminal render test completed after ${TEST_SECONDS}s."
   exit 0
+fi
+
+if [[ "$status" -eq 0 ]]; then
+  echo "lambda-terminal exited before timeout; render log may be incomplete." >&2
+  echo "Expected timeout status 124 after ${TEST_SECONDS}s." >&2
+  exit 1
 fi
 
 exit "$status"

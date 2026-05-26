@@ -486,21 +486,23 @@ private:
     return rows;
   }
 
-  static TerminalRow visualRowCopy(TerminalRow row, int visualRow) {
-    row.row = visualRow;
-    return row;
-  }
-
   void publishViewportRows() {
-    std::vector<TerminalRow> logical = logicalRows();
     std::vector<TerminalRow> visible;
     visible.reserve(static_cast<std::size_t>(rowsCount_));
-    int const count = static_cast<int>(logical.size());
+    int const count = logicalLineCount();
     int const end = std::clamp(count - viewportOffset_, 0, count);
     int const begin = std::max(0, end - rowsCount_);
     for (int index = begin; index < end; ++index) {
-      visible.push_back(visualRowCopy(logical[static_cast<std::size_t>(index)],
-                                      static_cast<int>(visible.size())));
+      TerminalRow const* source = logicalRowAt(index);
+      if (!source) {
+        continue;
+      }
+      TerminalRow row = *source;
+      row.row = static_cast<int>(visible.size());
+      if (!rowHasPreparedLayout(row)) {
+        prepareRowForDisplay(row);
+      }
+      visible.push_back(std::move(row));
     }
     if (visible == rows_.peek()) {
       return;
@@ -511,9 +513,20 @@ private:
     }
   }
 
+  TerminalRow const* logicalRowAt(int index) const {
+    int const historyCount = static_cast<int>(historyRows_.size());
+    if (index >= 0 && index < historyCount) {
+      return &historyRows_[static_cast<std::size_t>(index)];
+    }
+    int const screenIndex = index - historyCount;
+    if (screenIndex >= 0 && screenIndex < static_cast<int>(screenRows_.size())) {
+      return &screenRows_[static_cast<std::size_t>(screenIndex)];
+    }
+    return nullptr;
+  }
+
   void appendHistoryRow(TerminalRow row) {
     bool const pinnedToBottom = viewportOffset_ == 0;
-    prepareRowForDisplay(row);
     row.row = static_cast<int>(historyRows_.size());
     historyRows_.push_back(std::move(row));
     int const limit = std::max(0, config_.scrollbackLimit);
@@ -530,7 +543,22 @@ private:
     if (pinnedToBottom) {
       viewportOffset_ = 0;
     }
+    if (pinnedToBottom && static_cast<int>(screenRows_.size()) >= rowsCount_) {
+      return;
+    }
     publishViewportRows();
+  }
+
+  static bool rowHasPreparedLayout(TerminalRow const& row) {
+    if (row.runs.empty()) {
+      return true;
+    }
+    if (row.layout) {
+      return true;
+    }
+    return std::all_of(row.runs.begin(), row.runs.end(), [](TerminalRun const& run) {
+      return run.layout != nullptr;
+    });
   }
 
   TerminalBufferCoordinate coordinateForPoint(Point point) const {
