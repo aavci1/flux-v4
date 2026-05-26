@@ -937,7 +937,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Scrollback works with configurable limit.
 - [x] Normal and alternate screen behavior is correct.
 - [x] Selection works across visible screen and scrollback.
-- [ ] Copy and paste work through desktop clipboard.
+- [x] Copy and paste work through desktop clipboard.
 - [x] Bracketed paste works.
 - [x] Key encoding covers common terminal apps.
 - [x] Mouse reporting covers common terminal apps.

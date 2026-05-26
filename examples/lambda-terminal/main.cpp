@@ -227,9 +227,31 @@ public:
     }
   }
 
+  void copySelectionToClipboard() {
+    if (!app_ || !selection_) {
+      return;
+    }
+    std::string text = selectedText();
+    if (!text.empty()) {
+      app_->clipboard().writeText(std::move(text));
+    }
+  }
+
   bool handleKeyDown(KeyCode key, Modifiers modifiers) {
+    if (isTerminalCopyShortcut(key, modifiers)) {
+      copySelectionToClipboard();
+      return true;
+    }
     if (isTerminalPasteShortcut(key, modifiers)) {
       pasteFromClipboard();
+      return true;
+    }
+    if (key == keys::Escape && selection_) {
+      selection_.reset();
+      selecting_ = false;
+      if (window_) {
+        window_->requestRedraw();
+      }
       return true;
     }
     sendKey(key, modifiers);
@@ -259,6 +281,7 @@ public:
           canvas.drawRect(runRect, CornerRadius{}, FillStyle::solid(run.background), StrokeStyle::none());
         }
       }
+      drawSelectionForRow(canvas, frame, row.row);
       if (row.layout) {
         canvas.drawTextLayout(*row.layout, Point{frame.x + kContentInset, y});
       } else {
@@ -288,6 +311,44 @@ public:
     canvas.restore();
   }
 
+  void beginSelection(Point point, MouseButton button) {
+    if (button != MouseButton::Left) {
+      return;
+    }
+    TerminalBufferCoordinate const coord = coordinateForPoint(point);
+    selection_ = TerminalSelection{.anchor = coord, .focus = coord};
+    selecting_ = true;
+    if (window_) {
+      window_->requestRedraw();
+    }
+  }
+
+  void updateSelection(Point point) {
+    if (!selecting_ || !selection_) {
+      return;
+    }
+    selection_->focus = coordinateForPoint(point);
+    if (window_) {
+      window_->requestRedraw();
+    }
+  }
+
+  void endSelection(Point point, MouseButton button) {
+    if (button != MouseButton::Left || !selecting_) {
+      return;
+    }
+    selecting_ = false;
+    if (selection_) {
+      selection_->focus = coordinateForPoint(point);
+      if (selection_->anchor == selection_->focus) {
+        selection_.reset();
+      }
+    }
+    if (window_) {
+      window_->requestRedraw();
+    }
+  }
+
   void drawRunDecorations(Canvas& canvas, TerminalRun const& run, Rect runRect) const {
     if (!run.underline && !run.strikethrough) {
       return;
@@ -308,6 +369,36 @@ public:
     }
   }
 
+  void drawSelectionForRow(Canvas& canvas, Rect frame, int row) const {
+    if (!selection_) {
+      return;
+    }
+    TerminalSelection selection = *selection_;
+    TerminalBufferCoordinate start = selection.anchor;
+    TerminalBufferCoordinate end = selection.focus;
+    if (std::pair{end.line, end.column} < std::pair{start.line, start.column}) {
+      std::swap(start, end);
+    }
+    if (row < start.line || row > end.line) {
+      return;
+    }
+    int from = row == start.line ? start.column : 0;
+    int to = row == end.line ? end.column : cols_;
+    from = std::clamp(from, 0, cols_);
+    to = std::clamp(to, 0, cols_);
+    if (to <= from) {
+      return;
+    }
+    Rect const rect{
+        frame.x + kContentInset + static_cast<float>(from) * kCellWidth,
+        frame.y + kContentInset + static_cast<float>(row) * kLineHeight,
+        static_cast<float>(to - from) * kCellWidth,
+        kLineHeight,
+    };
+    canvas.drawRect(rect, CornerRadius{}, FillStyle::solid(Color{0.24f, 0.48f, 1.f, 0.34f}),
+                    StrokeStyle::none());
+  }
+
   void drawCursor(Canvas& canvas, Rect frame) {
     VTermPos const cursor = cursor_.evaluate();
     if (cursor.row >= 0 && cursor.row < rowsCount_ && cursor.col >= 0 && cursor.col < cols_) {
@@ -322,6 +413,54 @@ public:
   }
 
 private:
+  TerminalBufferCoordinate coordinateForPoint(Point point) const {
+    TerminalBufferCoordinate const cell = terminalMouseCell(point.x,
+                                                           point.y,
+                                                           TerminalGridMetrics{
+                                                               .cellWidth = kCellWidth,
+                                                               .lineHeight = kLineHeight,
+                                                               .contentInset = kContentInset,
+                                                               .minColumns = 20,
+                                                               .minRows = 6,
+                                                           });
+    return TerminalBufferCoordinate{
+        .line = std::clamp(cell.line - 1, 0, std::max(0, rowsCount_ - 1)),
+        .column = std::clamp(cell.column - 1, 0, cols_),
+    };
+  }
+
+  static std::string textForRow(TerminalRow const& row) {
+    std::string text;
+    for (TerminalRun const& run : row.runs) {
+      int const start = std::max(0, run.startCell);
+      if (static_cast<int>(text.size()) < start) {
+        text.resize(static_cast<std::size_t>(start), ' ');
+      }
+      text.append(run.text);
+    }
+    while (!text.empty() && text.back() == ' ') {
+      text.pop_back();
+    }
+    return text;
+  }
+
+  std::string selectedText() const {
+    if (!selection_) {
+      return {};
+    }
+    TerminalTextBuffer buffer{rowsCount_, 0};
+    std::vector<TerminalRow> rows = rows_.peek();
+    std::sort(rows.begin(), rows.end(), [](TerminalRow const& a, TerminalRow const& b) {
+      return a.row < b.row;
+    });
+    for (TerminalRow const& row : rows) {
+      if (row.row >= 0 && row.row < rowsCount_) {
+        buffer.replaceVisibleLine(row.row, textForRow(row));
+      }
+    }
+    return terminalCopyPayload(buffer, *selection_);
+  }
+
   static VTermScreenCallbacks const& screenCallbacks() {
     static VTermScreenCallbacks callbacks{
         .damage = &TerminalSession::onDamage,
@@ -937,6 +1076,8 @@ private:
   std::atomic_bool wakeQueued_{false};
   std::atomic_bool wakeThreadStop_{false};
   std::thread wakeThread_;
+  std::optional<TerminalSelection> selection_;
+  bool selecting_ = false;
   mutable std::array<std::array<CachedGlyph, 128>, 2> asciiGlyphs_{};
   Reactive::Signal<std::vector<TerminalRow>> rows_;
   Reactive::Signal<VTermPos> cursor_;
@@ -950,7 +1091,15 @@ struct TerminalApp {
               session->drawTerminal(canvas, frame);
             }}
         .flex(1.f, 1.f, 0.f)
-        .onPointerDown([](Point) {})
+        .onPointerDown([session = session](Point point, MouseButton button) {
+          session->beginSelection(point, button);
+        })
+        .onPointerMove([session = session](Point point) {
+          session->updateSelection(point);
+        })
+        .onPointerUp([session = session](Point point, MouseButton button) {
+          session->endSelection(point, button);
+        })
         .onTextInput([session = session](std::string const& text) { session->sendText(text); })
         .onKeyDown([session = session](KeyCode key, Modifiers modifiers) {
           session->handleKeyDown(key, modifiers);

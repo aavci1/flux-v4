@@ -97,8 +97,14 @@ TEST_CASE("terminal copy and paste payload helpers honor selection and bracketed
   CHECK(terminalPastePayload("", plain).empty());
 }
 
-TEST_CASE("terminal paste shortcut keeps Ctrl+V available for programs") {
+TEST_CASE("terminal clipboard shortcuts keep Ctrl+C and Ctrl+V available for programs") {
   using namespace flux::keys;
+  CHECK(isTerminalCopyShortcut(C, flux::Modifiers::Meta));
+  CHECK(isTerminalCopyShortcut(C, flux::Modifiers::Ctrl | flux::Modifiers::Shift));
+  CHECK_FALSE(isTerminalCopyShortcut(C, flux::Modifiers::Ctrl));
+  CHECK_FALSE(isTerminalCopyShortcut(C, flux::Modifiers::Ctrl | flux::Modifiers::Alt));
+  CHECK_FALSE(isTerminalCopyShortcut(V, flux::Modifiers::Ctrl | flux::Modifiers::Shift));
+
   CHECK(isTerminalPasteShortcut(V, flux::Modifiers::Meta));
   CHECK(isTerminalPasteShortcut(V, flux::Modifiers::Ctrl | flux::Modifiers::Shift));
   CHECK_FALSE(isTerminalPasteShortcut(V, flux::Modifiers::Ctrl));

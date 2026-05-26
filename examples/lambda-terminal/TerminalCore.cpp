@@ -497,6 +497,15 @@ bool isTerminalPasteShortcut(KeyCode key, Modifiers modifiers) {
   return metaPaste || linuxPaste;
 }
 
+bool isTerminalCopyShortcut(KeyCode key, Modifiers modifiers) {
+  if (key != flux::keys::C || has(modifiers, Modifiers::Alt)) {
+    return false;
+  }
+  bool const metaCopy = has(modifiers, Modifiers::Meta);
+  bool const linuxCopy = has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
+  return metaCopy || linuxCopy;
+}
+
 std::string encodeSgrMouseEvent(TerminalMouseEvent event) {
   int button = 0;
   switch (event.button) {

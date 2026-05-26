@@ -229,6 +229,7 @@ private:
                                               TerminalSelection selection);
 [[nodiscard]] std::string terminalPastePayload(std::string_view clipboardText,
                                                TerminalConfig const& config);
+[[nodiscard]] bool isTerminalCopyShortcut(flux::KeyCode key, flux::Modifiers modifiers);
 [[nodiscard]] bool isTerminalPasteShortcut(flux::KeyCode key, flux::Modifiers modifiers);
 [[nodiscard]] std::string encodeSgrMouseEvent(TerminalMouseEvent event);
 [[nodiscard]] TerminalBufferCoordinate terminalMouseCell(float x,
