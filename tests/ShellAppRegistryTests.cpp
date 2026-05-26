@@ -303,10 +303,13 @@ TEST_CASE("Shell app registry resolves configured icon themes through XDG roots"
   ScopedEnv homeEnv("HOME");
   ScopedEnv dataHomeEnv("XDG_DATA_HOME");
   ScopedEnv dataDirsEnv("XDG_DATA_DIRS");
+  ScopedEnv shellConfigEnv("LAMBDA_SHELL_CONFIG");
+  ScopedEnv iconThemeEnv("LAMBDA_ICON_THEME");
 
   auto root = tempRoot("lambda-shell-icon-theme-roots-test");
   auto dataHome = root / "data-home";
   auto dataDir = root / "data-dir";
+  auto shellConfig = root / "lambda-shell.toml";
   auto themedIcon = dataHome / "icons" / "Lambda" / "48x48" / "apps" / "lambda-terminal.png";
   auto inheritedIcon = dataDir / "icons" / "Lambda-Base" / "48x48" / "apps" / "lambda-files.png";
   auto fallbackIcon = dataDir / "icons" / "hicolor" / "48x48" / "apps" / "lambda-settings.png";
@@ -322,12 +325,64 @@ TEST_CASE("Shell app registry resolves configured icon themes through XDG roots"
   auto const dataDirString = dataDir.string();
   setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
   setenv("XDG_DATA_DIRS", dataDirString.c_str(), 1);
+  auto const shellConfigString = shellConfig.string();
+  setenv("LAMBDA_SHELL_CONFIG", shellConfigString.c_str(), 1);
+  unsetenv("LAMBDA_ICON_THEME");
   unsetenv("HOME");
+  std::ofstream(shellConfig) << "[appearance]\nicon_theme = \"Lambda\"\n";
 
+  CHECK(lambda_shell::configuredIconThemeName() == "Lambda");
   CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "Lambda", 48) == themedIcon);
   CHECK(lambda_shell::resolveIconThemePath("lambda-files", "Lambda", 48) == inheritedIcon);
   CHECK(lambda_shell::resolveIconThemePath("lambda-settings", "Lambda", 48) == fallbackIcon);
+  CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "", 48) == themedIcon);
+  CHECK(lambda_shell::resolveIconThemePath("lambda-files", "", 48) == inheritedIcon);
+  CHECK(lambda_shell::resolveIconThemePath("lambda-settings", "", 48) == fallbackIcon);
   CHECK(lambda_shell::resolveIconThemePath("missing", "Lambda", 48).empty());
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Shell app registry honors freedesktop scaled icon directories") {
+  ScopedEnv homeEnv("HOME");
+  ScopedEnv dataHomeEnv("XDG_DATA_HOME");
+  ScopedEnv dataDirsEnv("XDG_DATA_DIRS");
+  ScopedEnv shellConfigEnv("LAMBDA_SHELL_CONFIG");
+  ScopedEnv iconThemeEnv("LAMBDA_ICON_THEME");
+
+  auto root = tempRoot("lambda-shell-scaled-icon-theme-test");
+  auto dataHome = root / "data-home";
+  auto themeRoot = dataHome / "icons" / "Lambda";
+  auto smallIcon = themeRoot / "apps" / "22" / "lambda-terminal.png";
+  auto scaledIcon = themeRoot / "apps@2x" / "32" / "lambda-terminal.png";
+  std::filesystem::create_directories(smallIcon.parent_path());
+  std::filesystem::create_directories(scaledIcon.parent_path());
+  std::ofstream(themeRoot / "index.theme") << R"(
+[Icon Theme]
+Name=Lambda
+Directories=apps/22
+ScaledDirectories=apps@2x/32
+
+[apps/22]
+Size=22
+Type=Fixed
+
+[apps@2x/32]
+Size=32
+Scale=2
+Type=Fixed
+)";
+  std::ofstream(smallIcon) << "png";
+  std::ofstream(scaledIcon) << "png";
+
+  auto const dataHomeString = dataHome.string();
+  setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
+  unsetenv("XDG_DATA_DIRS");
+  unsetenv("LAMBDA_SHELL_CONFIG");
+  unsetenv("LAMBDA_ICON_THEME");
+  unsetenv("HOME");
+
+  CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "Lambda", 64) == scaledIcon);
 
   std::filesystem::remove_all(root);
 }

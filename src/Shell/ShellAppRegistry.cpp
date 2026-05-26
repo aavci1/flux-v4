@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -107,6 +108,28 @@ std::vector<std::string> splitCommaList(std::string_view value) {
   return list;
 }
 
+std::string parseQuotedTomlString(std::string_view value) {
+  value = trim(value);
+  if (value.size() < 2u || value.front() != '"' || value.back() != '"') return {};
+  std::string out;
+  out.reserve(value.size() - 2u);
+  bool escaped = false;
+  for (std::size_t i = 1u; i + 1u < value.size(); ++i) {
+    char const ch = value[i];
+    if (escaped) {
+      out.push_back(ch);
+      escaped = false;
+      continue;
+    }
+    if (ch == '\\') {
+      escaped = true;
+      continue;
+    }
+    out.push_back(ch);
+  }
+  return out;
+}
+
 bool parseBool(std::string_view value) {
   std::string text = lowerAscii(trim(value));
   return text == "true" || text == "1" || text == "yes";
@@ -151,6 +174,43 @@ std::vector<std::string> iconThemeInherits(std::filesystem::path const& themeRoo
     break;
   }
   return inherits;
+}
+
+std::filesystem::path configuredShellPath() {
+  if (char const* explicitPath = std::getenv("LAMBDA_SHELL_CONFIG"); explicitPath && *explicitPath) {
+    return explicitPath;
+  }
+  if (char const* configHome = std::getenv("XDG_CONFIG_HOME"); configHome && *configHome) {
+    return std::filesystem::path{configHome} / "lambda-shell" / "config.toml";
+  }
+  if (char const* home = std::getenv("HOME"); home && *home) {
+    return std::filesystem::path{home} / ".config" / "lambda-shell" / "config.toml";
+  }
+  return {};
+}
+
+std::string iconThemeFromShellConfig(std::filesystem::path const& path) {
+  std::ifstream input(path);
+  if (!input) return {};
+  bool inAppearance = false;
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
+    std::string stripped = trim(view);
+    if (stripped.empty()) continue;
+    if (stripped.front() == '[' && stripped.back() == ']') {
+      inAppearance = stripped == "[appearance]";
+      continue;
+    }
+    if (!inAppearance) continue;
+    auto equals = stripped.find('=');
+    if (equals == std::string::npos) continue;
+    std::string key = trim(std::string_view(stripped).substr(0, equals));
+    if (key != "icon_theme") continue;
+    return parseQuotedTomlString(std::string_view(stripped).substr(equals + 1u));
+  }
+  return {};
 }
 
 bool executableFile(std::filesystem::path const& path) {
@@ -202,6 +262,110 @@ bool registryContainsApp(std::vector<AppRegistryEntry> const& apps, std::string_
   return std::any_of(apps.begin(), apps.end(), [appId](AppRegistryEntry const& app) {
     return shellAppIdMatches(appId, app.appId) || shellAppIdMatches(app.appId, appId);
   });
+}
+
+struct IconThemeDir {
+  std::filesystem::path relativePath;
+  int size = 48;
+  int minSize = 48;
+  int maxSize = 48;
+  int threshold = 2;
+  int scale = 1;
+  std::string type = "Threshold";
+};
+
+std::optional<int> parseInteger(std::string_view value) {
+  std::string text = trim(value);
+  char* end = nullptr;
+  long parsed = std::strtol(text.c_str(), &end, 10);
+  if (end == text.c_str() || *end != '\0') return std::nullopt;
+  return static_cast<int>(parsed);
+}
+
+std::vector<IconThemeDir> iconThemeDirs(std::filesystem::path const& themeRoot) {
+  std::ifstream input(themeRoot / "index.theme");
+  if (!input) return {};
+
+  std::vector<std::string> directoryNames;
+  std::map<std::string, IconThemeDir> dirs;
+  std::string section;
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
+    std::string stripped = trim(view);
+    if (stripped.empty()) continue;
+    if (stripped.front() == '[' && stripped.back() == ']') {
+      section = stripped.substr(1u, stripped.size() - 2u);
+      if (section != "Icon Theme" && !section.empty()) {
+        dirs.try_emplace(section, IconThemeDir{.relativePath = section});
+      }
+      continue;
+    }
+    auto equals = stripped.find('=');
+    if (equals == std::string::npos) continue;
+    std::string key = trim(std::string_view(stripped).substr(0, equals));
+    std::string value = trim(std::string_view(stripped).substr(equals + 1u));
+    if (section == "Icon Theme") {
+      if (key == "Directories" || key == "ScaledDirectories") {
+        auto names = splitCommaList(value);
+        directoryNames.insert(directoryNames.end(), names.begin(), names.end());
+      }
+      continue;
+    }
+    auto found = dirs.find(section);
+    if (found == dirs.end()) continue;
+    IconThemeDir& dir = found->second;
+    if (key == "Size") {
+      if (auto parsed = parseInteger(value)) dir.size = *parsed;
+    } else if (key == "MinSize") {
+      if (auto parsed = parseInteger(value)) dir.minSize = *parsed;
+    } else if (key == "MaxSize") {
+      if (auto parsed = parseInteger(value)) dir.maxSize = *parsed;
+    } else if (key == "Threshold") {
+      if (auto parsed = parseInteger(value)) dir.threshold = *parsed;
+    } else if (key == "Scale") {
+      if (auto parsed = parseInteger(value)) dir.scale = std::max(1, *parsed);
+    } else if (key == "Type") {
+      dir.type = value;
+    }
+  }
+
+  std::vector<IconThemeDir> ordered;
+  std::set<std::string> seen;
+  for (auto const& name : directoryNames) {
+    auto found = dirs.find(name);
+    if (found == dirs.end() || !seen.insert(name).second) continue;
+    IconThemeDir dir = found->second;
+    if (dir.minSize == 48 && dir.maxSize == 48) {
+      dir.minSize = dir.size;
+      dir.maxSize = dir.size;
+    }
+    ordered.push_back(std::move(dir));
+  }
+  for (auto& [name, dir] : dirs) {
+    if (!seen.insert(name).second) continue;
+    if (dir.minSize == 48 && dir.maxSize == 48) {
+      dir.minSize = dir.size;
+      dir.maxSize = dir.size;
+    }
+    ordered.push_back(std::move(dir));
+  }
+  return ordered;
+}
+
+int iconDirDistance(IconThemeDir const& dir, int preferredSize) {
+  int const scale = std::max(1, dir.scale);
+  int const size = std::max(1, dir.size * scale);
+  int const minSize = std::max(1, dir.minSize * scale);
+  int const maxSize = std::max(minSize, dir.maxSize * scale);
+  if (dir.type == "Scalable") {
+    if (preferredSize >= minSize && preferredSize <= maxSize) return 0;
+    return preferredSize < minSize ? minSize - preferredSize : preferredSize - maxSize;
+  }
+  int const distance = std::abs(size - preferredSize);
+  if (dir.type == "Threshold" && distance <= std::max(0, dir.threshold * scale)) return 0;
+  return distance;
 }
 
 } // namespace
@@ -404,10 +568,9 @@ std::vector<std::filesystem::path> defaultIconThemeRoots(std::string const& them
     }
   };
 
-  addTheme(addTheme, themeName, 0);
+  std::string const resolvedTheme = themeName.empty() ? configuredIconThemeName() : themeName;
+  addTheme(addTheme, resolvedTheme, 0);
   addTheme(addTheme, "hicolor", 0);
-  addTheme(addTheme, "AdwaitaLegacy", 0);
-  addTheme(addTheme, "Adwaita", 0);
 
   if (char const* xdgDataHome = std::getenv("XDG_DATA_HOME"); xdgDataHome && *xdgDataHome) {
     roots.emplace_back(std::filesystem::path{xdgDataHome} / "pixmaps");
@@ -536,6 +699,22 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
     return iconPath;
   }
 
+  struct Match {
+    std::filesystem::path path;
+    int distance = 0;
+  };
+  std::optional<Match> best;
+  for (auto const& dir : iconThemeDirs(themeRoot)) {
+    std::filesystem::path const path = iconCandidate(themeRoot / dir.relativePath, iconName);
+    if (path.empty()) continue;
+    int const distance = iconDirDistance(dir, preferredSize);
+    if (!best || distance < best->distance) {
+      best = Match{.path = path, .distance = distance};
+      if (distance == 0) break;
+    }
+  }
+  if (best) return best->path;
+
   std::vector<std::filesystem::path> candidates;
   std::string const size = std::to_string(preferredSize);
   std::string const sizePair = size + "x" + size;
@@ -561,6 +740,13 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
   return {};
 }
 
+std::string configuredIconThemeName() {
+  if (char const* theme = std::getenv("LAMBDA_ICON_THEME"); theme && *theme) {
+    return theme;
+  }
+  return iconThemeFromShellConfig(configuredShellPath());
+}
+
 std::filesystem::path resolveIconThemePath(std::string const& iconName,
                                            std::string const& themeName,
                                            int preferredSize) {
@@ -568,7 +754,8 @@ std::filesystem::path resolveIconThemePath(std::string const& iconName,
   if (std::filesystem::path iconPath(iconName); iconPath.is_absolute() && std::filesystem::exists(iconPath)) {
     return iconPath;
   }
-  for (auto const& root : defaultIconThemeRoots(themeName)) {
+  std::string const resolvedTheme = themeName.empty() ? configuredIconThemeName() : themeName;
+  for (auto const& root : defaultIconThemeRoots(resolvedTheme)) {
     if (auto path = lookupIconThemePath(root, iconName, preferredSize); !path.empty()) return path;
   }
   return {};

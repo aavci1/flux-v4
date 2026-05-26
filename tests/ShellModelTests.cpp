@@ -6,6 +6,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -21,6 +22,27 @@ std::filesystem::path tempRoot(char const* name) {
   std::filesystem::create_directories(path);
   return path;
 }
+
+struct ScopedEnv {
+  explicit ScopedEnv(char const* name) : name(name) {
+    if (char const* value = std::getenv(name)) {
+      hadOriginal = true;
+      original = value;
+    }
+  }
+
+  ~ScopedEnv() {
+    if (!hadOriginal) {
+      unsetenv(name);
+    } else {
+      setenv(name, original.c_str(), 1);
+    }
+  }
+
+  char const* name;
+  bool hadOriginal = false;
+  std::string original;
+};
 
 } // namespace
 
@@ -297,4 +319,53 @@ TEST_CASE("Shell model updates dock icon physical size from DPI scale") {
     }
   }
   CHECK_FALSE(model.setDockDpiScale(1.5f));
+}
+
+TEST_CASE("Shell model refreshes dock icon paths when icon theme changes") {
+  ScopedEnv homeEnv("HOME");
+  ScopedEnv dataHomeEnv("XDG_DATA_HOME");
+  ScopedEnv dataDirsEnv("XDG_DATA_DIRS");
+  ScopedEnv shellConfigEnv("LAMBDA_SHELL_CONFIG");
+  ScopedEnv iconThemeEnv("LAMBDA_ICON_THEME");
+
+  auto root = tempRoot("lambda-shell-model-theme-reload-test");
+  auto dataHome = root / "data-home";
+  auto alphaIcon = dataHome / "icons" / "Alpha" / "48x48" / "apps" / "lambda-terminal.png";
+  auto betaIcon = dataHome / "icons" / "Beta" / "48x48" / "apps" / "lambda-terminal.png";
+  std::filesystem::create_directories(alphaIcon.parent_path());
+  std::filesystem::create_directories(betaIcon.parent_path());
+  std::ofstream(alphaIcon) << "png";
+  std::ofstream(betaIcon) << "png";
+
+  auto const dataHomeString = dataHome.string();
+  setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
+  unsetenv("XDG_DATA_DIRS");
+  unsetenv("LAMBDA_SHELL_CONFIG");
+  unsetenv("LAMBDA_ICON_THEME");
+  unsetenv("HOME");
+
+  lambda_shell::ShellModel model;
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.dockPinned = {"lambda-terminal"};
+  config.iconTheme = "Alpha";
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-terminal", .name = "Terminal", .icon = "lambda-terminal", .command = "lambda-terminal"},
+  };
+
+  model.setDockItems(apps, config);
+  auto terminalItem = std::find_if(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
+    return item.appId == "lambda-terminal";
+  });
+  REQUIRE(terminalItem != model.dockItems().end());
+  CHECK(terminalItem->iconPath == alphaIcon.string());
+
+  config.iconTheme = "Beta";
+  model.setDockItems(apps, config);
+  terminalItem = std::find_if(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
+    return item.appId == "lambda-terminal";
+  });
+  REQUIRE(terminalItem != model.dockItems().end());
+  CHECK(terminalItem->iconPath == betaIcon.string());
+
+  std::filesystem::remove_all(root);
 }
