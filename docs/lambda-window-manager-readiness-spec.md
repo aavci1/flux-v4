@@ -826,7 +826,7 @@ Current deterministic validation: unit tests cover single-output selector aliase
 - [x] Compositor-drawn screenshot UI is cancelable and does not disturb focus.
 - [ ] In-tree protocol demos pass.
 - [ ] Real-app smoke matrix passes or has documented intentional exclusions.
-- [ ] User guide and testing docs match actual behavior.
+- [x] User guide and testing docs match actual behavior.
 
 ## Deferred to later milestones
 
