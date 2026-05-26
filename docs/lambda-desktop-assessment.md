@@ -56,10 +56,10 @@ Use each detailed spec's `Done checklist` as the readiness gate for that compone
 Current spec coverage:
 
 - Window Manager: detailed spec exists.
-- Shell: detailed spec exists.
-- Settings: detailed spec exists.
-- Files: detailed spec exists.
-- Terminal: detailed spec exists.
+- Shell: detailed spec exists; live notification UI, clipboard-history UI, production launcher provider integration, and manual validation remain open.
+- Settings: detailed spec exists; Settings writes owner config files, while live application depends on the owning Window Manager/Shell hot-reload paths.
+- Files: detailed spec exists; core model/operation coverage is ahead of the live UI, with rename, undo, restore, progress/cancel, conflict prompts, search, sort controls, open-with chooser, native watcher, and drag/drop still open.
+- Terminal: detailed spec exists; live scrollback exists, but search UI, terminal-app mouse reporting, full Unicode grapheme handling, primary selection, URL opening, and fuller live component split remain open.
 
 ## Validation Model
 

@@ -28,7 +28,8 @@ Implemented today:
 - It supports a persisted hidden-file toggle and persisted view mode.
 - It refreshes the current folder periodically when external changes are detected.
 - It supports context menus for entries, selected sets, empty directory background, sidebar places, and breadcrumbs.
-- It supports create folder/file, duplicate, copy, cut, paste, move, trash-first delete, restore helpers, and safe undo helpers in the operation/model layer.
+- It supports create folder/file, duplicate, copy, cut, paste, move, and trash-first delete in the live UI.
+- It has rename validation, restore helpers, safe undo helpers, operation progress/cancel state, conflict decisions, and current-folder search/filtering in the operation/model layer, but those are not fully wired into the live UI.
 - It writes and consumes `text/uri-list` clipboard text for file copy/cut/paste interop with compatible clients.
 - It resolves file-open commands through MIME/default-app data and the shared app registry.
 - It has keyboard shortcuts for back, forward, up, select-all, clear selection, directional selection, range extension, and activate selected.
@@ -36,7 +37,7 @@ Implemented today:
 Important limitations:
 
 - Drag/drop is explicitly unsupported in the Files UI until Flux exposes app-level file drag source/target APIs.
-- Rename, trash restore, undo, operation progress/cancel, open-with, and search/sort are represented in the model and tests, but not all of those controls have full polished live UI yet.
+- Direct text path entry, rename UI, trash restore UI, undo UI, operation progress/cancel UI, conflict prompts, open-with chooser UI, search UI, and sort controls are not wired into the live app yet.
 - Current-folder refresh is polling-based rather than a native filesystem watcher.
 - No mounted volumes/removable devices.
 - No thumbnail cache.
@@ -63,7 +64,9 @@ These areas should be included in the Files milestone:
 - Add basic Files preferences through Settings later, but keep defaults usable now.
 - Add deterministic tests for path handling, operations, trash, selection, and model behavior.
 
-Status update 2026-05-26: `FilesStore` now has deterministic XDG user-directory parsing, home fallback coverage, path normalization and navigation-history coverage, breadcrumb generation for home/root/outside-home paths, validated directory navigation that keeps the previous directory on missing/non-folder paths, explicit stable sorting by name/kind/size/modified time, current-folder search/filtering, directory listing tests that cover hidden-file filtering plus modified-time capture, directory refresh diff helpers, a non-UI `FilesModel` for directory/visible-entry/error/refresh state, refresh selection preservation for paths that still exist, selection/range-selection helpers, collision-free folder/file creation, rename validation, copy/move/duplicate operations with symlink-preserving recursive copy behavior and staged final-path replacement, internal copy/cut clipboard operation state, URI-list clipboard parsing/serialization, trash metadata generation, trash collision handling, restore-from-trash collision handling, conflict decisions including cancel, deterministic operation progress/failure/cancel state, safe undo helpers for create/rename/move/trash/copy, MIME/default-app fixture parsing, open-with choice resolution and open-command planning, mimeapps-list loading/merging, icon-theme fallback lookup through the shared app registry helpers, preference parse/serialize helpers, atomic preference load/save with generated defaults, and persisted hidden-file preference wiring in the app. The default file-open path now uses the shared app registry plus MIME/default-app data instead of directly shelling out to `xdg-open`. Live UI wiring for undo/open-with/icons, real watcher integration, progress/cancel UX, and external clipboard/DnD interop remain open.
+Status update 2026-05-26: `FilesStore` now has deterministic XDG user-directory parsing, home fallback coverage, path normalization and navigation-history coverage, breadcrumb generation for home/root/outside-home paths, validated directory navigation that keeps the previous directory on missing/non-folder paths, explicit stable sorting by name/kind/size/modified time, current-folder search/filtering, directory listing tests that cover hidden-file filtering plus modified-time capture, directory refresh diff helpers, a non-UI `FilesModel` for directory/visible-entry/error/refresh state, refresh selection preservation for paths that still exist, selection/range-selection helpers, collision-free folder/file creation, rename validation, copy/move/duplicate operations with symlink-preserving recursive copy behavior and staged final-path replacement, internal copy/cut clipboard operation state, URI-list clipboard parsing/serialization, trash metadata generation, trash collision handling, restore-from-trash collision handling, conflict decisions including cancel, deterministic operation progress/failure/cancel state, safe undo helpers for create/rename/move/trash/copy, MIME/default-app fixture parsing, open-with choice resolution and open-command planning, mimeapps-list loading/merging, icon-theme fallback lookup through the shared app registry helpers, preference parse/serialize helpers, atomic preference load/save with generated defaults, and persisted hidden-file/view-mode preference wiring in the app. The default file-open path now uses the shared app registry plus MIME/default-app data instead of directly shelling out to `xdg-open`.
+
+Code audit 2026-05-26: the live `FilesApp` exposes navigation, grid/list view, hidden-file toggle, selection, create folder/file, copy/cut/paste, duplicate, trash, reveal, default open, and periodic refresh. The model has more capability than the live UI. Direct text path entry, rename UI, restore-from-trash UI, undo UI, operation progress/cancel UX, conflict prompts, search UI, sort controls, open-with chooser UI, native watcher integration, and drag/drop remain open.
 
 ## Goals
 
@@ -781,7 +784,7 @@ Expected:
 
 - Files opens with integrated titlebar and glass background.
 - Sidebar places appear for existing standard folders.
-- Navigation works through sidebar, breadcrumbs, back, forward, up, and path entry.
+- Navigation works through sidebar, breadcrumbs, back, forward, and up.
 - Closing and reopening preserves relevant preferences.
 
 ### Browsing checks
@@ -831,31 +834,27 @@ Expected:
 
 Use a temporary directory with test files.
 
-Validate:
+Validate model helpers and any live controls that exist:
 
 - create folder
 - create file
-- rename file
-- rename folder
 - duplicate file
 - copy file
 - copy folder
 - cut/paste file
 - move folder
-- name collision keep both
-- name collision replace
-- operation cancel
 - permission failure
-- undo create
-- undo rename
-- undo move
-- undo trash
+- rename file/folder in model tests
+- name collision keep both/replace in model tests
+- operation cancel in model tests
+- undo create/rename/move/trash in model tests
 
 Expected:
 
 - No operation corrupts unrelated files.
 - Partial failures are reported.
-- Undo behaves only where safe.
+- Live UI exposes errors for supported commands.
+- Rename, conflict prompts, cancel, and undo are not expected live until those controls are wired.
 
 ### Trash checks
 
@@ -865,8 +864,8 @@ Validate:
 - trash folder
 - trash multiple items
 - trash collision
-- restore item
-- restore collision
+- restore item in model tests
+- restore collision in model tests
 - trash unavailable path
 
 Expected:
@@ -874,6 +873,7 @@ Expected:
 - Files are moved to freedesktop trash.
 - `.trashinfo` metadata is correct.
 - Permanent deletion is not used as silent fallback.
+- Restore is not expected live until a Trash view/control exists.
 
 ### Clipboard and DnD checks
 
@@ -900,7 +900,7 @@ Validate:
 - open image
 - open PDF
 - file with no default handler
-- open with explicit app
+- open with explicit app in model tests
 - reveal containing folder
 
 Expected:
@@ -908,6 +908,7 @@ Expected:
 - Default app comes from desktop app/MIME registry.
 - Missing handler shows useful error.
 - Files does not depend on hidden shell command behavior.
+- Explicit open-with chooser UI is not expected live yet.
 
 ### View checks
 
@@ -915,19 +916,17 @@ Validate:
 
 - grid view
 - list/detail view
-- sort by name
-- sort by kind
-- sort by size
-- sort by modified time
-- ascending/descending
-- search current folder
-- no search results
+- sort by name/kind/size/modified time in model tests
+- ascending/descending in model tests
+- search current folder in model tests
+- no search results in model tests
 
 Expected:
 
-- Sorting and search are deterministic.
+- Sorting and search are deterministic in the model.
 - Text and icons do not overlap.
 - Preferences persist.
+- Search and sort controls are not expected live until wired.
 
 ## Test additions
 
@@ -975,27 +974,28 @@ Current limitations visible to users:
 
 - Drag/drop is not supported in the Files UI yet.
 - Folder refresh is periodic, so external filesystem changes can take up to the refresh interval to appear.
+- Rename, restore-from-trash, undo, progress/cancel, conflict prompts, search, sort controls, and explicit open-with chooser UI are not exposed yet.
 - Advanced open-with/default-app editing, thumbnails, mounted volumes, tabs, split panes, and indexed search are deferred.
 
 ## Done checklist
 
 - [x] Files has a testable model outside the view body.
-- [x] Directory browsing, history, breadcrumbs, and path entry are robust.
+- [ ] Directory browsing, history, breadcrumbs, and path entry are robust. Browsing/history/breadcrumbs work; direct text path entry is not wired.
 - [x] Multi-select and keyboard selection work.
 - [x] Create folder/file works.
-- [x] Rename works.
+- [ ] Rename works in the live UI. Rename validation/model helpers exist, but no rename control is exposed.
 - [x] Copy/cut/paste/move works.
 - [x] Duplicate works.
 - [x] Trash-first delete works.
-- [x] Restore from trash works or Trash restore is explicitly deferred with delete still trash-first.
-- [x] Undo works for supported safe operations.
+- [ ] Restore from trash works in the live UI or Trash restore is explicitly deferred. Restore helpers exist; no Trash restore UI is exposed.
+- [ ] Undo works for supported safe operations in the live UI. Safe undo helpers exist in the model; no undo control is exposed.
 - [x] Context menus expose real commands.
 - [x] Clipboard file operations work internally and with compatible clients.
 - [x] Basic drag/drop works or unsupported portions are clearly documented.
 - [x] Current folder refreshes after external changes.
-- [x] Operation progress/errors/cancel states exist.
+- [ ] Operation progress/errors/cancel states exist in the live UI. Specific error reporting exists; progress/cancel state is model-only.
 - [x] Grid and list/detail views exist.
-- [x] Sorting and current-folder search work.
+- [ ] Sorting and current-folder search work in the live UI. Sorting/search helpers exist in the model; controls are not wired.
 - [x] Open-with uses shared app/MIME registry.
 - [x] Icons use shared icon theme provider with fallback.
 - [x] Files preferences persist.

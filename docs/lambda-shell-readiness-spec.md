@@ -32,6 +32,7 @@ Important limitations in the current implementation:
 - Live service providers for network, Bluetooth, audio, battery, power mode, brightness, notifications, and clipboard history are not complete.
 - Notification and clipboard-history models/config exist and are tested, but notification banners/center and clipboard picker UI are not live yet.
 - The top-bar quick-status popup shows real/unknown/unavailable values and explicitly labels provider controls unavailable where live controls do not exist.
+- Advanced launcher provider models for windows, Settings panels, Shell actions, empty states, error states, and ranking exist in `ShellModels`, but the production launcher still renders and activates `DockItem` app results from the dock model. Window/Settings-panel/Shell-action provider activation is not wired into the live launcher yet.
 - Files/recent-documents launcher providers are not implemented.
 - `lambda-shell` exits if IPC disconnects and throws if it cannot connect at startup.
 - Multi-output Shell behavior remains mostly architectural. The current daily target is still the selected single output.
@@ -57,7 +58,9 @@ These areas should be included in the Shell milestone:
 - Add accessibility and keyboard navigation pass for top bar, dock, and launcher.
 - Add focused Shell tests for model behavior, app discovery, ranking, IPC parsing, and config parsing.
 
-Status update 2026-05-26: the first Shell app-registry and model helpers are in place. They cover deterministic `.desktop` parsing for common fields, installed desktop-file discovery from fixture XDG app dirs, visibility filtering for hidden/no-display/TryExec, Exec token and field-code handling, Lambda app-id alias matching shared by Shell and Window Manager focus/launch paths, local `./examples/APP_NAME` executable precedence, installed/local registry merging, conservative browser/terminal launch fallbacks, shared launch-command resolution and snapshot app-registry publication used by the Window Manager, icon theme lookup fallback across app/actions/MIME/place/status contexts, configured XDG icon-theme roots, icon paths threaded into the dock and launcher models, bitmap theme-icon rendering in dock/launcher with Material glyph fallback, structured Window Manager snapshot parsing with reordered/escaped fields, dock state from pinned apps plus Window Manager snapshots, live Shell model snapshot application, config-backed dock pins from the shared app registry without fake mail/calendar/music launchers, `show_running_unpinned`-controlled running unpinned window insertion/removal in the live dock model, dock click decisions for stopped/running/minimized apps, launcher cursor-aware text editing/highlight keyboard state, launcher ranking for prefix/acronym/fuzzy/running/recent matches, merged launcher result models for app/window/Settings-panel/Shell-action providers, launcher empty/error states, notification grouping/dismissal/clear-all/do-not-disturb/history limits, clipboard history dedupe/clear/disabled/limit behavior, clipboard max-text-size, primary-selection, and memory-only-by-default persistence policy, Shell IPC request-id parse/serialize round trips plus request IDs on live launch/focus/modal commands and Window Manager error replies, clean missing/disconnected Shell IPC handling, reactive top-bar status rendering for available/off/unavailable network, Bluetooth, volume, and battery values, a top-bar quick-status popup that shows real status values and explicitly marks provider controls unavailable, quick-settings available/unknown/unavailable provider ordering, top-bar status module availability classification, Shell config defaults/load/create/invalid-value fallback using the spec's `appearance`, `dock`, `top_bar`, `quick_settings`, `notifications`, `clipboard_history`, and `launcher` sections, and generated Shell config serialization. Live service providers, notification UI, clipboard-history picker UI, and deeper control integration remain open.
+Status update 2026-05-26: the first Shell app-registry and model helpers are in place. They cover deterministic `.desktop` parsing for common fields, installed desktop-file discovery from fixture XDG app dirs, visibility filtering for hidden/no-display/TryExec, Exec token and field-code handling, Lambda app-id alias matching shared by Shell and Window Manager focus/launch paths, local `./examples/APP_NAME` executable precedence, installed/local registry merging, conservative browser/terminal launch fallbacks, shared launch-command resolution and snapshot app-registry publication used by the Window Manager, icon theme lookup fallback across app/actions/MIME/place/status contexts, configured XDG icon-theme roots, icon paths threaded into the dock and launcher models, bitmap theme-icon rendering in dock/launcher with Material glyph fallback, structured Window Manager snapshot parsing with reordered/escaped fields, dock state from pinned apps plus Window Manager snapshots, live Shell model snapshot application, config-backed dock pins from the shared app registry without fake mail/calendar/music launchers, `show_running_unpinned`-controlled running unpinned window insertion/removal in the live dock model, dock click decisions for stopped/running/minimized apps, launcher cursor-aware text editing/highlight keyboard state, provider/ranking model helpers for app/window/Settings-panel/Shell-action results, launcher empty/error model states, notification grouping/dismissal/clear-all/do-not-disturb/history limits, clipboard history dedupe/clear/disabled/limit behavior, clipboard max-text-size, primary-selection, and memory-only-by-default persistence policy, Shell IPC request-id parse/serialize round trips plus request IDs on live launch/focus/modal commands and Window Manager error replies, clean missing/disconnected Shell IPC handling, reactive top-bar status rendering for available/off/unavailable network, Bluetooth, volume, and battery values, a top-bar quick-status popup that shows real status values and explicitly marks provider controls unavailable, quick-settings available/unknown/unavailable provider ordering, top-bar status module availability classification, Shell config defaults/load/create/invalid-value fallback using the spec's `appearance`, `dock`, `top_bar`, `quick_settings`, `notifications`, `clipboard_history`, and `launcher` sections, and generated Shell config serialization.
+
+Code audit 2026-05-26: the production command launcher still uses `ShellModel::launcherResults()` over `DockItem`s and activates through `ShellModel::activateItem(DockItem)`. The richer `LauncherResult` provider model is not yet the live launcher data path. Live service providers, notification UI, clipboard-history picker UI, live launcher provider integration, and deeper control integration remain open.
 
 ## Goals
 
@@ -1134,9 +1137,9 @@ Dock:
 Command launcher:
 
 - Open it with `Super+Space`, the dock launcher item, or the top-bar lambda mark.
-- Type to filter apps, running windows, Settings panels, and Shell actions.
+- Type to filter current app/dock entries.
 - Use arrow keys to change highlight, `Enter` to activate, and `Escape` to dismiss.
-- Empty/error states are explicit rather than blank.
+- Window, Settings-panel, Shell-action, empty-state, error-state, and richer ranking models exist in tests, but are not wired into the production launcher UI yet.
 
 Configuration:
 
@@ -1155,8 +1158,8 @@ Configuration:
 - [x] Dock click launches, focuses, or restores correctly.
 - [x] Icon theme provider is used by dock and launcher.
 - [x] Missing icons have a consistent fallback.
-- [x] Command launcher supports app, window, Settings-panel, and Shell-action providers.
-- [x] Launcher ranking and keyboard navigation are tested.
+- [ ] Command launcher supports app, window, Settings-panel, and Shell-action providers in the live UI. Model helpers exist; production launcher currently filters app/dock entries.
+- [ ] Launcher ranking and keyboard navigation are fully wired and tested in the live launcher path. Basic query/highlight behavior exists; richer ranking is model-only.
 - [x] Top-bar status values are real or explicitly unavailable.
 - [x] Quick settings/status controls are real or explicitly unavailable.
 - [ ] Notifications support banners, notification center/history, dismissal, clear-all, and do-not-disturb.

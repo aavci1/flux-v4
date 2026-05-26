@@ -35,20 +35,21 @@ Implemented today:
 - Supports paste from desktop clipboard with `Meta+V` and `Ctrl+Shift+V`, preserving plain `Ctrl+V` for terminal programs.
 - Supports visible-screen pointer selection and copies selected text to the desktop clipboard with `Meta+C` or `Ctrl+Shift+C`, preserving plain `Ctrl+C` for terminal programs.
 - Supports bracketed paste policy through the terminal profile config.
+- Supports live scrollback viewport movement with the scroll wheel and `Shift+PageUp`/`Shift+PageDown`.
+- Supports selection/copy across the live logical row set, including visible scrollback rows.
 - Has a testable `TerminalCore` for input encoding, paste/copy payloads, scrollback model behavior, Unicode width, color/attributes, resize calculation, preferences/profiles, search, URL detection, and PTY smoke behavior.
 - Has trace scripts for terminal rendering and terminal resize scenarios.
 
 Important limitations:
 
-- Live app scrollback, search UI, and URL opening UI are not fully integrated yet, even though the deterministic core model exists.
-- Pointer selection currently covers the visible terminal screen; selection across the core scrollback model is tested but not fully surfaced in the live app UI.
+- Search and URL opening are model-only; there is no live search UI, match highlighting, next/previous navigation, or URL-opening UI yet.
 - No primary selection behavior.
 - No OSC 52 clipboard handling.
-- Live terminal-app mouse reporting is still incomplete, even though SGR mouse encoding exists in `TerminalCore`.
+- Live terminal-app mouse reporting is not wired into `TerminalSession`; SGR mouse encoding exists only in `TerminalCore` tests/helpers.
 - No tabs or splits.
 - Cursor shape and color scheme preferences are not fully surfaced.
-- Unicode rendering still uses `VTermScreenCell::chars[0]` in the live renderer, so complex grapheme clusters remain limited even though codepoint width helpers are tested.
-- PTY/session, renderer, and UI are still mostly in `main.cpp`; deterministic core helpers are split out, but the live session/rendering split is not complete.
+- Unicode rendering still uses `VTermScreenCell::chars[0]` in the live renderer, so combining sequences and complex grapheme clusters remain limited even though codepoint width helpers are tested.
+- Deterministic core helpers are split out, but live pty/session/rendering/UI behavior is still concentrated in `TerminalSession.cpp` rather than fully split into independent components.
 
 ## Additional Terminal work identified
 
@@ -67,9 +68,11 @@ These areas should be included in the Terminal milestone:
 - Add desktop integration: app id, desktop entry/app registry, Settings handoff, clipboard services, URL opening, and window title behavior.
 - Add performance targets and repeatable tests for high-output workloads and resize workloads.
 
-Status update 2026-05-26: the first terminal core split is in place. `TerminalCore` now covers deterministic key sequence generation, application cursor/keypad mode encoding, focus-event reporting encoding, bracketed paste wrapping, copy/paste payload policy helpers, SGR mouse event encoding, mouse-to-cell coordinate mapping, resize row/column calculation, Unicode width handling, ANSI/256/truecolor conversion, basic attribute resolution for bold/dim/italic/underline/reverse/strikethrough, flat preference parsing/default fallback plus serialization, profile-based preference parsing/serialization, default config file creation, atomic preference save, active-profile fallback, configurable black glass/solid background selection, scrollback limit enforcement, viewport movement, normal/alternate screen separation, row resize behavior, selected-text reconstruction, plain-text search across visible rows and scrollback, HTTP/HTTPS URL detection, canonical `lambda-terminal` app identity, and shared app-registry browser command planning for URL opening. A controlled PTY smoke test verifies child output can be read and fed into the terminal text model without UI/pointer activity. `lambda-terminal` uses the shared key encoder, resize calculator, profile background config, and live renderer handling for italic/underline/strikethrough attributes.
+Status update 2026-05-26: the first terminal core split is in place. `TerminalCore` now covers deterministic key sequence generation, application cursor/keypad mode encoding, focus-event reporting encoding, bracketed paste wrapping, copy/paste payload policy helpers, SGR mouse event encoding, mouse-to-cell coordinate mapping, resize row/column calculation, Unicode width handling, ANSI/256/truecolor conversion, basic attribute resolution for bold/dim/italic/underline/reverse/strikethrough, flat preference parsing/default fallback plus serialization, profile-based preference parsing/serialization, default config file creation, atomic preference save, active-profile fallback, configurable black glass/solid background selection, scrollback limit enforcement, viewport movement, normal/alternate screen separation, row resize behavior, selected-text reconstruction, plain-text search across visible rows and scrollback, HTTP/HTTPS URL detection, canonical `lambda-terminal` app identity, and shared app-registry browser command planning for URL opening. A controlled PTY smoke test verifies child output can be read and fed into the terminal text model without UI/pointer activity. `lambda-terminal` uses the shared key encoder, resize calculator, profile background config, live scrollback viewport, live scrollback-aware selection/copy, and live renderer handling for italic/underline/strikethrough attributes.
 
-Status update 2026-05-26: the live app path is now split as well. `main.cpp` only creates the app, window, profile background, and installs the terminal view. `TerminalSession.cpp` owns the pty process, libvterm integration, frame-driven resize flushing, dirty-row refresh, renderer/layout cache, pointer selection, clipboard shortcuts, and Flux view wiring behind `installTerminalView`. Deeper model integration for live scrollback/search/mouse/URL UI remains open, but the terminal implementation is no longer a single-file app.
+Code audit 2026-05-26: live scrollback and scrollback-aware selection are now wired. Live search UI, URL-opening UI, terminal-app mouse reporting, primary selection, OSC 52, full Unicode grapheme handling, and a fuller live component split remain open.
+
+Status update 2026-05-26: the live app path is now split as well. `main.cpp` only creates the app, window, profile background, and installs the terminal view. `TerminalSession.cpp` owns the pty process, libvterm integration, frame-driven resize flushing, dirty-row refresh, renderer/layout cache, pointer selection, clipboard shortcuts, scrollback viewport, and Flux view wiring behind `installTerminalView`. Deeper model integration for search, mouse reporting, URL UI, and more granular live components remains open, but the terminal implementation is no longer a single-file app.
 
 ## Goals
 
@@ -784,7 +787,8 @@ Expected:
 - Output renders correctly.
 - Full-screen apps enter and exit alternate screen correctly.
 - Keyboard navigation works.
-- Mouse behavior works where apps enable it.
+- Normal pointer selection works when mouse reporting is off.
+- App mouse reporting is not expected to work until live mouse-reporting support is wired.
 
 ### Scrollback checks
 
@@ -817,7 +821,7 @@ Validate:
 - paste
 - multi-line paste
 - bracketed paste in apps that enable it
-- primary selection if supported
+- primary selection is currently unsupported
 
 Expected:
 
@@ -857,7 +861,7 @@ Validate:
 - 256 colors.
 - truecolor.
 - bold.
-- dim.
+- dim in model tests.
 - italic.
 - underline.
 - reverse.
@@ -867,6 +871,7 @@ Expected:
 
 - Text does not overlap or corrupt neighboring cells.
 - Colors and attributes are readable and predictable.
+- Combining sequences and complex grapheme clusters remain limited in the live renderer.
 
 ### Resize and performance checks
 
@@ -932,16 +937,16 @@ Input and clipboard:
 
 - Type normally to send text to the pty.
 - Plain `Ctrl+C` and `Ctrl+V` are sent to terminal programs.
-- Use `Meta+C` or `Ctrl+Shift+C` to copy the current visible-screen selection to the desktop clipboard.
+- Use `Meta+C` or `Ctrl+Shift+C` to copy the current selection to the desktop clipboard.
 - Use `Meta+V` or `Ctrl+Shift+V` to paste from the desktop clipboard.
 - Pasted text uses bracketed paste wrapping when the active profile has bracketed paste enabled.
 - Press `Escape` while a selection exists to clear that selection instead of sending Escape.
 
 Selection:
 
-- Drag with the left pointer button to select visible terminal text.
+- Drag with the left pointer button to select terminal text.
 - Releasing without a range clears the selection.
-- Selection across scrollback is covered in the core text model, but the live scrollback UI is not finished.
+- Use the scroll wheel or `Shift+PageUp`/`Shift+PageDown` to move through scrollback; selection/copy can include visible scrollback rows.
 
 Configuration:
 
@@ -950,13 +955,13 @@ Configuration:
 
 Current limitations visible to users:
 
-- No tabs, splits, live scrollback UI, search UI, URL opening UI, OSC 52, or primary selection yet.
-- Mouse reporting is not fully wired into the live terminal app.
+- No tabs, splits, search UI, URL opening UI, OSC 52, or primary selection yet.
+- Mouse reporting is not wired into the live terminal app.
 - Complex grapheme rendering remains limited.
 
 ## Done checklist
 
-- [x] Terminal implementation is split into testable components.
+- [ ] Terminal implementation is fully split into testable pty/session/model/renderer/UI components. `TerminalCore` is split out; live pty/session/rendering/UI remain concentrated in `TerminalSession.cpp`.
 - [x] Canonical app id is `lambda-terminal`.
 - [x] Shell lifecycle and child cleanup are robust.
 - [x] Scrollback works with configurable limit.
@@ -965,15 +970,15 @@ Current limitations visible to users:
 - [x] Copy and paste work through desktop clipboard.
 - [x] Bracketed paste works.
 - [x] Key encoding covers common terminal apps.
-- [x] Mouse reporting covers common terminal apps.
-- [x] Unicode wide/combining text is handled correctly enough for daily use.
-- [x] ANSI/256/truecolor and common attributes render correctly.
+- [ ] Mouse reporting covers common terminal apps in the live terminal. SGR encoding helpers are tested, but `TerminalSession` does not report mouse events to terminal apps yet.
+- [ ] Unicode wide/combining text is handled correctly enough for daily use. Core width helpers exist; live rendering still uses only `VTermScreenCell::chars[0]`.
+- [x] ANSI/256/truecolor plus bold/italic/underline/reverse/strikethrough render in the live path. Dim remains model-only.
 - [x] Resize remains responsive and accurate.
-- [x] Search works across visible screen and scrollback.
+- [ ] Search works across visible screen and scrollback in the live UI. Core search helper exists; no search UI is wired.
 - [x] Preferences/profiles exist and persist.
 - [x] Black glass background is configurable, not hard-coded only.
 - [x] Desktop integration with Shell app registry works.
-- [x] Tests cover model, input, scrollback, selection, Unicode, color, resize, config, and pty smoke behavior.
+- [x] Tests cover core model, input, scrollback, selection, Unicode helpers, color, resize, config, and pty smoke behavior.
 - [x] User guide and app docs match actual behavior.
 
 ## Deferred to later milestones
