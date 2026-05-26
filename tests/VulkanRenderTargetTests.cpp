@@ -428,7 +428,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   VulkanFrameRecorder recorded;
   REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
   canvas->drawRect(flux::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
-                   FillStyle::solid(Colors::red), StrokeStyle::none(), ShadowStyle::none());
+                   FillStyle::solid(Color{1.f, 0.f, 0.f, 1.f}), StrokeStyle::none(), ShadowStyle::none());
   endRecordedOpsCaptureForCanvas(canvas.get());
   CHECK(recorded.ops.size() == 1);
   CHECK(recorded.rects.size() == 1);
@@ -746,6 +746,7 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
           .blurRadius = 18.f,
           .tint = Color{0.f, 0.f, 0.f, 0.5f},
           .borderColor = Color{1.f, 1.f, 1.f, 0.f},
+          .usesDefaultMaterial = false,
       },
       .serial = 1,
       .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
