@@ -627,6 +627,35 @@ DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vect
   return changes;
 }
 
+FileSelectionState preserveSelectionAfterRefresh(FileSelectionState const& previous,
+                                                 std::optional<std::filesystem::path> const& previousAnchor,
+                                                 std::vector<FileEntry> const& entries) {
+  FileSelectionState next;
+  for (auto const& selected : previous.selected) {
+    auto found = std::find_if(entries.begin(), entries.end(), [&](FileEntry const& entry) {
+      return entry.path == selected;
+    });
+    if (found != entries.end()) next.selected.push_back(selected);
+  }
+  if (next.selected.empty()) return next;
+
+  auto indexOf = [&](std::filesystem::path const& path) -> int {
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+      if (entries[i].path == path) return static_cast<int>(i);
+    }
+    return -1;
+  };
+  if (previousAnchor) {
+    int const anchor = indexOf(*previousAnchor);
+    if (anchor >= 0 && std::find(next.selected.begin(), next.selected.end(), *previousAnchor) != next.selected.end()) {
+      next.anchorIndex = anchor;
+      return next;
+    }
+  }
+  next.anchorIndex = indexOf(next.selected.front());
+  return next;
+}
+
 double FileOperationProgress::fractionComplete() const noexcept {
   if (totalItems == 0) {
     return status == FileOperationStatus::Succeeded ? 1.0 : 0.0;
@@ -672,6 +701,13 @@ FilesModel applyDirectoryListing(FilesModel model,
     return model;
   }
 
+  std::optional<std::filesystem::path> previousAnchor;
+  if (model.selection.anchorIndex >= 0 &&
+      model.selection.anchorIndex < static_cast<int>(model.entries.size())) {
+    previousAnchor = model.entries[static_cast<std::size_t>(model.selection.anchorIndex)].path;
+  }
+  FileSelectionState const previousSelection = model.selection;
+
   std::vector<FileEntry> sorted = sortedEntries(std::move(listing.entries),
                                                 model.preferences.sortKey,
                                                 model.preferences.sortAscending);
@@ -679,7 +715,7 @@ FilesModel applyDirectoryListing(FilesModel model,
   model.entries = std::move(sorted);
   model.visibleEntries = filterEntries(model.entries, model.query);
   model.history = navigateTo(std::move(model.history), directory);
-  model.selection = clearSelection(std::move(model.selection));
+  model.selection = preserveSelectionAfterRefresh(previousSelection, previousAnchor, model.entries);
   model.error.clear();
   model.operation = completeFileOperation(beginFileOperation(FileOperationKind::Refresh, 1, false));
   return model;

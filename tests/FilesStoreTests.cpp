@@ -231,6 +231,47 @@ TEST_CASE("FilesStore model owns directory state filtering errors and refresh di
   std::filesystem::remove_all(root);
 }
 
+TEST_CASE("FilesStore refresh preserves selected paths that still exist") {
+  using lambda_files::FileEntry;
+  auto now = std::filesystem::file_time_type::clock::now();
+  auto root = tempRoot("lambda-files-selection-refresh-test");
+  std::filesystem::create_directories(root);
+
+  auto model = lambda_files::makeFilesModel(root);
+  model = lambda_files::applyDirectoryListing(model, root, {
+      .entries = {
+          FileEntry{.name = "alpha.txt", .path = root / "alpha.txt", .size = 1, .modifiedAt = now},
+          FileEntry{.name = "bravo.txt", .path = root / "bravo.txt", .size = 2, .modifiedAt = now},
+          FileEntry{.name = "charlie.txt", .path = root / "charlie.txt", .size = 3, .modifiedAt = now},
+      },
+  });
+  model.selection = lambda_files::rangeSelection(lambda_files::selectOnly(model.entries, 1), model.entries, 2);
+  CHECK(model.selection.selected ==
+        std::vector<std::filesystem::path>{root / "bravo.txt", root / "charlie.txt"});
+  CHECK(model.selection.anchorIndex == 1);
+
+  model = lambda_files::applyDirectoryListing(model, root, {
+      .entries = {
+          FileEntry{.name = "bravo.txt", .path = root / "bravo.txt", .size = 4,
+                    .modifiedAt = now + std::chrono::seconds(1)},
+          FileEntry{.name = "delta.txt", .path = root / "delta.txt", .size = 5, .modifiedAt = now},
+      },
+  });
+  CHECK(model.selection.selected == std::vector<std::filesystem::path>{root / "bravo.txt"});
+  CHECK(model.selection.anchorIndex == 0);
+
+  auto other = root / "other";
+  model = lambda_files::applyDirectoryListing(model, other, {
+      .entries = {
+          FileEntry{.name = "bravo.txt", .path = other / "bravo.txt", .size = 4, .modifiedAt = now},
+      },
+  });
+  CHECK(model.selection.selected.empty());
+  CHECK(model.selection.anchorIndex == -1);
+
+  std::filesystem::remove_all(root);
+}
+
 TEST_CASE("FilesStore operation progress supports completion failure and cancellation") {
   auto progress = lambda_files::beginFileOperation(lambda_files::FileOperationKind::Copy, 3, true, 42);
   CHECK(progress.active());
