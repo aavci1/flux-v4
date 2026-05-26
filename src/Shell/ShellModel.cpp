@@ -94,6 +94,7 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
         .kind = "app",
         .label = found->name.empty() ? appId : found->name,
         .appId = appId,
+        .pinned = true,
     });
   }
   items.push_back({"sep2", "separator", "", {}, false, false, false});
@@ -115,17 +116,25 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
   SnapshotChanges changes{};
   ShellDesktopSnapshot const snapshot = parseShellSnapshot(json);
   auto items = dockItems_.peek();
+  items.erase(std::remove_if(items.begin(), items.end(), [](DockItem const& item) {
+                return item.kind == "app" && !item.pinned;
+              }),
+              items.end());
   for (auto& item : items) {
+    if (item.kind != "app") continue;
     item.running = false;
     item.focused = false;
   }
   std::string nextTitle;
-  for (auto& item : items) {
-    if (item.appId.empty()) continue;
-    for (auto const& window : snapshot.windows) {
+  for (auto const& window : snapshot.windows) {
+    if (window.appId.empty()) continue;
+    bool represented = false;
+    for (auto& item : items) {
+      if (item.kind != "app" || item.appId.empty()) continue;
       if (shellAppIdMatches(item.appId, window.appId)) {
+        represented = true;
         item.running = true;
-        item.focused = window.focused;
+        item.focused = item.focused || window.focused;
         if (item.focused) {
           nextTitle = window.title;
           if (nextTitle.empty()) nextTitle = item.label;
@@ -133,6 +142,20 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
         break;
       }
     }
+    if (represented) continue;
+    DockItem item{
+        .id = window.appId,
+        .kind = "app",
+        .label = window.title.empty() ? window.appId : window.title,
+        .appId = window.appId,
+        .running = true,
+        .focused = window.focused,
+    };
+    if (item.focused) nextTitle = item.label;
+    auto separator = std::find_if(items.begin(), items.end(), [](DockItem const& candidate) {
+      return candidate.id == "sep2";
+    });
+    items.insert(separator == items.end() ? items.end() : separator, std::move(item));
   }
 
   SystemStatus nextStatus{

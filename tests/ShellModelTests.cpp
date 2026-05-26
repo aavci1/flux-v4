@@ -78,7 +78,8 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
     "type":"lambda.windowManager.snapshot",
     "windows":[
       {"id":1,"appId":"lambda-files","title":"Files Home","state":"normal","focused":true},
-      {"id":2,"appId":"lambda-terminal","title":"Terminal","state":"minimized","focused":false}
+      {"id":2,"appId":"lambda-terminal","title":"Terminal","state":"minimized","focused":false},
+      {"id":3,"appId":"org.example.Editor","title":"Notes","state":"normal","focused":false}
     ],
     "system":{"network":"online","wifi":"Lambda","bluetooth":"off","volume":"55%","battery":"88%"}
   })");
@@ -91,12 +92,15 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
 
   bool filesFocused = false;
   bool terminalRunning = false;
+  bool editorUnpinned = false;
   for (auto const& item : model.dockItems()) {
     if (item.appId == "lambda-files") filesFocused = item.running && item.focused;
     if (item.appId == "lambda-terminal") terminalRunning = item.running && !item.focused;
+    if (item.appId == "org.example.Editor") editorUnpinned = item.running && !item.pinned;
   }
   CHECK(filesFocused);
   CHECK(terminalRunning);
+  CHECK(editorUnpinned);
 
   std::vector<std::string> sent;
   for (auto const& item : model.dockItems()) {
@@ -110,6 +114,18 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   CHECK(message->kind == flux::shell::ShellMessageKind::WindowManagerFocusApp);
   CHECK(message->requestId == 42);
   CHECK(message->focusApp.appId == "lambda-terminal");
+
+  changes = model.applySnapshot(R"({
+    "type":"lambda.windowManager.snapshot",
+    "windows":[
+      {"id":1,"appId":"lambda-files","title":"Files Home","state":"normal","focused":true}
+    ],
+    "system":{"network":"online","wifi":"Lambda","bluetooth":"off","volume":"55%","battery":"88%"}
+  })");
+  CHECK(changes.dockItems);
+  for (auto const& item : model.dockItems()) {
+    CHECK(item.appId != "org.example.Editor");
+  }
 }
 
 TEST_CASE("Shell model dock items come from config pins and app registry") {

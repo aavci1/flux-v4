@@ -37,6 +37,7 @@ struct DockItem {
   bool running = false;
   bool focused = false;
   bool disabled = false;
+  bool pinned = false;
 
   bool operator==(DockItem const& other) const = default;
 };
