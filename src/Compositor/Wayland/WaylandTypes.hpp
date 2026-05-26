@@ -6,6 +6,7 @@
 
 #include "Compositor/Screenshot.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -59,6 +60,7 @@ struct WaylandOutputInfo {
   std::int32_t refreshMilliHz = 60'000;
   std::int32_t physicalWidthMm = 0;
   std::int32_t physicalHeightMm = 0;
+  std::uint64_t drmDevice = 0;
 };
 
 struct PresentationTiming {
@@ -138,6 +140,8 @@ struct CommittedSurfaceSnapshot {
   std::vector<RegionRect> backgroundBlurRects;
   std::vector<RegionRect> opaqueRegionRects;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
+  std::uint8_t const* shmPixels = nullptr;
+  std::size_t shmPixelBytes = 0;
   Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
   std::uint64_t dmabufBufferId = 0;
   std::uint32_t dmabufFormat = 0;

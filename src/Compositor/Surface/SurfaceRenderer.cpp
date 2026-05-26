@@ -170,6 +170,65 @@ bool hasTransientChromeState(CommittedSurfaceSnapshot const &surface) {
          surface.minimizeButtonPressed;
 }
 
+std::span<std::uint8_t const> surfacePixelBytes(CommittedSurfaceSnapshot const &surface) {
+  if (surface.shmPixels && surface.shmPixelBytes > 0) {
+    return {surface.shmPixels, surface.shmPixelBytes};
+  }
+  if (surface.rgbaPixels && !surface.rgbaPixels->empty()) {
+    return *surface.rgbaPixels;
+  }
+  return {};
+}
+
+bool setCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
+#if FLUX_VULKAN
+  return setVulkanCanvasImagePremultipliedAlpha(canvas, enabled);
+#else
+  (void)canvas;
+  return enabled;
+#endif
+}
+
+bool destinationMatchesWindow(CommittedSurfaceSnapshot const &surface) {
+  return (surface.destinationWidth <= 0 || surface.destinationWidth == surface.width) &&
+         (surface.destinationHeight <= 0 || surface.destinationHeight == surface.height);
+}
+
+bool hasCompositorMaterial(CommittedSurfaceSnapshot const &surface, ChromeConfig const &chrome) {
+  return !surface.backgroundBlurRects.empty() ||
+         (chrome.windowGlassEnabled && surface.defaultGlassEligible && chrome.glass.blurRadius > 0.f);
+}
+
+bool canDrawPlainClientSurfaceDirectly(CommittedSurfaceSnapshot const &surface,
+                                       ChromeConfig const &chrome,
+                                       SurfaceVisualState const &visual,
+                                       std::chrono::steady_clock::time_point frameTime,
+                                       bool animationsEnabled) {
+  return !surface.serverSideDecorated &&
+         surface.windowClipTop <= 0 &&
+         surface.windowClipBottom <= 0 &&
+         !surface.activeSizing &&
+         !surface.pacingSizing &&
+         !surface.geometryAnimationGrowing &&
+         !hasTransientChromeState(surface) &&
+         !hasCompositorMaterial(surface, chrome) &&
+         destinationMatchesWindow(surface) &&
+         surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
+}
+
+void drawPlainClientSurface(Canvas &canvas, CommittedSurfaceSnapshot const &surface, Image &image) {
+  float const sourceWidth = surface.sourceWidth > 0.f ? surface.sourceWidth : static_cast<float>(image.size().width);
+  float const sourceHeight = surface.sourceHeight > 0.f ? surface.sourceHeight : static_cast<float>(image.size().height);
+  bool const previousPremultiplied = setCanvasImagePremultipliedAlpha(&canvas, true);
+  canvas.drawImage(image,
+                   Rect::sharp(surface.sourceX, surface.sourceY, sourceWidth, sourceHeight),
+                   Rect::sharp(static_cast<float>(surface.x),
+                               static_cast<float>(surface.y),
+                               static_cast<float>(surface.width),
+                               static_cast<float>(surface.height)));
+  setCanvasImagePremultipliedAlpha(&canvas, previousPremultiplied);
+}
+
 } // namespace
 
 void drawSurfaceImage(Canvas &canvas, CommittedSurfaceSnapshot const &surface, Image &image, float opacity,
@@ -199,6 +258,7 @@ void drawSurfaceImage(Canvas &canvas, CommittedSurfaceSnapshot const &surface, I
 void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceSnapshot const &surface,
                        CachedClientImage &cached) {
   bool const hasDmabuf = !surface.dmabufPlanes.empty();
+  std::span<std::uint8_t const> pixels = surfacePixelBytes(surface);
   if (cached.id != 0 && cached.id != surface.id) {
     cached = {};
   }
@@ -214,13 +274,13 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
   cached.dmabufBufferId = surface.dmabufBufferId;
   std::int32_t const bufferWidth = surface.bufferWidth > 0 ? surface.bufferWidth : surface.width;
   std::int32_t const bufferHeight = surface.bufferHeight > 0 ? surface.bufferHeight : surface.height;
-  if (surface.rgbaPixels && !surface.rgbaPixels->empty()) {
+  if (!pixels.empty()) {
     cached.dmabufBufferId = 0;
     cached.dmabufImported = false;
-    std::size_t const uploadBytes = surface.rgbaPixels->size();
+    std::size_t const uploadBytes = pixels.size();
     if (cached.image && cached.shmBufferWidth == bufferWidth && cached.shmBufferHeight == bufferHeight && [&] {
           auto const updateStart = diagnostics::cpuTraceNow();
-          bool const updated = cached.image->updatePixels(*surface.rgbaPixels, surface.pixelFormat, canvas.gpuDevice());
+          bool const updated = cached.image->updatePixels(pixels, surface.pixelFormat, canvas.gpuDevice());
           diagnostics::recordSurfaceImageUpload(uploadBytes, diagnostics::cpuTraceElapsedMilliseconds(updateStart),
                                                 false);
           return updated;
@@ -231,7 +291,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
     cached.logged = false;
     auto const createStart = diagnostics::cpuTraceNow();
     cached.image = Image::fromPixels(static_cast<std::uint32_t>(bufferWidth), static_cast<std::uint32_t>(bufferHeight),
-                                     *surface.rgbaPixels, surface.pixelFormat, canvas.gpuDevice());
+                                     pixels, surface.pixelFormat, canvas.gpuDevice());
     diagnostics::recordSurfaceImageUpload(uploadBytes, diagnostics::cpuTraceElapsedMilliseconds(createStart), true);
     cached.shmBufferWidth = bufferWidth;
     cached.shmBufferHeight = bufferHeight;
@@ -365,6 +425,12 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
 
   if (visual.firstSeen.time_since_epoch().count() == 0) {
     visual.firstSeen = frameTime;
+  }
+  if (canDrawPlainClientSurfaceDirectly(surface, chrome, visual, frameTime, animationsEnabled)) {
+    drawPlainClientSurface(canvas, surface, *cached.image);
+    visual.lastSnapshot = surface;
+    visual.hasLastSnapshot = true;
+    return;
   }
   bool const canRecordSurface =
       canvas.backend() == Backend::Vulkan &&

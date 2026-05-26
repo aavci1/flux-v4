@@ -343,6 +343,8 @@ struct WaylandServer::Impl::Surface {
   std::uint32_t lastLoggedCommitKind = 0;
   std::uint32_t lastLoggedCommitFormat = 0;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
+  std::uint8_t const* shmPixels = nullptr;
+  std::size_t shmPixelBytes = 0;
   Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
   bool rgbaFullyOpaque = false;
   std::int32_t width = 0;

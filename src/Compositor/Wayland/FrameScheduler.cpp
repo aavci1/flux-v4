@@ -44,6 +44,12 @@ bool hasVisibleFullscreenToplevel(WaylandServer::Impl const& server) {
   });
 }
 
+bool hiddenFullscreenShellPanel(WaylandServer::Impl const& server, WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsLayerSurface(surface) && surface->layerSurface && server.shellPanelHideProgress_ >= 0.999f &&
+         (surface->layerSurface->nameSpace == "lambda.topbar" ||
+          surface->layerSurface->nameSpace == "lambda.dock");
+}
+
 void updateShellPanelAnimation(WaylandServer::Impl& server, std::uint32_t timeMs, bool animationsEnabled) {
   float const target = hasVisibleFullscreenToplevel(server) ? 1.f : 0.f;
   if (std::fabs(target - server.shellPanelHideTargetProgress_) > 0.001f) {
@@ -220,6 +226,7 @@ void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
   releasePendingBuffers();
   std::uint64_t callbackCount = 0;
   for (auto const& surface : surfaces_) {
+    if (surface && hiddenFullscreenShellPanel(*this, surface.get())) continue;
     std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);
     surface->frameCallbacks.clear();
     callbackCount += callbacks.size();

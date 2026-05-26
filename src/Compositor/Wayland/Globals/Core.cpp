@@ -332,21 +332,36 @@ bool copyShmBufferToPixels(WaylandServer::Impl::ShmBuffer const& buffer,
 
   out.resize(static_cast<std::size_t>(buffer.width) * static_cast<std::size_t>(buffer.height) * 4u);
   pixelFormat = Image::PixelFormat::Bgra8888;
-  bool const scanAlpha = buffer.format == WL_SHM_FORMAT_ARGB8888;
-  fullyOpaque = true;
+  fullyOpaque = buffer.format == WL_SHM_FORMAT_XRGB8888;
   auto const* base = static_cast<std::uint8_t const*>(buffer.data) + buffer.offset;
   for (std::int32_t y = 0; y < buffer.height; ++y) {
     auto const* src = base + static_cast<std::size_t>(y) * static_cast<std::size_t>(buffer.stride);
     auto* dst = out.data() + static_cast<std::size_t>(y) * rowBytes;
     // wl_shm ARGB/XRGB are little-endian words, so memory order is B, G, R, A/X.
     std::memcpy(dst, src, rowBytes);
-    if (scanAlpha && fullyOpaque) {
-      for (std::int32_t x = 0; x < buffer.width; ++x) {
-        fullyOpaque = src[static_cast<std::size_t>(x) * 4u + 3u] == 255u;
-        if (!fullyOpaque) break;
-      }
-    }
   }
+  return true;
+}
+
+bool mapTightShmBufferPixels(WaylandServer::Impl::ShmBuffer const& buffer,
+                             std::uint8_t const*& pixels,
+                             std::size_t& pixelBytes,
+                             Image::PixelFormat& pixelFormat,
+                             bool& fullyOpaque) {
+  pixels = nullptr;
+  pixelBytes = 0;
+  if (!buffer.data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) return false;
+  if (buffer.format != WL_SHM_FORMAT_ARGB8888 && buffer.format != WL_SHM_FORMAT_XRGB8888) return false;
+  std::size_t const rowBytes = static_cast<std::size_t>(buffer.width) * 4u;
+  if (buffer.offset < 0 || static_cast<std::size_t>(buffer.stride) != rowBytes) return false;
+  std::size_t const size = rowBytes * static_cast<std::size_t>(buffer.height);
+  std::size_t const end = static_cast<std::size_t>(buffer.offset) + size;
+  if (end > static_cast<std::size_t>(buffer.size)) return false;
+
+  pixels = static_cast<std::uint8_t const*>(buffer.data) + buffer.offset;
+  pixelBytes = size;
+  pixelFormat = Image::PixelFormat::Bgra8888;
+  fullyOpaque = buffer.format == WL_SHM_FORMAT_XRGB8888;
   return true;
 }
 
@@ -617,6 +632,14 @@ void clearPendingDamage(WaylandServer::Impl::Surface* surface) {
   surface->pendingBufferDamageRects.clear();
 }
 
+void queueBufferRelease(WaylandServer::Impl::Surface* surface, wl_resource* buffer) {
+  if (!surface || !buffer) return;
+  if (std::find(surface->pendingBufferReleases.begin(), surface->pendingBufferReleases.end(), buffer) ==
+      surface->pendingBufferReleases.end()) {
+    surface->pendingBufferReleases.push_back(buffer);
+  }
+}
+
 bool applySurfaceProtocolState(WaylandServer::Impl::Surface* surface,
                                bool hasBufferAttach,
                                bool& inputRegionChanged) {
@@ -688,6 +711,22 @@ bool bufferSizeValidForScale(WaylandServer::Impl::Surface const* surface) {
 
 bool refreshCurrentShmBuffer(WaylandServer::Impl::Surface* surface,
                              WaylandServer::Impl::ShmBuffer const& shmBuffer) {
+  std::uint8_t const* shmPixels = nullptr;
+  std::size_t shmPixelBytes = 0;
+  Image::PixelFormat mappedPixelFormat = Image::PixelFormat::Rgba8888;
+  bool mappedFullyOpaque = false;
+  if (mapTightShmBufferPixels(shmBuffer, shmPixels, shmPixelBytes, mappedPixelFormat, mappedFullyOpaque)) {
+    surface->rgbaPixels.reset();
+    surface->shmPixels = shmPixels;
+    surface->shmPixelBytes = shmPixelBytes;
+    surface->pixelFormat = mappedPixelFormat;
+    surface->rgbaFullyOpaque = mappedFullyOpaque;
+    surface->width = shmBuffer.width;
+    surface->height = shmBuffer.height;
+    surface->dmabufBuffer = nullptr;
+    return true;
+  }
+
   std::vector<std::uint8_t> pixels;
   Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
   bool fullyOpaque = false;
@@ -697,6 +736,8 @@ bool refreshCurrentShmBuffer(WaylandServer::Impl::Surface* surface,
   }
   diagnostics::recordShmCopy(pixels.size(), diagnostics::cpuTraceElapsedMilliseconds(copyStart));
   surface->rgbaPixels = std::make_shared<std::vector<std::uint8_t> const>(std::move(pixels));
+  surface->shmPixels = nullptr;
+  surface->shmPixelBytes = 0;
   surface->pixelFormat = pixelFormat;
   surface->rgbaFullyOpaque = fullyOpaque;
   surface->width = shmBuffer.width;
@@ -853,8 +894,9 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
 
   wl_resource* const previousBuffer = surface->currentBuffer;
   bool const previousDmabufHeld = surface->dmabufBuffer != nullptr;
-  if (previousBuffer && previousDmabufHeld && previousBuffer != surface->pendingBuffer) {
-    surface->pendingBufferReleases.push_back(previousBuffer);
+  bool const previousShmHeld = surface->shmPixels != nullptr;
+  if (previousBuffer && (previousDmabufHeld || previousShmHeld) && previousBuffer != surface->pendingBuffer) {
+    queueBufferRelease(surface, previousBuffer);
   }
   surface->currentBuffer = surface->pendingBuffer;
   surface->pendingBuffer = nullptr;
@@ -884,11 +926,13 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
           sendPendingResizeConfigureIfNeeded(surface);
         }
         traceCrashSurfaceCommit(surface, "shm", 1u, static_cast<std::uint32_t>(shmBuffer->format));
-        releaseCurrentBufferImmediately = true;
+        releaseCurrentBufferImmediately = surface->shmPixels == nullptr;
       }
     } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
       if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
         surface->rgbaPixels.reset();
+        surface->shmPixels = nullptr;
+        surface->shmPixelBytes = 0;
         surface->pixelFormat = Image::PixelFormat::Rgba8888;
         surface->rgbaFullyOpaque = false;
         surface->width = dmabufBuffer->width;
@@ -919,6 +963,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->currentBuffer);
   } else {
     surface->rgbaPixels.reset();
+    surface->shmPixels = nullptr;
+    surface->shmPixelBytes = 0;
     surface->pixelFormat = Image::PixelFormat::Rgba8888;
     surface->rgbaFullyOpaque = false;
     surface->width = 0;

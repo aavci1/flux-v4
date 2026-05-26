@@ -6,13 +6,20 @@
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 
 #include <drm_fourcc.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
+#include <cstring>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace flux::compositor {
 namespace {
@@ -22,6 +29,24 @@ void bufferDestroy(wl_client*, wl_resource* resource) {
 }
 
 struct wl_buffer_interface const bufferImpl{bufferDestroy};
+
+struct DmabufFormatModifier {
+  std::uint32_t format = 0;
+  std::uint32_t padding = 0;
+  std::uint64_t modifier = 0;
+};
+
+constexpr std::array<std::uint32_t, 4> kSupportedDmabufFormats{
+    DRM_FORMAT_ARGB8888,
+    DRM_FORMAT_XRGB8888,
+    DRM_FORMAT_ABGR8888,
+    DRM_FORMAT_XBGR8888,
+};
+
+constexpr std::array<std::uint64_t, 2> kSupportedDmabufModifiers{
+    DRM_FORMAT_MOD_INVALID,
+    DRM_FORMAT_MOD_LINEAR,
+};
 
 std::optional<DmabufPlane> findPlane(WaylandServer::Impl::DmabufParams const* params, std::uint32_t index) {
   auto found = std::find_if(params->planes.begin(), params->planes.end(),
@@ -217,9 +242,136 @@ void linuxDmabufCreateParams(wl_client* client, wl_resource* resource, std::uint
                                                          &WaylandServer::Impl::destroyDmabufParams>);
 }
 
+void linuxDmabufFeedbackDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct zwp_linux_dmabuf_feedback_v1_interface const linuxDmabufFeedbackImpl{
+    .destroy = linuxDmabufFeedbackDestroy,
+};
+
+std::vector<DmabufFormatModifier> supportedDmabufFormatTable() {
+  std::vector<DmabufFormatModifier> table;
+  table.reserve(kSupportedDmabufFormats.size() * kSupportedDmabufModifiers.size());
+  for (std::uint32_t format : kSupportedDmabufFormats) {
+    for (std::uint64_t modifier : kSupportedDmabufModifiers) {
+      table.push_back({
+          .format = format,
+          .padding = 0,
+          .modifier = modifier,
+      });
+    }
+  }
+  return table;
+}
+
+int createDmabufFormatTableFd(std::vector<DmabufFormatModifier> const& table) {
+  int fd = memfd_create("lambda-dmabuf-formats", MFD_CLOEXEC);
+  if (fd < 0) return -1;
+
+  std::size_t const byteSize = table.size() * sizeof(DmabufFormatModifier);
+  auto const* data = reinterpret_cast<char const*>(table.data());
+  std::size_t written = 0;
+  while (written < byteSize) {
+    ssize_t const rc = write(fd, data + written, byteSize - written);
+    if (rc < 0) {
+      if (errno == EINTR) continue;
+      close(fd);
+      return -1;
+    }
+    if (rc == 0) {
+      close(fd);
+      return -1;
+    }
+    written += static_cast<std::size_t>(rc);
+  }
+  return fd;
+}
+
+void appendArrayBytes(wl_array& array, void const* data, std::size_t size) {
+  void* target = wl_array_add(&array, size);
+  if (!target) return;
+  std::memcpy(target, data, size);
+}
+
+void sendDeviceArray(wl_resource* resource, bool trancheTarget, std::uint64_t rawDevice) {
+  wl_array deviceArray;
+  wl_array_init(&deviceArray);
+  dev_t const device = static_cast<dev_t>(rawDevice);
+  appendArrayBytes(deviceArray, &device, sizeof(device));
+  if (deviceArray.size == sizeof(device)) {
+    if (trancheTarget) {
+      zwp_linux_dmabuf_feedback_v1_send_tranche_target_device(resource, &deviceArray);
+    } else {
+      zwp_linux_dmabuf_feedback_v1_send_main_device(resource, &deviceArray);
+    }
+  }
+  wl_array_release(&deviceArray);
+}
+
+void sendDmabufFeedback(wl_resource* resource, WaylandServer::Impl* server) {
+  auto const table = supportedDmabufFormatTable();
+  int tableFd = createDmabufFormatTableFd(table);
+  if (tableFd < 0) {
+    wl_resource_post_no_memory(resource);
+    return;
+  }
+
+  zwp_linux_dmabuf_feedback_v1_send_format_table(
+      resource, tableFd, static_cast<std::uint32_t>(table.size() * sizeof(DmabufFormatModifier)));
+  close(tableFd);
+
+  std::uint64_t const device = server && server->output_.drmDevice != 0 ? server->output_.drmDevice : 1;
+  sendDeviceArray(resource, false, device);
+  sendDeviceArray(resource, true, device);
+
+  wl_array indices;
+  wl_array_init(&indices);
+  for (std::uint16_t i = 0; i < table.size(); ++i) {
+    appendArrayBytes(indices, &i, sizeof(i));
+  }
+  if (indices.size == table.size() * sizeof(std::uint16_t)) {
+    zwp_linux_dmabuf_feedback_v1_send_tranche_formats(resource, &indices);
+  }
+  wl_array_release(&indices);
+
+  zwp_linux_dmabuf_feedback_v1_send_tranche_flags(resource, 0);
+  zwp_linux_dmabuf_feedback_v1_send_tranche_done(resource);
+  zwp_linux_dmabuf_feedback_v1_send_done(resource);
+}
+
+wl_resource* createDmabufFeedbackResource(wl_client* client, wl_resource* dmabufResource, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client,
+                                             &zwp_linux_dmabuf_feedback_v1_interface,
+                                             wl_resource_get_version(dmabufResource),
+                                             id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return nullptr;
+  }
+  wl_resource_set_implementation(resource, &linuxDmabufFeedbackImpl, nullptr, nullptr);
+  return resource;
+}
+
+void linuxDmabufGetDefaultFeedback(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  wl_resource* feedback = createDmabufFeedbackResource(client, resource, id);
+  if (!feedback) return;
+  sendDmabufFeedback(feedback, serverFrom(resource));
+}
+
+void linuxDmabufGetSurfaceFeedback(wl_client* client, wl_resource* resource, std::uint32_t id,
+                                   wl_resource* surfaceResource) {
+  (void)surfaceResource;
+  wl_resource* feedback = createDmabufFeedbackResource(client, resource, id);
+  if (!feedback) return;
+  sendDmabufFeedback(feedback, serverFrom(resource));
+}
+
 struct zwp_linux_dmabuf_v1_interface const linuxDmabufImpl{
     .destroy = linuxDmabufDestroy,
     .create_params = linuxDmabufCreateParams,
+    .get_default_feedback = linuxDmabufGetDefaultFeedback,
+    .get_surface_feedback = linuxDmabufGetSurfaceFeedback,
 };
 
 void sendDmabufFormat(wl_resource* resource, std::uint32_t format) {
@@ -238,21 +390,23 @@ void sendDmabufFormat(wl_resource* resource, std::uint32_t format) {
 } // namespace
 
 bool isSupportedDmabufFormat(std::uint32_t format) {
-  return format == DRM_FORMAT_ARGB8888 || format == DRM_FORMAT_XRGB8888 ||
-         format == DRM_FORMAT_ABGR8888 || format == DRM_FORMAT_XBGR8888;
+  return std::find(kSupportedDmabufFormats.begin(), kSupportedDmabufFormats.end(), format) !=
+         kSupportedDmabufFormats.end();
 }
 
 void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, std::min(version, 3u), id);
+  std::uint32_t const resourceVersion = std::min(version, 5u);
+  wl_resource* resource = wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, resourceVersion, id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
   }
   wl_resource_set_implementation(resource, &linuxDmabufImpl, data, nullptr);
-  sendDmabufFormat(resource, DRM_FORMAT_ARGB8888);
-  sendDmabufFormat(resource, DRM_FORMAT_XRGB8888);
-  sendDmabufFormat(resource, DRM_FORMAT_ABGR8888);
-  sendDmabufFormat(resource, DRM_FORMAT_XBGR8888);
+  if (resourceVersion < 4u) {
+    for (std::uint32_t format : kSupportedDmabufFormats) {
+      sendDmabufFormat(resource, format);
+    }
+  }
 }
 
 } // namespace flux::compositor

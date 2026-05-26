@@ -44,6 +44,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <vulkan/vulkan.h>
 
 namespace flux::compositor {
@@ -64,6 +66,13 @@ bool envEnabled(char const* name) {
   char const* raw = std::getenv(name);
   if (!raw || !*raw) return false;
   return std::strcmp(raw, "0") != 0 && std::strcmp(raw, "false") != 0 && std::strcmp(raw, "FALSE") != 0;
+}
+
+std::uint64_t drmDeviceForFd(int fd) {
+  if (fd < 0) return 0;
+  struct stat statbuf {};
+  if (fstat(fd, &statbuf) != 0) return 0;
+  return static_cast<std::uint64_t>(statbuf.st_rdev);
 }
 
 std::filesystem::path snapCaptureRoot() {
@@ -597,6 +606,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         .width = static_cast<std::int32_t>(output.width()),
         .height = static_cast<std::int32_t>(output.height()),
         .refreshMilliHz = static_cast<std::int32_t>(output.refreshRateMilliHz()),
+        .drmDevice = drmDeviceForFd(device->fd()),
     });
     auto lastInputActivity = SteadyClock::now();
     bool inputActivityThisLoop = false;

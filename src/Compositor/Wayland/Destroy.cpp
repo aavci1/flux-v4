@@ -336,6 +336,10 @@ void WaylandServer::Impl::destroyShmBuffer(ShmBuffer* buffer) {
       }
       if (surface->currentBuffer == buffer->resource) {
         surface->currentBuffer = nullptr;
+        surface->shmPixels = nullptr;
+        surface->shmPixelBytes = 0;
+        surface->rgbaPixels.reset();
+        surface->rgbaFullyOpaque = false;
       }
       auto& releases = surface->pendingBufferReleases;
       releases.erase(std::remove(releases.begin(), releases.end(), buffer->resource), releases.end());
@@ -381,6 +385,8 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
       surface->width = 0;
       surface->height = 0;
       surface->rgbaPixels.reset();
+      surface->shmPixels = nullptr;
+      surface->shmPixelBytes = 0;
       surface->rgbaFullyOpaque = false;
       ++surface->serial;
     }

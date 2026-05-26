@@ -164,7 +164,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   outputGlobal_ = wl_global_create(display_, &wl_output_interface, 4, this, bindOutput);
   seatGlobal_ = wl_global_create(display_, &wl_seat_interface, 7, this, bindSeat);
   xdgWmBaseGlobal_ = wl_global_create(display_, &xdg_wm_base_interface, 6, this, bindXdgWmBase);
-  linuxDmabufGlobal_ = wl_global_create(display_, &zwp_linux_dmabuf_v1_interface, 3, this, bindLinuxDmabuf);
+  linuxDmabufGlobal_ = wl_global_create(display_, &zwp_linux_dmabuf_v1_interface, 5, this, bindLinuxDmabuf);
   xdgDecorationManagerGlobal_ =
       wl_global_create(display_, &zxdg_decoration_manager_v1_interface, 1, this, bindXdgDecorationManager);
   xdgOutputManagerGlobal_ =

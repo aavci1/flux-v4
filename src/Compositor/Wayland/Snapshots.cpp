@@ -25,7 +25,9 @@ namespace {
 
 bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->width > 0 && surface->height > 0 &&
-         ((surface->rgbaPixels && !surface->rgbaPixels->empty()) || surface->dmabufBuffer);
+         ((surface->rgbaPixels && !surface->rgbaPixels->empty()) ||
+          (surface->shmPixels && surface->shmPixelBytes > 0) ||
+          surface->dmabufBuffer);
 }
 
 bool dmabufFormatFullyOpaque(std::uint32_t format) {
@@ -123,7 +125,8 @@ bool surfaceContentFullyOpaque(WaylandServer::Impl::Surface const* surface) {
   if (regionCoversRect(surface->opaqueRegionRects, x, y, width, height)) {
     return true;
   }
-  if (surface->rgbaPixels && !surface->rgbaPixels->empty()) return surface->rgbaFullyOpaque;
+  if ((surface->rgbaPixels && !surface->rgbaPixels->empty()) ||
+      (surface->shmPixels && surface->shmPixelBytes > 0)) return surface->rgbaFullyOpaque;
   if (surface->dmabufBuffer) return dmabufFormatFullyOpaque(surface->dmabufBuffer->format);
   return false;
 }
@@ -326,6 +329,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .backgroundBlurRects = surface->backgroundBlurRects,
       .opaqueRegionRects = surface->opaqueRegionRects,
       .rgbaPixels = surface->rgbaPixels,
+      .shmPixels = surface->shmPixels,
+      .shmPixelBytes = surface->shmPixelBytes,
       .pixelFormat = surface->pixelFormat,
       .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
       .dmabufFormat = 0,
@@ -383,13 +388,18 @@ bool isDockLayer(WaylandServer::Impl::Surface const* surface) {
 
 std::int32_t panelHiddenY(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
   if (isTopBarLayer(surface)) {
-    return -displayHeight(surface) - (surface->layerSurface ? surface->layerSurface->marginTop : 0);
+    return -displayHeight(surface) - (surface->layerSurface ? surface->layerSurface->marginTop : 0) - 1;
   }
   if (isDockLayer(surface)) {
     return (server ? server->logicalOutputHeight() : surface->windowY + displayHeight(surface)) +
-           (surface->layerSurface ? surface->layerSurface->marginBottom : 0);
+           (surface->layerSurface ? surface->layerSurface->marginBottom : 0) + 1;
   }
   return surface ? surface->windowY : 0;
+}
+
+bool shellPanelFullyHidden(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  return server && (isTopBarLayer(surface) || isDockLayer(surface)) &&
+         server->shellPanelHideProgress_ >= 0.999f;
 }
 
 std::int32_t shellPanelPresentationOffsetY(WaylandServer::Impl const* server,
@@ -405,6 +415,7 @@ void appendRenderableSurface(WaylandServer::Impl const* server,
                              std::vector<CommittedSurfaceSnapshot>& snapshots,
                              WaylandServer::Impl::Surface const* surface) {
   if (!wm::surfaceEligibleForPresentation(surface)) return;
+  if (shellPanelFullyHidden(server, surface)) return;
   std::int32_t const presentationOffsetY = shellPanelPresentationOffsetY(server, surface);
   if (surfaceIsRenderable(surface)) {
     snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY + presentationOffsetY, true));
@@ -448,7 +459,9 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
   if (compositorCursorOverride_) return std::nullopt;
   Surface* surface = cursorSurface_;
   if (!surface || surface->width <= 0 || surface->height <= 0) return std::nullopt;
-  if ((!surface->rgbaPixels || surface->rgbaPixels->empty()) && !surface->dmabufBuffer) return std::nullopt;
+  if ((!surface->rgbaPixels || surface->rgbaPixels->empty()) &&
+      (!surface->shmPixels || surface->shmPixelBytes == 0) &&
+      !surface->dmabufBuffer) return std::nullopt;
 
   CommittedSurfaceSnapshot snapshot{
       .id = surface->id,
@@ -475,6 +488,8 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
 	      .serial = surface->serial,
 	      .backgroundBlurRects = {},
 	      .rgbaPixels = surface->rgbaPixels,
+	      .shmPixels = surface->shmPixels,
+	      .shmPixelBytes = surface->shmPixelBytes,
 	      .pixelFormat = surface->pixelFormat,
 	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
 	      .dmabufFormat = 0,
