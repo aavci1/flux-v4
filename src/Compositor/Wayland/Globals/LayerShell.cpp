@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
 
+#include "Compositor/Wayland/LayerShellZones.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
@@ -10,10 +11,6 @@
 
 namespace flux::compositor {
 namespace {
-
-bool hasAnchor(std::uint32_t anchor, std::uint32_t edge) {
-  return (anchor & edge) != 0;
-}
 
 void layerShellDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -200,24 +197,35 @@ void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
 
 void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!layerSurface || !layerSurface->resource) return;
-  std::uint32_t width = layerSurface->width;
-  std::uint32_t height = layerSurface->height;
-  if (width == 0 &&
-      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) != 0 &&
-      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) != 0) {
-    width = static_cast<std::uint32_t>(
-        std::max(1, layerSurface->server->logicalOutputWidth() - layerSurface->marginLeft - layerSurface->marginRight));
-  }
-  if (height == 0 &&
-      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) != 0 &&
-      (layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) != 0) {
-    height = static_cast<std::uint32_t>(
-        std::max(1, layerSurface->server->logicalOutputHeight() - layerSurface->marginTop - layerSurface->marginBottom));
-  }
+  LayerShellConfigureSize const size = resolveLayerShellConfigureSize({
+      .requestedWidth = layerSurface->width,
+      .requestedHeight = layerSurface->height,
+      .anchor = layerSurface->anchor,
+      .marginTop = layerSurface->marginTop,
+      .marginRight = layerSurface->marginRight,
+      .marginBottom = layerSurface->marginBottom,
+      .marginLeft = layerSurface->marginLeft,
+      .outputWidth = layerSurface->server->logicalOutputWidth(),
+      .outputHeight = layerSurface->server->logicalOutputHeight(),
+  });
   zwlr_layer_surface_v1_send_configure(layerSurface->resource,
                                        layerSurface->server->nextConfigureSerial_++,
-                                       width,
-                                       height);
+                                       size.width,
+                                       size.height);
+}
+
+bool reconfigureLayerSurfacesForOutputGeometry(WaylandServer::Impl* server) {
+  if (!server) return false;
+
+  bool touched = false;
+  for (auto const& layerSurface : server->layerSurfaces_) {
+    if (!layerSurface || !layerSurface->surface || !layerSurface->resource) continue;
+    touched = true;
+    applyLayerGeometry(layerSurface.get());
+    sendLayerConfigure(layerSurface.get());
+  }
+
+  return touched;
 }
 
 void bindLayerShell(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {

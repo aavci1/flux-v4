@@ -83,13 +83,19 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
 
   app_.eventQueue().on<flux::WindowEvent>([this](flux::WindowEvent const& event) {
     if (event.kind != flux::WindowEvent::Kind::Resize) return;
-    if (!launcherHandle_ || event.handle != *launcherHandle_) return;
-    if (!model_.launcherOpen()) return;
-    model_.setLauncherSize(event.size.width, event.size.height);
-    if (event.size.width > 64.f && event.size.height > 64.f) {
-      model_.setLauncherUiVisible(true);
+    if (topBarHandle_ && event.handle == *topBarHandle_) {
+      if (model_.setTopBarWidth(event.size.width)) {
+        requestTopBarRedraw();
+      }
+      return;
     }
-    requestLauncherRedraw();
+    if (launcherHandle_ && event.handle == *launcherHandle_ && model_.launcherOpen()) {
+      model_.setLauncherSize(event.size.width, event.size.height);
+      if (event.size.width > 64.f && event.size.height > 64.f) {
+        model_.setLauncherUiVisible(true);
+      }
+      requestLauncherRedraw();
+    }
   });
 
   app_.eventQueue().on<flux::TimerEvent>([this](flux::TimerEvent const& event) {
@@ -147,6 +153,7 @@ void ShellController::createProductionWindows() {
   topBar.setBackground(flux::WindowBackground::transparent());
   topBarWindow_ = &topBar;
   topBarHandle_ = topBar.handle();
+  model_.setTopBarWidth(topBar.getSize().width);
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *topBarHandle_);
 
   int const dockWidthPx = dockWidth(model_.dockItems());

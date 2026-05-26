@@ -29,6 +29,7 @@ public:
   bool launcherUiVisible() const { return launcherUiVisible_.peek(); }
   float launcherWidth() const { return launcherWidth_.peek(); }
   float launcherHeight() const { return launcherHeight_.peek(); }
+  float topBarWidth() const { return topBarWidth_.peek(); }
   std::string const& query() const { return query_.peek(); }
   int queryCursor() const { return queryCursor_.peek(); }
   int highlighted() const { return highlighted_.peek(); }
@@ -42,6 +43,7 @@ public:
   flux::Signal<bool>& launcherUiVisibleSignal() { return launcherUiVisible_; }
   flux::Signal<float>& launcherWidthSignal() { return launcherWidth_; }
   flux::Signal<float>& launcherHeightSignal() { return launcherHeight_; }
+  flux::Signal<float>& topBarWidthSignal() { return topBarWidth_; }
   flux::Signal<std::string>& querySignal() { return query_; }
   flux::Signal<int>& queryCursorSignal() { return queryCursor_; }
   flux::Signal<int>& highlightedSignal() { return highlighted_; }
@@ -61,6 +63,7 @@ public:
   void closeLauncher();
   void setLauncherUiVisible(bool visible);
   void setLauncherSize(float width, float height);
+  bool setTopBarWidth(float width);
   void setQuery(std::string query);
   void setHighlighted(int index);
   void moveHighlight(int delta);
@@ -85,6 +88,7 @@ private:
   flux::Signal<bool> launcherUiVisible_{false};
   flux::Signal<float> launcherWidth_{1.f};
   flux::Signal<float> launcherHeight_{1.f};
+  flux::Signal<float> topBarWidth_{1.f};
   flux::Signal<std::string> query_;
   flux::Signal<int> queryCursor_{0};
   flux::Signal<int> highlighted_{0};

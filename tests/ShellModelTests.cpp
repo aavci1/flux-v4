@@ -85,6 +85,18 @@ TEST_CASE("Shell model launcher query editing is cursor aware") {
   CHECK(model.queryCursor() == 11);
 }
 
+TEST_CASE("Shell model tracks top bar width from layer resize") {
+  lambda_shell::ShellModel model;
+
+  CHECK(model.topBarWidth() == 1.f);
+  CHECK(model.setTopBarWidth(1440.f));
+  CHECK(model.topBarWidth() == 1440.f);
+  CHECK_FALSE(model.setTopBarWidth(1440.f));
+  CHECK(model.topBarWidth() == 1440.f);
+  CHECK(model.setTopBarWidth(0.f));
+  CHECK(model.topBarWidth() == 1.f);
+}
+
 TEST_CASE("Shell model applies structured snapshots to dock status title and system status") {
   lambda_shell::ShellModel model;
   model.resetDockItems();

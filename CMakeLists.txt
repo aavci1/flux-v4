@@ -704,6 +704,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Wayland/Globals/XdgShell.cpp
     src/Compositor/Wayland/Destroy.cpp
     src/Compositor/Wayland/FrameScheduler.cpp
+    src/Compositor/Wayland/LayerShellZones.cpp
     src/Compositor/Wayland/ServerLifecycle.cpp
     src/Compositor/Wayland/Snapshots.cpp
     src/Compositor/Window/WindowGeometry.cpp

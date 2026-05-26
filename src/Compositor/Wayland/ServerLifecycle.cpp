@@ -321,7 +321,14 @@ void WaylandServer::Impl::setInputConfig(CompositorInputConfig config) {
 }
 
 void WaylandServer::Impl::setPreferredScale(float scale) {
+  float const previousScale = preferredScale_;
+  std::int32_t const previousLogicalWidth = logicalOutputWidth();
+  std::int32_t const previousLogicalHeight = logicalOutputHeight();
+
   preferredScale_ = std::clamp(scale, 0.5f, 4.f);
+  bool const outputGeometryChanged = std::abs(previousScale - preferredScale_) > 0.001f ||
+                                     previousLogicalWidth != logicalOutputWidth() ||
+                                     previousLogicalHeight != logicalOutputHeight();
   std::int32_t const integerScale = integerOutputScale(preferredScale_);
   for (wl_resource* output : outputResources_) {
     if (output && wl_resource_get_version(output) >= 2) {
@@ -334,6 +341,11 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
     if (fractionalScale && fractionalScale->resource) {
       wp_fractional_scale_v1_send_preferred_scale(fractionalScale->resource, preferred);
     }
+  }
+  if (outputGeometryChanged) {
+    reconfigureLayerSurfacesForOutputGeometry(this);
+    ++contentSerial_;
+    notifyShellStateChanged();
   }
   flushClients();
 }

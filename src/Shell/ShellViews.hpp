@@ -6,7 +6,6 @@
 #include "Shell/UI/LambdaTopBar.hpp"
 
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/KeyCodes.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
@@ -22,13 +21,8 @@ struct ShellTopBarView {
   flux::Element body() const {
     auto const activeTitle = model.activeTitleSignal();
     auto const timeText = model.timeTextSignal();
-    flux::Reactive::Bindable<float> barWidth{[] {
-      flux::LayoutConstraints const* constraints = flux::useLayoutConstraints();
-      if (constraints && std::isfinite(constraints->maxWidth) && constraints->maxWidth > 0.f) {
-        return constraints->maxWidth;
-      }
-      return 1.f;
-    }};
+    auto const topBarWidth = model.topBarWidthSignal();
+    flux::Reactive::Bindable<float> barWidth{[topBarWidth] { return std::max(1.f, topBarWidth()); }};
     auto const systemStatus = model.systemStatusSignal();
     return flux::Element{LambdaTopBar{TopBarProps{
         .title = flux::Reactive::Bindable<std::string>{[activeTitle] { return activeTitle(); }},

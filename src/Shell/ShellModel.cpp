@@ -263,6 +263,15 @@ void ShellModel::setLauncherSize(float width, float height) {
   launcherHeight_.set(nextHeight);
 }
 
+bool ShellModel::setTopBarWidth(float width) {
+  float const nextWidth = std::max(1.f, width);
+  if (topBarWidth_.peek() == nextWidth) {
+    return false;
+  }
+  topBarWidth_.set(nextWidth);
+  return true;
+}
+
 void ShellModel::setQuery(std::string query) {
   int const cursor = static_cast<int>(query.size());
   query_.set(std::move(query));

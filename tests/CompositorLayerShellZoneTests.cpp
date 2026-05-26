@@ -7,7 +7,11 @@
 TEST_CASE("layer shell reserved zones aggregate top bar and dock") {
   std::vector<flux::compositor::LayerShellReservedZoneInput> layers{
       {.nameSpace = "lambda.topbar", .exclusiveZone = 36},
-      {.nameSpace = "lambda.dock", .exclusiveZone = 0, .anchor = 4, .marginBottom = 8, .extent = 64},
+      {.nameSpace = "lambda.dock",
+       .exclusiveZone = 0,
+       .anchor = flux::compositor::kLayerShellAnchorBottom,
+       .marginBottom = 8,
+       .extent = 64},
   };
   auto const zones = flux::compositor::aggregateLayerShellReservedZones(layers);
   CHECK(zones.topBar == 36);
@@ -21,4 +25,42 @@ TEST_CASE("layer shell reserved zones ignore unrelated namespaces") {
   auto const zones = flux::compositor::aggregateLayerShellReservedZones(layers);
   CHECK(zones.topBar == 0);
   CHECK(zones.dock == 0);
+}
+
+TEST_CASE("layer shell configure size resolves output-relative dimensions") {
+  using namespace flux::compositor;
+
+  auto const horizontal = resolveLayerShellConfigureSize({
+      .requestedWidth = 0,
+      .requestedHeight = 36,
+      .anchor = kLayerShellAnchorLeft | kLayerShellAnchorRight,
+      .marginRight = 30,
+      .marginLeft = 10,
+      .outputWidth = 3840,
+      .outputHeight = 2160,
+  });
+  CHECK(horizontal.width == 3800);
+  CHECK(horizontal.height == 36);
+
+  auto const vertical = resolveLayerShellConfigureSize({
+      .requestedWidth = 64,
+      .requestedHeight = 0,
+      .anchor = kLayerShellAnchorTop | kLayerShellAnchorBottom,
+      .marginTop = 12,
+      .marginBottom = 20,
+      .outputWidth = 3840,
+      .outputHeight = 2160,
+  });
+  CHECK(vertical.width == 64);
+  CHECK(vertical.height == 2128);
+
+  auto const floating = resolveLayerShellConfigureSize({
+      .requestedWidth = 0,
+      .requestedHeight = 0,
+      .anchor = kLayerShellAnchorTop,
+      .outputWidth = 3840,
+      .outputHeight = 2160,
+  });
+  CHECK(floating.width == 0);
+  CHECK(floating.height == 0);
 }
