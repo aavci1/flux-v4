@@ -4,6 +4,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/WaylandTypes.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
+#include "Shell/ShellAppRegistry.hpp"
 
 #include <cstdint>
 #include <algorithm>
@@ -150,16 +151,7 @@ inline WaylandServer::Impl::Surface* previousFocusedToplevelFromOrders(
   return nullptr;
 }
 inline bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
-  if (requested == actual) return true;
-  if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
-  if (requested == "browser" && actual == "firefox") return true;
-  if (requested == "settings" && actual == "lambda-settings") return true;
-  if (requested == "files" &&
-      (actual == "files" || actual == "lambda-files" || actual == "org.gnome.Nautilus" ||
-       actual == "nautilus" || actual == "thunar")) {
-    return true;
-  }
-  return false;
+  return lambda_shell::shellAppIdMatches(requested, actual);
 }
 bool containsPoint(float x, float y, float left, float top, float right, float bottom);
 inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, float localX, float localY) {

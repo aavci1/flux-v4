@@ -1,5 +1,6 @@
 #include "Shell/ShellModel.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
 #include "Shell/ShellJson.hpp"
 #include "Shell/ShellModels.hpp"
 
@@ -26,7 +27,7 @@ void ShellModel::refreshLauncherResults() {
 void ShellModel::setPreviewFocus(std::string_view appId) {
   auto items = dockItems_.peek();
   for (auto& item : items) {
-    item.running = !appId.empty() && item.kind == "app" && item.appId == appId;
+    item.running = !appId.empty() && item.kind == "app" && shellAppIdMatches(item.appId, appId);
     item.focused = item.running;
   }
   dockItems_.set(std::move(items));
@@ -59,18 +60,6 @@ void ShellModel::resetDockItems() {
   refreshLauncherResults();
 }
 
-bool ShellModel::appIdMatches(std::string_view requested, std::string_view actual) {
-  if (requested == actual) return true;
-  if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
-  if (requested == "browser" && actual == "firefox") return true;
-  if (requested == "settings" && actual == "lambda-settings") return true;
-  if (requested == "files" &&
-      (actual == "lambda-files" || actual == "org.gnome.Nautilus" || actual == "nautilus" || actual == "thunar")) {
-    return true;
-  }
-  return false;
-}
-
 bool ShellModel::dockItemsVisualStateEqual(std::vector<DockItem> const& a,
                                            std::vector<DockItem> const& b) {
   if (a.size() != b.size()) return false;
@@ -92,7 +81,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
   for (auto& item : items) {
     if (item.appId.empty()) continue;
     for (auto const& window : snapshot.windows) {
-      if (appIdMatches(item.appId, window.appId)) {
+      if (shellAppIdMatches(item.appId, window.appId)) {
         item.running = true;
         item.focused = window.focused;
         if (item.focused) {

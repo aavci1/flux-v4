@@ -70,7 +70,6 @@ public:
   void activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc);
 
 private:
-  static bool appIdMatches(std::string_view requested, std::string_view actual);
   void refreshLauncherResults();
   static bool dockItemsVisualStateEqual(std::vector<DockItem> const& a,
                                         std::vector<DockItem> const& b);
