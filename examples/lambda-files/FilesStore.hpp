@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/UI/IconName.hpp>
+#include <Flux/UI/Input.hpp>
 
 #include "Shell/ShellAppRegistry.hpp"
 
@@ -217,6 +218,14 @@ struct FileSelectionState {
   int anchorIndex = -1;
 
   [[nodiscard]] bool contains(std::filesystem::path const& path) const;
+  bool operator==(FileSelectionState const&) const = default;
+};
+
+struct FilePointerSelectionResult {
+  FileSelectionState selection;
+  bool activate = false;
+
+  bool operator==(FilePointerSelectionResult const&) const = default;
 };
 
 struct TrashInfo {
@@ -320,6 +329,10 @@ FileSelectionState moveSelectionByOffset(FileSelectionState state,
                                          std::vector<FileEntry> const& entries,
                                          int offset,
                                          bool extend);
+FilePointerSelectionResult selectionForPointerTap(FileSelectionState state,
+                                                  std::vector<FileEntry> const& entries,
+                                                  int index,
+                                                  flux::Modifiers modifiers);
 std::vector<FileEntry> selectedEntries(std::vector<FileEntry> const& entries, FileSelectionState const& selection);
 std::vector<FileContextCommand> contextMenuCommands(std::vector<FileEntry> const& entries,
                                                     FileSelectionState const& selection,

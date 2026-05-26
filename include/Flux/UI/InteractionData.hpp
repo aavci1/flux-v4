@@ -37,6 +37,7 @@ struct InteractionData : public scenegraph::Interaction {
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
   Reactive::SmallFn<void(std::string const&)> onTextInput;
   Reactive::SmallFn<void(MouseButton)> onTap;
+  Reactive::SmallFn<void(MouseButton, Modifiers)> onTapWithModifiers;
   Reactive::Signal<bool> hoverSignal;
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
@@ -54,6 +55,7 @@ struct InteractionData : public scenegraph::Interaction {
     return !onPointerEnter && !onPointerExit && !onFocus && !onBlur && !onPointerDown &&
            !onPointerUp && !onPointerMove &&
            !onScroll && !onKeyDown && !onKeyUp && !onTextInput && !onTap &&
+           !onTapWithModifiers &&
            hoverSignal.disposed() && pressSignal.disposed() &&
            focusSignal.disposed() && keyboardFocusSignal.disposed() &&
            !focusable_.isReactive() && !focusable_.evaluate() &&

@@ -45,6 +45,7 @@ struct RuntimeTargetSnapshot {
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
   Reactive::SmallFn<void(std::string const&)> onTextInput;
   Reactive::SmallFn<void(MouseButton)> onTap;
+  Reactive::SmallFn<void(MouseButton, Modifiers)> onTapWithModifiers;
   Reactive::Signal<bool> hoverSignal;
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
@@ -365,6 +366,7 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
     target.onKeyUp = interaction->onKeyUp;
     target.onTextInput = interaction->onTextInput;
     target.onTap = interaction->onTap;
+    target.onTapWithModifiers = interaction->onTapWithModifiers;
     target.hoverSignal = interaction->hoverSignal;
     target.pressSignal = interaction->pressSignal;
     target.focusSignal = interaction->focusSignal;
@@ -814,12 +816,18 @@ void Runtime::handleInput(InputEvent const& event) {
       if (!cancelled && released.onTap) {
         released.onTap(event.button);
       }
+      if (!cancelled && released.onTapWithModifiers) {
+        released.onTapWithModifiers(event.button, event.modifiers);
+      }
     } else if (auto hit = hitWindow(d->window, point)) {
       if (hit->interaction && hit->interaction->onPointerUp) {
         hit->interaction->onPointerUp(hit->localPoint, event.button);
       }
       if (hit->interaction && hit->interaction->onTap) {
         hit->interaction->onTap(event.button);
+      }
+      if (hit->interaction && hit->interaction->onTapWithModifiers) {
+        hit->interaction->onTapWithModifiers(event.button, event.modifiers);
       }
     }
     updateHoverForPoint(d->input, d->window, point);

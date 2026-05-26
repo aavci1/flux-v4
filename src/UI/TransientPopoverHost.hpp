@@ -36,9 +36,9 @@ public:
   void resize(Size size);
   void render(Canvas& canvas);
 
-  void pointerDown(Point point, MouseButton button);
+  void pointerDown(Point point, MouseButton button, Modifiers modifiers = Modifiers::None);
   void pointerMove(Point point);
-  void pointerUp(Point point, MouseButton button);
+  void pointerUp(Point point, MouseButton button, Modifiers modifiers = Modifiers::None);
   void scroll(Point point, Vec2 delta);
   void keyDown(KeyCode key, Modifiers modifiers);
   void keyUp(KeyCode key, Modifiers modifiers);

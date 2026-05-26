@@ -92,6 +92,7 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , onKeyDown(o.onKeyDown)
     , onKeyUp(o.onKeyUp)
     , onTextInput(o.onTextInput)
+    , onTapWithModifiers(o.onTapWithModifiers)
     , focusable(o.focusable)
     , cursor(o.cursor)
     , windowDragRegion(o.windowDragRegion)
@@ -128,6 +129,7 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     onKeyDown = o.onKeyDown;
     onKeyUp = o.onKeyUp;
     onTextInput = o.onTextInput;
+    onTapWithModifiers = o.onTapWithModifiers;
     focusable = o.focusable;
     cursor = o.cursor;
     windowDragRegion = o.windowDragRegion;
@@ -339,6 +341,11 @@ Element Element::onTap(std::function<void()> handler, MouseButton button) && {
 
 Element Element::onTap(std::function<void(MouseButton)> handler) && {
   writableModifiers().onTap = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onTap(std::function<void(MouseButton, Modifiers)> handler) && {
+  writableModifiers().onTapWithModifiers = std::move(handler);
   return std::move(*this);
 }
 

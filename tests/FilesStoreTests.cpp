@@ -447,6 +447,34 @@ TEST_CASE("FilesStore keyboard selection moves extends and selects all") {
   CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/e"});
 }
 
+TEST_CASE("FilesStore pointer selection supports activate toggle and range") {
+  std::vector<lambda_files::FileEntry> entries{
+      {.name = "a", .path = "/tmp/a"},
+      {.name = "b", .path = "/tmp/b"},
+      {.name = "c", .path = "/tmp/c"},
+      {.name = "d", .path = "/tmp/d"},
+  };
+
+  auto result = lambda_files::selectionForPointerTap({}, entries, 1, flux::Modifiers::None);
+  CHECK(result.activate);
+  CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/b"});
+  CHECK(result.selection.anchorIndex == 1);
+
+  result = lambda_files::selectionForPointerTap(result.selection, entries, 3, flux::Modifiers::Ctrl);
+  CHECK_FALSE(result.activate);
+  CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/b", "/tmp/d"});
+  CHECK(result.selection.anchorIndex == 3);
+
+  result = lambda_files::selectionForPointerTap(result.selection, entries, 0, flux::Modifiers::Shift);
+  CHECK_FALSE(result.activate);
+  CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/a", "/tmp/b", "/tmp/c", "/tmp/d"});
+  CHECK(result.selection.anchorIndex == 3);
+
+  auto invalid = lambda_files::selectionForPointerTap(result.selection, entries, 42, flux::Modifiers::None);
+  CHECK_FALSE(invalid.activate);
+  CHECK(invalid.selection == result.selection);
+}
+
 TEST_CASE("FilesStore context menu commands reflect selection and clipboard state") {
   std::vector<lambda_files::FileEntry> entries{
       {.name = "a", .path = "/tmp/a"},

@@ -162,6 +162,11 @@ Element ViewModifiers<Derived>::onTap(std::function<void(MouseButton)> handler) 
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::onTap(std::function<void(MouseButton, Modifiers)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onTap(std::move(handler));
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::onPointerEnter(std::function<void()> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerEnter(std::move(handler));
 }

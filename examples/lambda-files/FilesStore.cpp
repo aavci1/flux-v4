@@ -1038,6 +1038,31 @@ FileSelectionState moveSelectionByOffset(FileSelectionState state,
   return moveSelectionToIndex(std::move(state), entries, focused, extend);
 }
 
+FilePointerSelectionResult selectionForPointerTap(FileSelectionState state,
+                                                  std::vector<FileEntry> const& entries,
+                                                  int index,
+                                                  flux::Modifiers modifiers) {
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return {.selection = std::move(state), .activate = false};
+  }
+  if (flux::any(modifiers & flux::Modifiers::Shift)) {
+    return {
+        .selection = rangeSelection(std::move(state), entries, index),
+        .activate = false,
+    };
+  }
+  if (flux::any(modifiers & flux::Modifiers::Ctrl) || flux::any(modifiers & flux::Modifiers::Meta)) {
+    return {
+        .selection = toggleSelection(std::move(state), entries, index),
+        .activate = false,
+    };
+  }
+  return {
+      .selection = selectOnly(entries, index),
+      .activate = true,
+  };
+}
+
 std::vector<FileEntry> selectedEntries(std::vector<FileEntry> const& entries, FileSelectionState const& selection) {
   std::vector<FileEntry> selected;
   selected.reserve(selection.selected.size());

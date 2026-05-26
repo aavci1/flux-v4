@@ -84,12 +84,12 @@ struct RuntimeHarness {
     dispatchPointer(flux::InputEvent::Kind::PointerMove, point);
   }
 
-  void pointerDown(flux::Point point) {
-    dispatchPointer(flux::InputEvent::Kind::PointerDown, point);
+  void pointerDown(flux::Point point, flux::Modifiers modifiers = flux::Modifiers::None) {
+    dispatchPointer(flux::InputEvent::Kind::PointerDown, point, modifiers);
   }
 
-  void pointerUp(flux::Point point) {
-    dispatchPointer(flux::InputEvent::Kind::PointerUp, point);
+  void pointerUp(flux::Point point, flux::Modifiers modifiers = flux::Modifiers::None) {
+    dispatchPointer(flux::InputEvent::Kind::PointerUp, point, modifiers);
   }
 
   void keyDown(flux::KeyCode key, flux::Modifiers modifiers = flux::Modifiers::None) {
@@ -120,12 +120,14 @@ struct RuntimeHarness {
   }
 
 private:
-  void dispatchPointer(flux::InputEvent::Kind kind, flux::Point point) {
+  void dispatchPointer(flux::InputEvent::Kind kind, flux::Point point,
+                       flux::Modifiers modifiers = flux::Modifiers::None) {
     flux::InputEvent event{};
     event.kind = kind;
     event.handle = window.handle();
     event.position = {point.x, point.y};
     event.button = flux::MouseButton::Left;
+    event.modifiers = modifiers;
     event.pressedButtons =
         kind == flux::InputEvent::Kind::PointerUp ? 0u : static_cast<std::uint8_t>(1u);
     runtime.handleInput(event);

@@ -1550,9 +1550,9 @@ private:
     ++state.dispatchDepth;
     MouseButton const mouseButton = mouseButtonFromLinux(button);
     if (buttonState == WL_POINTER_BUTTON_STATE_PRESSED) {
-      state.host->pointerDown(state.pointerPos, mouseButton);
+      state.host->pointerDown(state.pointerPos, mouseButton, currentModifiers_);
     } else {
-      state.host->pointerUp(state.pointerPos, mouseButton);
+      state.host->pointerUp(state.pointerPos, mouseButton, currentModifiers_);
     }
     bool const shouldRender = !state.closeAfterEvent;
     if (shouldRender) {

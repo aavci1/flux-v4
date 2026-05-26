@@ -451,6 +451,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     interaction->onKeyDown = modifiers.onKeyDown;
     interaction->onKeyUp = modifiers.onKeyUp;
     interaction->onTextInput = modifiers.onTextInput;
+    interaction->onTapWithModifiers = modifiers.onTapWithModifiers;
     interaction->focusable_ = modifiers.focusable;
     interaction->cursor = modifiers.cursor;
     interaction->windowDragRegion = modifiers.windowDragRegion;

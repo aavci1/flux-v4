@@ -77,6 +77,7 @@ struct TargetSnapshot {
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
   Reactive::SmallFn<void(std::string const&)> onTextInput;
   Reactive::SmallFn<void(MouseButton)> onTap;
+  Reactive::SmallFn<void(MouseButton, Modifiers)> onTapWithModifiers;
   Reactive::Signal<bool> hoverSignal;
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
@@ -117,6 +118,7 @@ TargetSnapshot snapshot(scenegraph::SceneNode const* node, InteractionData const
     target.onKeyUp = interaction->onKeyUp;
     target.onTextInput = interaction->onTextInput;
     target.onTap = interaction->onTap;
+    target.onTapWithModifiers = interaction->onTapWithModifiers;
     target.hoverSignal = interaction->hoverSignal;
     target.pressSignal = interaction->pressSignal;
     target.focusSignal = interaction->focusSignal;
@@ -321,7 +323,8 @@ void TransientPopoverHost::render(Canvas& canvas) {
   d->renderer->render(d->sceneGraph);
 }
 
-void TransientPopoverHost::pointerDown(Point point, MouseButton button) {
+void TransientPopoverHost::pointerDown(Point point, MouseButton button, Modifiers modifiers) {
+  (void)modifiers;
   if (!d) {
     return;
   }
@@ -372,7 +375,7 @@ void TransientPopoverHost::pointerMove(Point point) {
   updateHover(d->input, d->sceneGraph, point);
 }
 
-void TransientPopoverHost::pointerUp(Point point, MouseButton button) {
+void TransientPopoverHost::pointerUp(Point point, MouseButton button, Modifiers modifiers) {
   if (!d) {
     return;
   }
@@ -389,12 +392,18 @@ void TransientPopoverHost::pointerUp(Point point, MouseButton button) {
     if (!cancelled && released.onTap) {
       released.onTap(button);
     }
+    if (!cancelled && released.onTapWithModifiers) {
+      released.onTapWithModifiers(button, modifiers);
+    }
   } else if (auto hit = hitGraph(d->sceneGraph, point)) {
     if (hit->interaction && hit->interaction->onPointerUp) {
       hit->interaction->onPointerUp(hit->localPoint, button);
     }
     if (hit->interaction && hit->interaction->onTap) {
       hit->interaction->onTap(button);
+    }
+    if (hit->interaction && hit->interaction->onTapWithModifiers) {
+      hit->interaction->onTapWithModifiers(button, modifiers);
     }
   }
   updateHover(d->input, d->sceneGraph, point);

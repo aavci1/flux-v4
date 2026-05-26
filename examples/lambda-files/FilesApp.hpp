@@ -569,6 +569,23 @@ struct FilesAppRoot {
       (void)openEntry(entry, error);
     };
 
+    auto tapEntry = [entries, selection, applySelection, activateEntry](FileEntry const& entry,
+                                                                        Modifiers modifiers) {
+      int index = -1;
+      for (std::size_t i = 0; i < entries().size(); ++i) {
+        if (entries()[i].path == entry.path) {
+          index = static_cast<int>(i);
+          break;
+        }
+      }
+      FilePointerSelectionResult const result =
+          selectionForPointerTap(selection(), entries(), index, modifiers);
+      applySelection(result.selection);
+      if (result.activate) {
+        activateEntry(entry);
+      }
+    };
+
     auto showMenu = usePopupMenu();
     auto pathsForSelection = [](std::vector<FileEntry> const& selected) {
       std::vector<std::filesystem::path> paths;
@@ -681,6 +698,7 @@ struct FilesAppRoot {
         .iconThemeRoots = iconThemeRoots(),
         .iconSize = preferences().iconSize,
         .activateEntry = activateEntry,
+        .tapEntry = tapEntry,
         .showEntryContextMenu = showEntryContextMenu,
     };
     Element root = VStack{

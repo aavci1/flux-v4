@@ -135,6 +135,21 @@ std::size_t gridRowCount(scenegraph::SceneNode const& gridRoot) {
   return gridForGroup(gridRoot).children().size();
 }
 
+bool hasTapInteraction(scenegraph::Interaction const& interaction) {
+  auto const& data = interactionData(interaction);
+  return static_cast<bool>(data.onTap) || static_cast<bool>(data.onTapWithModifiers);
+}
+
+void dispatchTap(scenegraph::Interaction const& interaction, MouseButton button,
+                 Modifiers modifiers = Modifiers::None) {
+  auto const& data = interactionData(interaction);
+  if (data.onTapWithModifiers) {
+    data.onTapWithModifiers(button, modifiers);
+  } else if (data.onTap) {
+    data.onTap(button);
+  }
+}
+
 } // namespace
 
 TEST_CASE("FilesFlowGrid layout column and row math") {
@@ -301,6 +316,7 @@ TEST_CASE("FilesFlowGrid expands in a flex scroll viewport and remains clickable
     Reactive::Signal<std::vector<FileEntry>> entries;
     Reactive::Signal<std::string> listingKey;
     std::shared_ptr<int> activations;
+    std::shared_ptr<std::vector<Modifiers>> activationModifiers;
 
     Element body() const {
       return HStack{
@@ -314,8 +330,11 @@ TEST_CASE("FilesFlowGrid expands in a flex scroll viewport and remains clickable
                       .entries = entries,
                       .listingKey = listingKey,
                       .selectedPath = Reactive::Signal<std::string>{},
-                      .activateEntry = [activations = activations](FileEntry const&) {
+                      .tapEntry = [activations = activations,
+                                   activationModifiers = activationModifiers](
+                                      FileEntry const&, Modifiers modifiers) {
                         ++*activations;
+                        activationModifiers->push_back(modifiers);
                       },
                   }}),
               }}.flex(1.f, 1.f, 0.f)),
@@ -327,9 +346,10 @@ TEST_CASE("FilesFlowGrid expands in a flex scroll viewport and remains clickable
   Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(10)};
   Reactive::Signal<std::string> listingKey{"/test/dir"};
   auto activations = std::make_shared<int>(0);
+  auto activationModifiers = std::make_shared<std::vector<Modifiers>>();
   scenegraph::SceneGraph sceneGraph;
   MountRoot root{std::make_unique<TypedRootHolder<Root>>(
-                     std::in_place, Root{entries, listingKey, activations}),
+                     std::in_place, Root{entries, listingKey, activations, activationModifiers}),
                  textSystem,
                  testEnvironment(),
                  Size{820.f, 320.f}};
@@ -348,11 +368,13 @@ TEST_CASE("FilesFlowGrid expands in a flex scroll viewport and remains clickable
 
   std::optional<scenegraph::InteractionHitResult> hit =
       scenegraph::hitTestInteraction(sceneGraph, Point{230.f, 20.f}, [](scenegraph::Interaction const& interaction) {
-        return static_cast<bool>(interactionData(interaction).onTap);
+        return hasTapInteraction(interaction);
       });
   REQUIRE(hit.has_value());
-  interactionData(*hit->interaction).onTap(MouseButton::Left);
+  dispatchTap(*hit->interaction, MouseButton::Left, Modifiers::Ctrl | Modifiers::Shift);
   CHECK(*activations == 1);
+  REQUIRE(activationModifiers->size() == 1);
+  CHECK(activationModifiers->front() == (Modifiers::Ctrl | Modifiers::Shift));
 }
 
 TEST_CASE("FilesFlowGrid expands inside the Files app shell layout") {
@@ -845,10 +867,10 @@ TEST_CASE("FilesAppRoot main scroll view survives sidebar folder navigation") {
   auto downloadsHit = scenegraph::hitTestInteraction(
       sceneGraph, Point{32.f, FilesTheme::kTitlebarHeight + FilesTheme::kSidePad + 98.f},
       [](scenegraph::Interaction const& interaction) {
-        return static_cast<bool>(interactionData(interaction).onTap);
+        return hasTapInteraction(interaction);
       });
   REQUIRE(downloadsHit.has_value());
-  interactionData(*downloadsHit->interaction).onTap(MouseButton::Left);
+  dispatchTap(*downloadsHit->interaction, MouseButton::Left);
 
   auto scrollHit = scenegraph::hitTestInteraction(
       sceneGraph, contentPoint, [](scenegraph::Interaction const& interaction) {

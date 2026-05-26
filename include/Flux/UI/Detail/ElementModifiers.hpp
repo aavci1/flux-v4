@@ -75,6 +75,7 @@ struct ElementModifiers {
   std::function<void(KeyCode, Modifiers)> onKeyDown;
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
+  std::function<void(MouseButton, Modifiers)> onTapWithModifiers;
   Reactive::Bindable<bool> focusable{false};
   Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
   bool windowDragRegion = false;
@@ -87,6 +88,7 @@ struct ElementModifiers {
            static_cast<bool>(onPointerUp) || static_cast<bool>(onPointerMove) ||
            static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
            static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) ||
+           static_cast<bool>(onTapWithModifiers) ||
            focusable.isReactive() || focusable.evaluate() ||
            cursor.isReactive() || cursor.evaluate() != Cursor::Inherit ||
            windowDragRegion || windowResizeEdge != WindowResizeEdge::None;

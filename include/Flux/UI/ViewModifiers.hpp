@@ -64,6 +64,7 @@ struct ViewModifiers {
 
   Element onTap(std::function<void()> handler, MouseButton button = MouseButton::Left) &&;
   Element onTap(std::function<void(MouseButton)> handler) &&;
+  Element onTap(std::function<void(MouseButton, Modifiers)> handler) &&;
   Element onPointerEnter(std::function<void()> handler) &&;
   Element onPointerExit(std::function<void()> handler) &&;
   Element onFocus(std::function<void()> handler) &&;

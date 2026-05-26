@@ -967,7 +967,7 @@ Add focused automated tests where behavior is deterministic:
 
 - [x] Files has a testable model outside the view body.
 - [x] Directory browsing, history, breadcrumbs, and path entry are robust.
-- [ ] Multi-select and keyboard selection work.
+- [x] Multi-select and keyboard selection work.
 - [x] Create folder/file works.
 - [x] Rename works.
 - [x] Copy/cut/paste/move works.

@@ -133,6 +133,7 @@ struct FilesFlowGrid {
   std::vector<std::filesystem::path> iconThemeRoots;
   int iconSize = 48;
   std::function<void(FileEntry const&)> activateEntry;
+  std::function<void(FileEntry const&, flux::Modifiers)> tapEntry;
   std::function<void(FileEntry const&)> showEntryContextMenu;
 
   float cellWidth = FilesTheme::kGridMinCell;
@@ -190,6 +191,7 @@ inline flux::Element FilesFlowGrid::body() const {
   std::vector<std::filesystem::path> const roots = iconThemeRoots;
   int const preferredIconSize = iconSize;
   auto const activate = activateEntry;
+  auto const tap = tapEntry;
   auto const contextMenu = showEntryContextMenu;
   float const tileW = cellWidth;
   float const tileH = cellHeight;
@@ -221,7 +223,7 @@ inline flux::Element FilesFlowGrid::body() const {
       [](detail::RowDescriptor const& row) {
         return row.key;
       },
-      [selectedPathSignal, selectionSignal, roots, preferredIconSize, activate, contextMenu, tileW, tileH, gapH](
+      [selectedPathSignal, selectionSignal, roots, preferredIconSize, activate, tap, contextMenu, tileW, tileH, gapH](
           detail::RowDescriptor const& row,
           Signal<std::size_t> const&) {
         int const colCount = std::max(1, row.columns);
@@ -240,8 +242,10 @@ inline flux::Element FilesFlowGrid::body() const {
                                           resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize)
                                               .themePath.string(),
                                       .selected = selected,
-                                      .onActivate = [activate, entry] {
-                                        if (activate) {
+                                      .onActivate = [activate, tap, entry](Modifiers modifiers) {
+                                        if (tap) {
+                                          tap(entry, modifiers);
+                                        } else if (activate) {
                                           activate(entry);
                                         }
                                       },
