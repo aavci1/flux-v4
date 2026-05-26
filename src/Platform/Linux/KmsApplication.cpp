@@ -1127,6 +1127,7 @@ void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
   if (!vtForeground_) return;
   vtForeground_ = false;
   debugLog("releasing DRM master for VT switch");
+  suspendInputForVtSwitch();
   for (KmsWindow* window : windows_) {
     if (window) window->suspendForVtSwitch();
   }
@@ -1177,6 +1178,7 @@ void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
   }
   vtAcquireAckPending_ = ttyFd_ >= 0 && acknowledge && vtProcessMode_;
   vtForeground_ = true;
+  resumeInputAfterVtSwitch();
   for (KmsWindow* window : windows_) {
     if (window) window->resumeFromVtSwitch();
   }

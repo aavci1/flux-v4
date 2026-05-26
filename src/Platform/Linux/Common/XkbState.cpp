@@ -100,6 +100,21 @@ void XkbState::updateKey(std::uint32_t key, bool pressed) {
   modifiers_ = mods;
 }
 
+void XkbState::resetState() {
+  if (!keymap_) {
+    modifiers_ = Modifiers::None;
+    return;
+  }
+  xkb_state* state = xkb_state_new(keymap_);
+  if (!state) {
+    modifiers_ = Modifiers::None;
+    return;
+  }
+  if (state_) xkb_state_unref(state_);
+  state_ = state;
+  modifiers_ = Modifiers::None;
+}
+
 std::uint32_t XkbState::keysymForEvdevKey(std::uint32_t key) const {
   return state_ ? static_cast<std::uint32_t>(xkb_state_key_get_one_sym(state_, key + 8))
                 : static_cast<std::uint32_t>(XKB_KEY_NoSymbol);

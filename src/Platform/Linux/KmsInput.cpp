@@ -9,12 +9,15 @@
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace flux {
 namespace {
@@ -43,6 +46,12 @@ std::uint8_t buttonMaskBit(std::uint32_t button) {
 bool debugKmsInput() {
   static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_KMS"));
   return enabled;
+}
+
+std::uint32_t inputEventTimeMs() {
+  using namespace std::chrono;
+  auto const now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+  return static_cast<std::uint32_t>(std::max<std::int64_t>(0, now));
 }
 
 } // namespace
@@ -128,7 +137,94 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
 }
 
 void KmsApplication::emitRawInput(platform::KmsInputEvent const& event) {
+  if (event.kind == platform::KmsInputEvent::Kind::PointerButton) {
+    if (event.pressed) rawPressedButtons_.insert(event.button);
+    else rawPressedButtons_.erase(event.button);
+  } else if (event.kind == platform::KmsInputEvent::Kind::Key) {
+    if (event.pressed) rawPressedKeys_.insert(event.key);
+    else rawPressedKeys_.erase(event.key);
+  }
   if (rawInputHandler_) rawInputHandler_(event);
+}
+
+void KmsApplication::releaseRawInputState(std::uint32_t timeMs) {
+  std::vector<std::uint32_t> buttons(rawPressedButtons_.begin(), rawPressedButtons_.end());
+  std::vector<std::uint32_t> keys(rawPressedKeys_.begin(), rawPressedKeys_.end());
+  for (std::uint32_t button : buttons) {
+    emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerButton,
+                  .button = button,
+                  .pressed = false,
+                  .timeMs = timeMs});
+  }
+  for (std::uint32_t key : keys) {
+    emitRawInput({.kind = platform::KmsInputEvent::Kind::Key,
+                  .pressed = false,
+                  .key = key,
+                  .timeMs = timeMs});
+  }
+  rawPressedButtons_.clear();
+  rawPressedKeys_.clear();
+  pressedButtons_ = 0;
+  xkbState().resetState();
+}
+
+void KmsApplication::discardPendingInputEvents(bool handleDeviceEvents) {
+  if (!input_) return;
+
+  for (;;) {
+    int const dispatchResult = libinput_dispatch(input_);
+    if (dispatchResult != 0) {
+      if (debugKmsInput()) {
+        std::fprintf(stderr, "[flux:kms:input] libinput_dispatch while draining returned %d\n",
+                     dispatchResult);
+      }
+      break;
+    }
+
+    bool sawEvent = false;
+    while (libinput_event* event = libinput_get_event(input_)) {
+      sawEvent = true;
+      libinput_event_type const type = libinput_event_get_type(event);
+      if (handleDeviceEvents && type == LIBINPUT_EVENT_DEVICE_ADDED) {
+        handleInputDeviceAdded(libinput_event_get_device(event));
+      } else if (handleDeviceEvents && type == LIBINPUT_EVENT_DEVICE_REMOVED && debugKmsInput()) {
+        libinput_device* device = libinput_event_get_device(event);
+        std::fprintf(stderr, "[flux:kms:input] device removed while draining: %s\n",
+                     device ? libinput_device_get_name(device) : "(unknown)");
+      } else if (debugKmsInput()) {
+        std::fprintf(stderr, "[flux:kms:input] discarded libinput event type %d during VT transition\n",
+                     static_cast<int>(type));
+      }
+      libinput_event_destroy(event);
+    }
+
+    if (!sawEvent) break;
+  }
+}
+
+void KmsApplication::suspendInputForVtSwitch() {
+  if (!input_ || inputSuspendedForVt_) return;
+  releaseRawInputState(inputEventTimeMs());
+  discardPendingInputEvents(false);
+  libinput_suspend(input_);
+  inputSuspendedForVt_ = true;
+  if (debugKmsInput()) {
+    std::fprintf(stderr, "[flux:kms:input] suspended libinput for inactive VT\n");
+  }
+}
+
+void KmsApplication::resumeInputAfterVtSwitch() {
+  if (!input_ || !inputSuspendedForVt_) return;
+  int const resumeResult = libinput_resume(input_);
+  if (resumeResult != 0 && debugKmsInput()) {
+    std::fprintf(stderr, "[flux:kms:input] libinput_resume returned %d\n", resumeResult);
+  }
+  inputSuspendedForVt_ = false;
+  releaseRawInputState(inputEventTimeMs());
+  discardPendingInputEvents(true);
+  if (debugKmsInput()) {
+    std::fprintf(stderr, "[flux:kms:input] resumed libinput for active VT\n");
+  }
 }
 
 void KmsApplication::dispatchPendingInput() {

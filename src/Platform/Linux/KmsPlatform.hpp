@@ -80,6 +80,10 @@ public:
                     Vec2 scrollDelta = {}, bool preciseScrollDelta = true);
   void routeKey(std::uint32_t evdevKey, bool pressed);
   void emitRawInput(platform::KmsInputEvent const& event);
+  void discardPendingInputEvents(bool handleDeviceEvents);
+  void releaseRawInputState(std::uint32_t timeMs);
+  void suspendInputForVtSwitch();
+  void resumeInputAfterVtSwitch();
 
 private:
   friend class platform::KmsDevice;
@@ -136,6 +140,8 @@ private:
   std::string appName_ = "flux";
   Point pointerPos_{};
   std::uint8_t pressedButtons_ = 0;
+  std::unordered_set<std::uint32_t> rawPressedButtons_;
+  std::unordered_set<std::uint32_t> rawPressedKeys_;
   std::atomic<bool> terminateRequested_{false};
   bool signalHandlersInstalled_ = false;
   bool drmMaster_ = false;
@@ -144,6 +150,7 @@ private:
   bool vtProcessMode_ = false;
   bool vtForeground_ = true;
   bool vtAcquireAckPending_ = false;
+  bool inputSuspendedForVt_ = false;
   int previousConsoleMode_ = 0;
   termios previousTermios_{};
   vt_mode previousVtMode_{};

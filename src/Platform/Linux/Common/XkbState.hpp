@@ -24,6 +24,7 @@ public:
   void updateModifiers(std::uint32_t depressed, std::uint32_t latched,
                        std::uint32_t locked, std::uint32_t group);
   void updateKey(std::uint32_t key, bool pressed);
+  void resetState();
 
   KeyCode keyCodeForEvdevKey(std::uint32_t key) const;
   std::string utf8ForEvdevKey(std::uint32_t key) const;
