@@ -46,6 +46,26 @@ Expected result: the selected output logs as connected, the configured backgroun
 
 Run these from another TTY or SSH shell while the compositor is running.
 
+To run the demo clients in sequence and collect logs:
+
+```sh
+scripts/run-compositor-demos.sh
+```
+
+Useful variants:
+
+```sh
+scripts/run-compositor-demos.sh --passive-only
+scripts/run-compositor-demos.sh --demo presentation-time
+scripts/run-compositor-demos.sh --include-popup-grab
+```
+
+The runner auto-detects `WAYLAND_DISPLAY` from
+`$XDG_RUNTIME_DIR/lambda-window-manager-display`, leaves each demo open briefly,
+and writes logs under `.debug-logs/compositor-demos/`. It does not replace the
+visual checks below: for interactive demos, perform the listed pointer or
+keyboard action while the demo is open.
+
 ### SHM
 
 ```sh

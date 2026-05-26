@@ -672,6 +672,7 @@ Expected:
 
 Run the existing compositor demos:
 
+- `scripts/run-compositor-demos.sh` can run the demo clients sequentially against a live Window Manager session, collect per-demo logs, and prompt for the interactive checks.
 - SHM
 - DMABUF
 - Viewporter
@@ -693,6 +694,8 @@ Expected:
 
 - Each demo behaves as described in `docs/compositor-testing.md`.
 - No demo leaves focus, pointer, presentation, or rendering in a broken state after exit.
+
+Status: implemented and manually verified on 2026-05-26. The demo runner builds/runs the in-tree protocol clients and collects per-demo logs; visual behavior was accepted on the target session.
 
 ### Lambda app checks
 
@@ -824,7 +827,7 @@ Current deterministic validation: unit tests cover single-output selector aliase
 - [x] Screenshot capture is reliable.
 - [x] Screenshot full-output, active-window, and region modes are specified and validated.
 - [x] Compositor-drawn screenshot UI is cancelable and does not disturb focus.
-- [ ] In-tree protocol demos pass.
+- [x] In-tree protocol demos pass.
 - [ ] Real-app smoke matrix passes or has documented intentional exclusions.
 - [x] User guide and testing docs match actual behavior.
 

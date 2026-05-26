@@ -49,6 +49,7 @@ DerivedData/
 
 # Debugging / profiling
 *.dSYM/
+.debug-logs/
 
 # UI / Python test artifacts
 **/__pycache__/
