@@ -60,6 +60,75 @@ TEST_CASE("Shell launcher ranking handles prefix acronym fuzzy running and recen
   CHECK(empty[1].app.appId == "lambda-files");
 }
 
+TEST_CASE("Shell launcher merges app window settings and shell action providers") {
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-terminal", .name = "Terminal", .icon = "terminal"},
+      {.appId = "org.example.Editor", .name = "Editor", .icon = "editor", .keywords = {"text"}},
+  };
+  std::vector<lambda_shell::ShellWindowSnapshot> windows{
+      {.id = 7, .appId = "org.example.Editor", .title = "Editor - notes.txt"},
+      {.id = 8, .appId = "lambda-terminal", .title = "Terminal", .focused = true},
+  };
+  std::vector<lambda_shell::SettingsPanelEntry> settings{
+      {.id = "network", .title = "Network", .subtitle = "Wi-Fi and Ethernet", .icon = "network",
+       .keywords = {"wifi", "internet"}},
+  };
+  std::vector<lambda_shell::ShellActionEntry> actions{
+      {.id = "toggle-do-not-disturb", .title = "Toggle Do Not Disturb", .icon = "notifications",
+       .keywords = {"notifications", "dnd"}},
+  };
+
+  auto terminal = lambda_shell::buildLauncherResults(apps, windows, settings, actions, {}, "term");
+  REQUIRE_FALSE(terminal.empty());
+  CHECK(terminal[0].kind == lambda_shell::LauncherResultKind::App);
+  CHECK(terminal[0].id == "lambda-terminal");
+  CHECK(terminal[0].running);
+  CHECK(lambda_shell::launcherActivationForResult(terminal[0]) ==
+        lambda_shell::LauncherAction{.kind = lambda_shell::LauncherActionKind::FocusApp,
+                                     .target = "lambda-terminal"});
+
+  auto editor = lambda_shell::buildLauncherResults(apps, windows, settings, actions, {}, "notes");
+  REQUIRE_FALSE(editor.empty());
+  CHECK(editor[0].kind == lambda_shell::LauncherResultKind::Window);
+  CHECK(editor[0].windowId == 7);
+  CHECK(lambda_shell::launcherActivationForResult(editor[0]) ==
+        lambda_shell::LauncherAction{.kind = lambda_shell::LauncherActionKind::FocusWindow,
+                                     .target = "7",
+                                     .windowId = 7});
+
+  auto network = lambda_shell::buildLauncherResults(apps, windows, settings, actions, {}, "wifi");
+  REQUIRE(network.size() == 1);
+  CHECK(network[0].kind == lambda_shell::LauncherResultKind::SettingsPanel);
+  CHECK(lambda_shell::launcherActivationForResult(network[0]).kind ==
+        lambda_shell::LauncherActionKind::OpenSettingsPanel);
+
+  auto dnd = lambda_shell::buildLauncherResults(apps, windows, settings, actions, {}, "dnd");
+  REQUIRE(dnd.size() == 1);
+  CHECK(dnd[0].kind == lambda_shell::LauncherResultKind::ShellAction);
+  CHECK(lambda_shell::launcherActivationForResult(dnd[0]).kind ==
+        lambda_shell::LauncherActionKind::RunShellAction);
+}
+
+TEST_CASE("Shell launcher returns deterministic empty and provider error states") {
+  auto empty = lambda_shell::buildLauncherResults({}, {}, {}, {}, {}, "", 12);
+  REQUIRE(empty.size() == 1);
+  CHECK(empty[0].kind == lambda_shell::LauncherResultKind::EmptyState);
+  CHECK(empty[0].disabled);
+  CHECK(lambda_shell::launcherActivationForResult(empty[0]).kind == lambda_shell::LauncherActionKind::None);
+
+  auto noResults = lambda_shell::buildLauncherResults({}, {}, {}, {}, {}, "zzzz", 12);
+  REQUIRE(noResults.size() == 1);
+  CHECK(noResults[0].id == "launcher-no-results");
+
+  auto errors = lambda_shell::buildLauncherResults({}, {}, {}, {}, {}, "anything", 12, {
+      {.providerId = "apps", .message = "desktop files unavailable"},
+  });
+  REQUIRE(errors.size() == 1);
+  CHECK(errors[0].kind == lambda_shell::LauncherResultKind::ErrorState);
+  CHECK(errors[0].providerId == "apps");
+  CHECK(errors[0].subtitle == "desktop files unavailable");
+}
+
 TEST_CASE("Shell notification model groups dismisses clears and honors DND") {
   lambda_shell::NotificationCenterModel notifications{2};
   auto first = notifications.add("files", "Done", "Copied");
@@ -226,4 +295,6 @@ empty_query = "everything"
 max_results = 1000
 )");
   CHECK(fallback == defaults);
+
+  CHECK(lambda_shell::parseShellConfig(lambda_shell::writeShellConfigToml(parsed)) == parsed);
 }

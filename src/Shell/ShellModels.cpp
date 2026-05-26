@@ -63,19 +63,56 @@ int recentBoost(AppRegistryEntry const& app, std::vector<std::string> const& rec
   return 0;
 }
 
-int queryScore(AppRegistryEntry const& app, std::string_view query) {
+int queryScoreText(std::string_view title,
+                   std::string_view id,
+                   std::vector<std::string_view> keywords,
+                   std::string_view query) {
   if (query.empty()) return 10;
   std::string q = lowerAscii(query);
-  std::string name = lowerAscii(app.name);
-  std::string id = lowerAscii(app.appId);
-  if (name.starts_with(q) || id.starts_with(q)) return 1000;
-  if (acronym(app.name).starts_with(q)) return 850;
-  for (auto const& keyword : app.keywords) {
+  std::string name = lowerAscii(title);
+  std::string lowerId = lowerAscii(id);
+  if (name.starts_with(q) || lowerId.starts_with(q)) return 1000;
+  if (acronym(title).starts_with(q)) return 850;
+  for (auto const& keyword : keywords) {
     if (lowerAscii(keyword).starts_with(q)) return 760;
   }
-  if (containsCaseInsensitive(app.name, q) || containsCaseInsensitive(app.appId, q)) return 700;
-  if (fuzzyMatch(app.name, q) || fuzzyMatch(app.appId, q)) return 600;
+  if (containsCaseInsensitive(title, q) || containsCaseInsensitive(id, q)) return 700;
+  if (fuzzyMatch(title, q) || fuzzyMatch(id, q)) return 600;
   return 0;
+}
+
+int queryScore(AppRegistryEntry const& app, std::string_view query) {
+  std::vector<std::string_view> keywords;
+  keywords.reserve(app.keywords.size());
+  for (auto const& keyword : app.keywords) keywords.push_back(keyword);
+  return queryScoreText(app.name, app.appId, keywords, query);
+}
+
+std::vector<std::string_view> stringViews(std::vector<std::string> const& strings) {
+  std::vector<std::string_view> views;
+  views.reserve(strings.size());
+  for (auto const& string : strings) views.push_back(string);
+  return views;
+}
+
+std::string tomlQuote(std::string_view value) {
+  std::string output = "\"";
+  for (char ch : value) {
+    if (ch == '"' || ch == '\\') output.push_back('\\');
+    output.push_back(ch);
+  }
+  output.push_back('"');
+  return output;
+}
+
+std::string tomlStringArray(std::vector<std::string> const& values) {
+  std::string output = "[";
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i > 0) output += ", ";
+    output += tomlQuote(values[i]);
+  }
+  output += "]";
+  return output;
 }
 
 std::string trim(std::string_view value) {
@@ -320,6 +357,155 @@ std::vector<LauncherRankedResult> rankLauncherApps(std::vector<AppRegistryEntry>
   return ranked;
 }
 
+std::vector<LauncherResult> buildLauncherResults(std::vector<AppRegistryEntry> const& apps,
+                                                 std::vector<ShellWindowSnapshot> const& windows,
+                                                 std::vector<SettingsPanelEntry> const& settingsPanels,
+                                                 std::vector<ShellActionEntry> const& shellActions,
+                                                 std::vector<std::string> const& recentAppIds,
+                                                 std::string_view query,
+                                                 std::size_t limit,
+                                                 std::vector<LauncherProviderError> const& errors) {
+  std::vector<LauncherResult> results;
+
+  for (auto const& error : errors) {
+    if (error.message.empty()) continue;
+    results.push_back({
+        .kind = LauncherResultKind::ErrorState,
+        .id = error.providerId.empty() ? "launcher-error" : error.providerId,
+        .providerId = error.providerId.empty() ? "error" : error.providerId,
+        .title = "Provider unavailable",
+        .subtitle = error.message,
+        .icon = "dialog-warning",
+        .score = 20'000,
+        .disabled = true,
+    });
+  }
+
+  for (auto const& app : apps) {
+    if (app.hidden || app.noDisplay) continue;
+    int score = queryScore(app, query);
+    if (score == 0) continue;
+    bool const running = appRunning(app, windows);
+    if (running) score += 100;
+    score += recentBoost(app, recentAppIds);
+    score += 30;
+    results.push_back({
+        .kind = LauncherResultKind::App,
+        .id = app.appId,
+        .providerId = "apps",
+        .title = app.name.empty() ? app.appId : app.name,
+        .subtitle = app.command,
+        .icon = app.icon,
+        .score = score,
+        .running = running,
+    });
+  }
+
+  for (auto const& window : windows) {
+    std::vector<std::string_view> keywords{window.appId};
+    int score = queryScoreText(window.title.empty() ? window.appId : window.title,
+                               std::to_string(window.id),
+                               keywords,
+                               query);
+    if (score == 0) continue;
+    score += 40;
+    if (window.focused) score += 25;
+    results.push_back({
+        .kind = LauncherResultKind::Window,
+        .id = std::to_string(window.id),
+        .providerId = "windows",
+        .title = window.title.empty() ? window.appId : window.title,
+        .subtitle = window.appId,
+        .icon = window.appId,
+        .score = score,
+        .running = true,
+        .windowId = window.id,
+    });
+  }
+
+  for (auto const& panel : settingsPanels) {
+    int score = queryScoreText(panel.title, panel.id, stringViews(panel.keywords), query);
+    if (score == 0) continue;
+    results.push_back({
+        .kind = LauncherResultKind::SettingsPanel,
+        .id = panel.id,
+        .providerId = "settings",
+        .title = panel.title,
+        .subtitle = panel.subtitle,
+        .icon = panel.icon,
+        .score = score + 20,
+    });
+  }
+
+  for (auto const& action : shellActions) {
+    int score = queryScoreText(action.title, action.id, stringViews(action.keywords), query);
+    if (score == 0) continue;
+    results.push_back({
+        .kind = LauncherResultKind::ShellAction,
+        .id = action.id,
+        .providerId = "shell-actions",
+        .title = action.title,
+        .subtitle = action.subtitle,
+        .icon = action.icon,
+        .score = score + 10,
+    });
+  }
+
+  std::stable_sort(results.begin(), results.end(), [](auto const& a, auto const& b) {
+    if (a.score != b.score) return a.score > b.score;
+    if (a.providerId != b.providerId) return a.providerId < b.providerId;
+    return lowerAscii(a.title) < lowerAscii(b.title);
+  });
+
+  if (results.empty()) {
+    results.push_back({
+        .kind = LauncherResultKind::EmptyState,
+        .id = query.empty() ? "launcher-empty" : "launcher-no-results",
+        .providerId = "empty",
+        .title = query.empty() ? "Start typing" : "No results",
+        .subtitle = query.empty() ? std::string{"Apps, windows, settings, and shell actions appear here."}
+                                  : std::string{},
+        .icon = "system-search",
+        .disabled = true,
+    });
+  } else if (results.size() > limit) {
+    results.resize(limit);
+  }
+
+  return results;
+}
+
+LauncherAction launcherActivationForResult(LauncherResult const& result) {
+  if (result.disabled) return {};
+  switch (result.kind) {
+  case LauncherResultKind::App:
+    return {
+        .kind = result.running ? LauncherActionKind::FocusApp : LauncherActionKind::LaunchApp,
+        .target = result.id,
+    };
+  case LauncherResultKind::Window:
+    return {
+        .kind = LauncherActionKind::FocusWindow,
+        .target = result.id,
+        .windowId = result.windowId,
+    };
+  case LauncherResultKind::SettingsPanel:
+    return {
+        .kind = LauncherActionKind::OpenSettingsPanel,
+        .target = result.id,
+    };
+  case LauncherResultKind::ShellAction:
+    return {
+        .kind = LauncherActionKind::RunShellAction,
+        .target = result.id,
+    };
+  case LauncherResultKind::EmptyState:
+  case LauncherResultKind::ErrorState:
+    return {};
+  }
+  return {};
+}
+
 std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingState> providers) {
   std::stable_sort(providers.begin(), providers.end(), [](auto const& a, auto const& b) {
     if (a.availability != b.availability) return a.availability > b.availability;
@@ -466,6 +652,51 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
     }
   }
   return config;
+}
+
+std::string writeShellConfigToml(ShellConfig const& config) {
+  std::ostringstream out;
+  out << "[appearance]\n";
+  out << "icon_theme = " << tomlQuote(config.iconTheme) << "\n";
+  out << "symbolic_icon_theme = " << tomlQuote(config.symbolicIconTheme) << "\n";
+  out << "icon_size = " << config.iconSize << "\n";
+  out << "reduced_motion = " << (config.reducedMotion ? "true" : "false") << "\n\n";
+
+  out << "[dock]\n";
+  out << "position = " << tomlQuote(config.dockPosition) << "\n";
+  out << "auto_hide = " << (config.dockAutoHide ? "true" : "false") << "\n";
+  out << "show_running_unpinned = " << (config.showRunningUnpinned ? "true" : "false") << "\n";
+  out << "show_tooltips = " << (config.dockShowTooltips ? "true" : "false") << "\n";
+  out << "pinned = " << tomlStringArray(config.dockPinned) << "\n\n";
+
+  out << "[top_bar]\n";
+  out << "clock_format = " << tomlQuote(config.topBarClockFormat) << "\n";
+  out << "show_active_title = " << (config.topBarShowActiveTitle ? "true" : "false") << "\n";
+  out << "modules = " << tomlStringArray(config.topBarModules) << "\n\n";
+
+  out << "[quick_settings]\n";
+  out << "modules = " << tomlStringArray(config.quickSettingsModules) << "\n\n";
+
+  out << "[notifications]\n";
+  out << "enabled = " << (config.notificationsEnabled ? "true" : "false") << "\n";
+  out << "do_not_disturb = " << (config.notificationsDoNotDisturb ? "true" : "false") << "\n";
+  out << "banner_timeout_seconds = " << config.notificationBannerTimeoutSeconds << "\n";
+  out << "history_limit = " << config.notificationHistoryLimit << "\n";
+  out << "show_previews = " << (config.notificationShowPreviews ? "true" : "false") << "\n\n";
+
+  out << "[clipboard_history]\n";
+  out << "enabled = " << (config.clipboardHistoryEnabled ? "true" : "false") << "\n";
+  out << "persist = " << (config.clipboardHistoryPersist ? "true" : "false") << "\n";
+  out << "max_entries = " << config.clipboardHistoryMaxEntries << "\n";
+  out << "max_text_bytes = " << config.clipboardHistoryMaxTextBytes << "\n";
+  out << "record_primary_selection = " << (config.clipboardHistoryRecordPrimarySelection ? "true" : "false")
+      << "\n\n";
+
+  out << "[launcher]\n";
+  out << "empty_query = " << tomlQuote(config.launcherEmptyQuery) << "\n";
+  out << "max_results = " << config.launcherMaxResults << "\n";
+  out << "show_categories = " << (config.launcherShowCategories ? "true" : "false") << "\n";
+  return out.str();
 }
 
 } // namespace lambda_shell

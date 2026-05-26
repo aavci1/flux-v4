@@ -73,6 +73,74 @@ struct LauncherRankedResult {
   bool operator==(LauncherRankedResult const&) const = default;
 };
 
+struct SettingsPanelEntry {
+  std::string id;
+  std::string title;
+  std::string subtitle;
+  std::string icon;
+  std::vector<std::string> keywords;
+
+  bool operator==(SettingsPanelEntry const&) const = default;
+};
+
+struct ShellActionEntry {
+  std::string id;
+  std::string title;
+  std::string subtitle;
+  std::string icon;
+  std::vector<std::string> keywords;
+
+  bool operator==(ShellActionEntry const&) const = default;
+};
+
+struct LauncherProviderError {
+  std::string providerId;
+  std::string message;
+
+  bool operator==(LauncherProviderError const&) const = default;
+};
+
+enum class LauncherResultKind : std::uint8_t {
+  App,
+  Window,
+  SettingsPanel,
+  ShellAction,
+  EmptyState,
+  ErrorState,
+};
+
+enum class LauncherActionKind : std::uint8_t {
+  None,
+  LaunchApp,
+  FocusApp,
+  FocusWindow,
+  OpenSettingsPanel,
+  RunShellAction,
+};
+
+struct LauncherResult {
+  LauncherResultKind kind = LauncherResultKind::App;
+  std::string id;
+  std::string providerId;
+  std::string title;
+  std::string subtitle;
+  std::string icon;
+  int score = 0;
+  bool running = false;
+  bool disabled = false;
+  std::uint64_t windowId = 0;
+
+  bool operator==(LauncherResult const&) const = default;
+};
+
+struct LauncherAction {
+  LauncherActionKind kind = LauncherActionKind::None;
+  std::string target;
+  std::uint64_t windowId = 0;
+
+  bool operator==(LauncherAction const&) const = default;
+};
+
 struct Notification {
   std::uint64_t id = 0;
   std::string appId;
@@ -181,9 +249,20 @@ private:
                                                                  std::vector<std::string> const& recentAppIds,
                                                                  std::string_view query,
                                                                  std::size_t limit = 8);
+[[nodiscard]] std::vector<LauncherResult> buildLauncherResults(
+    std::vector<AppRegistryEntry> const& apps,
+    std::vector<ShellWindowSnapshot> const& windows,
+    std::vector<SettingsPanelEntry> const& settingsPanels,
+    std::vector<ShellActionEntry> const& shellActions,
+    std::vector<std::string> const& recentAppIds,
+    std::string_view query,
+    std::size_t limit = 12,
+    std::vector<LauncherProviderError> const& errors = {});
+[[nodiscard]] LauncherAction launcherActivationForResult(LauncherResult const& result);
 [[nodiscard]] std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingState> providers);
 [[nodiscard]] ShellDesktopSnapshot parseShellSnapshot(std::string_view json);
 [[nodiscard]] ShellConfig defaultShellConfig();
 [[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);
+[[nodiscard]] std::string writeShellConfigToml(ShellConfig const& config);
 
 } // namespace lambda_shell
