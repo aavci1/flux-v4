@@ -58,25 +58,6 @@ std::string iconKey(DockItem const& item) {
   return item.appId;
 }
 
-struct IconPalette {
-  Color from;
-  Color to;
-  Color ink;
-};
-
-IconPalette iconPalette(DockItem const& item) {
-  if (item.kind == "launcher") return {Color(0.96f, 0.97f, 0.99f, 1.f), Color(0.80f, 0.84f, 0.92f, 1.f), Color(0.13f, 0.20f, 0.33f, 1.f)};
-  if (shellAppIdMatches("files", item.appId)) return {Color(0.43f, 0.65f, 1.f, 1.f), Color(0.16f, 0.50f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (shellAppIdMatches("browser", item.appId)) return {Color(0.37f, 0.72f, 1.f, 1.f), Color(0.16f, 0.53f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (shellAppIdMatches("terminal", item.appId)) return {Color(0.16f, 0.18f, 0.27f, 1.f), Color(0.05f, 0.07f, 0.14f, 1.f), Color(0.75f, 0.90f, 1.f, 1.f)};
-  if (shellAppIdMatches("settings", item.appId)) return {Color(0.58f, 0.63f, 0.72f, 1.f), Color(0.31f, 0.35f, 0.45f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "calendar") return {Color(1.f, 1.f, 1.f, 1.f), Color(0.92f, 0.94f, 0.98f, 1.f), Color(0.90f, 0.29f, 0.24f, 1.f)};
-  if (item.appId == "mail") return {Color(0.44f, 0.71f, 1.f, 1.f), Color(0.16f, 0.53f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "music") return {Color(0.79f, 0.50f, 0.90f, 1.f), Color(0.48f, 0.25f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (item.kind == "trash") return {Color(0.80f, 0.84f, 0.89f, 1.f), Color(0.58f, 0.64f, 0.74f, 1.f), Color(0.10f, 0.15f, 0.25f, 1.f)};
-  return {Color(0.96f, 0.97f, 0.99f, 1.f), Color(0.82f, 0.86f, 0.93f, 1.f), Color(0.10f, 0.15f, 0.25f, 1.f)};
-}
-
 IconName dockIconName(DockItem const& item) {
   std::string const key = iconKey(item);
   if (item.kind == "launcher") return IconName::Dashboard;
@@ -96,7 +77,6 @@ Element dockIconAt(std::size_t index,
                          Signal<std::vector<DockItem>> const& items,
                          bool hover,
                          std::function<void()> onTap) {
-  IconPalette const palette = iconPalette(item);
   float const lift = hover ? -5.f : 0.f;
   Reactive::Bindable<bool> running{[items, index] {
     auto const& dockItems = items();
@@ -117,22 +97,16 @@ Element dockIconAt(std::size_t index,
 
   std::vector<Element> iconLayers;
   auto image = iconImage(item.iconPath);
-  iconLayers.push_back(Rectangle{}
-      .size(iconSize, iconSize)
-      .position(iconInsetX, lift)
-      .fill(FillStyle::linearGradient(palette.from, palette.to, {0.f, 0.f}, {1.f, 1.f}))
-      .stroke(StrokeStyle::solid(Color(1.f, 1.f, 1.f, 0.4f), 0.5f))
-      .cornerRadius(11.f));
   if (image) {
     iconLayers.push_back(Element{views::Image{
         .source = std::move(image),
         .fillMode = ImageFillMode::Fit,
-    }}.size(iconSize - 4.f, iconSize - 4.f).position(iconInsetX + 2.f, lift + 2.f));
+    }}.size(iconSize, iconSize).position(iconInsetX, lift));
   } else {
     iconLayers.push_back(Text{
         .text = icon(dockIconName(item)),
-        .font = Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
-        .color = palette.ink,
+        .font = Font{.family = "Material Symbols Rounded", .size = 36.f, .weight = 680.f},
+        .color = Color(1.f, 1.f, 1.f, 0.92f),
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
     }.size(iconSize, iconSize).position(iconInsetX, lift));

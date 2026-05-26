@@ -25,9 +25,9 @@ AppRegistryEntry appEntry(std::string appId, std::string name, std::string icon,
 
 std::vector<AppRegistryEntry> defaultDockRegistry() {
   auto apps = std::vector<AppRegistryEntry>{
-      appEntry("lambda-files", "Files", "lambda-files", "lambda-files"),
-      appEntry("lambda-terminal", "Terminal", "lambda-terminal", "lambda-terminal"),
-      appEntry("lambda-settings", "Settings", "lambda-settings", "lambda-settings"),
+      appEntry("lambda-files", "Files", "system-file-manager", "lambda-files"),
+      appEntry("lambda-terminal", "Terminal", "utilities-terminal", "lambda-terminal"),
+      appEntry("lambda-settings", "Settings", "preferences-system", "lambda-settings"),
   };
   auto fallbacks = builtinFallbackAppEntries();
   apps.insert(apps.end(), fallbacks.begin(), fallbacks.end());

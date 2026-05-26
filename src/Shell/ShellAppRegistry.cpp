@@ -337,6 +337,7 @@ std::vector<std::filesystem::path> defaultIconThemeRoots(std::string const& them
   std::vector<std::string> themes;
   if (!themeName.empty()) themes.push_back(themeName);
   if (std::find(themes.begin(), themes.end(), "hicolor") == themes.end()) themes.push_back("hicolor");
+  if (std::find(themes.begin(), themes.end(), "AdwaitaLegacy") == themes.end()) themes.push_back("AdwaitaLegacy");
   if (std::find(themes.begin(), themes.end(), "Adwaita") == themes.end()) themes.push_back("Adwaita");
 
   std::vector<std::filesystem::path> bases;
@@ -405,13 +406,19 @@ std::vector<AppRegistryEntry> discoverInstalledDesktopApps(std::vector<std::file
 std::vector<AppRegistryEntry> discoverLocalExampleApps(std::filesystem::path const& examplesDir,
                                                        std::vector<std::string> const& appNames) {
   std::vector<AppRegistryEntry> apps;
+  static std::map<std::string, std::string> const themedIcons{
+      {"lambda-files", "system-file-manager"},
+      {"lambda-settings", "preferences-system"},
+      {"lambda-terminal", "utilities-terminal"},
+  };
   for (auto const& name : appNames) {
     std::filesystem::path executable = examplesDir / name;
     if (!executableFile(executable)) continue;
     AppRegistryEntry app;
     app.appId = name;
     app.name = name.starts_with("lambda-") ? name.substr(7u) : name;
-    app.icon = name;
+    auto icon = themedIcons.find(name);
+    app.icon = icon == themedIcons.end() ? name : icon->second;
     app.command = executable.string();
     app.local = true;
     apps.push_back(std::move(app));
@@ -439,13 +446,13 @@ std::vector<AppRegistryEntry> builtinFallbackAppEntries() {
   AppRegistryEntry terminal;
   terminal.appId = "terminal";
   terminal.name = "Terminal";
-  terminal.icon = "terminal";
+  terminal.icon = "utilities-terminal";
   terminal.command = "lambda-terminal";
 
   AppRegistryEntry browser;
   browser.appId = "browser";
   browser.name = "Browser";
-  browser.icon = "browser";
+  browser.icon = "firefox";
   browser.command = "firefox";
 
   return {std::move(terminal), std::move(browser)};
@@ -488,22 +495,30 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "apps",
       themeRoot / std::to_string(preferredSize) / "actions",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "actions",
+      themeRoot / std::to_string(preferredSize) / "categories",
+      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "categories",
       themeRoot / std::to_string(preferredSize) / "mimetypes",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "mimetypes",
       themeRoot / std::to_string(preferredSize) / "places",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "places",
       themeRoot / std::to_string(preferredSize) / "status",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "status",
+      themeRoot / std::to_string(preferredSize) / "legacy",
+      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "legacy",
       themeRoot / "scalable" / "apps",
       themeRoot / "scalable" / "actions",
+      themeRoot / "scalable" / "categories",
       themeRoot / "scalable" / "mimetypes",
       themeRoot / "scalable" / "places",
       themeRoot / "scalable" / "status",
+      themeRoot / "scalable" / "legacy",
       themeRoot / "apps",
       themeRoot / "actions",
+      themeRoot / "categories",
       themeRoot / "mimetypes",
       themeRoot / "places",
       themeRoot / "status",
+      themeRoot / "legacy",
       themeRoot,
   };
   for (auto const& dir : candidates) {

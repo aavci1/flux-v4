@@ -16,8 +16,8 @@ namespace lambda_shell {
 
 inline constexpr int kTopBarHeight = 36;
 inline constexpr int kDockBottom = 12;
-inline constexpr int kDockCell = 48;
-inline constexpr int kDockIconSize = 40;
+inline constexpr int kDockCell = 56;
+inline constexpr int kDockIconSize = 48;
 inline constexpr int kDockDotSize = 6;
 inline constexpr int kDockIconDotGap = 4;
 inline constexpr int kDockDotBelowPad = 2;

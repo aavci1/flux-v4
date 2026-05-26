@@ -135,8 +135,11 @@ TEST_CASE("Shell app registry prefers local example executables") {
   auto local = lambda_shell::discoverLocalExampleApps(root, {"lambda-files", "lambda-terminal", "lambda-settings"});
   REQUIRE(local.size() == 2);
   CHECK(local[0].appId == "lambda-files");
+  CHECK(local[0].icon == "system-file-manager");
   CHECK(local[0].command == (root / "lambda-files").string());
   CHECK(local[0].local);
+  CHECK(local[1].appId == "lambda-terminal");
+  CHECK(local[1].icon == "utilities-terminal");
 
   std::vector<lambda_shell::AppRegistryEntry> installed{
       {.appId = "files", .name = "Installed Files", .command = "nautilus"},
@@ -237,15 +240,23 @@ TryExec=missing-bin
 TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   auto root = tempRoot("lambda-shell-icon-test");
   std::filesystem::create_directories(root / "48x48" / "apps");
+  std::filesystem::create_directories(root / "48x48" / "categories");
+  std::filesystem::create_directories(root / "48x48" / "legacy");
   std::filesystem::create_directories(root / "48x48" / "mimetypes");
   std::filesystem::create_directories(root / "scalable" / "apps");
   {
     std::ofstream(root / "48x48" / "apps" / "files.png") << "png";
+    std::ofstream(root / "48x48" / "categories" / "preferences-system.png") << "png";
+    std::ofstream(root / "48x48" / "legacy" / "utilities-terminal.png") << "png";
     std::ofstream(root / "48x48" / "mimetypes" / "text-x-generic.svg") << "svg";
     std::ofstream(root / "scalable" / "apps" / "settings.svg") << "svg";
   }
 
   CHECK(lambda_shell::lookupIconThemePath(root, "files", 48) == root / "48x48" / "apps" / "files.png");
+  CHECK(lambda_shell::lookupIconThemePath(root, "preferences-system", 48) ==
+        root / "48x48" / "categories" / "preferences-system.png");
+  CHECK(lambda_shell::lookupIconThemePath(root, "utilities-terminal", 48) ==
+        root / "48x48" / "legacy" / "utilities-terminal.png");
   CHECK(lambda_shell::lookupIconThemePath(root, "text-x-generic", 48) ==
         root / "48x48" / "mimetypes" / "text-x-generic.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "settings", 48) == root / "scalable" / "apps" / "settings.svg");
