@@ -1,12 +1,12 @@
 # Flux Compositor
 
-**Status:** phases 1–5 are implemented for Flux demos and initial real-app testing. This document is now the architecture/history reference; active daily-driver readiness work is tracked in [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md).
+**Status:** phases 1–5 are implemented for Flux demos and initial real-app testing. This document is now the architecture/history reference; active daily-driver readiness work is tracked in [roadmap.md](roadmap.md).
 **Repository:** `lambda-window-manager` is currently built from this repository as `lambda-window-manager` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
 
-**Next work:** see [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md) for the current Window Manager readiness backlog and [roadmap.md](roadmap.md) for broader project status.
+**Next work:** see [roadmap.md](roadmap.md) for the current Window Manager readiness backlog and broader Lambda desktop project status.
 
 ---
 
@@ -71,7 +71,7 @@ Windows stack. Click-to-focus. Drag title bar to move. Drag corner to resize. Sn
 
 The compositor supports three window-chrome tiers. Clients that do not bind `xdg_decoration_v1` keep client-side decoration and receive no compositor title bar. Clients that accept server-side decoration get compositor chrome above the client buffer. Clients that accept server-side decoration and bind `xx_cutouts_v1` render their own title-bar content inside the surface while the compositor overlays only the reserved close/minimize controls cutout.
 
-Chrome cutouts, input routing, and chrome config keys are now covered by the Window Manager readiness spec and the compositor user guide.
+Chrome cutouts, input routing, and chrome config keys are now covered by the roadmap and the compositor user guide.
 
 ### 1.9 Repository layout
 
@@ -132,7 +132,7 @@ These are the framework changes the compositor needed; most have landed:
 
 - **Frame pacing decoupled from Window (done).** The compositor main loop drives presentation; Flux `Application::run` is unused.
 
-- **Shell IPC, layer chrome, window capabilities (done).** See [roadmap.md](roadmap.md) §5 and §12.1 below for commit-level history.
+- **Shell IPC, layer chrome, window capabilities (done).** See [roadmap.md](roadmap.md) archived completed work and §12.1 below for commit-level history.
 
 These are listed here for visibility. Each phase's framework-changes section identifies which of these (or new ones) land with that phase.
 
@@ -824,4 +824,4 @@ Tracked as work proceeds. Removed when answered.
 
 ### 12.3 Remaining implementation work
 
-Tracked in [roadmap.md](roadmap.md) (§3 status summary and §6 P0–P3 items). Update that document as work lands; keep §12.1 framework log entries here with commit SHAs.
+Tracked in [roadmap.md](roadmap.md). Update that document as work lands; keep §12.1 framework log entries here with commit SHAs.

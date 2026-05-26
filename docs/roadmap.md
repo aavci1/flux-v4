@@ -1,840 +1,486 @@
-# Flux project status and roadmap
+# Flux and Lambda roadmap
 
 **Last updated:** 2026-05-26
-**Purpose:** Single place for current project status, active work, and archived milestone notes.  
-**Architecture reference:** [compositor.md](compositor.md) (compositor design and framework log). Current Window Manager readiness work is tracked in [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md).
-**How to run:** [compositor-user-guide.md](compositor-user-guide.md), [linux-development.md](linux-development.md).
-
----
-
-## 1. Project snapshot
-
-| Area | Status |
-|------|--------|
-| **Flux v5 UI runtime** | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
-| **App platforms** | macOS (Metal), Linux Wayland (Vulkan), Linux KMS (Vulkan). |
-| **Examples** | 28+ demo targets; build with `-DFLUX_BUILD_EXAMPLES=ON`. |
-| **Linux compositor** | `lambda-window-manager` — KMS + Wayland server + Vulkan paint. Roadmap P0–P3 largely implemented; hardware validation continues. |
-| **Desktop shell** | `lambda-shell` — layer-shell UI, shared `Flux::Shell::ShellIpc`, compositor-backed background effects. |
-
-Build the compositor with `-DLAMBDA_BUILD_WINDOW_MANAGER=ON` (Linux only). See [conventions.md](conventions.md) for CMake layout.
-
----
-
-## 2. Flux v5 — complete
-
-v5 is the current public API under `Flux/Reactive`, `Flux/UI`, and `Flux/SceneGraph`. Applications use declarative `body()` trees that mount once; state changes flow through signals and update retained scene nodes.
-
-**Runtime characteristics**
-
-- `MountRoot` / `MountContext` own the retained tree and environment bindings.
-- `Signal`, `Computed`, `Effect`, and `Scope` form the reactive graph.
-- `Bindable<T>` on view modifiers installs effects that patch mounted nodes.
-- `Window::setTheme()` and compile-time `EnvironmentKey` supply reactive theme and chrome metrics.
-
-**Validation (Stage 9)**
-
-- Tests: `flux_reactive_tests` and full `ctest` pass on normal, ASAN, UBSAN, and TSAN builds.
-- All example binaries passed launch-smoke checks.
-- `scripts/check_stale_symbols.sh` passes.
-
-**Performance (AmbientLoopLab, `animation-demo`, 60 fps steady state)**
-
-| Bucket | Wall-clock share |
-|--------|------------------|
-| Signal set | ~0.01% |
-| Effect runs (inclusive body) | ~0.17% |
-| Poll / propagation / flush | &lt;0.01% each |
-| **Inclusive reactive path** | **~0.19%** |
-
-Measured with `FLUX_PROFILE_REACTIVE=ON` (see historical note in git history; detailed tables were archived when v5 perf docs were consolidated).
-
-**Docs for app authors:** [reactive-graph.md](reactive-graph.md), [composites.md](composites.md), [migrating-to-v5.md](migrating-to-v5.md), [ui-view-body-style.md](ui-view-body-style.md).
-
----
-
-## 3. Linux compositor — current status
-
-Executable: `lambda-window-manager` (`src/Compositor/`). Consumes Flux as a **renderer library** (`VulkanContext`, `Canvas`, `Image::fromDmabuf`) — not `Application::run`.
-
-| Phase | Summary | State |
-|-------|---------|--------|
-| 1 — First pixels | KMS + Vulkan scanout, atomic page flips | Largely done; some TTY kill-path checks still informal |
-| 2 — Wayland server | SHM + dma-buf clients, xdg-shell | Done on hardware smoke |
-| 3 — Input + WM | Focus, chrome, move, resize, snap, shortcuts | Done; popup grabs **implemented, config-gated** (`popup_grabs`, default off) |
-| 4 — Protocols | layer-shell, viewporter, `ext_background_effect_v1`, clipboard, … | Done in tree; see [compositor-user-guide.md](compositor-user-guide.md) |
-| 5 — Polish | Animations, config hot reload, cursor theme, async wallpapers | In progress; adaptive sync / DPMS / multi-output still open |
-
-**Rendering path:** Immediate-mode `Canvas` over immutable `CommittedSurfaceSnapshot` lists — not the app `SceneGraph`.
-
-**Structure:** Runtime split (`CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`); WM split (`FocusStack`, `PointerRouter`, `InteractiveMoveResize`, …). Protocol codegen via `cmake/FluxWaylandProtocols.cmake`.
-
-**Remaining validation**
-
-- Follow [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md) for the current compositor/window-manager checklist.
-- Hardware-validate real-app menus (GTK/Qt/browser), presentation timing under load, selected-output scale behavior, and the GBM/atomic-KMS path.
-- Optional **tablet v2** (P3.5); legacy `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` debug presenter may be removed after smoke.
-
----
-
-## 4. Lambda shell — current status
-
-Process model: `lambda-window-manager` + `lambda-shell` (reconnect if WM restarts). Contract: [lambda-shell-spec.md](lambda-shell-spec.md).
-
-| Surface namespace | Role |
-|-------------------|------|
-| `lambda.topbar` | Status bar (layer top) |
-| `lambda.dock` | Dock (layer overlay) |
-| `lambda.command-launcher` | Modal launcher |
-
-Shell UI uses Flux v5 reactive views (`ShellModel` signals, no remount loop). Layer chrome uses `LayerShellChromeOptions` + `BackdropBlur` aligned with production (**P1.5** done).
-
----
-
-## 5. Completed milestones (archive)
-
-Short record of finished plans removed from `docs/` to reduce clutter.
-
-### Compositor structural cleanup (2026-05-18)
-
-- Split Wayland globals into `src/Compositor/Wayland/Globals/`.
-- Pimpl `WaylandServer`; moved runtime to `CompositorRuntime.cpp`.
-- Replaced hand-rolled TOML with tomlplusplus.
-- Unified resize tracing under `flux::detail::resizeTrace` (`FLUX_RESIZE_TRACE`).
-- Window/input logic in `Window/WindowManager.cpp`.
-
-### Compositor bug sweep
-
-- Popup-first hit testing; `SurfaceRole` tag; configure states on xdg-toplevel.
-- xkbcommon text input for launcher; `execvp` spawn; config color formats.
-- Xcursor parsing without libXcursor; config hot reload scale guard.
-
-### Popup hit-test fix
-
-- `surfaceAt` consults popups before toplevels; geometry covered by unit tests and popup demo.
-
-### Flux v5 stage gates (0–8 complete, 9 validation green)
-
-Stages 0–8 landed retained mounting and reactive control flow. Stage 9 hardening added relayout fixes, environment key migration, interaction signals, and profiling tooling.
-
-### Compositor roadmap P0–P3 (2026-05)
-
-Landed on `window-manager-refactor`: `LayerShellChrome`, `ext_background_effect_v1`, shared `ShellIpc`, WM/runtime splits, presenter abstraction, subsurface hit tests, expanded unit tests, install/user-guide updates, async wallpaper loading, brighter shell glass. Popup grabs behind config (default off).
-
----
-
-## 6. Active roadmap (reference)
-
-Detailed P0–P3 specs are kept below for history. **Current priorities are in §8.**
-
-Principles and prioritized work items (**P0–P3**). Update the tracking table at the end as items land.
-## Principles (non-negotiable)
-
-1. **Enrich Flux first** when a capability is reusable (blur regions, layer-shell chrome, IPC helpers, capability flags on `Window`). Applications declare intent; the compositor interprets generic protocol state.
-2. **Backend parity where it makes sense.** Graphics APIs (`Canvas`, `Image`) stay Metal/Vulkan aligned. Linux-only compositor paths (DMABUF, KMS) are explicitly Linux-only with no silent Mac no-ops.
-3. **Honest protocols.** Do not advertise `wl_seat` capabilities, globals, or client APIs that are empty stubs.
-4. **One source of truth for visuals.** Shell layer surfaces and compositor chrome should share the same framework chrome/blur path instead of parallel color constants in the shell repo and the WM.
-
----
-
-## Summary roadmap
-
-| Phase | Theme | Outcome |
-|-------|--------|---------|
-| **P0** | Correctness & honesty | Real menus, truthful seat caps, no dead protocol linkage |
-| **P1** | Framework shell chrome | Remove `lambda.*` string policy from WM; unified glass/blur |
-| **P2** | Structure & build hygiene | Smaller modules, single protocol build, doc truth |
-| **P3** | Polish & session | Themes, tests, install docs, presentation simplification |
-
-Work items below are numbered **`P0.x` … `P3.x`** for tracking. Dependencies are called out per item.
-
----
-
-## P0 — Correctness and honest capabilities
-
-### P0.1 — xdg-popup input grabs (deferred path)
-
-| | |
-|---|---|
-| **Owner** | Compositor (`Wayland/Globals/XdgShell.cpp`, `Window/WindowManager.cpp`) |
-| **Parity** | Linux compositor only; no Metal API |
-
-**Problem.** Non-grabbing popups render, but real toolkit menus (GTK/Qt) expect `xdg_popup.grab` semantics. Grabs were deferred after hardware lockups.
-
-**Implementation details.**
-
-- Add a compositor config flag, e.g. `[input] popup_grabs = true` (default `false` until hardware-validated).
-- Implement grab lifecycle on `WaylandServer::Impl::XdgPopup`:
-  - On `xdg_popup.grab(seat, serial)`: mark popup as grabbing; route pointer/keyboard exclusively to popup subtree until dismiss.
-  - On dismiss / destroy: release grab to parent popup or toplevel per xdg-shell rules.
-  - Reject nested grabs that violate spec (post `xdg_popup.error` as today for other errors).
-- Wire `WindowManager` dismissal (`Super+Q`, click-outside) to consult **popup-first** hit test, then grab owner.
-- Validate popup grabs against real toolkit menus before enabling them by default.
-- Land behind flag first; enable by default only after CachyOS smoke + one real app (e.g. foot context menu if available).
-
-**Key points.**
-
-- Do not reintroduce the old “grab everything on map” path; follow serial + seat binding from the client request.
-- Keep non-grabbing popups working when the flag is off (current behavior).
-- Log grab enter/exit when `FLUX_RESIZE_TRACE` or a dedicated `LAMBDA_WINDOW_MANAGER_POPUP_TRACE` is set.
-
-**Acceptance.**
-
-- Demo client: submenu stays interactive; outside click dismisses; parent regains focus per spec.
-- With `popup_grabs = false`, behavior matches today.
-- No WM freeze on grab/ungrab cycle (manual TTY checklist).
-
-**Depends on.** None (highest priority correctness).
-
----
-
-### P0.2 — Seat capabilities: touch
-
-| | |
-|---|---|
-| **Owner** | Compositor (`Wayland/Globals/Seat.cpp`) |
-| **Parity** | Linux compositor only |
-
-**Problem.** `wl_seat` advertises pointer + keyboard; `get_touch` is an empty lambda. Clients may bind touch and hang or misbehave.
-
-**Implementation details.**
-
-- **Option A (v1 recommended):** Do not advertise `WL_SEAT_CAPABILITY_TOUCH` until touch is implemented; `get_touch` must not be callable.
-- **Option B:** Implement minimal touch: `wl_touch` resource, down/up/motion/frame/cancel, map to surface under point, forward through `KmsInputBridge` if libinput touch events exist.
-- Document chosen option in [compositor.md](compositor.md) §12.2.
-
-**Key points.**
-
-- Prefer honesty over a stub global.
-- If implementing touch, share coordinate transform with pointer path (viewport, surface transform).
-
-**Acceptance.**
-
-- `wayland-info` / demo clients see seat caps consistent with behavior.
-- No crash when a client calls `get_touch` on the supported path.
-
-**Depends on.** None.
-
----
-
-### P0.3 — Remove or implement tablet v2
-
-| | |
-|---|---|
-| **Owner** | Build + compositor |
-| **Parity** | N/A until implemented |
-
-**Problem.** `tablet-v2-protocol.c` is linked into `flux` and `lambda-window-manager`, but no `zwp_tablet_manager_v2` global is registered. `wp_cursor_shape_manager_v1.get_tablet_tool_v2` is a no-op stub.
-
-**Implementation details.**
-
-- **Short term (required):** Remove `tablet-v2-protocol.c` from `flux` target sources; remove from WM unless a global is added. Keep XML in `src/Compositor/Protocols/` for future use.
-- **Long term (optional P3):** Register `zwp_tablet_manager_v2`, forward tablet tool motion to cursor shape or pointer focus; only if hardware available.
-
-**Key points.**
-
-- Dead protocol objects confuse audits and increase link size.
-- Cursor-shape tablet entry must either work or be absent from the interface version we bind.
-
-**Acceptance.**
-
-- `flux` and `lambda-window-manager` link without unused tablet object files.
-- No reference to tablet interfaces in client code until implemented.
-
-**Depends on.** None.
-
----
-
-### P0.4 — WindowConfig backend capability honesty
-
-| | |
-|---|---|
-| **Owner** | Framework (`include/Flux/UI/Window.hpp`, `WaylandWindow.cpp`, `MacMetalWindow.mm`, `KmsWindow.cpp`) |
-| **Parity** | Mac / Linux Wayland / Linux KMS |
-
-**Problem.** `LayerShellOptions::backgroundBlur`, `layerShell`, `outputName`, etc. are ignored on some backends with no feedback. Mac preview silently diverges from Linux shell.
-
-**Implementation details.**
-
-- Add `struct PlatformWindowCapabilities` (or methods on `platform::Window`):
-  - `supportsLayerShell`, `supportsBackgroundBlur`, `supportsOutputSelection`, …
-- Populate per backend in `Window` factory paths.
-- On `Window` construction, if config requests an unsupported feature:
-  - Debug build: `assert` or log once via `FLUX_WARN_UNSUPPORTED_WINDOW_CONFIG`.
-  - Release: optional one-line `stderr` when env `FLUX_LOG_WINDOW_CONFIG=1`.
-- Document matrix in [conventions.md](conventions.md) and `Window.hpp` comments.
-
-**Key points.**
-
-- Preview on Mac should not set `layerShell` expecting compositor behavior; shell preview uses normal `Window` + local chrome until P1 lands.
-- Capabilities are framework API; compositor does not implement Mac layer-shell.
-
-**Acceptance.**
-
-- Table in docs matches runtime queries.
-- `lambda-shell` does not rely on ignored fields without comment.
-
-**Depends on.** None.
-
----
-
-## P1 — Framework-first shell chrome and IPC
-
-### P1.1 — `LayerShellChrome` (framework surface style)
-
-| | |
-|---|---|
-| **Owner** | Framework API + compositor snapshot consumer |
-| **Parity** | Blur: Metal + Vulkan `Canvas`; protocol: Linux Wayland server + client |
-
-**Problem.** Compositor hardcodes `lambda.topbar` / `lambda.dock` for `shellGlassSurface`, square corners, and reserved zones. Shell spec defines visual tokens; preview duplicates fills in `ShellPreviewChrome.hpp`.
-
-**Implementation details.**
-
-- Add to `include/Flux/UI/Window.hpp` (names illustrative):
-
-```cpp
-enum class LayerShellChromeStyle : std::uint8_t {
-  None,           // client buffer only
-  BlurPanel,      // ext_background_effect blur + optional compositor tint
-  BlurPanelBorder // blur + compositor-drawn border (dock/top bar)
-};
-
-struct LayerShellChromeOptions {
-  LayerShellChromeStyle style = LayerShellChromeStyle::None;
-  float blurRadius = 32.f;      // maps to effect + Canvas fallback
-  Color tint = ...;             // default from theme
-  Color borderColor = ...;
-  float tintOpacity = 0.48f;
-  bool squareBottomCorners = false; // was squareContentCorners for top bar
-};
+**Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
+
+## Purpose
+
+This document replaces the older roadmap, Lambda desktop readiness index, component readiness specs, Shell mockup spec, and Shell status-bar plan. Keep current priorities here; keep implementation details in code and stable usage/reference material in the focused docs listed below.
+
+## Document Map
+
+| Document | Role |
+| --- | --- |
+| [roadmap.md](roadmap.md) | Current project status, Lambda desktop backlog, ownership boundaries, validation gates, and archived milestone notes |
+| [compositor.md](compositor.md) | Architecture/history reference for the compositor and framework/compositor boundary |
+| [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, and run `lambda-window-manager` from a TTY |
+| [linux-development.md](linux-development.md) | Linux package setup and KMS/Vulkan development notes |
+| [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
+| [reactive-graph.md](reactive-graph.md), [composites.md](composites.md), [migrating-to-v5.md](migrating-to-v5.md), [ui-view-body-style.md](ui-view-body-style.md), [event_queue.md](event_queue.md) | Flux v5 framework reference |
+
+Deleted/superseded docs:
+
+- `lambda-desktop-assessment.md`
+- `lambda-window-manager-readiness-spec.md`
+- `lambda-shell-readiness-spec.md`
+- `lambda-shell-spec.md`
+- `lambda-shell-status-bar-plan.md`
+- `lambda-settings-readiness-spec.md`
+- `lambda-files-readiness-spec.md`
+- `lambda-terminal-readiness-spec.md`
+
+## Product Decisions
+
+- The daily-driver implementation order is Window Manager, Shell, Settings, Files, Terminal, then shared services and remaining apps.
+- The first daily-driver target is pure Wayland. XWayland remains a later explicit product decision.
+- Sessions are started and ended manually for now. Session automation, greeter/login, logout, lock, suspend/reboot UI, and crash-restart policy are intentionally outside the current daily-driver gate.
+- New log collection and log viewer work are outside the current daily-driver gate.
+- Browser, mail, calendar, and media can be mature external Wayland apps unless Lambda explicitly decides to own them.
+- Settings edits component-owned config. It must not become a second source of truth for Window Manager, Shell, Files, or Terminal preferences.
+
+## Ownership Boundaries
+
+- Window Manager owns KMS/Wayland composition, output/scale, window state/focus, input routing, layer-shell placement, compositor chrome, screenshots, compositor-drawn screenshot UI, and protocol validation.
+- Shell owns persistent desktop chrome: top bar, dock, command launcher, app presentation, quick settings/status presentation, notifications, clipboard-history UI/policy, Shell preferences, and user-facing desktop navigation.
+- Settings owns GUI editing for owner config files and truthful system/about status. The owning process remains the runtime authority.
+- Files owns safe local file management, trash-first delete, selection, clipboard file operations, open-with UI, file icons, and current-folder refresh/watch behavior.
+- Terminal owns pty/libvterm behavior, scrollback, keyboard/input encoding, selection/copy/paste, terminal rendering, terminal preferences, and terminal desktop integration.
+- Shared desktop services are still needed for app registry, icon theme, MIME/default-app/open-with, status providers, notifications, clipboard history, portals, secrets/keyring, and future file chooser/screenshot/screencast APIs.
+
+## Project Snapshot
+
+| Area | Current status |
+| --- | --- |
+| Flux v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
+| App platforms | macOS Metal, Linux Wayland Vulkan, Linux KMS Vulkan. |
+| Examples | Demo and Lambda app targets build through CMake when examples are enabled. |
+| Window Manager | Core compositor is usable for dogfooding; remaining gate is visual/manual compositor polish. |
+| Shell | App registry, dock, IPC, config, icons, and status fallback exist; live notification/clipboard/provider work remains. |
+| Settings | Real owner-config editor exists; live apply depends on Window Manager/Shell hot-reload support. |
+| Files | Live file browser/manager exists; model layer is ahead of live UI for several commands. |
+| Terminal | Usable for basic shell work; search UI, mouse reporting, and complex Unicode remain open. |
+
+## Daily-Driver Gate
+
+Lambda is not daily-driver complete until these gates are closed.
+
+| Priority | Area | Gate | Status |
+| --- | --- | --- | --- |
+| P0 | Window Manager | Visual stability and real-app compositor validation | Open |
+| P1 | Shell | Live launcher providers, notifications, clipboard history, quick settings providers | Open |
+| P2 | Settings | Owner config editing plus live-apply clarity | Mostly done |
+| P3 | Files | Safe file-management live UI beyond the model layer | Open |
+| P4 | Terminal | Daily terminal UI completeness | Open |
+| P5 | Shared services and missing core apps | Shared desktop backends, editor, document viewer | Unspecced/integrated backlog |
+
+## Detailed Workstream Index
+
+The old readiness specs used component-specific workstream IDs. This section keeps those workstreams in the roadmap so no active spec work is lost.
+
+Window Manager:
+
+- WM-1: Baseline idle and frame scheduling.
+- WM-2: Resize and snap visual stability.
+- WM-3: Window geometry and state invariants.
+- WM-4: Chrome, decorations, glass, and shadows.
+- WM-5: Output selection and scale.
+- WM-6: Input, keyboard, and cursor readiness.
+- WM-7: Screenshot readiness.
+- WM-8: Wayland protocol validation.
+- WM-9: Config contract.
+- WM-10: Real-app validation.
+
+Shell:
+
+- SH-1: Process, IPC, and failure behavior.
+- SH-2: Shared app registry.
+- SH-3: Icon theme provider.
+- SH-4: Dock model and behavior.
+- SH-5: Command launcher.
+- SH-6: Top bar and status modules.
+- SH-7: Quick settings and status controls.
+- SH-8: Notifications.
+- SH-9: Clipboard history.
+- SH-10: Shell config and preferences.
+- SH-11: Visual quality and layout.
+- SH-12: Accessibility and keyboard behavior.
+- SH-13: Tests and validation.
+
+Settings:
+
+- ST-1: Settings model, schema, and persistence.
+- ST-2: Window Manager settings integration.
+- ST-3: Shell settings integration.
+- ST-4: Appearance, theme, and personalization.
+- ST-5: Display and output settings.
+- ST-6: Keyboard, shortcuts, cursor, and input.
+- ST-7: Desktop, screenshots, and app defaults.
+- ST-8: System status and About.
+- ST-9: Page structure and UX cleanup.
+- ST-10: Tests and validation.
+
+Files:
+
+- FI-1: Files model and state ownership.
+- FI-2: Navigation, places, and path entry.
+- FI-3: Selection and keyboard behavior.
+- FI-4: Core file operations.
+- FI-5: Trash service.
+- FI-6: Clipboard and drag/drop.
+- FI-7: Context menus and commands.
+- FI-8: Views, sorting, search, and filtering.
+- FI-9: Filesystem watching and refresh.
+- FI-10: Open-with, MIME, icons, and thumbnails.
+- FI-11: Errors, progress, cancellation, and undo.
+- FI-12: Preferences and Settings integration.
+- FI-13: Accessibility and keyboard quality.
+- FI-14: Tests and validation.
+
+Terminal:
+
+- TE-1: App identity, lifecycle, and structure.
+- TE-2: PTY and event-loop reliability.
+- TE-3: Scrollback and viewport.
+- TE-4: Selection, copy, paste, and clipboard.
+- TE-5: Keyboard input coverage.
+- TE-6: Mouse reporting and pointer behavior.
+- TE-7: Unicode, width, and text attributes.
+- TE-8: Color, theme, cursor, and visual rendering.
+- TE-9: Resize, reflow, and performance.
+- TE-10: Search and navigation.
+- TE-11: Preferences, profiles, and Settings handoff.
+- TE-12: Desktop integration.
+- TE-13: Tests and validation.
+
+## P0 Window Manager
+
+Current implementation:
+
+- `lambda-window-manager` owns a selected KMS output, runs a Wayland server, renders through Vulkan/Canvas, and hosts Lambda plus normal Wayland apps.
+- Core idle behavior, Flux app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, and real-app smoke tooling exist.
+- Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
+- Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths.
+
+Open gate:
+
+- Resolve resize/snap/maximize/restore visual artifacts on the target machine.
+- Make system-titlebar and integrated-titlebar glass visually consistent.
+- Stop Shell panel flicker during nearby window animations.
+- Make shadow, border, and corner radius behavior consistent.
+- Complete live real-app validation with Lambda apps plus browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, and long idle sessions.
+- Keep popup grabs honest: config-gated until hardware validation says they can be enabled by default.
+- Keep unsupported touch/tablet behavior absent or clearly non-advertised.
+
+Validation:
+
+- Deterministic tests cover output selector, scale config, keybindings, config fallback, screenshot policy/regions/paths/PNG writing, frame geometry, snap/resize geometry, minimized focus restoration, popup geometry, layer-shell zones, and surface input regions.
+- Full visual acceptance still requires target hardware; GPU/Wayland tests may not run in headless CI.
+
+Deferred:
+
+- Session wrapper, auto-start, auto-restart, login, lock, logout, suspend/reboot UI.
+- Multi-output desktop layout.
+- DPMS/panel power-off and richer power management.
+- XWayland.
+
+## P1 Shell
+
+Current implementation:
+
+- `lambda-shell` creates layer-shell top bar, dock, command launcher, and dock menu surfaces.
+- Shell IPC uses request IDs and structured parse/serialization helpers.
+- Shell exits cleanly when the Window Manager IPC is unavailable or disconnects.
+- Shared app registry discovers local Lambda executables and installed `.desktop` entries, with app-id aliases and launch resolution shared by Shell and Window Manager.
+- Dock pins load from Shell config; running unpinned apps appear; dock click launches, focuses, or restores; dock context menu supports new window, pin/unpin, and quit where wired.
+- Icon theme lookup is used by dock and launcher with Material glyph fallback.
+- Top-bar status rendering shows real values when present and unavailable/unknown values honestly. The current Window Manager snapshot still reports system providers as unknown.
+- Quick-status popup exists, but provider controls are disabled/unavailable.
+- Notification and clipboard-history models/config/policies exist and are tested, but live UI is not implemented.
+- Advanced launcher provider models for apps, windows, Settings panels, Shell actions, empty states, error states, and ranking exist; production launcher still renders and activates dock/app `DockItem` results.
+- Shell config is generated, parsed, hot-reloaded, and covers appearance, dock, top bar, quick settings, notifications, clipboard history, and launcher policy.
+
+Open gate:
+
+- Wire the production launcher to the richer provider model and activation path for apps, windows, Settings panels, Shell actions, empty states, and errors.
+- Add launcher ranking to the live launcher path.
+- Implement live notification receive API/service boundary, banners, notification center/history, grouping, dismissal, clear-all, actions where supported, and do-not-disturb behavior.
+- Implement clipboard-history capture/service boundary, picker UI, selected-entry paste, clear, size/history limits, primary-selection policy, and memory-only-by-default persistence policy.
+- Add real Shell-owned status providers where available: network/Wi-Fi, Bluetooth, audio/volume, battery/power, brightness, do-not-disturb.
+- Add quick settings controls for providers that can actually be controlled.
+- Add status provider links into Settings for deeper configuration.
+- Complete manual validation with Lambda apps and selected external Wayland apps.
+
+Deferred:
+
+- Full freedesktop notification spec parity.
+- Full system tray/status-notifier support.
+- Multi-output Shell layout beyond preserving clean models.
+- Files/recent-documents launcher providers.
+
+### Shell Status And Quick Settings Detail
+
+Status and quick settings are Shell-owned. The Window Manager may include snapshot fields for compatibility, but it must not become the audio, network, Bluetooth, battery, brightness, notification, clipboard, or quick-settings backend.
+
+Provider model requirements:
+
+- Providers expose typed snapshots with availability: unavailable, read-only, or writable.
+- Visible state must be real or explicitly unavailable; never show fake connected, charged, unmuted, or active values.
+- Provider failures must not freeze Shell.
+- Slow providers should update independently so one missing backend does not block the top bar or quick settings.
+- Shell config controls top-bar module order through `top_bar.modules`.
+- Shell config controls quick-settings order through `quick_settings.modules`.
+
+Provider backends:
+
+- Clock: honor `top_bar.clock_format`, update conservatively, and avoid redraws when formatted text is unchanged.
+- Battery/power: read `/sys/class/power_supply` first; optionally use UPower later for richer state. Show absent battery as unavailable. Show percentage and charging/discharging/full only from real state. Battery is initially read-only; power mode waits for a real backend.
+- Brightness: read `/sys/class/backlight`; show unavailable when absent; show read-only when writable access or privileged backend is missing. Enable a slider only with a real write path such as logind/udev policy or a small privileged helper.
+- Audio: use PipeWire/WirePlumber APIs, with `wpctl` as an optional first fallback. Read default sink volume and mute state. Add volume slider and mute toggle only when control is real. Microphone mute and output picker can come later.
+- Network/Wi-Fi: use NetworkManager D-Bus. Show unavailable when NetworkManager or usable interfaces are absent. Distinguish wired, Wi-Fi, disconnected, connecting, connected, and SSID. First useful control is Wi-Fi enable/disable; connection selection/password entry belongs in Settings.
+- Bluetooth: use BlueZ D-Bus. Show unavailable when BlueZ/adapters are absent. Show powered state and connected device count/name. Toggle adapter power only when supported; pairing/device management belongs in Settings.
+- Notifications: provide top-bar affordance/count/DND state, banners, notification center/history, dismissal, clear-all, timeout/history/previews policy, and later freedesktop notification receive path.
+- Clipboard history: provide top-bar affordance, picker, selected-entry paste or write-back-to-clipboard, clear history, max entries, max text bytes, persistence policy, and primary-selection policy. Live clipboard observation is still missing.
+
+Top-bar UI requirements:
+
+- Respect `top_bar.modules`.
+- Support at least network/Wi-Fi, Bluetooth, volume, battery, notifications, clipboard, and clock.
+- Each status item should be individually clickable where it has a detail surface.
+- Icons should be driven by typed provider state.
+- Unavailable items must be disabled or hidden by policy, not shown as active.
+
+Quick settings UI requirements:
+
+- Include a header with title and Settings button.
+- Include Wi-Fi, Bluetooth, volume/mute, brightness, battery/power, and do-not-disturb controls when configured.
+- Keep read-only and unavailable controls visibly disabled.
+- Add per-row Settings links for deeper pages: network, sound, Bluetooth, display, notifications, clipboard.
+- Keep long-form setup out of quick settings.
+
+Shell actions:
+
+- `open-settings:network`
+- `open-settings:sound`
+- `open-settings:bluetooth`
+- `open-settings:display`
+- `open-settings:notifications`
+- `open-settings:clipboard`
+- `toggle-dnd`
+
+Status testing:
+
+- Provider snapshot normalization.
+- Icon selection for Wi-Fi, Bluetooth, volume, battery, notifications, and clipboard.
+- Module ordering from Shell config.
+- Unavailable/read-only/writable control state.
+- Clock formatting.
+- Sysfs battery and brightness fixture parsing.
+- Quick settings rows from provider snapshots.
+- Notification DND behavior.
+- Clipboard policy behavior.
+- Manual checks on battery-backed and no-battery machines, PipeWire/WirePlumber volume/mute, internal-panel brightness and external-only monitor, NetworkManager states, BlueZ absent/present/off/on/connected states, notification center interactions, and clipboard privacy/clear behavior.
+
+## P2 Settings
+
+Current implementation:
+
+- `lambda-settings` opens as a system-titlebar Flux app.
+- It reads and writes Window Manager and Shell owner config files directly.
+- It generates owner configs with defaults when missing.
+- Schema metadata exists for displayed settings.
+- Writes are atomic and validated; unknown keys are preserved where practical.
+- Appearance edits real Window Manager background/wallpaper/glass and Shell icon/reduced-motion config.
+- Display edits selected output and scale config.
+- Keyboard edits keyboard layout/repeat and screenshot/close shortcuts.
+- Desktop edits animations, hardware cursor, cursor theme/size, idle blank timeout, and screenshot shortcuts.
+- Dock & Panel edits Shell dock/top-bar/quick-settings values.
+- Notifications edits Shell notification and clipboard-history config.
+- About/System shows real or explicitly unavailable values.
+- Save/revert/reset/error UX exists; restart-required rows are visible.
+
+Open gate:
+
+- Ensure hot-reloadable changes apply live where the owning process supports them.
+- Keep apply-mode labels accurate: `Applies after Save` versus `Restart required`.
+- Avoid claiming unavailable system providers are live.
+- Add Settings UI later for Files preferences, Terminal preferences, MIME/default-app editing, and shared-service settings after those backends exist.
+
+Validation:
+
+- Targeted Settings tests pass for schema, validation, dirty/revert/reset, Window Manager and Shell config round trips, unknown key preservation, atomic write failure, owner config file helpers, shortcut conflict detection, wallpaper path normalization, theme discovery, and system info fixtures.
+
+Deferred:
+
+- Full network manager, Bluetooth pairing, audio mixer, notification daemon/center, privacy/portal permissions, users/accounts, package/update manager, multi-output layout editor, and Files open-with/default-app UI.
+
+## P3 Files
+
+Current implementation:
+
+- `lambda-files` opens as an integrated-titlebar Flux app with glass background.
+- Live UI supports sidebar places, breadcrumbs, back/forward/up, grid/list view, hidden-file toggle, pointer/keyboard multi-select, range select, select all, clear selection, activation, create folder/file, copy/cut/paste, duplicate, trash-first delete, reveal, default open, context menus, and periodic refresh.
+- Preferences persist for hidden files and view mode.
+- Clipboard uses internal copy/cut state plus `text/uri-list` text for compatible clients.
+- Default file open uses shared app registry plus MIME/default-app data rather than direct `xdg-open` file launching.
+- Icon theme lookup is used for file/folder/MIME icons with fallback.
+- Model layer has path normalization, navigation history, breadcrumb generation, stable sort by name/kind/size/modified time, current-folder search/filtering, directory refresh diffs, selection preservation, rename validation, copy/move/duplicate operations, trash metadata, restore helpers, conflict decisions, operation progress/failure/cancel state, safe undo helpers, MIME/default-app fixtures, icon lookup, and preference load/save.
+
+Open gate:
+
+- Add direct text path entry.
+- Add rename UI.
+- Add Trash view/restore UI or explicitly defer restore while keeping delete trash-first.
+- Add undo UI for supported safe operations.
+- Add operation progress/cancel UX and partial-failure reporting beyond simple error text.
+- Add conflict prompts for keep both, replace, skip, and cancel.
+- Add current-folder search UI.
+- Add visible sort controls for name/kind/size/modified time and direction.
+- Add explicit open-with chooser UI.
+- Replace polling refresh with native watcher integration where practical.
+- Add Flux-level file drag source/target widgets before advertising drag/drop.
+
+Validation:
+
+- Targeted Files tests pass for model, operations, trash, selection, preferences, open-with fixtures, MIME/default-app parsing, URI-list clipboard, icon fallback, and grid layout.
+
+Deferred:
+
+- Advanced default-app editing, thumbnails, mounted volumes/removable devices, tabs, split panes, indexed search, network shares, archive browsing, full document viewer, and full text editor.
+
+## P4 Terminal
+
+Current implementation:
+
+- `lambda-terminal` uses `forkpty`, libvterm, UTF-8 mode, alternate screen, nonblocking pty reads/writes, event-loop wake thread, row damage, row/layout caching, resize through `TIOCSWINSZ`, terminal title updates, and child cleanup.
+- Live UI supports text input, key encoding helpers, resize, black glass/solid background config, foreground/background colors, bold/italic/underline/reverse/strikethrough rendering, cursor, live scrollback viewport with wheel and `Shift+PageUp`/`Shift+PageDown`, scrollback-aware selection/copy, desktop clipboard copy/paste, bracketed paste policy, and profile/preferences persistence.
+- `TerminalCore` covers deterministic input encoding, application cursor/keypad, focus-event encoding, SGR mouse encoding helper, mouse-to-cell mapping, resize calculation, Unicode width helpers, color/attribute resolution, preferences/profiles, scrollback model, selection reconstruction, search helper, URL detection, app identity, and browser command planning.
+- `main.cpp` only creates the app/window/profile background and installs the terminal view; `TerminalSession.cpp` still owns live pty/session/rendering/UI behavior.
+
+Open gate:
+
+- Add live search UI with query entry, match highlight, next/previous, close behavior, and scrollback search.
+- Wire terminal-app mouse reporting in `TerminalSession` for SGR/basic button/motion/wheel modes while preserving normal selection when reporting is off.
+- Improve live Unicode/grapheme handling beyond `VTermScreenCell::chars[0]`, especially combining marks and complex emoji sequences.
+- Add primary selection support or explicitly defer it in the user-facing UI.
+- Add OSC 52 policy/support if desired.
+- Add URL opening UI and policy.
+- Continue splitting live pty/session/model/renderer/UI into testable components.
+- Add cursor shape/color scheme preferences if framework rendering supports them.
+
+Validation:
+
+- Targeted Terminal tests pass for core model, input, scrollback, selection, Unicode helpers, color, resize, config, preferences, and pty smoke behavior.
+
+Deferred:
+
+- Tabs, split panes, terminal multiplexing, SSH connection manager, and serial terminal UI.
+
+## P5 Shared Services And Missing Core Apps
+
+These remain backlog items, not separate specs.
+
+Shared desktop services:
+
+- App registry service boundaries and permission model.
+- Shared icon-theme provider and cache.
+- Shared MIME/default-app/open-with service.
+- Status provider service model for Shell and Settings.
+- Notification backend/service boundary.
+- Clipboard-history backend/service boundary.
+- Portal direction for screenshot/screencast/file chooser and untrusted clients.
+- Secrets/keyring.
+
+Preliminary text editor:
+
+- Plain-text open/edit/save/save-as.
+- New file flow.
+- Encoding/newline handling.
+- Dirty state.
+- Search.
+- Clipboard.
+- Files/open-with integration.
+
+Document/PDF viewer:
+
+- PDF rendering.
+- Page navigation.
+- Zoom and fit modes.
+- Search.
+- Thumbnail/sidebar navigation.
+- Files/open-with integration.
+
+Optional later apps:
+
+- Archive manager.
+- Image viewer.
+- Media player.
+- System monitor.
+- Browser.
+- Mail.
+- Calendar.
+- Calculator.
+
+## Validation Model
+
+- Unit/model tests for deterministic behavior.
+- Manual hardware/app smoke tests for compositor, Shell, and real Wayland clients.
+- Real-app validation with Lambda apps plus mature Wayland clients such as Firefox, GTK apps, Qt apps, and `foot`.
+- Visual/glass/animation behavior requires target-machine manual validation until screenshot/render regression coverage exists.
+- Do not mark a gate complete solely because model helpers exist; live UI and user workflow must be wired where the gate is user-facing.
+
+Manual validation coverage inherited from the old readiness specs:
+
+- Window Manager: build/unit checks, TTY launch, Shell launch, protocol smoke, Lambda apps, browser/GTK/Qt/foot real-app matrix, screenshots, config reload/restart matrix, idle CPU, and compositor crash/disconnect behavior.
+- Shell: build/unit checks, launch/failure behavior, app registry discovery, dock launch/focus/restore, launcher keyboard behavior, top-bar status, quick settings, notification workflows, clipboard-history workflows, config reload, and Lambda/external app validation.
+- Settings: build/unit checks, launch, Appearance, Display, Keyboard, Desktop, Dock & Panel, Notifications, About/System, save/revert/reset, restart-required rows, and owner-config persistence.
+- Files: build/unit checks, launch, browsing places/root/outside-home/permission-denied/large/hidden/external-change cases, selection, safe operations, trash, clipboard/DnD behavior, open-with behavior, grid/list/sort/search behavior, and preference persistence.
+- Terminal: build/unit checks, launch, shell workflows, full-screen apps, scrollback, selection/clipboard, key input, Unicode/color/attributes, resize/performance traces, and preferences.
+
+Useful targeted checks:
+
+```sh
+./build/flux_tests --test-case="Shell*"
+./build/flux_tests --test-case="Settings*"
+./build/flux_tests --test-case="*Files*"
+./build/flux_tests --test-case="Terminal*"
+./build/flux_tests --test-case="screenshot*"
+./build/flux_tests --test-case="surface*"
 ```
 
-- Extend `LayerShellOptions` with `LayerShellChromeOptions chrome`.
-- **Client (`WaylandWindow.cpp`):** On commit/configure, if `chrome.style != None`, use `ext_background_effect_surface_v1` for full-surface blur, tint, border, blur radius, and corner radii.
-- **Compositor:** Replace `shellGlassSurface` bool in `CommittedSurfaceSnapshot` with background-effect state copied from surface role state (set from protocol, not string compare).
-- **Painter (`CommittedSurfacePainter.cpp`):** Drive `drawBackdropBlur` + tint + border from snapshot background-effect state, not `if (shellGlassSurface)`.
-- **Remove** all `nameSpace == "lambda.topbar"` branches from `Snapshots.cpp`, `LayerShell.cpp`, `Destroy.cpp` except optional **defaults** when shell sends generic chrome without protocol extension.
+`ctest --test-dir build --output-on-failure` may require a live Wayland display and Vulkan device depending on the environment.
 
-**Key points.**
+## Archived Completed Work
 
-- Default glass appearance must match current compositor + [lambda-shell-spec.md](lambda-shell-spec.md) tokens (blur 32, alphas).
-- macOS preview uses `Canvas::drawBackdropBlur` via framework, not `shellGlassFill()` rectangles only.
-- Compositor tint is an *enhancement* over client blur region, not a second parallel system.
+Flux v5:
 
-**Acceptance.**
+- Retained mounting and fine-grained reactivity are the current public API.
+- `MountRoot`, `MountContext`, `Signal`, `Computed`, `Effect`, `Scope`, `Bindable`, `For`, `Show`, and `Switch` are implemented.
+- Framework docs live in the focused Flux v5 reference docs.
 
-- `lambda-shell` top bar and dock render consistently across configured outputs and scales.
-- Third-party layer-shell client can request blur/tint/border/corner radii without `lambda.*` namespace.
-- No `shellGlassSurface` in `WaylandTypes.hpp` after migration (or deprecated one release).
+Compositor structural cleanup:
 
-**Depends on.** P0.4 (preview uses capabilities). Optional: P1.2 for clean metadata transport.
+- Wayland globals split into `src/Compositor/Wayland/Globals/`.
+- `WaylandServer` uses a pimpl.
+- Runtime split into `CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`, and related modules.
+- Window/input logic split into `FocusStack`, `PointerRouter`, `InteractiveMoveResize`, `KeyboardShortcuts`, and `LayerShellInput`.
+- Resize tracing unified under `flux::detail::resizeTrace`.
+- Protocol codegen consolidated through `cmake/FluxWaylandProtocols.cmake`.
 
----
+Compositor and Shell framework work:
 
-### P1.2 — Background effect metadata protocol
+- Layer-shell chrome and compositor-backed background effects exist.
+- Shared Shell IPC module exists.
+- Shell preview and production rendering use shared paths where practical.
+- Subsurface hit testing, popup geometry, layer-shell zones, output selector, screenshot logic, and compositor state helpers have deterministic tests.
 
-| | |
-|---|---|
-| **Owner** | `src/Compositor/Protocols/` + framework client bind |
-| **Parity** | Server + Linux Wayland client; no Mac server |
+Documentation cleanup:
 
-**Problem.** Relying only on `namespace` strings for chrome style is fragile. Shell spec wants capability-based surfaces.
+- Old Lambda readiness specs and Shell mockup/status plans were consolidated into this roadmap on 2026-05-26.
+- `compositor.md` remains an architecture/history reference, not the active backlog.
 
-**Implementation details.**
+## Update Rules
 
-- Extend `ext_background_effect_v1.xml`:
-  - one object per `wl_surface`
-  - `set_blur_region(region)`, `set_blur_radius(fixed)`, `set_tint(rgba)`, `set_border(rgba)`, `set_corner_radii(fixed, fixed, fixed, fixed)`
-- Generate client code into `build/wayland-protocols/`; server code only in WM target.
-- Bind from `lambda-shell` in `ShellController` when creating layer surfaces.
-- Compositor stores background-effect state on `Impl::Surface`; snapshots copy into `SurfaceBackgroundEffectSnapshot`.
-
-**Key points.**
-
-- Keep v1 small; shell can hardcode style enums in controller.
-- Namespace strings remain for debugging and reserved-zone *hints*, not for rendering decisions.
-
-**Acceptance.**
-
-- Shell uses protocol, not WM string table, for glass vs border.
-- Demo client can set chrome without being `lambda.dock`.
-
-**Depends on.** P1.1 (snapshot/painter shape).
-
----
-
-### P1.3 — Exclusive zone and work area (generic layer-shell)
-
-| | |
-|---|---|
-| **Owner** | Compositor `LayerShell.cpp` + framework client |
-| **Parity** | Linux Wayland |
-
-**Problem.** `refreshShellReservedZones()` only recognizes `lambda.topbar` and bottom-anchored `lambda.dock`.
-
-**Implementation details.**
-
-- Trust client `set_exclusive_zone` and `set_anchor` for **all** layer surfaces (already in protocol); remove namespace special cases.
-- Shell continues to call `zwlr_layer_surface_v1_set_exclusive_zone` from dock/top bar logic (36px top bar per spec).
-- WM publishes combined reserved rects to shell via existing IPC snapshot (`topBarExclusiveZone_`, `dockReservedZone_` → generalize to `reservedEdges` struct).
-- `lambda.command-launcher` modal: use layer `keyboard_interactivity` + explicit modal flag from P1.2 or `namespace` suffix convention **documented in shell spec**, with WM treating `keyboard_interactivity == exclusive` as modal for hit-testing (not string-only).
-
-**Key points.**
-
-- Dock “does not reserve work area” in milestone 1 is a **shell policy** (exclusive zone 0), not WM hardcoding.
-- Top bar 36px is shell’s `set_exclusive_zone(36)`, not WM magic number tied to namespace.
-
-**Acceptance.**
-
-- Renaming namespace to `com.example.bar` still reserves zone if client sets exclusive zone.
-- [lambda-shell-spec.md](lambda-shell-spec.md) updated to say WM does not interpret `lambda.*` for geometry.
-
-**Depends on.** P1.1 (chrome decoupled from names).
-
----
-
-### P1.4 — Shared shell IPC module
-
-| | |
-|---|---|
-| **Owner** | Framework or `src/ShellProtocol/` shared static lib linked by WM + shell |
-| **Parity** | Linux-only transport; parsing code portable |
-
-**Problem.** `ShellProtocol.cpp` (compositor) and `ShellJson.cpp` (shell) duplicate JSON escaping and field parsing.
-
-**Implementation details.**
-
-- Create `include/Flux/Shell/ShellIpc.hpp` + `src/Shell/ShellIpc.cpp` (or `lambda/shell_protocol.hpp` under `include/Flux/`):
-  - Message types as `enum class` + `struct` (hello, refreshState, openCommandLauncher, focusApp, launchApp, …).
-  - `std::optional<ShellMessage> parseLine(std::string_view line)`.
-  - `std::string serialize(ShellMessage const&)`.
-- Compositor `Shell/ShellProtocol.cpp` becomes thin: read fd → `parseLine` → dispatch.
-- `lambda-shell` `ShellIpc` uses same parser; delete duplicate `escapeJson` / `jsonStringField` where redundant.
-- Add `tests/ShellIpcTests.cpp` (roundtrip, escape, malformed lines).
-
-**Key points.**
-
-- No behavior change to wire format in v1 (still JSON lines).
-- Future: schema version field in hello message.
-
-**Acceptance.**
-
-- Single implementation of escape/parse; tests green.
-- Fuzz malformed lines without crash.
-
-**Depends on.** None (can parallelize P1.1).
-
----
-
-### P1.5 — Unify preview and production shell rendering
-
-| | |
-|---|---|
-| **Owner** | Shell + framework |
-| **Parity** | Metal + Vulkan blur |
-
-**Problem.** `ShellPreviewChrome.hpp` draws fake glass with gradients; compositor draws blur + border from painter.
-
-**Implementation details.**
-
-- Replace `shell_preview::wrapTopBar` / `wrapDock` glass rectangles with:
-  - `Window` or root `Element` using `BackdropBlur` view (existing `src/UI/Views/BackdropBlur.cpp`) sized to bar/dock bounds, **or**
-  - Layer-shell chrome options on a normal window when preview simulates shell (if preview stays single-window).
-- Map shell theme tokens from [lambda-shell-spec.md](lambda-shell-spec.md) to `LayerShellChromeOptions` / `Theme` keys.
-- Keep `ShellPreviewChrome.hpp` wired to the shared layer-shell glass options so preview chrome and compositor chrome stay visually aligned.
-- Keep `wrapTopBar` ZStack **stretch alignment** fix (layout); only replace fill/stroke source.
-
-**Key points.**
-
-- Preview is allowed to differ in *layout container* (one window vs three surfaces) but not in *chrome math*.
-- Validate the shared shell chrome/material path through real shell surfaces.
-
-**Acceptance.**
-
-- Side-by-side screenshot or `FLUX_DEBUG_LAYOUT` bounds match between preview and compositor for bar/dock chrome regions.
-- Single definition of default tint/border/blur radius in framework theme.
-
-**Depends on.** P1.1.
-
----
-
-## P2 — Structure, build hygiene, documentation truth
-
-### P2.1 — Split `CompositorRuntime.cpp`
-
-| | |
-|---|---|
-| **Owner** | Compositor |
-| **Parity** | Linux only |
-
-**Problem.** ~1460 lines: presentation loop, config reload, tracing, cursor, render orchestration.
-
-**Implementation details.**
-
-- Extract units (files under `src/Compositor/`):
-  - `PresentationLoop.cpp` — KMS poll, frame pacing, present completion, `wp_presentation` feedback hooks.
-  - `CompositorRenderFrame.cpp` — build snapshots, call `SurfaceRenderer`, chrome, cursor.
-  - `CompositorConfigWatch.cpp` — hot reload, scale change, wallpaper.
-- `CompositorRuntime.cpp` retains `runKmsCompositor()` orchestration only (~200–300 lines).
-- No behavior change in first commit (move-only).
-
-**Key points.**
-
-- Eases testing presentation math without linking entire Wayland server.
-- Follow naming from [roadmap.md §5 (archive)](roadmap.md §5 (archive)) intent.
-
-**Acceptance.**
-
-- Build passes; hardware smoke unchanged.
-- Each new file &lt; 600 lines.
-
-**Depends on.** None.
-
----
-
-### P2.2 — Split `WindowManager.cpp`
-
-| | |
-|---|---|
-| **Owner** | Compositor `Window/` |
-| **Parity** | Linux only |
-
-**Problem.** ~1715 lines mixing focus, shortcuts, drag, resize, snap, layer-shell hits, launcher modal.
-
-**Implementation details.**
-
-- Suggested split:
-  - `FocusStack.cpp` — raise, activate, click-to-focus.
-  - `PointerRouter.cpp` — hit test order (popup → chrome → toplevel → layer), motion, buttons.
-  - `KeyboardShortcuts.cpp` — bindings from config, dispatch table.
-  - `InteractiveMoveResize.cpp` — drag, resize, snap preview (uses `WindowGeometry.hpp`).
-  - `LayerShellInput.cpp` — layer surface hits, modal exclusivity (post P1.3).
-- `WindowManager.cpp` becomes façade calling into units.
-
-**Key points.**
-
-- Extract pure functions already in `WindowGeometry.hpp` first; add tests per §3 compositor gaps and P3.2 below.
-
-**Acceptance.**
-
-- Existing `CompositorWindowGeometryTests` green; add focus-stack tests if extracted logic is pure.
-
-**Depends on.** P1.3 for layer input filedivorce.
-
----
-
-### P2.3 — Wayland protocol CMake consolidation
-
-| | |
-|---|---|
-| **Owner** | CMake + `src/Compositor/Protocols/` |
-| **Parity** | Client headers for `flux`; server for WM only |
-
-**Problem.** Duplicate generated sources: `build/wayland-protocols/` for clients vs checked-in `src/Compositor/Protocols/*-protocol.c` for server and erroneously for `flux`.
-
-**Implementation details.**
-
-- Single `flux_wayland_protocols` CMake function:
-  - Input: XML path, client/server/both.
-  - Output: generated `.c/.h` in build dir.
-- `flux` links **client** objects only (xdg-shell, layer-shell, viewporter, ext-background-effect, cutouts, decoration, fractional-scale).
-- `lambda-window-manager` links **server** objects only.
-- Remove checked-in generated `.c` from git over time (generate at build) **or** pin one generated tree and stop double-generating—pick one policy and document in [conventions.md](conventions.md).
-- Delete tablet from both targets until P0.3 long-term.
-
-**Key points.**
-
-- Prevents client/server struct drift.
-- Shorter clean builds when XML unchanged.
-
-**Acceptance.**
-
-- No protocol `.c` compiled twice; WM and flux both build.
-- Changing XML rebuilds only affected targets.
-
-**Depends on.** P0.3.
-
----
-
-### P2.4 — Presentation backend simplification
-
-| | |
-|---|---|
-| **Owner** | Compositor `CompositorRuntime` / KMS |
-| **Parity** | Linux KMS |
-
-**Problem.** Two presenters: default GBM/atomic KMS vs `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display`.
-
-**Implementation details.**
-
-- Introduce `Presenter` interface: `present(RenderTarget&, frameCallback)`.
-- Default: `AtomicKmsPresenter` (current default path).
-- Legacy: `VulkanDisplayPresenter` behind env flag, documented as debug-only.
-- Unify `wp_presentation` timestamp source behind presenter.
-- Goal state (optional): remove legacy path once atomic path passes video/game smoke in §12.3.
-
-**Key points.**
-
-- Reduces test matrix for timing bugs.
-- Document in [compositor-user-guide.md](compositor-user-guide.md).
-
-**Acceptance.**
-
-- Default path unchanged on hardware.
-- Legacy flag still works one release after refactor.
-
-**Depends on.** P2.1.
-
----
-
-### P2.5 — Documentation and spec alignment
-
-| | |
-|---|---|
-| **Owner** | `docs/` |
-| **Parity** | N/A |
-
-**Problem.** `compositor.md` §1.4 claims SceneGraph usage; §1.9 layout outdated; §2.1 DMABUF status stale; framework log uses “local working tree”.
-
-**Implementation details.**
-
-- Update [compositor.md](compositor.md):
-  - §1.4: compositor renders via immediate `Canvas` + snapshots (SceneGraph is app-side).
-  - §1.9: reflect actual tree (`CompositorRuntime`, `Wayland/Globals`, no `Scene/`).
-  - §2.1: mark DMABUF/SHM reuse done; IOSurface import status.
-  - §12.1: require commit SHA for new entries.
-- Done: docs index points here.
-- When P1/P0 items land, update phase table and [roadmap.md §5 (archive)](roadmap.md §5 (archive)).
-
-**Key points.**
-
-- Living spec must match tree or mislead future contributors.
-
-**Acceptance.**
-
-- No section contradicts `src/Compositor/` layout.
-
-**Depends on.** None (can start immediately).
-
----
-
-### P2.6 — Subsurface hit testing and coordinate transform
-
-| | |
-|---|---|
-| **Owner** | Compositor `Window/PointerRouter` (post split), `Core.cpp` |
-| **Parity** | Linux only |
-
-**Problem.** Open question in [compositor.md](compositor.md) §12.2: subsurfaces render but pointer routing may not walk subsurface order/transform.
-
-**Implementation details.**
-
-- Centralize `surfaceAt(x, y)` to walk toplevel tree including subsurfaces (z-order, position).
-- Unit tests with fake surface trees (no Wayland): point in subsurface vs parent.
-- Ensure viewport / surface transform applied consistently with render path in `Snapshots.cpp`.
-
-**Key points.**
-
-- Blocks correct embedded UI (video controls, CSD subsurfaces).
-
-**Acceptance.**
-
-- Demo or test: click on subsurface receives enter/leave on correct `wl_surface`.
-- Document closed in §12.2.
-
-**Depends on.** P2.2 (pointer router module).
-
----
-
-## P3 — Polish, tests, session
-
-### P3.1 — Shell theme bridge to compositor chrome config
-
-| | |
-|---|---|
-| **Owner** | Shell + compositor config |
-| **Parity** | Visual parity Metal/Vulkan |
-
-**Implementation details.**
-
-- Shell reads user theme (light/dark/system) and sends tokens over IPC (`shellTheme` message) or sets layer chrome protocol colors on map.
-- Compositor maps tokens to `[chrome]` tint defaults when not overridden in TOML.
-- Single table in [lambda-shell-spec.md](lambda-shell-spec.md) references framework theme keys.
-
-**Acceptance.**
-
-- Dark mode toggles shell glass tint on bar/dock without WM namespace hacks.
-
-**Depends on.** P1.1, P1.4.
-
----
-
-### P3.2 — Deterministic compositor tests (expanded)
-
-| | |
-|---|---|
-| **Owner** | `tests/` |
-| **Parity** | N/A |
-
-**Implementation details.**
-
-- Add tests per §3 compositor gaps and P3.2 below:
-  - Config hot reload (scale change, wallpaper path).
-  - Layer-shell exclusive zone aggregation (pure function extracted from `LayerShell.cpp`).
-  - Snapshot builder: role flags, chrome snapshot, buffer null.
-  - Shell IPC roundtrip (P1.4).
-  - Presentation feedback bookkeeping (mock presenter).
-- Where possible, avoid KMS (headless pure logic only).
-
-**Acceptance.**
-
-- CI runs new tests on Linux build; no GPU required for ≥80% of cases.
-
-**Depends on.** P1.4, P2.2, P2.3.
-
----
-
-### P3.3 — `Image::fromDmabuf` / IOSurface boundary
-
-| | |
-|---|---|
-| **Owner** | Framework `Image.hpp`, Metal/Vulkan impl |
-| **Parity** | Vulkan Linux; Metal IOSurface optional |
-
-**Implementation details.**
-
-- Document in `Image.hpp`: `fromDmabuf` is Linux-only; returns `nullptr` or `expected` error on Mac.
-- Either implement `fromExternalMetal(IOSurface*)` for symmetry or add `Image::canImportDmabuf()` compile-time/platform query.
-- Update [compositor.md](compositor.md) §2.1 and §12.1 with final decision.
-
-**Acceptance.**
-
-- Audit script / docs list DMABUF as Vulkan-only without “Metal deferred” ambiguity.
-
-**Depends on.** None.
-
----
-
-### P3.4 — Install and session documentation
-
-| | |
-|---|---|
-| **Owner** | `docs/compositor-user-guide.md` |
-| **Parity** | N/A |
-
-**Implementation details.**
-
-- Document: seat permissions, `lambda-window-manager` autostart from TTY, shell ordering, `XDG_RUNTIME_DIR` socket path, environment variables table (presenter, traces, validation layers).
-- Explicit security note: trusted shell binary; layer namespace not a security boundary without authentication.
-
-**Acceptance.**
-
-- New user can follow guide on CachyOS TTY without reading source.
-
-**Depends on.** None.
-
----
-
-### P3.5 — Tablet v2 (optional, hardware-gated)
-
-| | |
-|---|---|
-| **Owner** | Compositor + libinput |
-| **Parity** | Linux |
-
-**Implementation details.**
-
-- Register global; map tablet tool to pointer when in proximity; integrate with `wp_cursor_shape` tablet request.
-- Only if test hardware available; otherwise remain removed per P0.3.
-
-**Depends on.** P0.3 short-term removal.
-
----
-
-## Suggested execution order
-
-```text
-Wave 1 (correctness):     P0.3 → P0.2 → P0.4 → P0.1 (flagged)
-Wave 2 (framework shell): P1.4 ∥ P1.1 → P1.5 → P1.3 → P1.2 (optional)
-Wave 3 (structure):       P2.5 ∥ P2.3 → P2.1 → P2.2 → P2.6 → P2.4
-Wave 4 (polish):          P3.2 → P3.1 → P3.3 → P3.4
-```
-
-**Parallelism.** P1.4 and P0.x are independent. P1.1 blocks P1.5 and P1.3. P2 splits should be move-only first to reduce risk.
-
----
-
-## Framework changes log discipline
-
-For every item that touches `include/Flux/` or `src/Graphics/` / `src/Platform/`:
-
-1. Implement framework change with tests in `tests/` where applicable.
-2. Add a row to [compositor.md](compositor.md) §12.1 with **real commit SHA**, description, and **Mac parity status**.
-3. If no Metal parity is required, state why (Linux-only KMS/DMABUF/Wayland).
-
-
-## 7. Work item tracking
-
-| ID | Summary | Status |
-|----|---------|--------|
-| P0.1 | xdg-popup grabs | done (config-gated, default off) |
-| P0.2 | Seat touch honesty | done |
-| P0.3 | Tablet dead code removal | done |
-| P0.4 | Window capability flags | done |
-| P1.1 | LayerShellChrome in framework | done |
-| P1.2 | background-effect material protocol | done |
-| P1.3 | Generic exclusive zone | done |
-| P1.4 | Shared shell IPC | done |
-| P1.5 | Preview/production chrome unity | done |
-| P2.1 | Split CompositorRuntime | done |
-| P2.2 | Split WindowManager | done |
-| P2.3 | Protocol CMake consolidation | done |
-| P2.4 | Presenter abstraction | done |
-| P2.5 | Doc/spec alignment | done |
-| P2.6 | Subsurface hit testing | done |
-| P3.1 | Shell theme bridge | done |
-| P3.2 | Expanded tests | done |
-| P3.3 | DMABUF/IOSurface docs | done |
-| P3.4 | Install/session docs | done |
-| P3.5 | Tablet v2 (optional) | pending |
-
----
-
-## 8. Next to implement
-
-Ordered by impact. These are the live backlog items after P0–P3 landed in tree.
-
-### 1. Hardware-validate popup grabs (P0.1 follow-up)
-
-- Set `[input] popup_grabs = true` in compositor config.
-- Validate popup grabs against at least one real toolkit menu (GTK/Qt/browser).
-- If stable on CachyOS hardware, flip default to `true` and document in [compositor-user-guide.md](compositor-user-guide.md).
-
-### 2. Real-application validation
-
-- Extend beyond `foot`: GTK, Qt, browser clients; confirm layer-shell shell, clipboard, and presentation feedback under normal use.
-- See [compositor-user-guide.md](compositor-user-guide.md) “Remaining Work”.
-
-### 3. Presentation and pacing hardening
-
-- Hardware-smoke GBM/atomic-KMS page-flip completion with video or game workloads.
-- Adaptive sync and triple-buffering (phase 5 polish).
-- Consider removing the legacy `LAMBDA_WINDOW_MANAGER_PRESENT=vulkan-display` path once atomic presenter is proven.
-
-### 4. Session and display polish
-
-- Proper input/session brokering instead of manual `/dev/input/event*` ACLs.
-- DPMS / panel power-off (software idle blanking exists; inhibitors supported).
-- Multi-output desktop layout (still undecided for v1 vs post-v1).
-
-### 5. Optional: tablet v2 (P3.5)
-
-- Only if test hardware is available; register `zwp_tablet_manager_v2` and wire cursor-shape tablet tools.
-
-### 6. Framework / shell follow-ups
-
-- IOSurface import on Metal remains optional (`Image::fromDmabuf` is Linux-only by design).
-- Continue logging framework changes in [compositor.md](compositor.md) §12.1 with real commit SHAs.
-
-**Related docs:** [compositor.md](compositor.md) · [lambda-shell-spec.md](lambda-shell-spec.md) · [compositor-user-guide.md](compositor-user-guide.md)
+- Update this roadmap when a Lambda gate changes status.
+- When implementation lands, update the relevant `Current implementation`, `Open gate`, and `Validation` bullets in the same change.
+- Keep user/run instructions in [compositor-user-guide.md](compositor-user-guide.md), not here.
+- Keep architecture/history notes in [compositor.md](compositor.md), not here, unless they affect active roadmap decisions.

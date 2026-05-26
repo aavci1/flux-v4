@@ -4,7 +4,7 @@
 
 | Document | Contents |
 |----------|----------|
-| [roadmap.md](roadmap.md) | **Project status, active backlog (P0–P3), archived milestones** |
+| [roadmap.md](roadmap.md) | **Project status, Lambda desktop readiness, active backlog, archived milestones** |
 | [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
 
 ## Flux v5 (application framework)
@@ -21,15 +21,8 @@
 
 | Document | Contents |
 |----------|----------|
-| [compositor.md](compositor.md) | Compositor architecture, phases, framework boundary, change log |
-| [lambda-desktop-assessment.md](lambda-desktop-assessment.md) | Source-of-truth readiness index for Lambda desktop specs and remaining unspecced areas |
-| [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md) | Detailed Window Manager hardening spec for the first daily-driver milestone |
-| [lambda-shell-spec.md](lambda-shell-spec.md) | Shell vs window-manager boundary, surfaces, IPC |
-| [lambda-shell-readiness-spec.md](lambda-shell-readiness-spec.md) | Detailed Shell readiness spec for app discovery, dock, launcher, top bar, and icons |
-| [lambda-shell-status-bar-plan.md](lambda-shell-status-bar-plan.md) | Investigation and implementation plan for real top-bar status providers and quick settings |
-| [lambda-settings-readiness-spec.md](lambda-settings-readiness-spec.md) | Detailed Settings readiness spec for real config editing and system status |
-| [lambda-files-readiness-spec.md](lambda-files-readiness-spec.md) | Detailed Files readiness spec for safe file operations, trash, selection, and open-with |
-| [lambda-terminal-readiness-spec.md](lambda-terminal-readiness-spec.md) | Detailed Terminal readiness spec for scrollback, clipboard, keys, Unicode, and performance |
+| [roadmap.md](roadmap.md) | Source of truth for Lambda desktop status, ownership boundaries, active readiness gates, and deferred work |
+| [compositor.md](compositor.md) | Compositor architecture/history reference, phases, framework boundary, change log |
 | [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, run on a TTY |
 | [linux-development.md](linux-development.md) | Linux package setup and build notes |
 
