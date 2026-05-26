@@ -48,6 +48,9 @@ using TryExecResolver = std::function<bool(std::string const& executable)>;
 [[nodiscard]] std::vector<std::string> parseDesktopExec(std::string_view exec,
                                                         std::optional<std::filesystem::path> file = std::nullopt);
 [[nodiscard]] bool shellAppIdMatches(std::string_view requested, std::string_view actual);
+[[nodiscard]] bool executableInPath(std::string const& executable);
+[[nodiscard]] std::vector<std::filesystem::path> defaultXdgApplicationDirs();
+[[nodiscard]] std::vector<std::string> defaultLocalExampleAppNames();
 [[nodiscard]] std::vector<AppRegistryEntry> discoverInstalledDesktopApps(
     std::vector<std::filesystem::path> const& applicationDirs,
     TryExecResolver const& tryExecResolver = {});
@@ -55,6 +58,13 @@ using TryExecResolver = std::function<bool(std::string const& executable)>;
                                                                      std::vector<std::string> const& appNames);
 [[nodiscard]] std::vector<AppRegistryEntry> mergeAppRegistryEntries(std::vector<AppRegistryEntry> installed,
                                                                     std::vector<AppRegistryEntry> local);
+[[nodiscard]] std::vector<AppRegistryEntry> builtinFallbackAppEntries();
+[[nodiscard]] std::vector<AppRegistryEntry> buildDefaultAppRegistry(
+    std::filesystem::path const& examplesDir,
+    std::vector<std::filesystem::path> const& applicationDirs,
+    TryExecResolver const& tryExecResolver = {});
+[[nodiscard]] std::optional<std::string> resolveAppLaunchCommand(std::string_view requestedAppId,
+                                                                 std::vector<AppRegistryEntry> const& apps);
 [[nodiscard]] std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot,
                                                         std::string const& iconName,
                                                         int preferredSize = 48);

@@ -17,6 +17,13 @@ std::filesystem::path tempRoot(char const* name) {
   return path;
 }
 
+void makeExecutable(std::filesystem::path const& path) {
+  std::filesystem::permissions(path,
+                               std::filesystem::perms::owner_exec | std::filesystem::perms::group_exec |
+                                   std::filesystem::perms::others_exec,
+                               std::filesystem::perm_options::add);
+}
+
 } // namespace
 
 TEST_CASE("Shell app registry parses desktop entry fields") {
@@ -98,7 +105,10 @@ TEST_CASE("Shell app registry prefers local example executables") {
   {
     std::ofstream(root / "lambda-files") << "#!/bin/sh\n";
     std::ofstream(root / "lambda-terminal") << "#!/bin/sh\n";
+    std::ofstream(root / "lambda-settings") << "#!/bin/sh\n";
   }
+  makeExecutable(root / "lambda-files");
+  makeExecutable(root / "lambda-terminal");
 
   auto local = lambda_shell::discoverLocalExampleApps(root, {"lambda-files", "lambda-terminal", "lambda-settings"});
   REQUIRE(local.size() == 2);
@@ -115,6 +125,34 @@ TEST_CASE("Shell app registry prefers local example executables") {
   CHECK(merged[0].appId == "lambda-files");
   CHECK(merged[1].appId == "lambda-terminal");
   CHECK(merged[2].appId == "org.example.Editor");
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Shell app registry resolves launch commands from shared registry") {
+  auto root = tempRoot("lambda-shell-launch-registry-test");
+  {
+    std::ofstream(root / "lambda-terminal") << "#!/bin/sh\n";
+  }
+  makeExecutable(root / "lambda-terminal");
+
+  auto registry = lambda_shell::buildDefaultAppRegistry(root, {}, {});
+  auto terminal = lambda_shell::resolveAppLaunchCommand("terminal", registry);
+  REQUIRE(terminal);
+  CHECK(*terminal == "'" + (root / "lambda-terminal").string() + "'");
+
+  auto browser = lambda_shell::resolveAppLaunchCommand("browser", registry);
+  REQUIRE(browser);
+  CHECK(*browser == "'firefox'");
+
+  CHECK_FALSE(lambda_shell::resolveAppLaunchCommand("calendar", registry));
+
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "org.example.Editor", .name = "Editor", .command = R"(editor --new-window "two words" %f %i %c)"},
+  };
+  auto editor = lambda_shell::resolveAppLaunchCommand("org.example.Editor", apps);
+  REQUIRE(editor);
+  CHECK(*editor == "'editor' '--new-window' 'two words'");
 
   std::filesystem::remove_all(root);
 }

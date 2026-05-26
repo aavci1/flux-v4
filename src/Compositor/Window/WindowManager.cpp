@@ -4,6 +4,7 @@
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
+#include "Shell/ShellAppRegistry.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "relative-pointer-unstable-v1-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
@@ -21,7 +22,6 @@
 #include <cstdio>
 #include <ctime>
 #include <chrono>
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -407,58 +407,10 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
 }
 namespace {
 
-std::string shellQuote(std::string const& value) {
-  std::string quoted{"'"};
-  for (char c : value) {
-    if (c == '\'') {
-      quoted += "'\\''";
-    } else {
-      quoted.push_back(c);
-    }
-  }
-  quoted.push_back('\'');
-  return quoted;
-}
-
-bool executableFile(std::filesystem::path const& path) {
-  std::error_code ec;
-  if (!std::filesystem::is_regular_file(path, ec)) {
-    return false;
-  }
-  return access(path.c_str(), X_OK) == 0;
-}
-
-std::optional<std::string> commandFromExamples(std::string const& appName) {
-  std::vector<std::filesystem::path> const candidates{
-      std::filesystem::path{"examples"} / appName,
-      std::filesystem::path{"build-examples"} / "examples" / appName,
-      std::filesystem::path{"build-p2"} / "examples" / appName / appName,
-  };
-  for (std::filesystem::path const& candidate : candidates) {
-    if (executableFile(candidate)) {
-      return shellQuote(candidate.string());
-    }
-  }
-  return std::nullopt;
-}
-
-std::string exampleCommandOrFallback(std::string const& appName, std::string fallback) {
-  if (std::optional<std::string> command = commandFromExamples(appName)) {
-    return *command;
-  }
-  return fallback;
-}
-
 std::optional<std::string> commandForAppId(std::string const& appId) {
-  if (appId == "terminal") return exampleCommandOrFallback("lambda-terminal", "lambda-terminal");
-  if (appId == "foot") return "foot";
-  if (appId == "browser" || appId == "firefox") return "firefox";
-  if (appId == "files") return exampleCommandOrFallback("lambda-files", "lambda-files");
-  if (appId == "settings") return exampleCommandOrFallback("lambda-settings", "lambda-settings");
-  if (appId == "calendar") return "gnome-calendar";
-  if (appId == "mail") return "thunderbird";
-  if (appId == "music") return "rhythmbox";
-  return std::nullopt;
+  auto const registry = lambda_shell::buildDefaultAppRegistry(
+      "examples", lambda_shell::defaultXdgApplicationDirs(), lambda_shell::executableInPath);
+  return lambda_shell::resolveAppLaunchCommand(appId, registry);
 }
 
 void spawnShellCommand(std::string const& command, std::string const& waylandDisplay) {

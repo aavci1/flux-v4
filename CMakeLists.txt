@@ -718,6 +718,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
     src/Compositor/Protocols/tablet-v2-tool-interface-stub.c
+    src/Shell/ShellAppRegistry.cpp
     src/Platform/Linux/KmsApplication.cpp
     src/Platform/Linux/KmsInput.cpp
     src/Platform/Linux/KmsOutput.cpp

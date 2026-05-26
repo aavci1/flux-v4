@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <set>
@@ -24,6 +25,21 @@ std::string lowerAscii(std::string_view value) {
     return static_cast<char>(std::tolower(ch));
   });
   return out;
+}
+
+std::vector<std::string> splitColonList(std::string_view value) {
+  std::vector<std::string> parts;
+  std::string part;
+  for (char ch : value) {
+    if (ch == ':') {
+      parts.push_back(part);
+      part.clear();
+      continue;
+    }
+    part.push_back(ch);
+  }
+  parts.push_back(part);
+  return parts;
 }
 
 std::string unescapeDesktopString(std::string_view value) {
@@ -101,6 +117,16 @@ std::filesystem::path iconCandidate(std::filesystem::path const& dir, std::strin
   return {};
 }
 
+bool executableFile(std::filesystem::path const& path) {
+  std::error_code ec;
+  if (!std::filesystem::is_regular_file(path, ec) || ec) return false;
+  std::filesystem::perms const permissions = std::filesystem::status(path, ec).permissions();
+  if (ec) return false;
+  constexpr auto executableBits = std::filesystem::perms::owner_exec | std::filesystem::perms::group_exec |
+                                  std::filesystem::perms::others_exec;
+  return (permissions & executableBits) != std::filesystem::perms::none;
+}
+
 std::string desktopIdForPath(std::filesystem::path const& root, std::filesystem::path const& path) {
   std::error_code ec;
   std::filesystem::path relative = std::filesystem::relative(path, root, ec);
@@ -111,6 +137,35 @@ std::string desktopIdForPath(std::filesystem::path const& root, std::filesystem:
     id += part.string();
   }
   return id;
+}
+
+std::string shellQuote(std::string_view value) {
+  std::string quoted{"'"};
+  for (char c : value) {
+    if (c == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(c);
+    }
+  }
+  quoted.push_back('\'');
+  return quoted;
+}
+
+std::string shellCommandFromArgs(std::vector<std::string> const& args) {
+  std::string command;
+  for (auto const& arg : args) {
+    if (arg.empty()) continue;
+    if (!command.empty()) command.push_back(' ');
+    command += shellQuote(arg);
+  }
+  return command;
+}
+
+bool registryContainsApp(std::vector<AppRegistryEntry> const& apps, std::string_view appId) {
+  return std::any_of(apps.begin(), apps.end(), [appId](AppRegistryEntry const& app) {
+    return shellAppIdMatches(appId, app.appId) || shellAppIdMatches(app.appId, appId);
+  });
 }
 
 } // namespace
@@ -248,6 +303,40 @@ bool shellAppIdMatches(std::string_view requested, std::string_view actual) {
   return false;
 }
 
+bool executableInPath(std::string const& executable) {
+  if (executable.empty()) return false;
+  std::filesystem::path path{executable};
+  if (path.has_parent_path()) return executableFile(path);
+  char const* pathEnv = std::getenv("PATH");
+  if (!pathEnv || !*pathEnv) return false;
+  for (auto const& entry : splitColonList(pathEnv)) {
+    std::filesystem::path dir = entry.empty() ? std::filesystem::path{"."} : std::filesystem::path{entry};
+    if (executableFile(dir / executable)) return true;
+  }
+  return false;
+}
+
+std::vector<std::filesystem::path> defaultXdgApplicationDirs() {
+  std::vector<std::filesystem::path> dirs;
+  if (char const* xdgDataHome = std::getenv("XDG_DATA_HOME"); xdgDataHome && *xdgDataHome) {
+    dirs.emplace_back(std::filesystem::path{xdgDataHome} / "applications");
+  } else if (char const* home = std::getenv("HOME"); home && *home) {
+    dirs.emplace_back(std::filesystem::path{home} / ".local" / "share" / "applications");
+  }
+
+  char const* xdgDataDirs = std::getenv("XDG_DATA_DIRS");
+  std::string_view dataDirs = xdgDataDirs && *xdgDataDirs ? std::string_view{xdgDataDirs}
+                                                          : std::string_view{"/usr/local/share:/usr/share"};
+  for (auto const& entry : splitColonList(dataDirs)) {
+    if (!entry.empty()) dirs.emplace_back(std::filesystem::path{entry} / "applications");
+  }
+  return dirs;
+}
+
+std::vector<std::string> defaultLocalExampleAppNames() {
+  return {"lambda-files", "lambda-settings", "lambda-terminal"};
+}
+
 std::vector<AppRegistryEntry> discoverInstalledDesktopApps(std::vector<std::filesystem::path> const& applicationDirs,
                                                            TryExecResolver const& tryExecResolver) {
   std::vector<AppRegistryEntry> apps;
@@ -280,7 +369,7 @@ std::vector<AppRegistryEntry> discoverLocalExampleApps(std::filesystem::path con
   std::vector<AppRegistryEntry> apps;
   for (auto const& name : appNames) {
     std::filesystem::path executable = examplesDir / name;
-    if (!std::filesystem::exists(executable)) continue;
+    if (!executableFile(executable)) continue;
     AppRegistryEntry app;
     app.appId = name;
     app.name = name.starts_with("lambda-") ? name.substr(7u) : name;
@@ -306,6 +395,46 @@ std::vector<AppRegistryEntry> mergeAppRegistryEntries(std::vector<AppRegistryEnt
     if (!replaced) merged.push_back(std::move(app));
   }
   return merged;
+}
+
+std::vector<AppRegistryEntry> builtinFallbackAppEntries() {
+  AppRegistryEntry terminal;
+  terminal.appId = "terminal";
+  terminal.name = "Terminal";
+  terminal.icon = "terminal";
+  terminal.command = "lambda-terminal";
+
+  AppRegistryEntry browser;
+  browser.appId = "browser";
+  browser.name = "Browser";
+  browser.icon = "browser";
+  browser.command = "firefox";
+
+  return {std::move(terminal), std::move(browser)};
+}
+
+std::vector<AppRegistryEntry> buildDefaultAppRegistry(std::filesystem::path const& examplesDir,
+                                                      std::vector<std::filesystem::path> const& applicationDirs,
+                                                      TryExecResolver const& tryExecResolver) {
+  auto installed = discoverInstalledDesktopApps(applicationDirs, tryExecResolver);
+  auto local = discoverLocalExampleApps(examplesDir, defaultLocalExampleAppNames());
+  auto registry = mergeAppRegistryEntries(std::move(installed), std::move(local));
+  for (auto fallback : builtinFallbackAppEntries()) {
+    if (!registryContainsApp(registry, fallback.appId)) registry.push_back(std::move(fallback));
+  }
+  return registry;
+}
+
+std::optional<std::string> resolveAppLaunchCommand(std::string_view requestedAppId,
+                                                   std::vector<AppRegistryEntry> const& apps) {
+  for (auto const& app : apps) {
+    if (app.hidden || app.noDisplay || app.command.empty()) continue;
+    if (!shellAppIdMatches(requestedAppId, app.appId) && !shellAppIdMatches(app.appId, requestedAppId)) continue;
+    std::vector<std::string> args = app.local ? std::vector<std::string>{app.command} : parseDesktopExec(app.command);
+    std::string command = shellCommandFromArgs(args);
+    if (!command.empty()) return command;
+  }
+  return std::nullopt;
 }
 
 std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot,
