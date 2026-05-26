@@ -185,6 +185,12 @@ std::filesystem::path copyTargetPath(std::filesystem::path const& source,
 
 bool copyRecursive(std::filesystem::path const& source, std::filesystem::path const& destination, std::error_code& ec) {
   ec.clear();
+  std::filesystem::file_status const linkStatus = std::filesystem::symlink_status(source, ec);
+  if (ec) return false;
+  if (std::filesystem::is_symlink(linkStatus)) {
+    std::filesystem::copy_symlink(source, destination, ec);
+    return !ec;
+  }
   if (std::filesystem::is_directory(source, ec)) {
     if (ec) return false;
     std::filesystem::create_directories(destination, ec);

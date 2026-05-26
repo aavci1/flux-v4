@@ -476,6 +476,28 @@ TEST_CASE("FilesStore copies moves and duplicates files and folders") {
   std::filesystem::remove_all(root);
 }
 
+TEST_CASE("FilesStore copies symlinks without recursively following their targets") {
+  auto root = tempRoot("lambda-files-symlink-copy-test");
+  auto source = root / "source";
+  auto destination = root / "destination";
+  std::filesystem::create_directories(source / "real-dir");
+  std::filesystem::create_directories(destination);
+  {
+    std::ofstream(source / "real-dir" / "nested.txt") << "nested";
+  }
+
+  std::error_code ec;
+  std::filesystem::create_directory_symlink(source / "real-dir", source / "linked-dir", ec);
+  REQUIRE_FALSE(ec);
+
+  auto copied = lambda_files::copyPath(source / "linked-dir", destination);
+  REQUIRE(copied.ok);
+  CHECK(std::filesystem::is_symlink(copied.path));
+  CHECK(std::filesystem::read_symlink(copied.path) == source / "real-dir");
+
+  std::filesystem::remove_all(root);
+}
+
 TEST_CASE("FilesStore internal clipboard copies and cuts selected paths") {
   auto root = tempRoot("lambda-files-clipboard-operation-test");
   auto source = root / "source";
