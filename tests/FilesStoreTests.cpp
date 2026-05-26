@@ -131,6 +131,52 @@ TEST_CASE("FilesStore validated navigation keeps previous directory on invalid p
   std::filesystem::remove_all(root);
 }
 
+TEST_CASE("FilesStore normalizes paths and keeps deterministic navigation history") {
+  auto root = tempRoot("lambda-files-history-test");
+  auto alpha = root / "alpha";
+  auto beta = alpha / "beta";
+  auto gamma = root / "gamma";
+  std::filesystem::create_directories(beta);
+  std::filesystem::create_directories(gamma);
+
+  CHECK(lambda_files::normalizeDirectoryPath(beta / "..") == alpha.string());
+  std::error_code ec;
+  std::filesystem::create_directory_symlink(alpha, root / "alpha-link", ec);
+  if (!ec) {
+    CHECK(lambda_files::normalizeDirectoryPath(root / "alpha-link" / "beta" / "..") == alpha.string());
+  }
+
+  lambda_files::NavigationHistory history{.current = lambda_files::normalizeDirectoryPath(alpha)};
+  history = lambda_files::navigateTo(history, beta);
+  history = lambda_files::navigateTo(history, gamma);
+  CHECK(history.current == lambda_files::normalizeDirectoryPath(gamma));
+  CHECK(history.back == std::vector<std::string>{lambda_files::normalizeDirectoryPath(alpha),
+                                                 lambda_files::normalizeDirectoryPath(beta)});
+  CHECK(history.forward.empty());
+
+  history = lambda_files::goBack(history);
+  CHECK(history.current == lambda_files::normalizeDirectoryPath(beta));
+  CHECK(history.back == std::vector<std::string>{lambda_files::normalizeDirectoryPath(alpha)});
+  CHECK(history.forward == std::vector<std::string>{lambda_files::normalizeDirectoryPath(gamma)});
+
+  history = lambda_files::goBack(history);
+  CHECK(history.current == lambda_files::normalizeDirectoryPath(alpha));
+  CHECK(history.back.empty());
+  CHECK(history.forward == std::vector<std::string>{lambda_files::normalizeDirectoryPath(gamma),
+                                                    lambda_files::normalizeDirectoryPath(beta)});
+
+  history = lambda_files::goForward(history);
+  CHECK(history.current == lambda_files::normalizeDirectoryPath(beta));
+  CHECK(history.back == std::vector<std::string>{lambda_files::normalizeDirectoryPath(alpha)});
+  CHECK(history.forward == std::vector<std::string>{lambda_files::normalizeDirectoryPath(gamma)});
+
+  auto up = lambda_files::goUp(lambda_files::NavigationHistory{.current = lambda_files::normalizeDirectoryPath(beta)});
+  CHECK(up.current == lambda_files::normalizeDirectoryPath(alpha));
+  CHECK(up.back == std::vector<std::string>{lambda_files::normalizeDirectoryPath(beta)});
+
+  std::filesystem::remove_all(root);
+}
+
 TEST_CASE("FilesStore sorts entries by name kind size and modified time") {
   using lambda_files::FileEntry;
   using lambda_files::FileSortKey;
