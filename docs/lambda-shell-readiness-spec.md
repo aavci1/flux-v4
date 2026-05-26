@@ -29,18 +29,10 @@ Implemented today:
 
 Important limitations in the current implementation:
 
-- The app list is static in the Shell and the launch command table is hard-coded in the Window Manager.
-- Dock item matching uses local alias rules and string searching in the raw snapshot JSON.
-- There is no freedesktop `.desktop` parser, no app categories, no keywords, no recency, and no user pin model.
-- Dock and launcher icons are hard-coded Material glyphs with hard-coded colors.
-- There is no icon theme provider or fallback icon theme contract.
-- The top bar status icons are mostly visual. Network, Bluetooth, volume, and battery are not real Shell-owned providers yet.
-- There is no quick settings surface for network, Bluetooth, audio, battery, power mode, brightness, do-not-disturb, or related status controls.
-- There is no notification daemon, notification banner UI, notification center, or do-not-disturb state.
-- There is no clipboard history UI, persistence policy, privacy filtering, or clear-history behavior.
-- The command launcher only searches static dock items. It does not search windows, settings panels, shell actions, recent apps, or files.
-- The launcher uses manual text-event handling, not a proper text editing model.
-- IPC parsing is intentionally small and ad hoc; it should become structured before the protocol grows.
+- Live service providers for network, Bluetooth, audio, battery, power mode, brightness, notifications, and clipboard history are not complete.
+- Notification and clipboard-history models/config exist and are tested, but notification banners/center and clipboard picker UI are not live yet.
+- The top-bar quick-status popup shows real/unknown/unavailable values and explicitly labels provider controls unavailable where live controls do not exist.
+- Files/recent-documents launcher providers are not implemented.
 - `lambda-shell` exits if IPC disconnects and throws if it cannot connect at startup.
 - Multi-output Shell behavior remains mostly architectural. The current daily target is still the selected single output.
 
@@ -1120,6 +1112,37 @@ Add focused automated tests where behavior is deterministic:
 - Icon theme lookup fallback.
 - Shell config defaults and invalid-value fallback.
 
+## Current user guide
+
+Start `lambda-shell` after the Window Manager is running. The Shell connects to the Window Manager shell IPC socket, creates a top bar, dock, and command launcher layer, and exits if that IPC connection is unavailable or later disconnects.
+
+Top bar:
+
+- The `lambda` mark opens the command launcher.
+- Status icons display real values from the Window Manager snapshot when present.
+- Unknown or unavailable providers are never shown as fake connected/active values.
+- Clicking the status cluster opens a quick-status menu showing current status values and explicitly marking provider controls unavailable when Shell does not own a live provider yet.
+
+Dock:
+
+- Dock pins come from Shell config and local/installed app discovery.
+- Local Lambda example executables take precedence via `./examples/APP_NAME`.
+- Running unpinned apps appear when `show_running_unpinned` is enabled.
+- Clicking a stopped app requests launch; clicking a running app requests focus or restore through Window Manager IPC.
+- Theme icons are used where available, with Material glyph fallback.
+
+Command launcher:
+
+- Open it with `Super+Space`, the dock launcher item, or the top-bar lambda mark.
+- Type to filter apps, running windows, Settings panels, and Shell actions.
+- Use arrow keys to change highlight, `Enter` to activate, and `Escape` to dismiss.
+- Empty/error states are explicit rather than blank.
+
+Configuration:
+
+- Shell config is generated when missing and covers dock pins, icon themes, top-bar modules, quick-settings module order, notifications, clipboard-history policy, launcher behavior, and reduced motion.
+- Notification and clipboard-history policy models are implemented and tested, but their live UI surfaces remain pending.
+
 ## Done checklist
 
 - [x] Shell IPC uses request IDs and structured errors.
@@ -1141,7 +1164,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Shell config is generated and documented.
 - [x] Shell handles missing/disconnected IPC cleanly without adding session management.
 - [ ] Manual validation passes with Lambda apps and selected external apps.
-- [ ] User guide and Shell spec are updated to match actual behavior.
+- [x] User guide and Shell spec are updated to match actual behavior.
 
 ## Deferred to later milestones
 
