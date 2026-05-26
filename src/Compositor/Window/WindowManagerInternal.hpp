@@ -151,7 +151,8 @@ inline WaylandServer::Impl::Surface* previousFocusedToplevelFromOrders(
   return nullptr;
 }
 inline bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
-  return lambda_shell::shellAppIdMatches(requested, actual);
+  return lambda_shell::shellAppIdMatches(requested, actual) ||
+         lambda_shell::shellAppIdMatches(actual, requested);
 }
 bool containsPoint(float x, float y, float left, float top, float right, float bottom);
 inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, float localX, float localY) {

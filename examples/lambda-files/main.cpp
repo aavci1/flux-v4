@@ -6,7 +6,7 @@
 
 int main(int argc, char* argv[]) {
   flux::Application app(argc, argv);
-  app.setName("files");
+  app.setName("lambda-files");
 
   auto& window = app.createWindow<flux::Window>({
       .size = {1040.f, 680.f},

@@ -108,8 +108,10 @@ TEST_CASE("shell app id matching accepts built-in app aliases") {
   CHECK(flux::compositor::wm::shellAppIdMatches("terminal", "foot"));
   CHECK(flux::compositor::wm::shellAppIdMatches("browser", "firefox"));
   CHECK(flux::compositor::wm::shellAppIdMatches("files", "lambda-files"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("lambda-files", "files"));
   CHECK(flux::compositor::wm::shellAppIdMatches("files", "org.gnome.Nautilus"));
   CHECK(flux::compositor::wm::shellAppIdMatches("settings", "lambda-settings"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("lambda-settings", "settings"));
   CHECK(flux::compositor::wm::shellAppIdMatches("lambda-settings", "lambda-settings"));
 }
 
