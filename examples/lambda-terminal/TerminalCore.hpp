@@ -19,6 +19,7 @@ namespace lambda_terminal {
 struct TerminalInputMode {
   bool applicationCursor = false;
   bool applicationKeypad = false;
+  bool focusEvents = false;
 };
 
 struct TerminalGridMetrics {
@@ -206,6 +207,7 @@ private:
 [[nodiscard]] std::string encodeTerminalKey(flux::KeyCode key,
                                             flux::Modifiers modifiers = flux::Modifiers::None,
                                             TerminalInputMode mode = {});
+[[nodiscard]] std::string encodeTerminalFocusEvent(bool focused, TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeTerminalKeypadKey(TerminalKeypadKey key, TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeBracketedPaste(std::string_view text);
 [[nodiscard]] std::string terminalCopyPayload(TerminalTextBuffer const& buffer,

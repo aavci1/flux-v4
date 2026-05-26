@@ -68,6 +68,9 @@ TEST_CASE("terminal input encoder supports application cursor and keypad modes")
   CHECK(encodeTerminalKeypadKey(TerminalKeypadKey::Digit3) == "3");
   CHECK(encodeTerminalKeypadKey(TerminalKeypadKey::Digit3, TerminalInputMode{.applicationKeypad = true}) == "\x1bOs");
   CHECK(encodeTerminalKeypadKey(TerminalKeypadKey::Enter, TerminalInputMode{.applicationKeypad = true}) == "\x1bOM");
+  CHECK(encodeTerminalFocusEvent(true) == "");
+  CHECK(encodeTerminalFocusEvent(true, TerminalInputMode{.focusEvents = true}) == "\x1b[I");
+  CHECK(encodeTerminalFocusEvent(false, TerminalInputMode{.focusEvents = true}) == "\x1b[O");
 }
 
 TEST_CASE("terminal bracketed paste wraps text without rewriting payload") {

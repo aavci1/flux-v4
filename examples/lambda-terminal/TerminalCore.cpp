@@ -440,6 +440,11 @@ std::string encodeTerminalKey(KeyCode key, Modifiers modifiers, TerminalInputMod
   }
 }
 
+std::string encodeTerminalFocusEvent(bool focused, TerminalInputMode mode) {
+  if (!mode.focusEvents) return {};
+  return focused ? "\x1b[I" : "\x1b[O";
+}
+
 std::string encodeTerminalKeypadKey(TerminalKeypadKey key, TerminalInputMode mode) {
   static constexpr std::array<char, 10> normalDigits{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
   static constexpr std::array<char, 10> appDigits{'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y'};
