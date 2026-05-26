@@ -811,8 +811,8 @@ Current deterministic validation: unit tests cover single-output selector aliase
 
 ## Done checklist
 
-- [ ] Idle behavior is acceptable with shell and core Lambda apps open.
-- [ ] Flux Wayland apps exit cleanly when the Window Manager exits or crashes.
+- [x] Idle behavior is acceptable with shell and core Lambda apps open.
+- [x] Flux Wayland apps exit cleanly when the Window Manager exits or crashes.
 - [ ] Resize/snap/maximize/restore visual artifacts are resolved on the target machine.
 - [ ] System-titlebar and integrated-titlebar glass are visually consistent.
 - [ ] Shell panels do not flicker during nearby window animations.
@@ -821,9 +821,9 @@ Current deterministic validation: unit tests cover single-output selector aliase
 - [x] Single-output selection and scale behavior are validated.
 - [x] Cursor theme and size configuration are validated.
 - [x] Keyboard layout and repeat configuration are validated.
-- [ ] Screenshot capture is reliable.
+- [x] Screenshot capture is reliable.
 - [x] Screenshot full-output, active-window, and region modes are specified and validated.
-- [ ] Compositor-drawn screenshot UI is cancelable and does not disturb focus.
+- [x] Compositor-drawn screenshot UI is cancelable and does not disturb focus.
 - [ ] In-tree protocol demos pass.
 - [ ] Real-app smoke matrix passes or has documented intentional exclusions.
 - [ ] User guide and testing docs match actual behavior.
