@@ -264,6 +264,12 @@ TEST_CASE("FilesStore filters entries and computes directory refresh diffs") {
   CHECK(changes.added == std::vector<std::filesystem::path>{"/tmp/new.txt"});
   CHECK(changes.removed == std::vector<std::filesystem::path>{"/tmp/notes.md"});
   CHECK(changes.modified == std::vector<std::filesystem::path>{"/tmp/alpha.txt"});
+
+  CHECK(lambda_files::directoryListingChanged(before, "", {.entries = after}));
+  CHECK_FALSE(lambda_files::directoryListingChanged(before, "", {.entries = before}));
+  CHECK(lambda_files::directoryListingChanged(before, "", {.error = "permission denied"}));
+  CHECK_FALSE(lambda_files::directoryListingChanged(before, "permission denied",
+                                                   {.error = "permission denied"}));
 }
 
 TEST_CASE("FilesStore model owns directory state filtering errors and refresh diffs") {

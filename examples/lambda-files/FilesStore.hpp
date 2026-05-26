@@ -286,6 +286,9 @@ std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
                                      bool directoriesFirst = true);
 std::vector<FileEntry> filterEntries(std::vector<FileEntry> const& entries, std::string_view query);
 DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vector<FileEntry> after);
+bool directoryListingChanged(std::vector<FileEntry> const& currentEntries,
+                             std::string_view currentError,
+                             ListDirectoryResult const& nextListing);
 FilesPreferences defaultFilesPreferences();
 FilesModel makeFilesModel(std::filesystem::path directory = {},
                           FilesPreferences preferences = defaultFilesPreferences());

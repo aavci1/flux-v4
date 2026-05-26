@@ -22,6 +22,7 @@
 #include <Flux/UI/Window.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -511,16 +512,80 @@ struct FilesAppRoot {
 
     auto places = useState(sidebarPlaces());
 
-    auto syncListing = [history, entries, listingKey, crumbs, listError, showHiddenFiles] {
+    auto syncListing = [history, entries, listingKey, crumbs, listError, showHiddenFiles,
+                        selection, selectedPath](bool force = true) {
       std::filesystem::path const current{history().current};
+      ListDirectoryResult const result = listDirectory(current, showHiddenFiles());
+      if (!force && !directoryListingChanged(entries(), listError(), result)) {
+        return false;
+      }
+      FileSelectionState const currentSelection = selection();
+      std::vector<FileEntry> const currentEntries = entries();
+      std::optional<std::filesystem::path> anchorPath;
+      if (currentSelection.anchorIndex >= 0 &&
+          currentSelection.anchorIndex < static_cast<int>(currentEntries.size())) {
+        anchorPath = currentEntries[static_cast<std::size_t>(currentSelection.anchorIndex)].path;
+      }
       listingKey.set(current.string());
       crumbs.set(breadcrumbCrumbs(current));
-      ListDirectoryResult const result = listDirectory(current, showHiddenFiles());
       entries.set(result.entries);
       listError.set(result.error);
+      if (result.error.empty()) {
+        FileSelectionState kept;
+        for (auto const& path : currentSelection.selected) {
+          auto found = std::find_if(result.entries.begin(), result.entries.end(), [&](FileEntry const& entry) {
+            return entry.path == path;
+          });
+          if (found != result.entries.end()) {
+            kept.selected.push_back(path);
+          }
+        }
+        if (anchorPath) {
+          for (std::size_t index = 0; index < result.entries.size(); ++index) {
+            if (result.entries[index].path == *anchorPath && kept.contains(*anchorPath)) {
+              kept.anchorIndex = static_cast<int>(index);
+              break;
+            }
+          }
+        }
+        if (kept.anchorIndex < 0 && !kept.selected.empty()) {
+          for (std::size_t index = 0; index < result.entries.size(); ++index) {
+            if (result.entries[index].path == kept.selected.front()) {
+              kept.anchorIndex = static_cast<int>(index);
+              break;
+            }
+          }
+        }
+        selection.set(kept);
+        int const focused = focusedSelectionIndex(kept, result.entries);
+        selectedPath.set(focused >= 0 ? result.entries[static_cast<std::size_t>(focused)].path.string()
+                                      : std::string{});
+      }
+      return true;
     };
 
     syncListing();
+
+    if (Application::hasInstance()) {
+      auto refreshTimerId = std::make_shared<std::uint64_t>(
+          Application::instance().scheduleRepeatingTimer(std::chrono::seconds{2},
+                                                         window ? window->handle() : 0u));
+      Application::instance().eventQueue().on<TimerEvent>(
+          [refreshTimerId, syncListing](TimerEvent const& event) {
+            if (!refreshTimerId || *refreshTimerId == 0 || event.timerId != *refreshTimerId) {
+              return;
+            }
+            if (syncListing(false) && Application::hasInstance()) {
+              Application::instance().requestRedraw();
+            }
+          });
+      onCleanup([refreshTimerId] {
+        if (refreshTimerId && *refreshTimerId != 0 && Application::hasInstance()) {
+          Application::instance().cancelTimer(*refreshTimerId);
+          *refreshTimerId = 0;
+        }
+      });
+    }
 
     auto applyHistory = [history, activePlaceId, selectedPath, selection, scrollOffset, syncListing](
                             NavigationHistory next) {

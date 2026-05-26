@@ -978,7 +978,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Context menus expose real commands.
 - [ ] Clipboard file operations work internally and with compatible clients.
 - [ ] Basic drag/drop works or unsupported portions are clearly documented.
-- [ ] Current folder refreshes after external changes.
+- [x] Current folder refreshes after external changes.
 - [x] Operation progress/errors/cancel states exist.
 - [ ] Grid and list/detail views exist.
 - [x] Sorting and current-folder search work.

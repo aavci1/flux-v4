@@ -672,6 +672,19 @@ DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vect
   return changes;
 }
 
+bool directoryListingChanged(std::vector<FileEntry> const& currentEntries,
+                             std::string_view currentError,
+                             ListDirectoryResult const& nextListing) {
+  if (currentError != nextListing.error) {
+    return true;
+  }
+  if (!nextListing.error.empty()) {
+    return false;
+  }
+  DirectoryChangeSet changes = diffDirectoryEntries(currentEntries, nextListing.entries);
+  return !changes.added.empty() || !changes.removed.empty() || !changes.modified.empty();
+}
+
 FileSelectionState preserveSelectionAfterRefresh(FileSelectionState const& previous,
                                                  std::optional<std::filesystem::path> const& previousAnchor,
                                                  std::vector<FileEntry> const& entries) {
