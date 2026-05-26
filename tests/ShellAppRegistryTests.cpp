@@ -1,5 +1,7 @@
 #include "Shell/ShellAppRegistry.hpp"
 
+#include <Flux/Graphics/Image.hpp>
+
 #include <doctest/doctest.h>
 
 #include <cstdlib>
@@ -240,19 +242,25 @@ TryExec=missing-bin
 TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   auto root = tempRoot("lambda-shell-icon-test");
   std::filesystem::create_directories(root / "48x48" / "apps");
+  std::filesystem::create_directories(root / "apps" / "48");
   std::filesystem::create_directories(root / "48x48" / "categories");
   std::filesystem::create_directories(root / "48x48" / "legacy");
   std::filesystem::create_directories(root / "48x48" / "mimetypes");
   std::filesystem::create_directories(root / "scalable" / "apps");
+  std::filesystem::create_directories(root / "places" / "scalable");
   {
     std::ofstream(root / "48x48" / "apps" / "files.png") << "png";
+    std::ofstream(root / "apps" / "48" / "system-file-manager.svg") << "svg";
     std::ofstream(root / "48x48" / "categories" / "preferences-system.png") << "png";
     std::ofstream(root / "48x48" / "legacy" / "utilities-terminal.png") << "png";
     std::ofstream(root / "48x48" / "mimetypes" / "text-x-generic.svg") << "svg";
     std::ofstream(root / "scalable" / "apps" / "settings.svg") << "svg";
+    std::ofstream(root / "places" / "scalable" / "user-trash.svg") << "svg";
   }
 
   CHECK(lambda_shell::lookupIconThemePath(root, "files", 48) == root / "48x48" / "apps" / "files.png");
+  CHECK(lambda_shell::lookupIconThemePath(root, "system-file-manager", 48) ==
+        root / "apps" / "48" / "system-file-manager.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "preferences-system", 48) ==
         root / "48x48" / "categories" / "preferences-system.png");
   CHECK(lambda_shell::lookupIconThemePath(root, "utilities-terminal", 48) ==
@@ -260,10 +268,30 @@ TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   CHECK(lambda_shell::lookupIconThemePath(root, "text-x-generic", 48) ==
         root / "48x48" / "mimetypes" / "text-x-generic.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "settings", 48) == root / "scalable" / "apps" / "settings.svg");
+  CHECK(lambda_shell::lookupIconThemePath(root, "user-trash", 48) == root / "places" / "scalable" / "user-trash.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "missing", 48).empty());
 
   std::filesystem::remove_all(root);
 }
+
+#if FLUX_VULKAN
+TEST_CASE("Image loader decodes SVG theme icons on Linux") {
+  auto root = tempRoot("lambda-shell-svg-icon-test");
+  auto icon = root / "icon.svg";
+  std::ofstream(icon) << R"(<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" viewBox="0 0 4 4">
+<rect width="4" height="4" fill="#336699"/>
+</svg>)";
+
+  auto decoded = flux::decodeImageRgbaFromFile(icon.string());
+  REQUIRE(decoded);
+  CHECK(decoded->width == 4);
+  CHECK(decoded->height == 4);
+  REQUIRE(decoded->pixels.size() == 64);
+  CHECK(decoded->pixels[3] == 255);
+
+  std::filesystem::remove_all(root);
+}
+#endif
 
 TEST_CASE("Shell app registry resolves configured icon themes through XDG roots") {
   ScopedEnv homeEnv("HOME");
@@ -274,10 +302,14 @@ TEST_CASE("Shell app registry resolves configured icon themes through XDG roots"
   auto dataHome = root / "data-home";
   auto dataDir = root / "data-dir";
   auto themedIcon = dataHome / "icons" / "Lambda" / "48x48" / "apps" / "lambda-terminal.png";
-  auto fallbackIcon = dataDir / "icons" / "hicolor" / "48x48" / "apps" / "lambda-files.png";
+  auto inheritedIcon = dataDir / "icons" / "Lambda-Base" / "48x48" / "apps" / "lambda-files.png";
+  auto fallbackIcon = dataDir / "icons" / "hicolor" / "48x48" / "apps" / "lambda-settings.png";
   std::filesystem::create_directories(themedIcon.parent_path());
+  std::filesystem::create_directories(inheritedIcon.parent_path());
   std::filesystem::create_directories(fallbackIcon.parent_path());
+  std::ofstream(dataHome / "icons" / "Lambda" / "index.theme") << "[Icon Theme]\nInherits=Lambda-Base,hicolor\n";
   std::ofstream(themedIcon) << "png";
+  std::ofstream(inheritedIcon) << "png";
   std::ofstream(fallbackIcon) << "png";
 
   auto const dataHomeString = dataHome.string();
@@ -287,7 +319,8 @@ TEST_CASE("Shell app registry resolves configured icon themes through XDG roots"
   unsetenv("HOME");
 
   CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "Lambda", 48) == themedIcon);
-  CHECK(lambda_shell::resolveIconThemePath("lambda-files", "Lambda", 48) == fallbackIcon);
+  CHECK(lambda_shell::resolveIconThemePath("lambda-files", "Lambda", 48) == inheritedIcon);
+  CHECK(lambda_shell::resolveIconThemePath("lambda-settings", "Lambda", 48) == fallbackIcon);
   CHECK(lambda_shell::resolveIconThemePath("missing", "Lambda", 48).empty());
 
   std::filesystem::remove_all(root);

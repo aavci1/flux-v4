@@ -90,6 +90,23 @@ std::vector<std::string> splitDesktopList(std::string_view value) {
   return list;
 }
 
+std::vector<std::string> splitCommaList(std::string_view value) {
+  std::vector<std::string> list;
+  std::string item;
+  for (char ch : value) {
+    if (ch == ',') {
+      std::string stripped = trim(item);
+      if (!stripped.empty()) list.push_back(std::move(stripped));
+      item.clear();
+      continue;
+    }
+    item.push_back(ch);
+  }
+  std::string stripped = trim(item);
+  if (!stripped.empty()) list.push_back(std::move(stripped));
+  return list;
+}
+
 bool parseBool(std::string_view value) {
   std::string text = lowerAscii(trim(value));
   return text == "true" || text == "1" || text == "yes";
@@ -115,6 +132,25 @@ std::filesystem::path iconCandidate(std::filesystem::path const& dir, std::strin
     if (std::filesystem::exists(candidate)) return candidate;
   }
   return {};
+}
+
+std::vector<std::string> iconThemeInherits(std::filesystem::path const& themeRoot) {
+  std::ifstream input(themeRoot / "index.theme");
+  if (!input) return {};
+  std::vector<std::string> inherits;
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
+    std::string stripped = trim(view);
+    auto equals = stripped.find('=');
+    if (equals == std::string::npos) continue;
+    std::string key = trim(std::string_view(stripped).substr(0, equals));
+    if (key != "Inherits") continue;
+    inherits = splitCommaList(stripped.substr(equals + 1u));
+    break;
+  }
+  return inherits;
 }
 
 bool executableFile(std::filesystem::path const& path) {
@@ -334,12 +370,6 @@ std::vector<std::filesystem::path> defaultXdgApplicationDirs() {
 }
 
 std::vector<std::filesystem::path> defaultIconThemeRoots(std::string const& themeName) {
-  std::vector<std::string> themes;
-  if (!themeName.empty()) themes.push_back(themeName);
-  if (std::find(themes.begin(), themes.end(), "hicolor") == themes.end()) themes.push_back("hicolor");
-  if (std::find(themes.begin(), themes.end(), "AdwaitaLegacy") == themes.end()) themes.push_back("AdwaitaLegacy");
-  if (std::find(themes.begin(), themes.end(), "Adwaita") == themes.end()) themes.push_back("Adwaita");
-
   std::vector<std::filesystem::path> bases;
   if (char const* home = std::getenv("HOME"); home && *home) {
     bases.emplace_back(std::filesystem::path{home} / ".icons");
@@ -358,11 +388,27 @@ std::vector<std::filesystem::path> defaultIconThemeRoots(std::string const& them
   }
 
   std::vector<std::filesystem::path> roots;
-  for (auto const& base : bases) {
-    for (auto const& theme : themes) {
-      roots.emplace_back(base / theme);
+  std::set<std::string> seenThemes;
+  std::set<std::string> seenRoots;
+  auto addTheme = [&](auto const& self, std::string const& theme, int depth) -> void {
+    if (theme.empty() || depth > 8 || !seenThemes.insert(theme).second) return;
+    for (auto const& base : bases) {
+      std::filesystem::path root = base / theme;
+      std::error_code ec;
+      if (!std::filesystem::is_directory(root, ec) || ec) continue;
+      std::string key = root.string();
+      if (seenRoots.insert(key).second) roots.push_back(root);
+      for (auto const& inherited : iconThemeInherits(root)) {
+        self(self, inherited, depth + 1);
+      }
     }
-  }
+  };
+
+  addTheme(addTheme, themeName, 0);
+  addTheme(addTheme, "hicolor", 0);
+  addTheme(addTheme, "AdwaitaLegacy", 0);
+  addTheme(addTheme, "Adwaita", 0);
+
   if (char const* xdgDataHome = std::getenv("XDG_DATA_HOME"); xdgDataHome && *xdgDataHome) {
     roots.emplace_back(std::filesystem::path{xdgDataHome} / "pixmaps");
   }
@@ -490,37 +536,25 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
     return iconPath;
   }
 
-  std::vector<std::filesystem::path> candidates{
-      themeRoot / std::to_string(preferredSize) / "apps",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "apps",
-      themeRoot / std::to_string(preferredSize) / "actions",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "actions",
-      themeRoot / std::to_string(preferredSize) / "categories",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "categories",
-      themeRoot / std::to_string(preferredSize) / "mimetypes",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "mimetypes",
-      themeRoot / std::to_string(preferredSize) / "places",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "places",
-      themeRoot / std::to_string(preferredSize) / "status",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "status",
-      themeRoot / std::to_string(preferredSize) / "legacy",
-      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "legacy",
-      themeRoot / "scalable" / "apps",
-      themeRoot / "scalable" / "actions",
-      themeRoot / "scalable" / "categories",
-      themeRoot / "scalable" / "mimetypes",
-      themeRoot / "scalable" / "places",
-      themeRoot / "scalable" / "status",
-      themeRoot / "scalable" / "legacy",
-      themeRoot / "apps",
-      themeRoot / "actions",
-      themeRoot / "categories",
-      themeRoot / "mimetypes",
-      themeRoot / "places",
-      themeRoot / "status",
-      themeRoot / "legacy",
-      themeRoot,
+  std::vector<std::filesystem::path> candidates;
+  std::string const size = std::to_string(preferredSize);
+  std::string const sizePair = size + "x" + size;
+  std::vector<std::string> sizes{size, sizePair, "scalable", "256", "256x256", "128", "128x128", "96", "96x96",
+                                 "64", "64x64", "48", "48x48", "32", "32x32", "24", "24x24",
+                                 "22", "22x22", "16", "16x16", "symbolic"};
+  static constexpr char const* categories[] = {
+      "apps", "actions", "categories", "mimetypes", "places", "status", "legacy",
   };
+  for (char const* category : categories) {
+    for (auto const& candidateSize : sizes) {
+      candidates.push_back(themeRoot / candidateSize / category);
+      candidates.push_back(themeRoot / category / candidateSize);
+    }
+  }
+  for (char const* category : categories) {
+    candidates.push_back(themeRoot / category);
+  }
+  candidates.push_back(themeRoot);
   for (auto const& dir : candidates) {
     if (auto candidate = iconCandidate(dir, iconName); !candidate.empty()) return candidate;
   }

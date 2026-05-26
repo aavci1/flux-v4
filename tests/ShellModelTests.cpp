@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -120,7 +121,9 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   bool filesFocused = false;
   bool terminalRunning = false;
   bool editorUnpinned = false;
+  std::vector<std::string> dockOrder;
   for (auto const& item : model.dockItems()) {
+    dockOrder.push_back(item.id);
     if (item.appId == "lambda-files") filesFocused = item.running && item.focused;
     if (item.appId == "lambda-terminal") terminalRunning = item.running && !item.focused;
     if (item.appId == "org.example.Editor") editorUnpinned = item.running && !item.pinned;
@@ -128,6 +131,11 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   CHECK(filesFocused);
   CHECK(terminalRunning);
   CHECK(editorUnpinned);
+  auto const editor = std::find(dockOrder.begin(), dockOrder.end(), "org.example.Editor");
+  auto const trash = std::find(dockOrder.begin(), dockOrder.end(), "trash");
+  REQUIRE(editor != dockOrder.end());
+  REQUIRE(trash != dockOrder.end());
+  CHECK(editor < trash);
 
   std::vector<std::string> sent;
   for (auto const& item : model.dockItems()) {
@@ -213,4 +221,51 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
   }
 
   std::filesystem::remove_all(iconRoot);
+}
+
+TEST_CASE("Shell model merges alias app ids into pinned dock items") {
+  lambda_shell::ShellModel model;
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.dockPinned = {"lambda-files", "lambda-settings"};
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-files", .name = "Files", .icon = "system-file-manager", .command = "lambda-files"},
+      {.appId = "lambda-settings", .name = "Settings", .icon = "preferences-system", .command = "lambda-settings"},
+  };
+
+  model.setDockItems(apps, config);
+  auto changes = model.applySnapshot(R"({
+    "type":"lambda.windowManager.snapshot",
+    "apps":[
+      {"id":"lambda-files","name":"Files","icon":"system-file-manager","command":"lambda-files"},
+      {"id":"lambda-settings","name":"Settings","icon":"preferences-system","command":"lambda-settings"}
+    ],
+    "windows":[
+      {"id":1,"appId":"files","title":"Files","state":"normal","focused":true},
+      {"id":2,"appId":"settings","title":"Settings","state":"normal","focused":false}
+    ],
+    "system":{}
+  })");
+  CHECK(changes.dockItems);
+
+  int filesCount = 0;
+  int settingsCount = 0;
+  bool filesRunning = false;
+  bool settingsRunning = false;
+  for (auto const& item : model.dockItems()) {
+    if (item.kind != "app") continue;
+    if (item.appId == "lambda-files") {
+      ++filesCount;
+      filesRunning = item.running && item.focused;
+    }
+    if (item.appId == "lambda-settings") {
+      ++settingsCount;
+      settingsRunning = item.running && !item.focused;
+    }
+    CHECK(item.appId != "files");
+    CHECK(item.appId != "settings");
+  }
+  CHECK(filesCount == 1);
+  CHECK(settingsCount == 1);
+  CHECK(filesRunning);
+  CHECK(settingsRunning);
 }

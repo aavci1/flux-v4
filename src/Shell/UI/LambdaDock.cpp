@@ -53,6 +53,16 @@ std::shared_ptr<Image> iconImage(std::string const& path) {
   return image;
 }
 
+Element lambdaLauncherIcon(float iconSize, float iconInsetX, float lift) {
+  return Text{
+      .text = "λ",
+      .font = Font{.family = "", .size = 40.f, .weight = 900.f},
+      .color = Color(1.f, 1.f, 1.f, 1.f),
+      .horizontalAlignment = HorizontalAlignment::Center,
+      .verticalAlignment = VerticalAlignment::Center,
+  }.size(iconSize, iconSize).position(iconInsetX, lift);
+}
+
 std::string iconKey(DockItem const& item) {
   if (!item.icon.empty()) return item.icon;
   return item.appId;
@@ -96,8 +106,10 @@ Element dockIconAt(std::size_t index,
   float const iconInsetX = (slotWidth - iconSize) * 0.5f;
 
   std::vector<Element> iconLayers;
-  auto image = iconImage(item.iconPath);
-  if (image) {
+  auto image = item.kind == "launcher" ? nullptr : iconImage(item.iconPath);
+  if (item.kind == "launcher") {
+    iconLayers.push_back(lambdaLauncherIcon(iconSize, iconInsetX, lift));
+  } else if (image) {
     iconLayers.push_back(Element{views::Image{
         .source = std::move(image),
         .fillMode = ImageFillMode::Fit,

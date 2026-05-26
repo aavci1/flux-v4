@@ -289,6 +289,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
   pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
+  pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   if(LAMBDA_BUILD_WINDOW_MANAGER)
     pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
@@ -444,6 +445,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
   pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
+  pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
   set(FLUX_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
@@ -594,6 +596,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     PkgConfig::FREETYPE
     PkgConfig::FONTCONFIG
     PkgConfig::HARFBUZZ
+    PkgConfig::LIBRSVG
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 elseif(FLUX_PLATFORM_LINUX_KMS)
@@ -612,6 +615,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     PkgConfig::FREETYPE
     PkgConfig::FONTCONFIG
     PkgConfig::HARFBUZZ
+    PkgConfig::LIBRSVG
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 endif()

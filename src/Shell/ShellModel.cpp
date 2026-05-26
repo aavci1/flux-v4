@@ -38,9 +38,25 @@ bool appMatchesPin(AppRegistryEntry const& app, std::string_view pin) {
   return shellAppIdMatches(pin, app.appId) || shellAppIdMatches(app.appId, pin);
 }
 
+bool appIdsMatch(std::string_view a, std::string_view b) {
+  return shellAppIdMatches(a, b) || shellAppIdMatches(b, a);
+}
+
 std::string resolvedIconPath(std::string const& icon, std::string const& theme, int size) {
   auto path = resolveIconThemePath(icon, theme, size);
   return path.empty() ? std::string{} : path.string();
+}
+
+std::vector<DockItem>::iterator unpinnedInsertPosition(std::vector<DockItem>& items) {
+  auto trash = std::find_if(items.begin(), items.end(), [](DockItem const& candidate) {
+    return candidate.kind == "trash";
+  });
+  if (trash == items.end()) return items.end();
+  if (trash != items.begin()) {
+    auto beforeTrash = std::prev(trash);
+    if (beforeTrash->kind == "separator") return beforeTrash;
+  }
+  return trash;
 }
 
 } // namespace
@@ -61,7 +77,7 @@ void ShellModel::refreshLauncherResults() {
 void ShellModel::setPreviewFocus(std::string_view appId) {
   auto items = dockItems_.peek();
   for (auto& item : items) {
-    item.running = !appId.empty() && item.kind == "app" && shellAppIdMatches(item.appId, appId);
+    item.running = !appId.empty() && item.kind == "app" && appIdsMatch(item.appId, appId);
     item.focused = item.running;
   }
   dockItems_.set(std::move(items));
@@ -90,8 +106,7 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
   launcher.id = "launcher";
   launcher.kind = "launcher";
   launcher.label = "Launcher";
-  launcher.icon = "view-app-grid";
-  launcher.iconPath = resolvedIconPath("view-app-grid", iconTheme_, iconSize_);
+  launcher.icon = "lambda";
   items.push_back(std::move(launcher));
 
   DockItem firstSeparator;
@@ -163,7 +178,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     bool represented = false;
     for (auto& item : items) {
       if (item.kind != "app" || item.appId.empty()) continue;
-      if (shellAppIdMatches(item.appId, window.appId)) {
+      if (appIdsMatch(item.appId, window.appId)) {
         represented = true;
         item.running = true;
         item.focused = item.focused || window.focused;
@@ -176,7 +191,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     }
     if (represented || !showRunningUnpinned_) continue;
     auto app = std::find_if(snapshot.apps.begin(), snapshot.apps.end(), [&](AppRegistryEntry const& candidate) {
-      return shellAppIdMatches(candidate.appId, window.appId) || shellAppIdMatches(window.appId, candidate.appId);
+      return appIdsMatch(candidate.appId, window.appId);
     });
     std::string icon = app == snapshot.apps.end() || app->icon.empty() ? window.appId : app->icon;
     DockItem item;
@@ -189,10 +204,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     item.icon = icon;
     item.iconPath = resolvedIconPath(icon, iconTheme_, iconSize_);
     if (item.focused) nextTitle = item.label;
-    auto separator = std::find_if(items.begin(), items.end(), [](DockItem const& candidate) {
-      return candidate.id == "sep2";
-    });
-    items.insert(separator == items.end() ? items.end() : separator, std::move(item));
+    items.insert(unpinnedInsertPosition(items), std::move(item));
   }
 
   SystemStatus nextStatus{
