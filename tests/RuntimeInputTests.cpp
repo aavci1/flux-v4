@@ -22,6 +22,7 @@
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
+#include <cstdlib>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -29,13 +30,38 @@
 
 namespace {
 
+struct ScopedEnvOverride {
+  char const* name = nullptr;
+  std::string previous;
+  bool hadPrevious = false;
+
+  ScopedEnvOverride(char const* envName, char const* value)
+      : name(envName) {
+    if (char const* current = std::getenv(name)) {
+      previous = current;
+      hadPrevious = true;
+    }
+    setenv(name, value, 1);
+  }
+
+  ~ScopedEnvOverride() {
+    if (hadPrevious) {
+      setenv(name, previous.c_str(), 1);
+    } else {
+      unsetenv(name);
+    }
+  }
+};
+
 struct RuntimeHarness {
+  ScopedEnvOverride disableNativePopovers;
   flux::Application app;
   flux::Window& window;
   flux::Runtime runtime;
 
   RuntimeHarness()
-      : app()
+      : disableNativePopovers("FLUX_DISABLE_NATIVE_POPOVERS", "1")
+      , app()
       , window(app.createWindow(flux::WindowConfig{
             .size = {240.f, 140.f},
             .title = "Flux Runtime Input Tests",

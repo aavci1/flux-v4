@@ -6,6 +6,7 @@
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 
 namespace flux {
@@ -26,6 +27,11 @@ float availableStart(Rect const& anchor) {
 
 float availableEnd(Rect const& anchor, Size window) {
   return std::max(0.f, window.width - (anchor.x + anchor.width));
+}
+
+bool nativePopoversEnabled() {
+  char const* disabled = std::getenv("FLUX_DISABLE_NATIVE_POPOVERS");
+  return !disabled || !*disabled || *disabled == '0';
 }
 
 Rect adjustAnchor(Rect anchor, Popover const& popover) {
@@ -182,11 +188,13 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
       }
     }
 
-    Popover platformPopover = popover;
-    *id = window->showPopover(std::move(platformPopover), anchor.value_or(Rect{0.f, 0.f, 1.f, 1.f}),
-                              runtime->lastTapSerial(), anchorTrackComponentKey, anchorTrackLeafKey);
-    if (id->isValid()) {
-      return;
+    if (nativePopoversEnabled()) {
+      Popover platformPopover = popover;
+      *id = window->showPopover(std::move(platformPopover), anchor.value_or(Rect{0.f, 0.f, 1.f, 1.f}),
+                                runtime->lastTapSerial(), anchorTrackComponentKey, anchorTrackLeafKey);
+      if (id->isValid()) {
+        return;
+      }
     }
 
     OverlayConfig config{
