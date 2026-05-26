@@ -3,12 +3,15 @@
 #include "Compositor/Config/AppliedCompositorConfig.hpp"
 #include "Compositor/Config/WallpaperLoader.hpp"
 #include "Compositor/CompositorPresentation.hpp"
+#include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 namespace flux::compositor {
 
 void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceOutputScale) {
   auto const configStart = presentation::SteadyClock::now();
   ctx.appliedConfig = applyCompositorConfig(ctx.effectiveConfig(), ctx.canvas);
+  flux::setVulkanCanvasBackdropBlurBaseDownsample(&ctx.canvas,
+                                                  ctx.appliedConfig.config.rendering.backdropBlurBaseDownsample);
   presentation::traceTiming("apply-config", configStart);
   ctx.wayland.setShortcutBindings(ctx.appliedConfig.config.shortcutBindings);
   ctx.wayland.setChromeThemeConfig(ctx.appliedConfig.config.chrome, ctx.appliedConfig.config.darkChrome);

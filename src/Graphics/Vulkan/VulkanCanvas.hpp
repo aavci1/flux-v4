@@ -50,6 +50,7 @@ bool prepareRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder* recorded);
 bool replayRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 bool replayRecordedLocalOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight);
+bool setVulkanCanvasBackdropBlurBaseDownsample(Canvas* canvas, std::uint32_t downsample);
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled);
 bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled);
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas);

@@ -67,7 +67,10 @@ namespace {
 
 constexpr std::size_t kMaxFramesInFlight = 3;
 constexpr int kBackdropBlurIterations = 2;
-constexpr std::uint32_t kBackdropBlurDownsample = 2;
+constexpr std::uint32_t kDefaultBackdropBlurBaseDownsample = 2;
+constexpr std::uint32_t kMinBackdropBlurBaseDownsample = 1;
+constexpr std::uint32_t kMaxBackdropBlurBaseDownsample = 8;
+constexpr std::uint32_t kMaxBackdropBlurDownsample = 16;
 constexpr float kBackdropBlurRadiusBoost = 1.35f;
 constexpr std::uint32_t kDescriptorPoolStorageBufferSets = 4096;
 constexpr std::uint32_t kDescriptorPoolImageSamplerSets = 8192;
@@ -1102,6 +1105,18 @@ public:
       swapchainDirty_ = true;
     }
     return changed;
+  }
+
+  void setBackdropBlurBaseDownsample(std::uint32_t downsample) {
+    std::uint32_t const next = std::clamp(downsample,
+                                          kMinBackdropBlurBaseDownsample,
+                                          kMaxBackdropBlurBaseDownsample);
+    if (next == backdropBlurBaseDownsample_) {
+      return;
+    }
+    backdropBlurBaseDownsample_ = next;
+    backdropBlurCache_.clear();
+    renderTargetFrameCacheValid_ = false;
   }
 
   bool setRenderTargetSpec(VulkanRenderTargetSpec const& spec) {
@@ -3432,10 +3447,9 @@ private:
   }
 
   void ensureBackdropSceneTarget() {
-    int const targetW = static_cast<int>(std::max(1u, (swapExtent_.width + kBackdropBlurDownsample - 1u) /
-                                                      kBackdropBlurDownsample));
-    int const targetH = static_cast<int>(std::max(1u, (swapExtent_.height + kBackdropBlurDownsample - 1u) /
-                                                      kBackdropBlurDownsample));
+    std::uint32_t const downsample = backdropBlurDownsample();
+    int const targetW = static_cast<int>(std::max(1u, (swapExtent_.width + downsample - 1u) / downsample));
+    int const targetH = static_cast<int>(std::max(1u, (swapExtent_.height + downsample - 1u) / downsample));
     VkFormat const backdropFormat = backdropRenderTargetFormat();
     auto ensure = [&](Texture &texture) {
       if (texture.image && texture.width == targetW && texture.height == targetH && texture.format == backdropFormat) {
@@ -3585,6 +3599,15 @@ private:
     };
   }
 
+  std::uint32_t backdropBlurDownsample() const {
+    float const scale = std::max(dpiScaleX_, dpiScaleY_);
+    float const scaleFactor = std::max(1.f, scale);
+    long const scaledDownsample =
+        std::lround(static_cast<float>(backdropBlurBaseDownsample_) * scaleFactor);
+    return static_cast<std::uint32_t>(
+        std::clamp<long>(scaledDownsample, kMinBackdropBlurBaseDownsample, kMaxBackdropBlurDownsample));
+  }
+
   void hashTextureReference(std::uint64_t &h, Texture const *texture) const {
     auto image = reinterpret_cast<std::uintptr_t>(texture ? texture->image : VK_NULL_HANDLE);
     auto view = reinterpret_cast<std::uintptr_t>(texture ? texture->view : VK_NULL_HANDLE);
@@ -3682,7 +3705,7 @@ private:
     hashValue(h, clearColor_);
     hashValue(h, run.clip);
     hashValue(h, kBackdropBlurIterations);
-    hashValue(h, kBackdropBlurDownsample);
+    hashValue(h, backdropBlurDownsample());
     hashValue(h, kBackdropBlurRadiusBoost);
     if (run.horizontalQuad < quads_.size()) {
       hashValue(h, quads_[run.horizontalQuad]);
@@ -3717,6 +3740,7 @@ private:
     hashValue(h, framebufferHeight_);
     hashValue(h, dpiScaleX_);
     hashValue(h, dpiScaleY_);
+    hashValue(h, backdropBlurBaseDownsample_);
     hashValue(h, clearColor_);
     hashValue(h, resources().atlasGeneration);
     hashValue(h, resources().atlasDirty);
@@ -3762,7 +3786,7 @@ private:
       std::size_t const end = backdropBlurRunEnd(start);
       float const maxRadius = maxBackdropBlurRadius(start, end);
       float const effectiveRadius = maxRadius * kBackdropBlurRadiusBoost;
-      float const blurRadius = (effectiveRadius / static_cast<float>(kBackdropBlurDownsample)) /
+      float const blurRadius = (effectiveRadius / static_cast<float>(backdropBlurDownsample())) /
                                std::sqrt(static_cast<float>(kBackdropBlurIterations));
       runs.push_back(BackdropBlurRun{
           .start = start,
@@ -4902,6 +4926,7 @@ private:
   Texture backdropBlurTexture_;
   std::vector<CachedBackdropBlur> backdropBlurCache_;
   std::vector<std::uint64_t> backdropOpPrefixHashes_;
+  std::uint32_t backdropBlurBaseDownsample_ = kDefaultBackdropBlurBaseDownsample;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;
@@ -5065,6 +5090,14 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
   if (auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas)) {
     vulkan->setResizeBoundsHint(logicalWidth, logicalHeight);
   }
+}
+
+bool setVulkanCanvasBackdropBlurBaseDownsample(Canvas* canvas, std::uint32_t downsample) {
+  if (auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas)) {
+    vulkan->setBackdropBlurBaseDownsample(downsample);
+    return true;
+  }
+  return false;
 }
 
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {

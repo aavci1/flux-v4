@@ -69,6 +69,7 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
   CHECK(loaded.config.chrome.titleBarHeight == 28);
   CHECK(loaded.config.chrome.controlsWidth == 84);
+  CHECK(loaded.config.rendering.backdropBlurBaseDownsample == 2);
   CHECK_FALSE(loaded.config.popupGrabs);
   CHECK(loaded.config.keyboard.layout.empty());
   CHECK(loaded.config.keyboard.repeatRate == 25);
@@ -77,6 +78,8 @@ TEST_CASE("compositor config creates a default file when missing") {
   std::ifstream generated(path);
   std::string const text((std::istreambuf_iterator<char>(generated)), std::istreambuf_iterator<char>());
   CHECK(text.find("[input]") != std::string::npos);
+  CHECK(text.find("[rendering.backdrop_blur]") != std::string::npos);
+  CHECK(text.find("base_downsample = 2") != std::string::npos);
   CHECK(text.find("popup_grabs = false") != std::string::npos);
   CHECK(text.find("screenshot = [\"super+shift+3\", \"printscreen\", \"sysrq\"]") != std::string::npos);
   CHECK(text.find("screenshot_region = \"super+shift+4\"") != std::string::npos);
@@ -262,6 +265,24 @@ TEST_CASE("chrome controls scale and center with title bar height") {
   CHECK(rects.maximizeButton.x + rects.maximizeButton.width == doctest::Approx(rects.closeButton.x));
 }
 
+TEST_CASE("compositor config parses rendering backdrop blur settings") {
+  ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
+  ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  unsetenv("LAMBDA_WINDOW_MANAGER_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "[rendering.backdrop_blur]\n";
+  file << "base_downsample = 3\n";
+  file.close();
+  setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
+
+  auto loaded = flux::compositor::loadConfigWithMetadata();
+
+  CHECK(loaded.config.rendering.backdropBlurBaseDownsample == 3);
+
+  std::filesystem::remove(path);
+}
+
 TEST_CASE("compositor config reports file changes") {
   ScopedEnv configEnv("LAMBDA_WINDOW_MANAGER_CONFIG");
   ScopedEnv outputEnv("LAMBDA_WINDOW_MANAGER_OUTPUT");
@@ -363,6 +384,8 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   file << "scale = 9.0\n";
   file << "animations = \"maybe\"\n";
   file << "hardware_cursor = \"sometimes\"\n";
+  file << "[rendering.backdrop_blur]\n";
+  file << "base_downsample = 0\n";
   file << "[input.keyboard]\n";
   file << "layout = 3\n";
   file << "repeat_rate = 500\n";
@@ -385,6 +408,7 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   CHECK(config.scale == doctest::Approx(2.0f));
   CHECK(config.animationsEnabled);
   CHECK(config.hardwareCursorEnabled);
+  CHECK(config.rendering.backdropBlurBaseDownsample == 2);
   CHECK(config.keyboard.layout.empty());
   CHECK(config.keyboard.repeatRate == 25);
   CHECK(config.keyboard.repeatDelayMs == 600);

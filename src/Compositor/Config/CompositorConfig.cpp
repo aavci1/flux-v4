@@ -355,6 +355,22 @@ void parseKeyboardConfig(toml::table const& table, CompositorKeyboardConfig& key
   }
 }
 
+void parseRenderingConfig(toml::table const& table, CompositorRenderingConfig& rendering, char const* path) {
+  if (auto* backdropBlurTable = table["backdrop_blur"].as_table()) {
+    if (backdropBlurTable->contains("base_downsample")) {
+      if (auto value = configInt(*backdropBlurTable, "base_downsample"); value && *value >= 1 && *value <= 8) {
+        rendering.backdropBlurBaseDownsample = static_cast<std::uint32_t>(*value);
+      } else {
+        std::fprintf(stderr,
+                     "lambda-window-manager: ignoring invalid rendering.backdrop_blur.base_downsample value in %s\n",
+                     path);
+      }
+    }
+  } else if (table.contains("backdrop_blur")) {
+    std::fprintf(stderr, "lambda-window-manager: ignoring invalid rendering.backdrop_blur value in %s\n", path);
+  }
+}
+
 void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char const* path) {
   auto parseIntField = [&](char const* key, std::int32_t& field, std::int32_t minValue, std::int32_t maxValue) {
     if (!table.contains(key)) return;
@@ -556,6 +572,10 @@ animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
+
+[rendering.backdrop_blur]
+# Effective downsample is round(base_downsample * output scale), applied to width and height.
+base_downsample = 2
 
 [input]
 popup_grabs = false
@@ -892,6 +912,12 @@ CompositorConfig loadConfig() {
     }
   } else if (table.contains("input")) {
     std::fprintf(stderr, "lambda-window-manager: ignoring invalid input value in %s\n", path->c_str());
+  }
+
+  if (auto* renderingTable = table["rendering"].as_table()) {
+    parseRenderingConfig(*renderingTable, config.rendering, path->c_str());
+  } else if (table.contains("rendering")) {
+    std::fprintf(stderr, "lambda-window-manager: ignoring invalid rendering value in %s\n", path->c_str());
   }
 
   if (table.contains("window_glass")) {

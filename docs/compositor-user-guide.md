@@ -158,6 +158,10 @@ hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
 
+[rendering.backdrop_blur]
+# Effective downsample is round(base_downsample * output scale), applied to width and height.
+base_downsample = 2
+
 [input]
 popup_grabs = false
 
@@ -235,6 +239,11 @@ and `opacity`. Client content is rendered at the opacity the client submitted. `
 `ext-background-effect-v1` can still request explicit blur regions; set `window_glass = false` to disable
 only the compositor's default full-window policy.
 
+`[rendering.backdrop_blur].base_downsample` controls the compositor backdrop blur quality/performance tradeoff.
+The effective blur texture downsample is `round(base_downsample * scale)` and applies to both width and height.
+The default `2` keeps 1x output behavior unchanged while reducing blur texture resolution naturally as output
+scale increases.
+
 Keybinding values can be a single shortcut string or an array of shortcut strings. Shortcut tokens use `+`
 separators, for example `super+shift+3`, `alt+printscreen`, or `ctrl+alt+backspace`.
 
@@ -248,6 +257,7 @@ Config application policy:
 | `scale`, `[outputs.*].scale` | Hot reload for the selected output |
 | `output` | Restart required to move the compositor to another KMS output |
 | `animations`, `hardware_cursor`, `idle_blank_timeout_seconds` | Hot reload |
+| `[rendering.backdrop_blur]` | Hot reload |
 | `[input] popup_grabs` | Hot reload |
 | `[input.keyboard]` | Hot reload; existing keyboard resources receive updated keymap/repeat info |
 | `window_glass`, `[chrome]`, `[chrome.glass]`, `[chrome.dark]` | Hot reload |
