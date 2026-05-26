@@ -941,7 +941,7 @@ struct TerminalApp {
 
 int main(int argc, char* argv[]) {
   flux::Application app(argc, argv);
-  app.setName("terminal");
+  app.setName("lambda-terminal");
   auto const preferences = lambda_terminal::loadTerminalPreferences();
   auto const profile = lambda_terminal::activeTerminalProfile(preferences.preferences);
 
