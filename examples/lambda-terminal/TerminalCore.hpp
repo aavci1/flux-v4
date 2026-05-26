@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Color.hpp>
 #include <Flux/UI/Input.hpp>
+#include <Flux/UI/KeyCodes.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -228,6 +229,7 @@ private:
                                               TerminalSelection selection);
 [[nodiscard]] std::string terminalPastePayload(std::string_view clipboardText,
                                                TerminalConfig const& config);
+[[nodiscard]] bool isTerminalPasteShortcut(flux::KeyCode key, flux::Modifiers modifiers);
 [[nodiscard]] std::string encodeSgrMouseEvent(TerminalMouseEvent event);
 [[nodiscard]] TerminalBufferCoordinate terminalMouseCell(float x,
                                                         float y,

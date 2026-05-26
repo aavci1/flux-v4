@@ -18,8 +18,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <poll.h>
 #include <string>
+#include <string_view>
 #include <string_view>
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -128,9 +130,10 @@ TextLayoutOptions terminalTextOptions() {
 
 class TerminalSession : public std::enable_shared_from_this<TerminalSession> {
 public:
-  TerminalSession(Application& app, Window& window)
+  TerminalSession(Application& app, Window& window, TerminalConfig config)
       : app_(&app)
       , window_(&window)
+      , config_(config)
       , rows_(std::vector<TerminalRow>{})
       , cursor_(VTermPos{0, 0}) {
     vterm_ = vterm_new(kInitialRows, kInitialCols);
@@ -206,6 +209,31 @@ public:
   void sendKey(KeyCode key, Modifiers modifiers) {
     std::string const encoded = encodeTerminalKey(key, modifiers);
     writeAll(encoded.data(), encoded.size());
+  }
+
+  void pasteText(std::string_view text) {
+    std::string const payload = terminalPastePayload(text, config_);
+    if (!payload.empty()) {
+      sendText(payload);
+    }
+  }
+
+  void pasteFromClipboard() {
+    if (!app_) {
+      return;
+    }
+    if (std::optional<std::string> text = app_->clipboard().readText()) {
+      pasteText(*text);
+    }
+  }
+
+  bool handleKeyDown(KeyCode key, Modifiers modifiers) {
+    if (isTerminalPasteShortcut(key, modifiers)) {
+      pasteFromClipboard();
+      return true;
+    }
+    sendKey(key, modifiers);
+    return true;
   }
 
   void drawBackground(Canvas& canvas, Rect frame) {
@@ -891,6 +919,7 @@ private:
 
   Application* app_ = nullptr;
   Window* window_ = nullptr;
+  TerminalConfig config_{};
   VTerm* vterm_ = nullptr;
   VTermScreen* screen_ = nullptr;
   int ptyFd_ = -1;
@@ -924,7 +953,7 @@ struct TerminalApp {
         .onPointerDown([](Point) {})
         .onTextInput([session = session](std::string const& text) { session->sendText(text); })
         .onKeyDown([session = session](KeyCode key, Modifiers modifiers) {
-          session->sendKey(key, modifiers);
+          session->handleKeyDown(key, modifiers);
         })
         .focusable(true)
         .cursor(Cursor::IBeam);
@@ -958,7 +987,7 @@ int main(int argc, char* argv[]) {
     window.setBackground(flux::WindowBackground::solid(profile.config.blackGlassTint));
   }
 
-  auto session = std::make_shared<lambda_terminal::TerminalSession>(app, window);
+  auto session = std::make_shared<lambda_terminal::TerminalSession>(app, window, profile.config);
   window.setView<lambda_terminal::TerminalApp>({.session = std::move(session)});
   return app.exec();
 }

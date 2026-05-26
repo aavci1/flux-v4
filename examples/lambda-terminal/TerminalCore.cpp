@@ -488,6 +488,15 @@ std::string terminalPastePayload(std::string_view clipboardText, TerminalConfig 
   return std::string(clipboardText);
 }
 
+bool isTerminalPasteShortcut(KeyCode key, Modifiers modifiers) {
+  if (key != flux::keys::V || has(modifiers, Modifiers::Alt)) {
+    return false;
+  }
+  bool const metaPaste = has(modifiers, Modifiers::Meta);
+  bool const linuxPaste = has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
+  return metaPaste || linuxPaste;
+}
+
 std::string encodeSgrMouseEvent(TerminalMouseEvent event) {
   int button = 0;
   switch (event.button) {

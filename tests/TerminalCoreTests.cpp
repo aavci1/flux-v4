@@ -97,6 +97,15 @@ TEST_CASE("terminal copy and paste payload helpers honor selection and bracketed
   CHECK(terminalPastePayload("", plain).empty());
 }
 
+TEST_CASE("terminal paste shortcut keeps Ctrl+V available for programs") {
+  using namespace flux::keys;
+  CHECK(isTerminalPasteShortcut(V, flux::Modifiers::Meta));
+  CHECK(isTerminalPasteShortcut(V, flux::Modifiers::Ctrl | flux::Modifiers::Shift));
+  CHECK_FALSE(isTerminalPasteShortcut(V, flux::Modifiers::Ctrl));
+  CHECK_FALSE(isTerminalPasteShortcut(V, flux::Modifiers::Ctrl | flux::Modifiers::Alt));
+  CHECK_FALSE(isTerminalPasteShortcut(C, flux::Modifiers::Ctrl | flux::Modifiers::Shift));
+}
+
 TEST_CASE("terminal SGR mouse encoding maps buttons modifiers motion and wheel events") {
   CHECK(encodeSgrMouseEvent({
             .button = TerminalMouseButton::Left,
