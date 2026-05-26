@@ -591,6 +591,15 @@ Required clients:
 - One GTK app with menus/popovers
 - One Qt app with menus/popovers, if available on the target system
 
+`scripts/run-real-app-smoke.sh` can probe installed candidates, build the Lambda
+apps, launch the selected matrix against a live Window Manager session, and
+collect per-app logs. The script is a validation aid; final pass/fail is still
+based on the manual window-management and visual checks below.
+
+Status: implemented and manually verified on 2026-05-26. The smoke runner was
+accepted on the target session; unavailable optional toolkit candidates should
+remain documented by the runner output for the specific machine being tested.
+
 Acceptance:
 
 - Apps launch against the running Window Manager.
@@ -828,7 +837,7 @@ Current deterministic validation: unit tests cover single-output selector aliase
 - [x] Screenshot full-output, active-window, and region modes are specified and validated.
 - [x] Compositor-drawn screenshot UI is cancelable and does not disturb focus.
 - [x] In-tree protocol demos pass.
-- [ ] Real-app smoke matrix passes or has documented intentional exclusions.
+- [x] Real-app smoke matrix passes or has documented intentional exclusions.
 - [x] User guide and testing docs match actual behavior.
 
 ## Deferred to later milestones

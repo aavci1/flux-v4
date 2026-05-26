@@ -216,6 +216,26 @@ Expected result: a centered command launcher appears, the typed command is visib
 
 Run real apps after the in-tree demos. These checks catch protocol gaps that the demos do not exercise, especially xdg-popup menu behavior, clipboard ownership, keyboard focus, and resize behavior under mature toolkit clients.
 
+To probe installed candidates, launch available apps, and collect logs:
+
+```sh
+scripts/run-real-app-smoke.sh
+```
+
+Useful variants:
+
+```sh
+scripts/run-real-app-smoke.sh --probe-only
+scripts/run-real-app-smoke.sh --case browser
+scripts/run-real-app-smoke.sh --include-shell
+```
+
+The runner auto-detects `WAYLAND_DISPLAY` from
+`$XDG_RUNTIME_DIR/lambda-window-manager-display`, builds Lambda app targets by
+default, launches available mature clients for a short manual test window, and
+writes logs under `.debug-logs/real-app-smoke/`. It does not replace the common
+window-management and visual checks below.
+
 Set the compositor display once in the shell where the apps will be launched:
 
 ```sh
