@@ -66,6 +66,40 @@ using wm::updateDrag;
 using wm::updateResize;
 using wm::updateShortcutModifier;
 
+namespace {
+
+struct PointerVisualState {
+  WaylandServer::Impl::Surface* closeButton = nullptr;
+  WaylandServer::Impl::Surface* minimizeButton = nullptr;
+  WaylandServer::Impl::Surface* maximizeButton = nullptr;
+  bool compositorCursorOverride = false;
+  CursorShape compositorCursorShape = CursorShape::Arrow;
+};
+
+PointerVisualState pointerVisualState(WaylandServer::Impl* server) {
+  if (!server) return {};
+  return {
+      .closeButton = closeButtonAt(server, server->pointerX_, server->pointerY_),
+      .minimizeButton = minimizeButtonAt(server, server->pointerX_, server->pointerY_),
+      .maximizeButton = maximizeButtonAt(server, server->pointerX_, server->pointerY_),
+      .compositorCursorOverride = server->compositorCursorOverride_,
+      .compositorCursorShape = server->compositorCursorShape_,
+  };
+}
+
+void notePointerVisualStateChanged(WaylandServer::Impl* server, PointerVisualState const& previous) {
+  PointerVisualState const current = pointerVisualState(server);
+  if (current.closeButton != previous.closeButton ||
+      current.minimizeButton != previous.minimizeButton ||
+      current.maximizeButton != previous.maximizeButton ||
+      current.compositorCursorOverride != previous.compositorCursorOverride ||
+      current.compositorCursorShape != previous.compositorCursorShape) {
+    ++server->contentSerial_;
+  }
+}
+
+} // namespace
+
 std::optional<int> WaylandServer::Impl::snapPreviewWakeDelayMs() const {
   if (!dragSurface_ && !snapPreviewVisible_) return std::nullopt;
   auto* server = const_cast<WaylandServer::Impl*>(this);
@@ -91,6 +125,7 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
     sendRelativePointerMotion(this, dx, dy, timeMs);
     return;
   }
+  PointerVisualState const previousVisualState = pointerVisualState(this);
   float const scale = std::max(0.5f, preferredScale_);
   pointerX_ = std::clamp(pointerX_ + static_cast<float>(dx) / scale,
                          0.f,
@@ -124,6 +159,7 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
   }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
   updateCompositorCursorForPointer(this);
+  notePointerVisualStateChanged(this, previousVisualState);
   sendRelativePointerMotion(this, dx, dy, timeMs);
 }
 void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
@@ -132,6 +168,7 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
       constraint && constraint->kind == PointerConstraint::Kind::Lock) {
     return;
   }
+  PointerVisualState const previousVisualState = pointerVisualState(this);
   float const scale = std::max(0.5f, preferredScale_);
   pointerX_ = std::clamp(static_cast<float>(x) / scale,
                          0.f,
@@ -165,6 +202,7 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
   }
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
   updateCompositorCursorForPointer(this);
+  notePointerVisualStateChanged(this, previousVisualState);
 }
 void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
   if (handleScreenshotSelectionPointerButton(this, button, pressed, timeMs)) return;
@@ -218,18 +256,21 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         raiseSurface(this, chromeControlTarget);
         setKeyboardFocus(this, chromeControlTarget);
         closePressSurface_ = chromeControlTarget;
+        ++contentSerial_;
         return;
       }
       if (Surface* minimizeTarget = minimizeButtonAt(this, pointerX_, pointerY_)) {
         raiseSurface(this, minimizeTarget);
         setKeyboardFocus(this, minimizeTarget);
         minimizePressSurface_ = minimizeTarget;
+        ++contentSerial_;
         return;
       }
       if (Surface* maximizeTarget = maximizeButtonAt(this, pointerX_, pointerY_)) {
         raiseSurface(this, maximizeTarget);
         setKeyboardFocus(this, maximizeTarget);
         maximizePressSurface_ = maximizeTarget;
+        ++contentSerial_;
         return;
       }
       if (chromeControlTarget && resizeEdges != XDG_TOPLEVEL_RESIZE_EDGE_NONE) {
@@ -294,6 +335,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         flushClients();
       }
       closePressSurface_ = nullptr;
+      ++contentSerial_;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;
@@ -304,6 +346,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         flushClients();
       }
       minimizePressSurface_ = nullptr;
+      ++contentSerial_;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;
@@ -314,6 +357,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         flushClients();
       }
       maximizePressSurface_ = nullptr;
+      ++contentSerial_;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;

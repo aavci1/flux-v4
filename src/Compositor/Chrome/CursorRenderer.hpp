@@ -38,4 +38,9 @@ void drawCompositorCursor(WaylandServer& wayland,
                           std::int32_t cursorSize,
                           bool hardwareCursorEnabled);
 
+[[nodiscard]] bool moveCurrentHardwareCursor(WaylandServer& wayland,
+                                             platform::KmsOutput const& output,
+                                             CursorRenderState const& cursorState,
+                                             bool hardwareCursorEnabled);
+
 } // namespace flux::compositor

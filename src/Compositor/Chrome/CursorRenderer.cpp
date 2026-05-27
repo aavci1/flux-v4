@@ -477,4 +477,32 @@ void drawCompositorCursor(WaylandServer& wayland,
                                logicalHeight));
 }
 
+bool moveCurrentHardwareCursor(WaylandServer& wayland,
+                               platform::KmsOutput const& output,
+                               CursorRenderState const& cursorState,
+                               bool hardwareCursorEnabled) {
+  if (!hardwareCursorEnabled || !cursorState.hardwareVisible) return false;
+
+  float const outputScale = wayland.preferredScale();
+  if (cursorState.hardwareClient) {
+    auto cursorSurface = wayland.cursorSurface();
+    if (!cursorSurface ||
+        cursorState.hardwareClientId != cursorSurface->id ||
+        cursorState.hardwareSerial != cursorSurface->serial) {
+      return false;
+    }
+    return output.moveCursor(
+        static_cast<std::int32_t>(std::lround(static_cast<float>(cursorSurface->x) * outputScale)),
+        static_cast<std::int32_t>(std::lround(static_cast<float>(cursorSurface->y) * outputScale)));
+  }
+
+  CursorShape const shape = wayland.cursorShape();
+  if (cursorState.hardwareShape != shape ||
+      cursorState.hardwareSerial != themeSerial(shape, outputScale)) {
+    return false;
+  }
+  return output.moveCursor(static_cast<std::int32_t>(std::lround(wayland.pointerX() * outputScale)),
+                           static_cast<std::int32_t>(std::lround(wayland.pointerY() * outputScale)));
+}
+
 } // namespace flux::compositor

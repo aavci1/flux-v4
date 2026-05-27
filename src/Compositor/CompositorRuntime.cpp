@@ -611,14 +611,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     });
     auto lastInputActivity = SteadyClock::now();
     bool inputActivityThisLoop = false;
+    bool inputRenderRequiredThisLoop = false;
     bool idleBlanked = false;
     bool displayTimingSupportLogged = false;
     bool useVulkanPresentationCompletion = false;
-    device->setInputHandler([&](flux::platform::KmsInputEvent const& event) {
-      inputActivityThisLoop = true;
-      if (idleBlanked) return;
-      dispatchKmsInputEvent(wayland, event);
-    });
 
     flux::configureVulkanCanvasRuntime(device->requiredVulkanInstanceExtensions(), device->cacheDir());
     auto& vulkan = flux::VulkanContext::instance();
@@ -716,6 +712,27 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     if (!hardwareCursorAvailable && appliedConfig.config.hardwareCursorEnabled) {
       std::fprintf(stderr, "lambda-window-manager: hardware cursor unavailable; using software cursor\n");
     }
+
+    device->setInputHandler([&](flux::platform::KmsInputEvent const& event) {
+      inputActivityThisLoop = true;
+      if (idleBlanked) {
+        inputRenderRequiredThisLoop = true;
+        return;
+      }
+      std::uint64_t const beforeSerial = wayland.contentSerial();
+      dispatchKmsInputEvent(wayland, event);
+      bool const contentChanged = wayland.contentSerial() != beforeSerial;
+      if (contentChanged) {
+        inputRenderRequiredThisLoop = true;
+        return;
+      }
+      bool const hardwareCursorMoved =
+          moveCurrentHardwareCursor(wayland,
+                                    output,
+                                    cursorState,
+                                    appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
+      if (!hardwareCursorMoved) inputRenderRequiredThisLoop = true;
+    });
 
     bool forceRender = true;
     std::optional<ScreenshotRequest> screenshotPending;
@@ -1362,9 +1379,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       queueScreenshotIfRequested();
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
+      bool const inputRenderRequired = inputRenderRequiredThisLoop;
       if (hadInputActivity) {
         lastInputActivity = SteadyClock::now();
         inputActivityThisLoop = false;
+        inputRenderRequiredThisLoop = false;
       }
       ++loopStats.configChecks;
       bool configReloaded = false;
@@ -1413,6 +1432,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         if (inputActivityThisLoop) {
           lastInputActivity = SteadyClock::now();
           inputActivityThisLoop = false;
+          inputRenderRequiredThisLoop = false;
         }
         if (!device->isVtForeground()) {
           loopStats.maybeLog();
@@ -1442,9 +1462,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::optional<int> const snapPreviewDelay = wayland.snapPreviewWakeDelayMs();
       bool const snapPreviewFrameNeeded = snapPreviewDelay && *snapPreviewDelay <= 0;
       bool const screenshotFlashFrameNeeded = screenshotFlashStartedAt.has_value();
-      if (forceRender || pollResult.inputOrSystem || waylandWoke || hadInputActivity || configReloaded ||
+      if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired || configReloaded ||
           animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
-        if (!presenter->atomicPresenter() || forceRender || waylandWoke || hadInputActivity || configReloaded ||
+        if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired || configReloaded ||
             animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
           atomicFrameDirty = true;
         }
@@ -1465,7 +1485,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const snapPreviewCanRenderNow = snapPreviewFrameNeeded && !atomicFrameBlocked;
       bool const renderNeeded =
           forceRender || animationCanRenderNow || screenshotFlashCanRenderNow || snapPreviewCanRenderNow ||
-          renderAheadNeeded || genericRenderWake || hadInputActivity || configReloaded ||
+          renderAheadNeeded || genericRenderWake || inputRenderRequired || configReloaded ||
           atomicDirtyCanRender;
       if (pollWoke || renderNeeded) {
         tracePacing("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "
@@ -1479,7 +1499,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                     waylandWoke ? 1 : 0,
                     pageFlipWoke ? 1 : 0,
                     pageFlipCompleted ? 1 : 0,
-                    hadInputActivity ? 1 : 0,
+                    inputRenderRequired ? 1 : 0,
                     genericRenderWake ? 1 : 0,
                     forceRender ? 1 : 0,
                     animationFrameNeeded ? 1 : 0,
@@ -1510,7 +1530,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           .atomicPageFlipPending = atomicPageFlipPending,
           .renderNeeded = renderNeeded,
           .genericRenderWake = genericRenderWake,
-          .hadInputActivity = hadInputActivity,
+          .hadInputActivity = inputRenderRequired,
           .configReloaded = configReloaded,
           .pollInputOrSystem = pollResult.inputOrSystem,
           .waylandWoke = waylandWoke,
