@@ -151,8 +151,7 @@ bool forceLinearScanout() {
 }
 
 bool useKmsRenderInFence() {
-  char const* value = std::getenv("FLUX_COMPOSITOR_USE_KMS_IN_FENCE");
-  return !value || !*value || std::strcmp(value, "0") != 0;
+  return debug::envNonZero(std::getenv("FLUX_COMPOSITOR_USE_KMS_IN_FENCE"));
 }
 
 bool useDirectScanoutRender() {
