@@ -1,6 +1,6 @@
 # Flux and Lambda roadmap
 
-**Last updated:** 2026-05-26
+**Last updated:** 2026-05-27
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -54,7 +54,7 @@ Deleted/superseded docs:
 | Flux v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
 | App platforms | macOS Metal, Linux Wayland Vulkan, Linux KMS Vulkan. |
 | Examples | Demo and Lambda app targets build through CMake when examples are enabled. |
-| Window Manager | Core compositor is usable for dogfooding; remaining gate is visual/manual compositor polish. |
+| Window Manager | Core compositor is usable for dogfooding on the target hardware; remaining gate is broader real-app validation and visual polish. |
 | Shell | App registry, dock, IPC, config, icons, and status fallback exist; live notification/clipboard/provider work remains. |
 | Settings | Real owner-config editor exists; live apply depends on Window Manager/Shell hot-reload support. |
 | Files | Live file browser/manager exists; model layer is ahead of live UI for several commands. |
@@ -66,7 +66,7 @@ Lambda is not daily-driver complete until these gates are closed.
 
 | Priority | Area | Gate | Status |
 | --- | --- | --- | --- |
-| P0 | Window Manager | Visual stability and real-app compositor validation | Open |
+| P0 | Window Manager | Visual stability and real-app compositor validation | Open: narrowed to validation/polish |
 | P1 | Shell | Live launcher providers, notifications, clipboard history, quick settings providers | Open |
 | P2 | Settings | Owner config editing plus live-apply clarity | Mostly done |
 | P3 | Files | Safe file-management live UI beyond the model layer | Open |
@@ -157,24 +157,29 @@ Terminal:
 Current implementation:
 
 - `lambda-window-manager` owns a selected KMS output, runs a Wayland server, renders through Vulkan/Canvas, and hosts Lambda plus normal Wayland apps.
-- Core idle behavior, Flux app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, and real-app smoke tooling exist.
+- Core idle behavior, Flux app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths.
+- Firefox dogfooding blockers addressed in the tested paths: xdg-popup lifecycle cleanup follows the wlroots-style inert-resource pattern, Firefox crash/recovery windows no longer grow on focus changes, fullscreen video can restore, and fullscreen preserves pre-fullscreen maximized/snapped/normal state.
+- Fullscreen shell-panel behavior exists for the current single-output desktop: panels leave the fullscreen area and restore afterward.
+- KMS presentation has a compositor frame queue, improved frame pacing, direct scanout/overlay paths for video, hardware-cursor motion that does not force scene redraws, and video overlay tracing for skipped-frame analysis.
+- Explicit sync is removed for now; it did not fix the observed rendering artifacts and created client-crash risk when syncobj state was advertised without a matching attached buffer.
+- Wayland buffer damage is tracked through snapshots and used for partial cached-image updates on the SHM image path. Current high-value clients in daily testing mostly use dma-buf, so this is plumbing rather than a proven daily-driver win.
 
 Open gate:
 
-- Resolve resize/snap/maximize/restore visual artifacts on the target machine.
-- Make system-titlebar and integrated-titlebar glass visually consistent.
-- Stop Shell panel flicker during nearby window animations.
-- Make shadow, border, and corner radius behavior consistent.
-- Complete live real-app validation with Lambda apps plus browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, and long idle sessions.
+- Complete the visual consistency audit for system-titlebar and integrated-titlebar glass, shadow, border, and corner radius behavior.
+- Continue resize/snap/maximize/restore validation across more apps; Firefox restore/fullscreen paths are fixed in the tested scenarios, but GTK/Qt/terminal coverage still needs a pass.
+- Re-test Shell panel behavior around fullscreen, window animations, launcher/dock popovers, and long-running browser/video sessions.
+- Complete live real-app validation with Lambda apps plus browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, fullscreen video, mpv playback, and long idle sessions.
 - Keep popup grabs honest: config-gated until hardware validation says they can be enabled by default.
 - Keep unsupported touch/tablet behavior absent or clearly non-advertised.
 
 Validation:
 
-- Deterministic tests cover output selector, scale config, keybindings, config fallback, screenshot policy/regions/paths/PNG writing, frame geometry, snap/resize geometry, minimized focus restoration, popup geometry, layer-shell zones, and surface input regions.
-- Full visual acceptance still requires target hardware; GPU/Wayland tests may not run in headless CI.
+- Deterministic tests cover output selector, scale config, keybindings, config fallback, screenshot policy/regions/paths/PNG writing, frame geometry, snap/resize geometry, minimized focus restoration, fullscreen restore state, popup geometry, layer-shell zones, and surface input regions.
+- Manual target-hardware traces now cover Firefox stability, fullscreen video restore, mpv/video pacing, compositor CPU, hardware overlay/scanout decisions, and DP-1 terminal rendering.
+- Full visual acceptance still requires target hardware; GPU/Wayland tests may not run in headless CI. SHM buffer-damage optimization still needs a real SHM partial-damage client before it can be counted as performance-validated.
 
 Deferred:
 
@@ -430,7 +435,7 @@ Optional later apps:
 
 Manual validation coverage inherited from the old readiness specs:
 
-- Window Manager: build/unit checks, TTY launch, Shell launch, protocol smoke, Lambda apps, browser/GTK/Qt/foot real-app matrix, screenshots, config reload/restart matrix, idle CPU, and compositor crash/disconnect behavior.
+- Window Manager: build/unit checks, TTY launch, Shell launch, protocol smoke, Lambda apps, browser/GTK/Qt/foot real-app matrix, screenshots, fullscreen/restore, video/mpv pacing, hardware overlay/scanout traces, config reload/restart matrix, idle CPU, and compositor crash/disconnect behavior.
 - Shell: build/unit checks, launch/failure behavior, app registry discovery, dock launch/focus/restore, launcher keyboard behavior, top-bar status, quick settings, notification workflows, clipboard-history workflows, config reload, and Lambda/external app validation.
 - Settings: build/unit checks, launch, Appearance, Display, Keyboard, Desktop, Dock & Panel, Notifications, About/System, save/revert/reset, restart-required rows, and owner-config persistence.
 - Files: build/unit checks, launch, browsing places/root/outside-home/permission-denied/large/hidden/external-change cases, selection, safe operations, trash, clipboard/DnD behavior, open-with behavior, grid/list/sort/search behavior, and preference persistence.
@@ -472,6 +477,12 @@ Compositor and Shell framework work:
 - Shared Shell IPC module exists.
 - Shell preview and production rendering use shared paths where practical.
 - Subsurface hit testing, popup geometry, layer-shell zones, output selector, screenshot logic, and compositor state helpers have deterministic tests.
+- Firefox-oriented xdg-popup and inert-resource lifecycle fixes landed after real crash traces.
+- Fullscreen restore now preserves prior maximized/snapped/normal window state, and Shell panels leave/return around fullscreen.
+- KMS frame pacing now uses a queued compositor presentation path with video overlay/scanout decisions traced for skipped-frame analysis.
+- Hardware cursor motion is decoupled from full scene redraws.
+- Explicit sync advertisement is disabled/removed until there is a demonstrated benefit and a correct client-buffer lifecycle.
+- Wayland buffer damage is propagated into committed snapshots and used for partial cached-image updates on the SHM path.
 
 Documentation cleanup:
 
