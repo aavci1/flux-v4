@@ -198,6 +198,22 @@ bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
   });
 }
 
+std::uint64_t dmabufBufferIdForResource(WaylandServer::Impl const& server, wl_resource* resource) {
+  auto const found = std::find_if(server.dmabufBuffers_.begin(),
+                                  server.dmabufBuffers_.end(),
+                                  [resource](auto const& buffer) {
+                                    return buffer && buffer->resource == resource;
+                                  });
+  return found == server.dmabufBuffers_.end() ? 0 : (*found)->id;
+}
+
+bool isRetainedDmabufBuffer(WaylandServer::Impl const& server, wl_resource* resource) {
+  std::uint64_t const id = dmabufBufferIdForResource(server, resource);
+  return id != 0 && std::find(server.retainedDmabufBufferIds_.begin(),
+                              server.retainedDmabufBufferIds_.end(),
+                              id) != server.retainedDmabufBufferIds_.end();
+}
+
 void WaylandServer::Impl::releasePendingBuffers() {
   std::uint64_t releaseCount = 0;
   for (auto const& surface : surfaces_) {
@@ -206,6 +222,10 @@ void WaylandServer::Impl::releasePendingBuffers() {
     surface->pendingBufferReleases.clear();
     for (wl_resource* buffer : releases) {
       if (!buffer) continue;
+      if (isRetainedDmabufBuffer(*this, buffer)) {
+        surface->pendingBufferReleases.push_back(buffer);
+        continue;
+      }
       wl_buffer_send_release(buffer);
       ++releaseCount;
     }

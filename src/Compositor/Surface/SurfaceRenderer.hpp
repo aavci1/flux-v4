@@ -52,6 +52,9 @@ struct SurfaceRenderState {
   std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
   std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
   std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
+  std::uint64_t primaryReuseSignature = 0;
+  std::uint64_t primaryReuseOverlaySurfaceId = 0;
+  bool primaryReuseSignatureValid = false;
 };
 
 void drawSurfaceImage(Canvas &canvas, CommittedSurfaceSnapshot const &surface, Image &image, float opacity,

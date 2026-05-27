@@ -113,6 +113,8 @@ struct WaylandServer::Impl {
   void setShellThemeDark(bool dark);
   void setInputConfig(CompositorInputConfig config);
   void setPreferredScale(float scale);
+  void setDmabufFormatModifierPreferences(std::vector<DmabufFormatModifierPreference> preferences);
+  void setRetainedDmabufBufferIds(std::vector<std::uint64_t> bufferIds);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
@@ -206,6 +208,8 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
+  std::vector<DmabufFormatModifierPreference> dmabufFormatModifierPreferences_;
+  std::vector<std::uint64_t> retainedDmabufBufferIds_;
   std::uint64_t nextDmabufBufferId_ = 1;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<XxCutouts>> cutouts_;

@@ -114,6 +114,14 @@ void WaylandServer::setPreferredScale(float scale) {
   impl_->setPreferredScale(scale);
 }
 
+void WaylandServer::setDmabufFormatModifierPreferences(std::vector<DmabufFormatModifierPreference> preferences) {
+  impl_->setDmabufFormatModifierPreferences(std::move(preferences));
+}
+
+void WaylandServer::setRetainedDmabufBufferIds(std::vector<std::uint64_t> bufferIds) {
+  impl_->setRetainedDmabufBufferIds(std::move(bufferIds));
+}
+
 void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
   impl_->updateAnimations(timeMs, animationsEnabled);
 }

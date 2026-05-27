@@ -33,6 +33,8 @@ struct AtomicReadyFrame {
   std::chrono::steady_clock::time_point frameTime{};
   double renderMs = 0.0;
   bool renderedAhead = false;
+  bool overlayOnly = false;
+  bool directScanout = false;
   std::uint64_t contentSerial = 0;
   presentation::AtomicFrameProfile profile{};
 };

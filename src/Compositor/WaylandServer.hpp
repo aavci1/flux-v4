@@ -66,6 +66,8 @@ public:
   void setShellThemeDark(bool dark);
   void setInputConfig(CompositorInputConfig config);
   void setPreferredScale(float scale);
+  void setDmabufFormatModifierPreferences(std::vector<DmabufFormatModifierPreference> preferences);
+  void setRetainedDmabufBufferIds(std::vector<std::uint64_t> bufferIds);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;

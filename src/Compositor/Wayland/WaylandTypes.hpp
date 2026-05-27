@@ -63,6 +63,11 @@ struct WaylandOutputInfo {
   std::uint64_t drmDevice = 0;
 };
 
+struct DmabufFormatModifierPreference {
+  std::uint32_t format = 0;
+  std::uint64_t modifier = 0;
+};
+
 struct PresentationTiming {
   std::uint64_t monotonicNsec = 0;
   std::uint64_t sequence = 0;

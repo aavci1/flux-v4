@@ -27,6 +27,11 @@ namespace platform {
 
 class KmsOutput;
 
+struct KmsDmabufFormatModifier {
+  std::uint32_t format = 0;
+  std::uint64_t modifier = 0;
+};
+
 struct KmsPollResult {
   bool woke = false;
   bool inputOrSystem = false;
@@ -35,6 +40,30 @@ struct KmsPollResult {
 
 class KmsAtomicPresenter {
 public:
+  struct DmabufPlane {
+    int fd = -1;
+    std::uint32_t offset = 0;
+    std::uint32_t stride = 0;
+    std::uint64_t modifier = 0;
+  };
+
+  struct OverlayCandidate {
+    std::uint64_t surfaceId = 0;
+    std::uint64_t bufferId = 0;
+    std::uint32_t drmFormat = 0;
+    std::uint32_t bufferWidth = 0;
+    std::uint32_t bufferHeight = 0;
+    double sourceX = 0.0;
+    double sourceY = 0.0;
+    double sourceWidth = 0.0;
+    double sourceHeight = 0.0;
+    std::int32_t crtcX = 0;
+    std::int32_t crtcY = 0;
+    std::uint32_t crtcWidth = 0;
+    std::uint32_t crtcHeight = 0;
+    std::vector<DmabufPlane> planes;
+  };
+
   struct PageFlipTiming {
     bool hardware = false;
     std::uint32_t presentId = 0;
@@ -66,6 +95,20 @@ public:
   [[nodiscard]] bool canSchedulePresent(std::uint32_t token = 0);
   [[nodiscard]] int renderReadyFd(std::uint32_t token = 0) const noexcept;
   void discardPreparedFrame(std::uint32_t token);
+  [[nodiscard]] bool prepareOverlayCandidate(OverlayCandidate candidate);
+  [[nodiscard]] bool prepareOverlayCandidate(std::uint32_t token, OverlayCandidate candidate);
+  [[nodiscard]] bool canPrepareOverlayOnly() const noexcept;
+  [[nodiscard]] bool prepareOverlayCandidateForDisplayedFrame(OverlayCandidate candidate);
+  [[nodiscard]] bool canScheduleOverlayOnly() const noexcept;
+  std::uint32_t scheduleOverlayOnly();
+  [[nodiscard]] bool prepareDirectScanoutCandidate(OverlayCandidate candidate);
+  [[nodiscard]] bool canScheduleDirectScanout() const noexcept;
+  std::uint32_t scheduleDirectScanout();
+  void clearPreparedDirectScanout();
+  void clearPreparedOverlayCandidate();
+  [[nodiscard]] std::uint64_t preparedOverlaySurfaceId() const noexcept;
+  [[nodiscard]] std::vector<std::uint64_t> overlayBufferIdsInUse() const;
+  [[nodiscard]] std::vector<KmsDmabufFormatModifier> overlayDmabufFormatModifierPreferences() const;
   std::uint32_t schedulePresent(std::uint32_t token = 0);
   PageFlipTiming present();
   [[nodiscard]] std::optional<PageFlipTiming> dispatchPageFlipEvents();

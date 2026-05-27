@@ -350,4 +350,13 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
   flushClients();
 }
 
+void WaylandServer::Impl::setDmabufFormatModifierPreferences(
+    std::vector<DmabufFormatModifierPreference> preferences) {
+  dmabufFormatModifierPreferences_ = std::move(preferences);
+}
+
+void WaylandServer::Impl::setRetainedDmabufBufferIds(std::vector<std::uint64_t> bufferIds) {
+  retainedDmabufBufferIds_ = std::move(bufferIds);
+}
+
 } // namespace flux::compositor

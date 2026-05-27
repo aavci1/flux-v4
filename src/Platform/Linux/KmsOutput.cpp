@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <optional>
 #include <ctime>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -248,14 +249,29 @@ std::vector<std::uint64_t> vulkanModifiersForFormat(VkPhysicalDevice physical,
   return modifiers;
 }
 
+VkFormat vkFormatForDmabufFormat(std::uint32_t drmFormat) {
+  switch (drmFormat) {
+  case DRM_FORMAT_ARGB8888:
+  case DRM_FORMAT_XRGB8888:
+    return VK_FORMAT_B8G8R8A8_UNORM;
+  case DRM_FORMAT_ABGR8888:
+  case DRM_FORMAT_XBGR8888:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  default:
+    return VK_FORMAT_UNDEFINED;
+  }
+}
+
 std::vector<std::uint64_t> scanoutModifiersForUsage(int fd,
                                                     std::uint32_t planeId,
+                                                    std::uint32_t drmFormat,
+                                                    VkFormat vkFormat,
                                                     VkPhysicalDevice physical,
                                                     VkImageUsageFlags usage,
                                                     bool includeLinear) {
-  std::vector<std::uint64_t> const planeModifiers = planeModifiersForFormat(fd, planeId, DRM_FORMAT_ARGB8888);
-  std::vector<std::uint64_t> const vulkanModifiers =
-      vulkanModifiersForFormat(physical, VK_FORMAT_B8G8R8A8_UNORM, usage);
+  if (vkFormat == VK_FORMAT_UNDEFINED) return {};
+  std::vector<std::uint64_t> const planeModifiers = planeModifiersForFormat(fd, planeId, drmFormat);
+  std::vector<std::uint64_t> const vulkanModifiers = vulkanModifiersForFormat(physical, vkFormat, usage);
   std::vector<std::uint64_t> modifiers;
   for (std::uint64_t modifier : planeModifiers) {
     if (modifier == DRM_FORMAT_MOD_INVALID || modifier == DRM_FORMAT_MOD_LINEAR) continue;
@@ -278,6 +294,16 @@ void addAtomicProperty(drmModeAtomicReq* request,
   }
   if (drmModeAtomicAddProperty(request, objectId, property, value) < 0) {
     throw std::runtime_error(std::string("drmModeAtomicAddProperty failed for ") + name);
+  }
+}
+
+void addOptionalAtomicProperty(drmModeAtomicReq* request,
+                               std::uint32_t objectId,
+                               std::uint32_t property,
+                               std::uint64_t value) {
+  if (property == 0) return;
+  if (drmModeAtomicAddProperty(request, objectId, property, value) < 0) {
+    throw std::runtime_error("drmModeAtomicAddProperty failed for optional property");
   }
 }
 
@@ -316,6 +342,67 @@ std::uint32_t primaryPlaneForCrtc(int fd, std::uint32_t crtcId) {
   selected = selected != 0 ? selected : fallback;
   if (selected == 0) throw std::runtime_error("No usable KMS primary plane found");
   return selected;
+}
+
+std::vector<std::uint32_t> planesForCrtcWithType(int fd, std::uint32_t crtcId, std::uint64_t planeType) {
+  std::uint32_t const crtcIndex = crtcIndexForId(fd, crtcId);
+  drmModePlaneRes* planes = drmModeGetPlaneResources(fd);
+  if (!planes) throw std::runtime_error("drmModeGetPlaneResources failed");
+  std::vector<std::uint32_t> selected;
+  for (std::uint32_t i = 0; i < planes->count_planes; ++i) {
+    drmModePlane* plane = drmModeGetPlane(fd, planes->planes[i]);
+    if (!plane) continue;
+    bool const canUseCrtc = (plane->possible_crtcs & (1u << crtcIndex)) != 0;
+    std::uint64_t const type = propertyValue(fd, plane->plane_id, DRM_MODE_OBJECT_PLANE, "type");
+    if (canUseCrtc && type == planeType) selected.push_back(plane->plane_id);
+    drmModeFreePlane(plane);
+  }
+  drmModeFreePlaneResources(planes);
+  return selected;
+}
+
+bool planeListsFormat(int fd, std::uint32_t planeId, std::uint32_t drmFormat) {
+  drmModePlane* plane = drmModeGetPlane(fd, planeId);
+  if (!plane) return false;
+  bool supported = false;
+  for (std::uint32_t i = 0; i < plane->count_formats; ++i) {
+    if (plane->formats[i] == drmFormat) {
+      supported = true;
+      break;
+    }
+  }
+  drmModeFreePlane(plane);
+  return supported;
+}
+
+std::uint64_t normalizedModifier(std::uint64_t modifier) {
+  return modifier == DRM_FORMAT_MOD_INVALID ? DRM_FORMAT_MOD_LINEAR : modifier;
+}
+
+bool planeSupportsFormatModifier(int fd,
+                                 std::uint32_t planeId,
+                                 std::uint32_t drmFormat,
+                                 std::uint64_t modifier) {
+  if (!planeListsFormat(fd, planeId, drmFormat)) return false;
+  std::vector<std::uint64_t> const modifiers = planeModifiersForFormat(fd, planeId, drmFormat);
+  if (modifiers.empty()) return true;
+  return containsModifier(modifiers, normalizedModifier(modifier));
+}
+
+bool containsFormatModifier(std::vector<KmsDmabufFormatModifier> const& pairs,
+                            std::uint32_t format,
+                            std::uint64_t modifier) {
+  return std::find_if(pairs.begin(), pairs.end(), [format, modifier](KmsDmabufFormatModifier const& pair) {
+           return pair.format == format && pair.modifier == modifier;
+         }) != pairs.end();
+}
+
+void appendUniqueFormatModifier(std::vector<KmsDmabufFormatModifier>& pairs,
+                                std::uint32_t format,
+                                std::uint64_t modifier) {
+  if (!containsFormatModifier(pairs, format, modifier)) {
+    pairs.push_back(KmsDmabufFormatModifier{.format = format, .modifier = modifier});
+  }
 }
 
 void pageFlipHandler(int,
@@ -432,6 +519,7 @@ public:
     if (canvas_) canvas_.reset();
     VkDevice device = flux::VulkanContext::instance().device();
     if (device) vkDeviceWaitIdle(device);
+    destroyOverlayFramebuffers();
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
@@ -474,6 +562,9 @@ public:
   void prepareFrame() {
     reapDiscardedPreparedFrames();
     if (buffers_.empty()) throw std::runtime_error("Atomic KMS presenter has no scanout buffers");
+    preparedOverlay_.reset();
+    preparedOverlayPrimaryBuffer_ = -1;
+    preparedDirectScanout_.reset();
     std::optional<std::size_t> next;
     std::size_t candidate = displayedBuffer_ >= 0 ? static_cast<std::size_t>(displayedBuffer_) : 0u;
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
@@ -567,6 +658,339 @@ public:
     }
   }
 
+  bool prepareOverlayCandidate(std::uint32_t token, KmsAtomicPresenter::OverlayCandidate candidate) {
+    preparedOverlay_.reset();
+    preparedOverlayPrimaryBuffer_ = -1;
+    int const overlayBuffer = token == 0 ? renderBuffer_ : preparedBufferForToken(token);
+    return prepareOverlayCandidateForBuffer(overlayBuffer, std::move(candidate));
+  }
+
+  bool canPrepareOverlayOnly() const noexcept {
+    return modesetDone_ && (pageFlipPending_ ? pendingBuffer_ >= 0 : displayedBuffer_ >= 0);
+  }
+
+  bool prepareOverlayCandidateForDisplayedFrame(KmsAtomicPresenter::OverlayCandidate candidate) {
+    preparedOverlay_.reset();
+    preparedOverlayPrimaryBuffer_ = -1;
+    if (!canPrepareOverlayOnly()) {
+      closeOverlayCandidateFds(candidate);
+      return false;
+    }
+    int const primaryBuffer = pageFlipPending_ ? pendingBuffer_ : displayedBuffer_;
+    return prepareOverlayCandidateForBuffer(primaryBuffer, std::move(candidate));
+  }
+
+  bool canScheduleOverlayOnly() const noexcept {
+    return modesetDone_ && !pageFlipPending_ && preparedOverlay_.has_value() &&
+           preparedOverlayPrimaryBuffer_ >= 0 && preparedOverlayPrimaryBuffer_ == displayedBuffer_;
+  }
+
+  std::uint32_t scheduleOverlayOnly() {
+    if (!canScheduleOverlayOnly()) throw std::runtime_error("KMS atomic presenter has no prepared overlay-only frame");
+    Buffer& buffer = buffers_[static_cast<std::size_t>(preparedOverlayPrimaryBuffer_)];
+    drmModeAtomicReq* request = drmModeAtomicAlloc();
+    if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
+    try {
+      populateAtomicRequest(request, buffer, false, preparedOverlay_ ? &*preparedOverlay_ : nullptr);
+      pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
+          .presentId = nextPresentId_++,
+          .scheduledMonotonicNsec = monotonicNanoseconds(),
+          .renderSubmittedMonotonicNsec = 0,
+          .renderReadyMonotonicNsec = 0,
+          .usedRenderFence = false,
+      };
+      std::uint64_t const commitStartNsec = monotonicNanoseconds();
+      pendingTiming_.commitStartMonotonicNsec = commitStartNsec;
+      int const rc = drmModeAtomicCommit(fd_, request, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &pendingTiming_);
+      pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
+      pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
+      if (rc != 0) {
+        throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit overlay-only");
+      }
+      drmModeAtomicFree(request);
+      request = nullptr;
+      pendingBuffer_ = displayedBuffer_;
+      pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
+      pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
+      pendingOverlayBufferId_ = preparedOverlay_ ? preparedOverlay_->bufferId : 0;
+      pendingDirectScanout_ = false;
+      pendingDirectScanoutFbId_ = 0;
+      pendingDirectScanoutBufferId_ = 0;
+      preparedOverlay_.reset();
+      preparedOverlayPrimaryBuffer_ = -1;
+      pageFlipPending_ = true;
+      return pendingTiming_.presentId;
+    } catch (...) {
+      if (request) drmModeAtomicFree(request);
+      throw;
+    }
+  }
+
+  bool prepareOverlayCandidateForBuffer(int overlayBuffer, KmsAtomicPresenter::OverlayCandidate candidate) {
+    if (overlayBuffer < 0 || candidate.surfaceId == 0 || candidate.bufferId == 0 ||
+        candidate.drmFormat == 0 || candidate.bufferWidth == 0 || candidate.bufferHeight == 0 ||
+        candidate.sourceWidth <= 0.0 || candidate.sourceHeight <= 0.0 ||
+        candidate.crtcWidth == 0 || candidate.crtcHeight == 0 || candidate.planes.empty() ||
+        candidate.planes.size() > 4 || overlayPlanes_.empty()) {
+      closeOverlayCandidateFds(candidate);
+      return false;
+    }
+
+    if (!std::isfinite(candidate.sourceX) || !std::isfinite(candidate.sourceY) ||
+        !std::isfinite(candidate.sourceWidth) || !std::isfinite(candidate.sourceHeight)) {
+      closeOverlayCandidateFds(candidate);
+      return false;
+    }
+
+    std::uint64_t const modifier = normalizedModifier(candidate.planes.front().modifier);
+    Buffer const& buffer = buffers_[static_cast<std::size_t>(overlayBuffer)];
+    for (OverlayPlane const& plane : overlayPlanes_) {
+      if (!planeSupportsFormatModifier(fd_, plane.id, candidate.drmFormat, modifier)) continue;
+      OverlayFramebuffer* framebuffer = overlayFramebufferFor(candidate);
+      if (!framebuffer) return false;
+      PreparedOverlay overlay{
+          .surfaceId = candidate.surfaceId,
+          .bufferId = candidate.bufferId,
+          .planeId = plane.id,
+          .props = plane.props,
+          .fbId = framebuffer->fbId,
+          .srcX = toFixed16(candidate.sourceX),
+          .srcY = toFixed16(candidate.sourceY),
+          .srcW = toFixed16(candidate.sourceWidth),
+          .srcH = toFixed16(candidate.sourceHeight),
+          .crtcX = candidate.crtcX,
+          .crtcY = candidate.crtcY,
+          .crtcW = candidate.crtcWidth,
+          .crtcH = candidate.crtcHeight,
+      };
+      if (testAtomicOverlay(buffer, overlay)) {
+        preparedOverlay_ = overlay;
+        preparedOverlayPrimaryBuffer_ = overlayBuffer;
+        if (!overlayPreparedLogged_) {
+          std::fprintf(stderr,
+                       "lambda-window-manager: KMS hardware overlay active plane=%u surface=%llu buffer=%llu "
+                       "fb=%u format=0x%08x modifier=0x%016llx crtc=%d,%d %ux%u\n",
+                       overlay.planeId,
+                       static_cast<unsigned long long>(overlay.surfaceId),
+                       static_cast<unsigned long long>(overlay.bufferId),
+                       overlay.fbId,
+                       candidate.drmFormat,
+                       static_cast<unsigned long long>(modifier),
+                       overlay.crtcX,
+                       overlay.crtcY,
+                       overlay.crtcW,
+                       overlay.crtcH);
+          overlayPreparedLogged_ = true;
+        }
+        return true;
+      }
+    }
+
+    if (!overlayTestFailureLogged_) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: KMS hardware overlay test rejected surface=%llu buffer=%llu "
+                   "format=0x%08x modifier=0x%016llx\n",
+                   static_cast<unsigned long long>(candidate.surfaceId),
+                   static_cast<unsigned long long>(candidate.bufferId),
+                   candidate.drmFormat,
+                   static_cast<unsigned long long>(modifier));
+      overlayTestFailureLogged_ = true;
+    }
+    closeOverlayCandidateFds(candidate);
+    return false;
+  }
+
+  bool prepareDirectScanoutCandidate(KmsAtomicPresenter::OverlayCandidate candidate) {
+    preparedDirectScanout_.reset();
+    if (candidate.surfaceId == 0 || candidate.bufferId == 0 || candidate.drmFormat == 0 ||
+        candidate.bufferWidth == 0 || candidate.bufferHeight == 0 || candidate.sourceWidth <= 0.0 ||
+        candidate.sourceHeight <= 0.0 || candidate.crtcWidth == 0 || candidate.crtcHeight == 0 ||
+        candidate.planes.empty() || candidate.planes.size() > 4) {
+      closeOverlayCandidateFds(candidate);
+      return false;
+    }
+    if (!std::isfinite(candidate.sourceX) || !std::isfinite(candidate.sourceY) ||
+        !std::isfinite(candidate.sourceWidth) || !std::isfinite(candidate.sourceHeight)) {
+      closeOverlayCandidateFds(candidate);
+      return false;
+    }
+
+    std::uint64_t const modifier = normalizedModifier(candidate.planes.front().modifier);
+    if (!planeSupportsFormatModifier(fd_, planeId_, candidate.drmFormat, modifier)) {
+      if (!directScanoutTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS direct scanout primary plane rejected format=0x%08x "
+                     "modifier=0x%016llx surface=%llu buffer=%llu\n",
+                     candidate.drmFormat,
+                     static_cast<unsigned long long>(modifier),
+                     static_cast<unsigned long long>(candidate.surfaceId),
+                     static_cast<unsigned long long>(candidate.bufferId));
+        directScanoutTestFailureLogged_ = true;
+      }
+      closeOverlayCandidateFds(candidate);
+      return false;
+    }
+
+    OverlayFramebuffer* framebuffer = overlayFramebufferFor(candidate);
+    if (!framebuffer) return false;
+    PreparedDirectScanout direct{
+        .surfaceId = candidate.surfaceId,
+        .bufferId = candidate.bufferId,
+        .fbId = framebuffer->fbId,
+        .srcX = toFixed16(candidate.sourceX),
+        .srcY = toFixed16(candidate.sourceY),
+        .srcW = toFixed16(candidate.sourceWidth),
+        .srcH = toFixed16(candidate.sourceHeight),
+        .crtcX = candidate.crtcX,
+        .crtcY = candidate.crtcY,
+        .crtcW = candidate.crtcWidth,
+        .crtcH = candidate.crtcHeight,
+    };
+    DirectScanoutValidationKey validationKey{
+        .format = candidate.drmFormat,
+        .modifier = modifier,
+        .bufferWidth = candidate.bufferWidth,
+        .bufferHeight = candidate.bufferHeight,
+        .planeCount = candidate.planes.size(),
+        .srcX = direct.srcX,
+        .srcY = direct.srcY,
+        .srcW = direct.srcW,
+        .srcH = direct.srcH,
+        .crtcX = direct.crtcX,
+        .crtcY = direct.crtcY,
+        .crtcW = direct.crtcW,
+        .crtcH = direct.crtcH,
+    };
+    if (!directScanoutValidationKey_ || *directScanoutValidationKey_ != validationKey) {
+      if (!testAtomicDirectScanout(direct)) return false;
+      directScanoutValidationKey_ = validationKey;
+    }
+    preparedDirectScanout_ = direct;
+    if (!directScanoutPreparedLogged_) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: KMS direct scanout active surface=%llu buffer=%llu "
+                   "fb=%u format=0x%08x modifier=0x%016llx crtc=%d,%d %ux%u\n",
+                   static_cast<unsigned long long>(direct.surfaceId),
+                   static_cast<unsigned long long>(direct.bufferId),
+                   direct.fbId,
+                   framebuffer->format,
+                   static_cast<unsigned long long>(modifier),
+                   direct.crtcX,
+                   direct.crtcY,
+                   direct.crtcW,
+                   direct.crtcH);
+      directScanoutPreparedLogged_ = true;
+    }
+    return true;
+  }
+
+  bool canScheduleDirectScanout() const noexcept {
+    return modesetDone_ && !pageFlipPending_ && preparedDirectScanout_.has_value();
+  }
+
+  std::uint32_t scheduleDirectScanout() {
+    if (!canScheduleDirectScanout()) throw std::runtime_error("KMS atomic presenter has no prepared direct scanout frame");
+    drmModeAtomicReq* request = drmModeAtomicAlloc();
+    if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
+    try {
+      populateDirectScanoutRequest(request, *preparedDirectScanout_);
+      pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
+          .presentId = nextPresentId_++,
+          .scheduledMonotonicNsec = monotonicNanoseconds(),
+          .renderSubmittedMonotonicNsec = 0,
+          .renderReadyMonotonicNsec = 0,
+          .usedRenderFence = false,
+      };
+      std::uint64_t const commitStartNsec = monotonicNanoseconds();
+      pendingTiming_.commitStartMonotonicNsec = commitStartNsec;
+      int const rc = drmModeAtomicCommit(fd_, request, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &pendingTiming_);
+      pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
+      pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
+      if (rc != 0) {
+        throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout");
+      }
+      drmModeAtomicFree(request);
+      request = nullptr;
+      pendingBuffer_ = displayedBuffer_;
+      pendingOverlayPlaneId_ = 0;
+      pendingOverlayFbId_ = 0;
+      pendingOverlayBufferId_ = 0;
+      pendingDirectScanout_ = true;
+      pendingDirectScanoutFbId_ = preparedDirectScanout_->fbId;
+      pendingDirectScanoutBufferId_ = preparedDirectScanout_->bufferId;
+      preparedDirectScanout_.reset();
+      pageFlipPending_ = true;
+      return pendingTiming_.presentId;
+    } catch (...) {
+      if (request) drmModeAtomicFree(request);
+      throw;
+    }
+  }
+
+  void clearPreparedOverlayCandidate() noexcept {
+    preparedOverlay_.reset();
+    preparedOverlayPrimaryBuffer_ = -1;
+  }
+
+  void clearPreparedDirectScanout() noexcept {
+    preparedDirectScanout_.reset();
+  }
+
+  std::uint64_t preparedOverlaySurfaceId() const noexcept {
+    return preparedOverlay_ ? preparedOverlay_->surfaceId : 0;
+  }
+
+  std::vector<std::uint64_t> overlayBufferIdsInUse() const {
+    std::vector<std::uint64_t> ids;
+    auto append = [&ids](std::uint64_t id) {
+      if (id != 0 && std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
+    };
+    if (preparedOverlay_) append(preparedOverlay_->bufferId);
+    append(pendingOverlayBufferId_);
+    append(activeOverlayBufferId_);
+    if (preparedDirectScanout_) append(preparedDirectScanout_->bufferId);
+    append(pendingDirectScanoutBufferId_);
+    append(activeDirectScanoutBufferId_);
+    return ids;
+  }
+
+  std::vector<KmsDmabufFormatModifier> overlayDmabufFormatModifierPreferences() const {
+    constexpr std::array<std::uint32_t, 4> formats{
+        DRM_FORMAT_ARGB8888,
+        DRM_FORMAT_XRGB8888,
+        DRM_FORMAT_ABGR8888,
+        DRM_FORMAT_XBGR8888,
+    };
+    std::vector<KmsDmabufFormatModifier> pairs;
+    VkPhysicalDevice physical = flux::VulkanContext::instance().physicalDevice();
+    if (!physical) return pairs;
+
+    for (std::uint32_t format : formats) {
+      VkFormat const vkFormat = vkFormatForDmabufFormat(format);
+      std::vector<std::uint64_t> const vulkanModifiers =
+          vulkanModifiersForFormat(physical, vkFormat, VK_IMAGE_USAGE_SAMPLED_BIT);
+      if (vulkanModifiers.empty()) continue;
+
+      for (OverlayPlane const& plane : overlayPlanes_) {
+        if (!planeListsFormat(fd_, plane.id, format)) continue;
+        std::vector<std::uint64_t> const planeModifiers = planeModifiersForFormat(fd_, plane.id, format);
+        if (containsModifier(planeModifiers, DRM_FORMAT_MOD_LINEAR) &&
+            containsModifier(vulkanModifiers, DRM_FORMAT_MOD_LINEAR)) {
+          appendUniqueFormatModifier(pairs, format, DRM_FORMAT_MOD_LINEAR);
+        }
+      }
+    }
+
+    if (!pairs.empty()) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: KMS hardware overlay dmabuf preferences=%zu first=format 0x%08x modifier 0x%016llx\n",
+                   pairs.size(),
+                   pairs.front().format,
+                   static_cast<unsigned long long>(pairs.front().modifier));
+    }
+    return pairs;
+  }
+
   std::uint32_t schedulePresent(std::uint32_t token = 0) {
     if (pageFlipPending_) throw std::runtime_error("KMS atomic page flip is already pending");
     int const index = preparedBufferForToken(token);
@@ -577,36 +1001,7 @@ public:
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       bool const useRenderFence = !buffer.renderComplete && canUseRenderFence(buffer);
-      if (!modesetDone_) {
-        addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
-        addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
-        addAtomicProperty(request, connector_.crtcId, crtcActive_, 1, "crtc.ACTIVE");
-      }
-      addAtomicProperty(request, planeId_, planeFbId_, buffer.fbId, "plane.FB_ID");
-      addAtomicProperty(request, planeId_, planeCrtcId_, connector_.crtcId, "plane.CRTC_ID");
-      addAtomicProperty(request, planeId_, planeSrcX_, 0, "plane.SRC_X");
-      addAtomicProperty(request, planeId_, planeSrcY_, 0, "plane.SRC_Y");
-      addAtomicProperty(request,
-                        planeId_,
-                        planeSrcW_,
-                        static_cast<std::uint64_t>(connector_.mode.hdisplay) << 16u,
-                        "plane.SRC_W");
-      addAtomicProperty(request,
-                        planeId_,
-                        planeSrcH_,
-                        static_cast<std::uint64_t>(connector_.mode.vdisplay) << 16u,
-                        "plane.SRC_H");
-      addAtomicProperty(request, planeId_, planeCrtcX_, 0, "plane.CRTC_X");
-      addAtomicProperty(request, planeId_, planeCrtcY_, 0, "plane.CRTC_Y");
-      addAtomicProperty(request, planeId_, planeCrtcW_, connector_.mode.hdisplay, "plane.CRTC_W");
-      addAtomicProperty(request, planeId_, planeCrtcH_, connector_.mode.vdisplay, "plane.CRTC_H");
-      if (useRenderFence) {
-        addAtomicProperty(request,
-                          planeId_,
-                          planeInFenceFd_,
-                          static_cast<std::uint64_t>(buffer.renderFenceFd),
-                          "plane.IN_FENCE_FD");
-      }
+      populateAtomicRequest(request, buffer, useRenderFence, preparedOverlay_ ? &*preparedOverlay_ : nullptr);
       std::uint32_t flags = DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT;
       if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
@@ -635,6 +1030,15 @@ public:
       buffer.prepared = false;
       buffer.discardWhenReady = false;
       if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
+      pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
+      pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
+      pendingOverlayBufferId_ = preparedOverlay_ ? preparedOverlay_->bufferId : 0;
+      pendingDirectScanout_ = false;
+      pendingDirectScanoutFbId_ = 0;
+      pendingDirectScanoutBufferId_ = 0;
+      preparedOverlay_.reset();
+      preparedOverlayPrimaryBuffer_ = -1;
+      preparedDirectScanout_.reset();
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
@@ -669,6 +1073,24 @@ public:
     if (!pendingTiming_.hardware) return std::nullopt;
     displayedBuffer_ = pendingBuffer_;
     pendingBuffer_ = -1;
+    activeOverlayPlaneId_ = pendingOverlayPlaneId_;
+    activeOverlayFbId_ = pendingOverlayFbId_;
+    activeOverlayBufferId_ = pendingOverlayBufferId_;
+    activeDirectScanout_ = pendingDirectScanout_;
+    activeDirectScanoutFbId_ = pendingDirectScanoutFbId_;
+    activeDirectScanoutBufferId_ = pendingDirectScanoutBufferId_;
+    if (activeDirectScanout_) {
+      activeOverlayPlaneId_ = 0;
+      activeOverlayFbId_ = 0;
+      activeOverlayBufferId_ = 0;
+    }
+    pendingOverlayPlaneId_ = 0;
+    pendingOverlayFbId_ = 0;
+    pendingOverlayBufferId_ = 0;
+    pendingDirectScanout_ = false;
+    pendingDirectScanoutFbId_ = 0;
+    pendingDirectScanoutBufferId_ = 0;
+    pruneOverlayFramebufferCache();
     pageFlipPending_ = false;
     return pendingTiming_;
   }
@@ -678,6 +1100,88 @@ public:
   int eventFd() const noexcept { return fd_; }
 
 private:
+  struct PlaneProperties {
+    std::uint32_t fbId = 0;
+    std::uint32_t crtcId = 0;
+    std::uint32_t srcX = 0;
+    std::uint32_t srcY = 0;
+    std::uint32_t srcW = 0;
+    std::uint32_t srcH = 0;
+    std::uint32_t crtcX = 0;
+    std::uint32_t crtcY = 0;
+    std::uint32_t crtcW = 0;
+    std::uint32_t crtcH = 0;
+    std::uint32_t inFenceFd = 0;
+    std::uint32_t alpha = 0;
+    std::uint32_t pixelBlendMode = 0;
+    std::uint32_t rotation = 0;
+  };
+
+  struct OverlayPlane {
+    std::uint32_t id = 0;
+    PlaneProperties props{};
+  };
+
+  struct OverlayFramebuffer {
+    std::uint64_t bufferId = 0;
+    std::uint32_t format = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::vector<std::uint32_t> offsets;
+    std::vector<std::uint32_t> strides;
+    std::vector<std::uint64_t> modifiers;
+    std::uint32_t fbId = 0;
+    std::uint64_t lastUsedSerial = 0;
+  };
+
+  struct PreparedOverlay {
+    std::uint64_t surfaceId = 0;
+    std::uint64_t bufferId = 0;
+    std::uint32_t planeId = 0;
+    PlaneProperties props{};
+    std::uint32_t fbId = 0;
+    std::uint64_t srcX = 0;
+    std::uint64_t srcY = 0;
+    std::uint64_t srcW = 0;
+    std::uint64_t srcH = 0;
+    std::int32_t crtcX = 0;
+    std::int32_t crtcY = 0;
+    std::uint32_t crtcW = 0;
+    std::uint32_t crtcH = 0;
+  };
+
+  struct PreparedDirectScanout {
+    std::uint64_t surfaceId = 0;
+    std::uint64_t bufferId = 0;
+    std::uint32_t fbId = 0;
+    std::uint64_t srcX = 0;
+    std::uint64_t srcY = 0;
+    std::uint64_t srcW = 0;
+    std::uint64_t srcH = 0;
+    std::int32_t crtcX = 0;
+    std::int32_t crtcY = 0;
+    std::uint32_t crtcW = 0;
+    std::uint32_t crtcH = 0;
+  };
+
+  struct DirectScanoutValidationKey {
+    std::uint32_t format = 0;
+    std::uint64_t modifier = 0;
+    std::uint32_t bufferWidth = 0;
+    std::uint32_t bufferHeight = 0;
+    std::size_t planeCount = 0;
+    std::uint64_t srcX = 0;
+    std::uint64_t srcY = 0;
+    std::uint64_t srcW = 0;
+    std::uint64_t srcH = 0;
+    std::int32_t crtcX = 0;
+    std::int32_t crtcY = 0;
+    std::uint32_t crtcW = 0;
+    std::uint32_t crtcH = 0;
+
+    bool operator==(DirectScanoutValidationKey const&) const = default;
+  };
+
   struct Buffer {
     gbm_bo* bo = nullptr;
     std::uint32_t fbId = 0;
@@ -786,25 +1290,440 @@ private:
     }
   }
 
+  static std::uint64_t toFixed16(double value) noexcept {
+    if (value <= 0.0) return 0;
+    return static_cast<std::uint64_t>(std::llround(value * 65536.0));
+  }
+
+  static void closeOverlayCandidateFds(KmsAtomicPresenter::OverlayCandidate& candidate) noexcept {
+    for (auto& plane : candidate.planes) {
+      if (plane.fd >= 0) {
+        close(plane.fd);
+        plane.fd = -1;
+      }
+    }
+  }
+
+  void closeGemHandle(std::uint32_t handle) noexcept {
+    if (handle == 0) return;
+    struct drm_gem_close closeRequest {};
+    closeRequest.handle = handle;
+    drmIoctl(fd_, DRM_IOCTL_GEM_CLOSE, &closeRequest);
+  }
+
+  static bool overlayFramebufferMatches(OverlayFramebuffer const& fb,
+                                        KmsAtomicPresenter::OverlayCandidate const& candidate) {
+    if (fb.bufferId != candidate.bufferId || fb.format != candidate.drmFormat ||
+        fb.width != candidate.bufferWidth || fb.height != candidate.bufferHeight ||
+        fb.offsets.size() != candidate.planes.size() || fb.strides.size() != candidate.planes.size() ||
+        fb.modifiers.size() != candidate.planes.size()) {
+      return false;
+    }
+    for (std::size_t i = 0; i < candidate.planes.size(); ++i) {
+      if (fb.offsets[i] != candidate.planes[i].offset ||
+          fb.strides[i] != candidate.planes[i].stride ||
+          fb.modifiers[i] != normalizedModifier(candidate.planes[i].modifier)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  OverlayFramebuffer* overlayFramebufferFor(KmsAtomicPresenter::OverlayCandidate& candidate) {
+    for (auto& fb : overlayFramebuffers_) {
+      if (overlayFramebufferMatches(fb, candidate)) {
+        fb.lastUsedSerial = ++overlayUseSerial_;
+        closeOverlayCandidateFds(candidate);
+        return &fb;
+      }
+    }
+    return importOverlayFramebuffer(candidate);
+  }
+
+  OverlayFramebuffer* importOverlayFramebuffer(KmsAtomicPresenter::OverlayCandidate& candidate) {
+    std::array<std::uint32_t, 4> handles{};
+    std::array<std::uint32_t, 4> strides{};
+    std::array<std::uint32_t, 4> offsets{};
+    std::array<std::uint64_t, 4> modifiers{};
+    std::size_t const planeCount = candidate.planes.size();
+    try {
+      for (std::size_t i = 0; i < planeCount; ++i) {
+        if (candidate.planes[i].fd < 0) throw std::runtime_error("overlay dmabuf fd is invalid");
+        std::uint32_t handle = 0;
+        if (drmPrimeFDToHandle(fd_, candidate.planes[i].fd, &handle) != 0) {
+          throw std::system_error(errno, std::generic_category(), "drmPrimeFDToHandle overlay dmabuf");
+        }
+        handles[i] = handle;
+        strides[i] = candidate.planes[i].stride;
+        offsets[i] = candidate.planes[i].offset;
+        modifiers[i] = normalizedModifier(candidate.planes[i].modifier);
+      }
+
+      std::uint32_t fbId = 0;
+      int rc = drmModeAddFB2WithModifiers(fd_,
+                                          candidate.bufferWidth,
+                                          candidate.bufferHeight,
+                                          candidate.drmFormat,
+                                          handles.data(),
+                                          strides.data(),
+                                          offsets.data(),
+                                          modifiers.data(),
+                                          &fbId,
+                                          DRM_MODE_FB_MODIFIERS);
+      if (rc != 0) {
+        bool const allLinear = std::all_of(modifiers.begin(), modifiers.begin() + static_cast<std::ptrdiff_t>(planeCount),
+                                           [](std::uint64_t modifier) {
+                                             return modifier == DRM_FORMAT_MOD_LINEAR;
+                                           });
+        if (allLinear) {
+          rc = drmModeAddFB2(fd_,
+                             candidate.bufferWidth,
+                             candidate.bufferHeight,
+                             candidate.drmFormat,
+                             handles.data(),
+                             strides.data(),
+                             offsets.data(),
+                             &fbId,
+                             0);
+        }
+      }
+      if (rc != 0) throw std::system_error(errno, std::generic_category(), "drmModeAddFB2 overlay dmabuf");
+
+      OverlayFramebuffer fb{
+          .bufferId = candidate.bufferId,
+          .format = candidate.drmFormat,
+          .width = candidate.bufferWidth,
+          .height = candidate.bufferHeight,
+          .offsets = {},
+          .strides = {},
+          .modifiers = {},
+          .fbId = fbId,
+          .lastUsedSerial = ++overlayUseSerial_,
+      };
+      fb.offsets.reserve(planeCount);
+      fb.strides.reserve(planeCount);
+      fb.modifiers.reserve(planeCount);
+      for (std::size_t i = 0; i < planeCount; ++i) {
+        fb.offsets.push_back(offsets[i]);
+        fb.strides.push_back(strides[i]);
+        fb.modifiers.push_back(modifiers[i]);
+      }
+      overlayFramebuffers_.push_back(std::move(fb));
+      for (std::uint32_t handle : handles) closeGemHandle(handle);
+      closeOverlayCandidateFds(candidate);
+      pruneOverlayFramebufferCache();
+      return &overlayFramebuffers_.back();
+    } catch (std::exception const& error) {
+      for (std::uint32_t handle : handles) closeGemHandle(handle);
+      closeOverlayCandidateFds(candidate);
+      if (!overlayImportFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS hardware overlay import failed for surface=%llu buffer=%llu: %s\n",
+                     static_cast<unsigned long long>(candidate.surfaceId),
+                     static_cast<unsigned long long>(candidate.bufferId),
+                     error.what());
+        overlayImportFailureLogged_ = true;
+      }
+      return nullptr;
+    } catch (...) {
+      for (std::uint32_t handle : handles) closeGemHandle(handle);
+      closeOverlayCandidateFds(candidate);
+      if (!overlayImportFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS hardware overlay import failed for surface=%llu buffer=%llu\n",
+                     static_cast<unsigned long long>(candidate.surfaceId),
+                     static_cast<unsigned long long>(candidate.bufferId));
+        overlayImportFailureLogged_ = true;
+      }
+      return nullptr;
+    }
+  }
+
+  void destroyOverlayFramebuffer(OverlayFramebuffer& fb) noexcept {
+    if (fb.fbId != 0) {
+      drmModeRmFB(fd_, fb.fbId);
+      fb.fbId = 0;
+    }
+  }
+
+  void destroyOverlayFramebuffers() noexcept {
+    for (auto& fb : overlayFramebuffers_) destroyOverlayFramebuffer(fb);
+    overlayFramebuffers_.clear();
+    activeOverlayFbId_ = 0;
+    pendingOverlayFbId_ = 0;
+    activeOverlayBufferId_ = 0;
+    pendingOverlayBufferId_ = 0;
+    activeDirectScanoutFbId_ = 0;
+    pendingDirectScanoutFbId_ = 0;
+    activeDirectScanoutBufferId_ = 0;
+    pendingDirectScanoutBufferId_ = 0;
+    preparedDirectScanout_.reset();
+  }
+
+  void pruneOverlayFramebufferCache() noexcept {
+    if (overlayFramebuffers_.size() <= kOverlayFramebufferCacheLimit) return;
+    std::sort(overlayFramebuffers_.begin(),
+              overlayFramebuffers_.end(),
+              [](OverlayFramebuffer const& a, OverlayFramebuffer const& b) {
+                return a.lastUsedSerial > b.lastUsedSerial;
+              });
+    for (std::size_t i = overlayFramebuffers_.size(); i > kOverlayFramebufferCacheLimit; --i) {
+      OverlayFramebuffer& fb = overlayFramebuffers_[i - 1];
+      if (fb.fbId == activeOverlayFbId_ || fb.fbId == pendingOverlayFbId_ ||
+          fb.fbId == activeDirectScanoutFbId_ || fb.fbId == pendingDirectScanoutFbId_ ||
+          (preparedDirectScanout_ && fb.fbId == preparedDirectScanout_->fbId) ||
+          (preparedOverlay_ && fb.fbId == preparedOverlay_->fbId)) {
+        continue;
+      }
+      destroyOverlayFramebuffer(fb);
+      overlayFramebuffers_.erase(overlayFramebuffers_.begin() + static_cast<std::ptrdiff_t>(i - 1));
+    }
+  }
+
+  void addPlaneProperties(drmModeAtomicReq* request,
+                          std::uint32_t planeId,
+                          PlaneProperties const& props,
+                          std::uint32_t fbId,
+                          std::uint32_t crtcId,
+                          std::uint64_t srcX,
+                          std::uint64_t srcY,
+                          std::uint64_t srcW,
+                          std::uint64_t srcH,
+                          std::int32_t crtcX,
+                          std::int32_t crtcY,
+                          std::uint32_t crtcW,
+                          std::uint32_t crtcH,
+                          int inFenceFd,
+                          char const* label) {
+    addAtomicProperty(request, planeId, props.fbId, fbId, label);
+    addAtomicProperty(request, planeId, props.crtcId, crtcId, label);
+    addAtomicProperty(request, planeId, props.srcX, srcX, label);
+    addAtomicProperty(request, planeId, props.srcY, srcY, label);
+    addAtomicProperty(request, planeId, props.srcW, srcW, label);
+    addAtomicProperty(request, planeId, props.srcH, srcH, label);
+    addAtomicProperty(request, planeId, props.crtcX, static_cast<std::uint64_t>(static_cast<std::int64_t>(crtcX)), label);
+    addAtomicProperty(request, planeId, props.crtcY, static_cast<std::uint64_t>(static_cast<std::int64_t>(crtcY)), label);
+    addAtomicProperty(request, planeId, props.crtcW, crtcW, label);
+    addAtomicProperty(request, planeId, props.crtcH, crtcH, label);
+    if (inFenceFd >= 0) {
+      addAtomicProperty(request, planeId, props.inFenceFd, static_cast<std::uint64_t>(inFenceFd), label);
+    }
+    if (fbId != 0) {
+      addOptionalAtomicProperty(request, planeId, props.alpha, 65535);
+      addOptionalAtomicProperty(request, planeId, props.pixelBlendMode, 2);
+      addOptionalAtomicProperty(request, planeId, props.rotation, 1);
+    }
+  }
+
+  void disableOverlayPlane(drmModeAtomicReq* request, std::uint32_t planeId, PlaneProperties const& props) {
+    addPlaneProperties(request, planeId, props, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, "overlay.disable");
+  }
+
+  void populateAtomicRequest(drmModeAtomicReq* request,
+                             Buffer const& buffer,
+                             bool useRenderFence,
+                             PreparedOverlay const* overlay) {
+    if (!modesetDone_) {
+      addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
+      addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
+      addAtomicProperty(request, connector_.crtcId, crtcActive_, 1, "crtc.ACTIVE");
+    }
+    addPlaneProperties(request,
+                       planeId_,
+                       primaryPlaneProps_,
+                       buffer.fbId,
+                       connector_.crtcId,
+                       0,
+                       0,
+                       static_cast<std::uint64_t>(connector_.mode.hdisplay) << 16u,
+                       static_cast<std::uint64_t>(connector_.mode.vdisplay) << 16u,
+                       0,
+                       0,
+                       connector_.mode.hdisplay,
+                       connector_.mode.vdisplay,
+                       useRenderFence ? buffer.renderFenceFd : -1,
+                       "primary");
+    if (overlay) {
+      addPlaneProperties(request,
+                         overlay->planeId,
+                         overlay->props,
+                         overlay->fbId,
+                         connector_.crtcId,
+                         overlay->srcX,
+                         overlay->srcY,
+                         overlay->srcW,
+                         overlay->srcH,
+                         overlay->crtcX,
+                         overlay->crtcY,
+                         overlay->crtcW,
+                         overlay->crtcH,
+                         -1,
+                         "overlay");
+      if (activeOverlayPlaneId_ != 0 && activeOverlayPlaneId_ != overlay->planeId) {
+        if (auto props = overlayPlaneProperties(activeOverlayPlaneId_)) {
+          disableOverlayPlane(request, activeOverlayPlaneId_, *props);
+        }
+      }
+    } else if (activeOverlayPlaneId_ != 0) {
+      if (auto props = overlayPlaneProperties(activeOverlayPlaneId_)) {
+        disableOverlayPlane(request, activeOverlayPlaneId_, *props);
+      }
+    }
+  }
+
+  void populateDirectScanoutRequest(drmModeAtomicReq* request, PreparedDirectScanout const& direct) {
+    if (!modesetDone_) {
+      addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
+      addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
+      addAtomicProperty(request, connector_.crtcId, crtcActive_, 1, "crtc.ACTIVE");
+    }
+    addPlaneProperties(request,
+                       planeId_,
+                       primaryPlaneProps_,
+                       direct.fbId,
+                       connector_.crtcId,
+                       direct.srcX,
+                       direct.srcY,
+                       direct.srcW,
+                       direct.srcH,
+                       direct.crtcX,
+                       direct.crtcY,
+                       direct.crtcW,
+                       direct.crtcH,
+                       -1,
+                       "primary.direct-scanout");
+    if (activeOverlayPlaneId_ != 0) {
+      if (auto props = overlayPlaneProperties(activeOverlayPlaneId_)) {
+        disableOverlayPlane(request, activeOverlayPlaneId_, *props);
+      }
+    }
+  }
+
+  bool testAtomicOverlay(Buffer const& buffer, PreparedOverlay const& overlay) {
+    drmModeAtomicReq* request = drmModeAtomicAlloc();
+    if (!request) return false;
+    bool accepted = false;
+    try {
+      populateAtomicRequest(request, buffer, false, &overlay);
+      std::uint32_t flags = DRM_MODE_ATOMIC_TEST_ONLY;
+      if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
+      int const rc = drmModeAtomicCommit(fd_, request, flags, nullptr);
+      if (rc == 0) {
+        accepted = true;
+      } else if (!overlayTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS hardware overlay atomic test failed plane=%u fb=%u: %s\n",
+                     overlay.planeId,
+                     overlay.fbId,
+                     std::strerror(errno));
+      }
+    } catch (std::exception const& error) {
+      if (!overlayTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS hardware overlay atomic test exception plane=%u fb=%u: %s\n",
+                     overlay.planeId,
+                     overlay.fbId,
+                     error.what());
+      }
+      accepted = false;
+    } catch (...) {
+      if (!overlayTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS hardware overlay atomic test exception plane=%u fb=%u\n",
+                     overlay.planeId,
+                     overlay.fbId);
+      }
+      accepted = false;
+    }
+    drmModeAtomicFree(request);
+    return accepted;
+  }
+
+  bool testAtomicDirectScanout(PreparedDirectScanout const& direct) {
+    drmModeAtomicReq* request = drmModeAtomicAlloc();
+    if (!request) return false;
+    bool accepted = false;
+    try {
+      populateDirectScanoutRequest(request, direct);
+      std::uint32_t flags = DRM_MODE_ATOMIC_TEST_ONLY;
+      if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
+      int const rc = drmModeAtomicCommit(fd_, request, flags, nullptr);
+      if (rc == 0) {
+        accepted = true;
+      } else if (!directScanoutTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS direct scanout atomic test failed fb=%u: %s\n",
+                     direct.fbId,
+                     std::strerror(errno));
+        directScanoutTestFailureLogged_ = true;
+      }
+    } catch (std::exception const& error) {
+      if (!directScanoutTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS direct scanout atomic test exception fb=%u: %s\n",
+                     direct.fbId,
+                     error.what());
+        directScanoutTestFailureLogged_ = true;
+      }
+      accepted = false;
+    } catch (...) {
+      if (!directScanoutTestFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS direct scanout atomic test exception fb=%u\n",
+                     direct.fbId);
+        directScanoutTestFailureLogged_ = true;
+      }
+      accepted = false;
+    }
+    drmModeAtomicFree(request);
+    return accepted;
+  }
+
+  std::optional<PlaneProperties> overlayPlaneProperties(std::uint32_t planeId) const noexcept {
+    auto it = std::find_if(overlayPlanes_.begin(), overlayPlanes_.end(), [planeId](OverlayPlane const& plane) {
+      return plane.id == planeId;
+    });
+    if (it == overlayPlanes_.end()) return std::nullopt;
+    return it->props;
+  }
+
+  PlaneProperties loadPlaneProperties(std::uint32_t planeId) const {
+    return PlaneProperties{
+        .fbId = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "FB_ID"),
+        .crtcId = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_ID"),
+        .srcX = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "SRC_X"),
+        .srcY = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "SRC_Y"),
+        .srcW = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "SRC_W"),
+        .srcH = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "SRC_H"),
+        .crtcX = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_X"),
+        .crtcY = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_Y"),
+        .crtcW = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_W"),
+        .crtcH = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_H"),
+        .inFenceFd = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "IN_FENCE_FD"),
+        .alpha = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "alpha"),
+        .pixelBlendMode = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "pixel blend mode"),
+        .rotation = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "rotation"),
+    };
+  }
+
   void loadProperties() {
     connectorCrtcId_ = propertyId(fd_, connector_.connectorId, DRM_MODE_OBJECT_CONNECTOR, "CRTC_ID");
     crtcModeId_ = propertyId(fd_, connector_.crtcId, DRM_MODE_OBJECT_CRTC, "MODE_ID");
     crtcActive_ = propertyId(fd_, connector_.crtcId, DRM_MODE_OBJECT_CRTC, "ACTIVE");
-    planeFbId_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "FB_ID");
-    planeCrtcId_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_ID");
-    planeSrcX_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "SRC_X");
-    planeSrcY_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "SRC_Y");
-    planeSrcW_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "SRC_W");
-    planeSrcH_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "SRC_H");
-    planeCrtcX_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_X");
-    planeCrtcY_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_Y");
-    planeCrtcW_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_W");
-    planeCrtcH_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "CRTC_H");
-    planeInFenceFd_ = propertyId(fd_, planeId_, DRM_MODE_OBJECT_PLANE, "IN_FENCE_FD");
+    primaryPlaneProps_ = loadPlaneProperties(planeId_);
+    planeInFenceFd_ = primaryPlaneProps_.inFenceFd;
     if (planeInFenceFd_ == 0) {
       std::fprintf(stderr,
                    "lambda-window-manager: KMS primary plane has no IN_FENCE_FD; atomic presenter will use CPU GPU waits\n");
     }
+    std::vector<std::uint32_t> const overlayIds = planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY);
+    overlayPlanes_.reserve(overlayIds.size());
+    for (std::uint32_t overlayId : overlayIds) {
+      overlayPlanes_.push_back(OverlayPlane{.id = overlayId, .props = loadPlaneProperties(overlayId)});
+    }
+    std::fprintf(stderr,
+                 "lambda-window-manager: KMS hardware overlay planes available=%zu\n",
+                 overlayPlanes_.size());
   }
 
   void createCommandPool() {
@@ -939,6 +1858,8 @@ private:
     if (disableAutomaticDirectScanoutRender()) return false;
     auto const modifiers = scanoutModifiersForUsage(fd_,
                                                     planeId_,
+                                                    DRM_FORMAT_ARGB8888,
+                                                    VK_FORMAT_B8G8R8A8_UNORM,
                                                     flux::VulkanContext::instance().physicalDevice(),
                                                     directScanoutImageUsage(),
                                                     false);
@@ -958,6 +1879,8 @@ private:
     std::vector<std::uint64_t> const modifiers =
         scanoutModifiersForUsage(fd_,
                                  planeId_,
+                                 DRM_FORMAT_ARGB8888,
+                                 VK_FORMAT_B8G8R8A8_UNORM,
                                  flux::VulkanContext::instance().physicalDevice(),
                                  scanoutImageUsage(),
                                  true);
@@ -1264,6 +2187,24 @@ private:
       if (pendingTiming_.hardware) {
         displayedBuffer_ = pendingBuffer_;
         pendingBuffer_ = -1;
+        activeOverlayPlaneId_ = pendingOverlayPlaneId_;
+        activeOverlayFbId_ = pendingOverlayFbId_;
+        activeOverlayBufferId_ = pendingOverlayBufferId_;
+        activeDirectScanout_ = pendingDirectScanout_;
+        activeDirectScanoutFbId_ = pendingDirectScanoutFbId_;
+        activeDirectScanoutBufferId_ = pendingDirectScanoutBufferId_;
+        if (activeDirectScanout_) {
+          activeOverlayPlaneId_ = 0;
+          activeOverlayFbId_ = 0;
+          activeOverlayBufferId_ = 0;
+        }
+        pendingOverlayPlaneId_ = 0;
+        pendingOverlayFbId_ = 0;
+        pendingOverlayBufferId_ = 0;
+        pendingDirectScanout_ = false;
+        pendingDirectScanoutFbId_ = 0;
+        pendingDirectScanoutBufferId_ = 0;
+        pruneOverlayFramebufferCache();
         pageFlipPending_ = false;
       }
     }
@@ -1296,17 +2237,32 @@ private:
   std::uint32_t connectorCrtcId_ = 0;
   std::uint32_t crtcModeId_ = 0;
   std::uint32_t crtcActive_ = 0;
-  std::uint32_t planeFbId_ = 0;
-  std::uint32_t planeCrtcId_ = 0;
-  std::uint32_t planeSrcX_ = 0;
-  std::uint32_t planeSrcY_ = 0;
-  std::uint32_t planeSrcW_ = 0;
-  std::uint32_t planeSrcH_ = 0;
-  std::uint32_t planeCrtcX_ = 0;
-  std::uint32_t planeCrtcY_ = 0;
-  std::uint32_t planeCrtcW_ = 0;
-  std::uint32_t planeCrtcH_ = 0;
   std::uint32_t planeInFenceFd_ = 0;
+  PlaneProperties primaryPlaneProps_{};
+  std::vector<OverlayPlane> overlayPlanes_;
+  std::vector<OverlayFramebuffer> overlayFramebuffers_;
+  std::optional<PreparedOverlay> preparedOverlay_;
+  std::optional<PreparedDirectScanout> preparedDirectScanout_;
+  std::optional<DirectScanoutValidationKey> directScanoutValidationKey_;
+  int preparedOverlayPrimaryBuffer_ = -1;
+  std::uint64_t overlayUseSerial_ = 0;
+  std::uint32_t activeOverlayPlaneId_ = 0;
+  std::uint32_t activeOverlayFbId_ = 0;
+  std::uint64_t activeOverlayBufferId_ = 0;
+  std::uint32_t pendingOverlayPlaneId_ = 0;
+  std::uint32_t pendingOverlayFbId_ = 0;
+  std::uint64_t pendingOverlayBufferId_ = 0;
+  bool activeDirectScanout_ = false;
+  bool pendingDirectScanout_ = false;
+  std::uint32_t activeDirectScanoutFbId_ = 0;
+  std::uint32_t pendingDirectScanoutFbId_ = 0;
+  std::uint64_t activeDirectScanoutBufferId_ = 0;
+  std::uint64_t pendingDirectScanoutBufferId_ = 0;
+  bool overlayPreparedLogged_ = false;
+  bool overlayImportFailureLogged_ = false;
+  bool overlayTestFailureLogged_ = false;
+  bool directScanoutPreparedLogged_ = false;
+  bool directScanoutTestFailureLogged_ = false;
   bool useRenderInFence_ = false;
   bool useAsyncRenderFence_ = false;
   bool directScanoutRenderForced_ = false;
@@ -1321,6 +2277,7 @@ private:
   KmsAtomicPresenter::PageFlipTiming pendingTiming_{};
   std::vector<Buffer> buffers_;
   std::unique_ptr<Canvas> canvas_;
+  static constexpr std::size_t kOverlayFramebufferCacheLimit = 12;
 };
 
 KmsOutput::Impl::~Impl() {
@@ -1381,6 +2338,83 @@ int KmsAtomicPresenter::renderReadyFd(std::uint32_t token) const noexcept {
 
 void KmsAtomicPresenter::discardPreparedFrame(std::uint32_t token) {
   if (impl_) impl_->discardPreparedFrame(token);
+}
+
+bool KmsAtomicPresenter::prepareOverlayCandidate(OverlayCandidate candidate) {
+  return prepareOverlayCandidate(0, std::move(candidate));
+}
+
+bool KmsAtomicPresenter::prepareOverlayCandidate(std::uint32_t token, OverlayCandidate candidate) {
+  if (!impl_) {
+    for (auto& plane : candidate.planes) {
+      if (plane.fd >= 0) close(plane.fd);
+      plane.fd = -1;
+    }
+    return false;
+  }
+  return impl_->prepareOverlayCandidate(token, std::move(candidate));
+}
+
+bool KmsAtomicPresenter::canPrepareOverlayOnly() const noexcept {
+  return impl_ && impl_->canPrepareOverlayOnly();
+}
+
+bool KmsAtomicPresenter::prepareOverlayCandidateForDisplayedFrame(OverlayCandidate candidate) {
+  if (!impl_) {
+    for (auto& plane : candidate.planes) {
+      if (plane.fd >= 0) close(plane.fd);
+      plane.fd = -1;
+    }
+    return false;
+  }
+  return impl_->prepareOverlayCandidateForDisplayedFrame(std::move(candidate));
+}
+
+bool KmsAtomicPresenter::canScheduleOverlayOnly() const noexcept {
+  return impl_ && impl_->canScheduleOverlayOnly();
+}
+
+std::uint32_t KmsAtomicPresenter::scheduleOverlayOnly() {
+  return impl_ ? impl_->scheduleOverlayOnly() : 0u;
+}
+
+bool KmsAtomicPresenter::prepareDirectScanoutCandidate(OverlayCandidate candidate) {
+  if (!impl_) {
+    for (auto& plane : candidate.planes) {
+      if (plane.fd >= 0) close(plane.fd);
+      plane.fd = -1;
+    }
+    return false;
+  }
+  return impl_->prepareDirectScanoutCandidate(std::move(candidate));
+}
+
+bool KmsAtomicPresenter::canScheduleDirectScanout() const noexcept {
+  return impl_ && impl_->canScheduleDirectScanout();
+}
+
+std::uint32_t KmsAtomicPresenter::scheduleDirectScanout() {
+  return impl_ ? impl_->scheduleDirectScanout() : 0u;
+}
+
+void KmsAtomicPresenter::clearPreparedDirectScanout() {
+  if (impl_) impl_->clearPreparedDirectScanout();
+}
+
+void KmsAtomicPresenter::clearPreparedOverlayCandidate() {
+  if (impl_) impl_->clearPreparedOverlayCandidate();
+}
+
+std::uint64_t KmsAtomicPresenter::preparedOverlaySurfaceId() const noexcept {
+  return impl_ ? impl_->preparedOverlaySurfaceId() : 0;
+}
+
+std::vector<std::uint64_t> KmsAtomicPresenter::overlayBufferIdsInUse() const {
+  return impl_ ? impl_->overlayBufferIdsInUse() : std::vector<std::uint64_t>{};
+}
+
+std::vector<KmsDmabufFormatModifier> KmsAtomicPresenter::overlayDmabufFormatModifierPreferences() const {
+  return impl_ ? impl_->overlayDmabufFormatModifierPreferences() : std::vector<KmsDmabufFormatModifier>{};
 }
 
 std::uint32_t KmsAtomicPresenter::schedulePresent(std::uint32_t token) {
