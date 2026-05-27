@@ -96,7 +96,8 @@ inline void tracePacing(char const* format, ...) {
   std::uint64_t const refresh = refreshNsec(refreshMilliHz);
   if (refresh == 0) return clampRenderAheadLeadNsec(lead, refreshMilliHz);
   std::uint64_t const minimumLead = std::max<std::uint64_t>(refresh / 4ull, 1'000'000ull);
-  std::uint64_t const maximumLead = std::max<std::uint64_t>(minimumLead, refresh / 2ull);
+  std::uint64_t const maximumLead =
+      refresh > 2'000'000ull ? std::max<std::uint64_t>(minimumLead, refresh - 1'000'000ull) : minimumLead;
   return std::clamp(lead, minimumLead, maximumLead);
 }
 

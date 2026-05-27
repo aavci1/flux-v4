@@ -858,8 +858,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         if (flipFd >= 0) storage[count++] = flipFd;
       }
       if (presenter->atomicPresenter()) {
-        for (auto const& frame : atomicReadyFrames) {
-          int const readyFd = presenter->atomicPresenter()->renderReadyFd(frame.presentToken);
+        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
+          int const readyFd = presenter->atomicPresenter()->renderReadyFd(frame->presentToken);
           if (readyFd >= 0) {
             storage[count++] = readyFd;
             break;
@@ -887,7 +887,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
       if (!presenter->atomicPresenter() || !frame.ready) return false;
-      if (frame.renderedAhead && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0 &&
+      bool const allowRenderFence = frame.renderedAhead;
+      if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0 &&
           !presenter->atomicPresenter()->updateRenderReady(frame.presentToken)) {
         tracePacing("schedule-wait-render-ready token=%u surfaces=%zu contentSerial=%llu\n",
                     frame.presentToken,
@@ -989,12 +990,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           atomicReadyFrames.empty()) {
         return std::nullopt;
       }
-      std::optional<std::size_t> candidate;
-      for (std::size_t i = 0; i < atomicReadyFrames.size(); ++i) {
-        AtomicReadyFrame const& frame = atomicReadyFrames[i];
-        if (!frame.ready) continue;
-        if (frame.renderedAhead && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0) continue;
-        candidate = i;
+      std::size_t const candidate = atomicReadyFrames.size() - 1;
+      AtomicReadyFrame const& frame = atomicReadyFrames[candidate];
+      if (!frame.ready) return std::nullopt;
+      bool const allowRenderFence = frame.renderedAhead;
+      if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0) {
+        return std::nullopt;
       }
       return candidate;
     };
@@ -1019,8 +1020,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto queuedRenderReadyFd = [&]() -> int {
       if (!presenter->atomicPresenter()) return -1;
-      for (auto const& frame : atomicReadyFrames) {
-        int const fd = presenter->atomicPresenter()->renderReadyFd(frame.presentToken);
+      for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
+        int const fd = presenter->atomicPresenter()->renderReadyFd(frame->presentToken);
         if (fd >= 0) return fd;
       }
       return -1;
