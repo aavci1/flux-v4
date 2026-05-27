@@ -27,7 +27,7 @@ public:
   }
 
   void prepareFrame() override { presenter_->prepareFrame(); }
-  void markFrameRendered() override { presenter_->markFrameRendered(); }
+  void markFrameRendered() override { (void)presenter_->markFrameRendered(); }
 
   [[nodiscard]] bool isAtomic() const noexcept override { return true; }
   [[nodiscard]] platform::KmsAtomicPresenter* atomicPresenter() override { return presenter_.get(); }

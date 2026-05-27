@@ -59,12 +59,14 @@ public:
   KmsAtomicPresenter& operator=(KmsAtomicPresenter&&) noexcept;
 
   Canvas& canvas();
+  [[nodiscard]] bool canPrepareFrame();
   void prepareFrame();
-  void markFrameRendered();
-  [[nodiscard]] bool updateRenderReady();
-  [[nodiscard]] bool canSchedulePresent();
-  [[nodiscard]] int renderReadyFd() const noexcept;
-  std::uint32_t schedulePresent();
+  [[nodiscard]] std::uint32_t markFrameRendered();
+  [[nodiscard]] bool updateRenderReady(std::uint32_t token = 0);
+  [[nodiscard]] bool canSchedulePresent(std::uint32_t token = 0);
+  [[nodiscard]] int renderReadyFd(std::uint32_t token = 0) const noexcept;
+  void discardPreparedFrame(std::uint32_t token);
+  std::uint32_t schedulePresent(std::uint32_t token = 0);
   PageFlipTiming present();
   [[nodiscard]] std::optional<PageFlipTiming> dispatchPageFlipEvents();
   [[nodiscard]] bool hasPendingPageFlip() const noexcept;

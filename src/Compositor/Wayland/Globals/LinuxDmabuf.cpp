@@ -3,6 +3,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include <Flux/Graphics/VulkanContext.hpp>
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 
 #include <drm_fourcc.h>
@@ -43,11 +44,6 @@ constexpr std::array<std::uint32_t, 4> kSupportedDmabufFormats{
     DRM_FORMAT_XBGR8888,
 };
 
-constexpr std::array<std::uint64_t, 2> kSupportedDmabufModifiers{
-    DRM_FORMAT_MOD_INVALID,
-    DRM_FORMAT_MOD_LINEAR,
-};
-
 std::optional<DmabufPlane> findPlane(WaylandServer::Impl::DmabufParams const* params, std::uint32_t index) {
   auto found = std::find_if(params->planes.begin(), params->planes.end(),
                             [index](DmabufPlane const& plane) { return plane.index == index; });
@@ -65,6 +61,56 @@ std::optional<std::uint32_t> bytesPerPixel(std::uint32_t format) {
   default:
     return std::nullopt;
   }
+}
+
+VkFormat vkFormatForDmabufFormat(std::uint32_t drmFormat) {
+  switch (drmFormat) {
+  case DRM_FORMAT_ARGB8888:
+  case DRM_FORMAT_XRGB8888:
+    return VK_FORMAT_B8G8R8A8_UNORM;
+  case DRM_FORMAT_ABGR8888:
+  case DRM_FORMAT_XBGR8888:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  default:
+    return VK_FORMAT_UNDEFINED;
+  }
+}
+
+bool containsModifier(std::vector<std::uint64_t> const& modifiers, std::uint64_t modifier) {
+  return std::find(modifiers.begin(), modifiers.end(), modifier) != modifiers.end();
+}
+
+void appendUniqueModifier(std::vector<std::uint64_t>& modifiers, std::uint64_t modifier) {
+  if (!containsModifier(modifiers, modifier)) modifiers.push_back(modifier);
+}
+
+std::vector<std::uint64_t> sampledDmabufModifiersForFormat(std::uint32_t drmFormat) {
+  std::vector<std::uint64_t> modifiers{DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR};
+  VkPhysicalDevice physical = flux::VulkanContext::instance().physicalDevice();
+  VkFormat const vkFormat = vkFormatForDmabufFormat(drmFormat);
+  if (!physical || vkFormat == VK_FORMAT_UNDEFINED) return modifiers;
+
+  VkDrmFormatModifierPropertiesList2EXT modifierList{
+      VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT};
+  VkFormatProperties2 formatProperties{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2};
+  formatProperties.pNext = &modifierList;
+  vkGetPhysicalDeviceFormatProperties2(physical, vkFormat, &formatProperties);
+  if (modifierList.drmFormatModifierCount == 0) return modifiers;
+
+  std::vector<VkDrmFormatModifierProperties2EXT> properties(modifierList.drmFormatModifierCount);
+  modifierList.pDrmFormatModifierProperties = properties.data();
+  vkGetPhysicalDeviceFormatProperties2(physical, vkFormat, &formatProperties);
+
+  for (VkDrmFormatModifierProperties2EXT const& property : properties) {
+    if (property.drmFormatModifierPlaneCount != 1) continue;
+    if ((property.drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT) == 0) continue;
+    appendUniqueModifier(modifiers, property.drmFormatModifier);
+  }
+  return modifiers;
+}
+
+bool isSupportedDmabufModifier(std::uint32_t format, std::uint64_t modifier) {
+  return containsModifier(sampledDmabufModifiersForFormat(format), modifier);
 }
 
 bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_t width, std::int32_t height,
@@ -101,7 +147,7 @@ bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_
                            "dmabuf plane stride is too small");
     return false;
   }
-  if (plane.modifier != DRM_FORMAT_MOD_INVALID && plane.modifier != DRM_FORMAT_MOD_LINEAR) {
+  if (!isSupportedDmabufModifier(format, plane.modifier)) {
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
                            "unsupported dmabuf modifier 0x%016llx",
                            static_cast<unsigned long long>(plane.modifier));
@@ -139,6 +185,18 @@ wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::Impl::DmabufPa
                                  destroyResourceCallback<WaylandServer::Impl::DmabufBuffer,
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyDmabufBuffer>);
+  static bool loggedNonLinear = false;
+  if (!loggedNonLinear && !raw->planes.empty() && raw->planes.front().modifier != DRM_FORMAT_MOD_LINEAR &&
+      raw->planes.front().modifier != DRM_FORMAT_MOD_INVALID) {
+    loggedNonLinear = true;
+    std::fprintf(stderr,
+                 "lambda-window-manager: first non-linear dmabuf size=%dx%d format=0x%08x stride=%u modifier=0x%016llx\n",
+                 width,
+                 height,
+                 format,
+                 raw->planes.front().stride,
+                 static_cast<unsigned long long>(raw->planes.front().modifier));
+  }
   diagnostics::crashLog("dmabuf-create id=%llu size=%dx%d format=0x%08x flags=0x%08x stride=%u modifier=0x%016llx",
                         static_cast<unsigned long long>(raw->id),
                         width,
@@ -252,9 +310,8 @@ struct zwp_linux_dmabuf_feedback_v1_interface const linuxDmabufFeedbackImpl{
 
 std::vector<DmabufFormatModifier> supportedDmabufFormatTable() {
   std::vector<DmabufFormatModifier> table;
-  table.reserve(kSupportedDmabufFormats.size() * kSupportedDmabufModifiers.size());
   for (std::uint32_t format : kSupportedDmabufFormats) {
-    for (std::uint64_t modifier : kSupportedDmabufModifiers) {
+    for (std::uint64_t modifier : sampledDmabufModifiersForFormat(format)) {
       table.push_back({
           .format = format,
           .padding = 0,
@@ -311,6 +368,13 @@ void sendDeviceArray(wl_resource* resource, bool trancheTarget, std::uint64_t ra
 
 void sendDmabufFeedback(wl_resource* resource, WaylandServer::Impl* server) {
   auto const table = supportedDmabufFormatTable();
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    std::fprintf(stderr,
+                 "lambda-window-manager: linux-dmabuf feedback advertises %zu format/modifier pairs\n",
+                 table.size());
+  }
   int tableFd = createDmabufFormatTableFd(table);
   if (tableFd < 0) {
     wl_resource_post_no_memory(resource);
@@ -376,7 +440,7 @@ struct zwp_linux_dmabuf_v1_interface const linuxDmabufImpl{
 
 void sendDmabufFormat(wl_resource* resource, std::uint32_t format) {
   if (wl_resource_get_version(resource) >= ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION) {
-    for (std::uint64_t modifier : {DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR}) {
+    for (std::uint64_t modifier : sampledDmabufModifiersForFormat(format)) {
       zwp_linux_dmabuf_v1_send_modifier(resource,
                                         format,
                                         static_cast<std::uint32_t>(modifier >> 32u),

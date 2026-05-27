@@ -279,6 +279,7 @@ struct AtomicFrameProfile {
   std::int32_t maxFrameWidth = 0;
   std::int32_t maxFrameHeight = 0;
   std::uint32_t maxDmabufFormat = 0;
+  std::uint64_t maxDmabufModifier = 0;
   std::uint64_t maxAgeSurfaceId = 0;
   double maxInputToRenderMs = 0.0;
   double maxConfigureToRenderMs = 0.0;

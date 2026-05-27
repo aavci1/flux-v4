@@ -18,9 +18,11 @@
 #include <optional>
 #include <ctime>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <drm_fourcc.h>
 #include <gbm.h>
@@ -124,6 +126,14 @@ std::uint64_t gbmModifier(gbm_bo* bo) {
   return modifier == DRM_FORMAT_MOD_INVALID ? DRM_FORMAT_MOD_LINEAR : modifier;
 }
 
+bool containsModifier(std::vector<std::uint64_t> const& modifiers, std::uint64_t modifier) {
+  return std::find(modifiers.begin(), modifiers.end(), modifier) != modifiers.end();
+}
+
+void appendUniqueModifier(std::vector<std::uint64_t>& modifiers, std::uint64_t modifier) {
+  if (!containsModifier(modifiers, modifier)) modifiers.push_back(modifier);
+}
+
 bool forceLinearScanout() {
   char const* value = std::getenv("FLUX_COMPOSITOR_FORCE_LINEAR_SCANOUT");
   return debug::envNonZero(value);
@@ -132,6 +142,14 @@ bool forceLinearScanout() {
 bool useKmsRenderInFence() {
   char const* value = std::getenv("FLUX_COMPOSITOR_USE_KMS_IN_FENCE");
   return !value || !*value || std::strcmp(value, "0") != 0;
+}
+
+bool useDirectScanoutRender() {
+  return debug::envNonZero(std::getenv("FLUX_COMPOSITOR_DIRECT_SCANOUT_RENDER"));
+}
+
+bool disableAutomaticDirectScanoutRender() {
+  return debug::envNonZero(std::getenv("FLUX_COMPOSITOR_DISABLE_DIRECT_SCANOUT_RENDER"));
 }
 
 std::uint32_t propertyId(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
@@ -166,6 +184,88 @@ std::uint64_t propertyValue(int fd, std::uint32_t objectId, std::uint32_t object
   }
   drmModeFreeObjectProperties(props);
   return value;
+}
+
+std::vector<std::uint64_t> planeModifiersForFormat(int fd, std::uint32_t planeId, std::uint32_t drmFormat) {
+  std::vector<std::uint64_t> modifiers;
+  drmModeObjectProperties* props = drmModeObjectGetProperties(fd, planeId, DRM_MODE_OBJECT_PLANE);
+  if (!props) return modifiers;
+  std::uint64_t blobId = 0;
+  for (std::uint32_t i = 0; i < props->count_props; ++i) {
+    drmModePropertyRes* prop = drmModeGetProperty(fd, props->props[i]);
+    if (prop) {
+      bool const matches = std::strcmp(prop->name, "IN_FORMATS") == 0;
+      drmModeFreeProperty(prop);
+      if (matches) {
+        blobId = props->prop_values[i];
+        break;
+      }
+    }
+  }
+  drmModeFreeObjectProperties(props);
+  if (blobId == 0) return modifiers;
+
+  drmModePropertyBlobRes* blob = drmModeGetPropertyBlob(fd, blobId);
+  if (!blob) return modifiers;
+  drmModeFormatModifierIterator iter{};
+  while (drmModeFormatModifierBlobIterNext(blob, &iter)) {
+    if (iter.fmt == drmFormat) appendUniqueModifier(modifiers, iter.mod);
+  }
+  drmModeFreePropertyBlob(blob);
+  return modifiers;
+}
+
+VkFormatFeatureFlags2 formatFeaturesForUsage(VkImageUsageFlags usage) {
+  VkFormatFeatureFlags2 features = 0;
+  if ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0) features |= VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT;
+  if ((usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0) features |= VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
+  if ((usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0) features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT;
+  if ((usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0) features |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT;
+  return features;
+}
+
+std::vector<std::uint64_t> vulkanModifiersForFormat(VkPhysicalDevice physical,
+                                                    VkFormat format,
+                                                    VkImageUsageFlags usage) {
+  std::vector<std::uint64_t> modifiers;
+  VkDrmFormatModifierPropertiesList2EXT modifierList{
+      VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT};
+  VkFormatProperties2 formatProperties{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2};
+  formatProperties.pNext = &modifierList;
+  vkGetPhysicalDeviceFormatProperties2(physical, format, &formatProperties);
+  if (modifierList.drmFormatModifierCount == 0) return modifiers;
+
+  std::vector<VkDrmFormatModifierProperties2EXT> properties(modifierList.drmFormatModifierCount);
+  modifierList.pDrmFormatModifierProperties = properties.data();
+  vkGetPhysicalDeviceFormatProperties2(physical, format, &formatProperties);
+
+  VkFormatFeatureFlags2 const requiredFeatures = formatFeaturesForUsage(usage);
+  for (VkDrmFormatModifierProperties2EXT const& property : properties) {
+    if (property.drmFormatModifierPlaneCount != 1) continue;
+    if ((property.drmFormatModifierTilingFeatures & requiredFeatures) != requiredFeatures) continue;
+    appendUniqueModifier(modifiers, property.drmFormatModifier);
+  }
+  return modifiers;
+}
+
+std::vector<std::uint64_t> scanoutModifiersForUsage(int fd,
+                                                    std::uint32_t planeId,
+                                                    VkPhysicalDevice physical,
+                                                    VkImageUsageFlags usage,
+                                                    bool includeLinear) {
+  std::vector<std::uint64_t> const planeModifiers = planeModifiersForFormat(fd, planeId, DRM_FORMAT_ARGB8888);
+  std::vector<std::uint64_t> const vulkanModifiers =
+      vulkanModifiersForFormat(physical, VK_FORMAT_B8G8R8A8_UNORM, usage);
+  std::vector<std::uint64_t> modifiers;
+  for (std::uint64_t modifier : planeModifiers) {
+    if (modifier == DRM_FORMAT_MOD_INVALID || modifier == DRM_FORMAT_MOD_LINEAR) continue;
+    if (containsModifier(vulkanModifiers, modifier)) appendUniqueModifier(modifiers, modifier);
+  }
+  if (includeLinear && containsModifier(planeModifiers, DRM_FORMAT_MOD_LINEAR) &&
+      containsModifier(vulkanModifiers, DRM_FORMAT_MOD_LINEAR)) {
+    appendUniqueModifier(modifiers, DRM_FORMAT_MOD_LINEAR);
+  }
+  return modifiers;
 }
 
 void addAtomicProperty(drmModeAtomicReq* request,
@@ -285,6 +385,7 @@ public:
       planeId_ = primaryPlaneForCrtc(fd_, connector_.crtcId);
       loadProperties();
       useRenderInFence_ = useKmsRenderInFence() && planeInFenceFd_ != 0;
+      directScanoutRenderForced_ = useDirectScanoutRender();
       useAsyncRenderFence_ = true;
       if (planeInFenceFd_ != 0) {
         std::fprintf(stderr,
@@ -298,12 +399,27 @@ public:
       gbm_ = gbm_create_device(fd_);
       if (!gbm_) throw std::runtime_error("gbm_create_device failed for KMS atomic presenter");
       flux::VulkanContext::instance().ensureInitialized();
+      directScanoutRender_ = directScanoutRenderForced_ || shouldUseAutomaticDirectScanoutRender();
       createCommandPool();
-      createBuffers();
+      try {
+        createBuffers();
+      } catch (...) {
+        if (!directScanoutRender_ || directScanoutRenderForced_) throw;
+        std::fprintf(stderr,
+                     "lambda-window-manager: automatic direct scanout setup failed; falling back to offscreen copy\n");
+        destroyBuffers();
+        directScanoutRender_ = false;
+        createBuffers();
+      }
       canvas_ = flux::createVulkanRenderTargetCanvas(buffers_[0].spec, textSystem_);
       if (!canvas_) throw std::runtime_error("Failed to create atomic KMS render-target canvas");
-      std::fprintf(stderr,
-                   "lambda-window-manager: atomic KMS presenter uses optimal offscreen render targets with copy to scanout\n");
+      if (directScanoutRender_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: atomic KMS presenter renders directly to scanout buffers\n");
+      } else {
+        std::fprintf(stderr,
+                     "lambda-window-manager: atomic KMS presenter uses optimal offscreen render targets with copy to scanout\n");
+      }
     } catch (...) {
       cleanup();
       throw;
@@ -342,32 +458,51 @@ public:
     return *canvas_;
   }
 
-  void prepareFrame() {
-    if (buffers_.empty()) throw std::runtime_error("Atomic KMS presenter has no scanout buffers");
-    std::size_t next = displayedBuffer_ >= 0 ? static_cast<std::size_t>(displayedBuffer_) : 0u;
+  bool canPrepareFrame() {
+    reapDiscardedPreparedFrames();
+    if (buffers_.empty()) return false;
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
-      next = (next + 1u) % buffers_.size();
-      if (static_cast<int>(next) != displayedBuffer_ && static_cast<int>(next) != pendingBuffer_ &&
-          static_cast<int>(next) != renderBuffer_) {
+      Buffer const& buffer = buffers_[i];
+      if (static_cast<int>(i) != displayedBuffer_ && static_cast<int>(i) != pendingBuffer_ &&
+          static_cast<int>(i) != renderBuffer_ && !buffer.prepared) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void prepareFrame() {
+    reapDiscardedPreparedFrames();
+    if (buffers_.empty()) throw std::runtime_error("Atomic KMS presenter has no scanout buffers");
+    std::optional<std::size_t> next;
+    std::size_t candidate = displayedBuffer_ >= 0 ? static_cast<std::size_t>(displayedBuffer_) : 0u;
+    for (std::size_t i = 0; i < buffers_.size(); ++i) {
+      candidate = (candidate + 1u) % buffers_.size();
+      if (static_cast<int>(candidate) != displayedBuffer_ && static_cast<int>(candidate) != pendingBuffer_ &&
+          static_cast<int>(candidate) != renderBuffer_ && !buffers_[candidate].prepared) {
+        next = candidate;
         break;
       }
     }
-    renderBuffer_ = static_cast<int>(next);
-    closeRenderFence(buffers_[next]);
+    if (!next) throw std::runtime_error("No reusable KMS atomic render buffers");
+    renderBuffer_ = static_cast<int>(*next);
+    closeRenderFence(buffers_[*next]);
     if (useAsyncRenderFence_) {
-      resetRenderSemaphore(buffers_[next]);
+      resetRenderSemaphore(buffers_[*next]);
     }
-    buffers_[next].renderComplete = bufferHasNoAsyncRenderFence(buffers_[next]);
-    buffers_[next].renderSubmittedNsec = 0;
-    buffers_[next].renderReadyNsec = 0;
-    beginRenderCommandBuffer(buffers_[next]);
-    if (!flux::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[next].spec)) {
+    buffers_[*next].renderComplete = bufferHasNoAsyncRenderFence(buffers_[*next]);
+    buffers_[*next].renderSubmittedNsec = 0;
+    buffers_[*next].renderReadyNsec = 0;
+    buffers_[*next].prepared = false;
+    buffers_[*next].discardWhenReady = false;
+    beginRenderCommandBuffer(buffers_[*next]);
+    if (!flux::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[*next].spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
   }
 
-  void markFrameRendered() {
-    if (renderBuffer_ < 0) return;
+  std::uint32_t markFrameRendered() {
+    if (renderBuffer_ < 0) return 0;
     Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
     finishRenderCommandBuffer(buffer);
     buffer.renderSubmittedNsec = monotonicNanoseconds();
@@ -377,41 +512,67 @@ public:
       vkQueueWaitIdle(flux::VulkanContext::instance().queue());
       buffer.renderComplete = true;
       buffer.renderReadyNsec = buffer.renderSubmittedNsec;
-      return;
+    } else {
+      buffer.renderFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
+      buffer.renderComplete = false;
+      if (!canUseRenderFence(buffer)) {
+        updateRenderFenceReadiness(buffer);
+      }
     }
-    buffer.renderFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
-    buffer.renderComplete = false;
-    if (!canUseRenderFence(buffer)) {
-      updateRenderFenceReadiness(buffer);
-    }
+    buffer.prepared = true;
+    buffer.discardWhenReady = false;
+    activePreparedBuffer_ = renderBuffer_;
+    std::uint32_t const token = tokenForBuffer(renderBuffer_);
+    renderBuffer_ = -1;
+    return token;
   }
 
-  bool updateRenderReady() {
-    if (renderBuffer_ < 0) return true;
-    Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+  bool updateRenderReady(std::uint32_t token = 0) {
+    int const index = preparedBufferForToken(token);
+    if (index < 0) return true;
+    Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
     updateRenderFenceReadiness(buffer);
+    releaseDiscardedPreparedBuffer(index);
     return buffer.renderComplete;
   }
 
-  bool canSchedulePresent() {
-    if (renderBuffer_ < 0) return false;
-    bool const renderReady = updateRenderReady();
+  bool canSchedulePresent(std::uint32_t token = 0) {
+    int const index = preparedBufferForToken(token);
+    if (index < 0) return false;
+    bool const renderReady = updateRenderReady(token);
     if (pageFlipPending_) return false;
-    Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    Buffer const& buffer = buffers_[static_cast<std::size_t>(index)];
     return renderReady || canUseRenderFence(buffer);
   }
 
-  int renderReadyFd() const noexcept {
-    if (renderBuffer_ < 0) return -1;
-    Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+  int renderReadyFd(std::uint32_t token = 0) const noexcept {
+    int const index = preparedBufferForToken(token);
+    if (index < 0) return -1;
+    Buffer const& buffer = buffers_[static_cast<std::size_t>(index)];
     return buffer.renderComplete ? -1 : buffer.renderFenceFd;
   }
 
-  std::uint32_t schedulePresent() {
+  void discardPreparedFrame(std::uint32_t token) {
+    int const index = preparedBufferForToken(token);
+    if (index < 0) return;
+    Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
+    if (!buffer.prepared) return;
+    if (index == activePreparedBuffer_) activePreparedBuffer_ = -1;
+    if (buffer.renderComplete) {
+      releasePreparedBuffer(index);
+    } else {
+      buffer.discardWhenReady = true;
+      updateRenderFenceReadiness(buffer);
+      releaseDiscardedPreparedBuffer(index);
+    }
+  }
+
+  std::uint32_t schedulePresent(std::uint32_t token = 0) {
     if (pageFlipPending_) throw std::runtime_error("KMS atomic page flip is already pending");
-    if (renderBuffer_ < 0) prepareFrame();
-    if (!canSchedulePresent()) throw std::runtime_error("KMS atomic render buffer is not ready");
-    Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    int const index = preparedBufferForToken(token);
+    if (index < 0) throw std::runtime_error("KMS atomic presenter has no prepared render buffer");
+    if (!canSchedulePresent(token)) throw std::runtime_error("KMS atomic render buffer is not ready");
+    Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
@@ -470,8 +631,10 @@ public:
       drmModeAtomicFree(request);
       request = nullptr;
       modesetDone_ = true;
-      pendingBuffer_ = renderBuffer_;
-      renderBuffer_ = -1;
+      pendingBuffer_ = index;
+      buffer.prepared = false;
+      buffer.discardWhenReady = false;
+      if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
@@ -529,10 +692,59 @@ private:
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     int renderFenceFd = -1;
     bool renderComplete = true;
+    bool prepared = false;
+    bool discardWhenReady = false;
     std::uint64_t renderSubmittedNsec = 0;
     std::uint64_t renderReadyNsec = 0;
     VulkanRenderTargetSpec spec{};
   };
+
+  std::uint32_t tokenForBuffer(int index) const noexcept {
+    return index >= 0 ? static_cast<std::uint32_t>(index + 1) : 0u;
+  }
+
+  int bufferForToken(std::uint32_t token) const noexcept {
+    if (token == 0) return activePreparedBuffer_;
+    int const index = static_cast<int>(token - 1u);
+    if (index < 0 || index >= static_cast<int>(buffers_.size())) return -1;
+    return index;
+  }
+
+  int preparedBufferForToken(std::uint32_t token) const noexcept {
+    int const index = bufferForToken(token);
+    if (index < 0) return -1;
+    Buffer const& buffer = buffers_[static_cast<std::size_t>(index)];
+    return buffer.prepared ? index : -1;
+  }
+
+  void releasePreparedBuffer(int index) noexcept {
+    if (index < 0 || index >= static_cast<int>(buffers_.size())) return;
+    Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
+    closeRenderFence(buffer);
+    buffer.prepared = false;
+    buffer.discardWhenReady = false;
+    buffer.renderComplete = true;
+    buffer.renderSubmittedNsec = 0;
+    buffer.renderReadyNsec = 0;
+    if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
+  }
+
+  void releaseDiscardedPreparedBuffer(int index) {
+    if (index < 0 || index >= static_cast<int>(buffers_.size())) return;
+    Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
+    if (buffer.prepared && buffer.discardWhenReady && buffer.renderComplete) {
+      releasePreparedBuffer(index);
+    }
+  }
+
+  void reapDiscardedPreparedFrames() {
+    for (std::size_t i = 0; i < buffers_.size(); ++i) {
+      Buffer& buffer = buffers_[i];
+      if (!buffer.prepared || !buffer.discardWhenReady) continue;
+      updateRenderFenceReadiness(buffer);
+      releaseDiscardedPreparedBuffer(static_cast<int>(i));
+    }
+  }
 
   static bool bufferHasNoAsyncRenderFence(Buffer const& buffer) noexcept {
     return buffer.renderFinished == VK_NULL_HANDLE;
@@ -616,9 +828,40 @@ private:
     }
   }
 
+  void destroyBuffers() {
+    VkDevice device = flux::VulkanContext::instance().device();
+    if (device) vkDeviceWaitIdle(device);
+    for (auto& buffer : buffers_) {
+      closeRenderFence(buffer);
+      if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+      if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);
+      if (buffer.offscreenImage) vkDestroyImage(device, buffer.offscreenImage, nullptr);
+      if (buffer.offscreenMemory) vkFreeMemory(device, buffer.offscreenMemory, nullptr);
+      if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
+      if (buffer.image) vkDestroyImage(device, buffer.image, nullptr);
+      if (buffer.memory) vkFreeMemory(device, buffer.memory, nullptr);
+      if (buffer.fbId) drmModeRmFB(fd_, buffer.fbId);
+      if (buffer.bo) gbm_bo_destroy(buffer.bo);
+    }
+    buffers_.clear();
+    displayedBuffer_ = -1;
+    pendingBuffer_ = -1;
+    renderBuffer_ = -1;
+  }
+
   Buffer createBuffer() {
     Buffer buffer{};
-    if (!forceLinearScanout()) {
+    std::vector<std::uint64_t> const modifiers = preferredScanoutModifiers();
+    if (!modifiers.empty()) {
+      buffer.bo = gbm_bo_create_with_modifiers2(gbm_,
+                                                connector_.mode.hdisplay,
+                                                connector_.mode.vdisplay,
+                                                GBM_FORMAT_ARGB8888,
+                                                modifiers.data(),
+                                                static_cast<unsigned int>(modifiers.size()),
+                                                GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+    }
+    if (!buffer.bo && !forceLinearScanout()) {
       buffer.bo = gbm_bo_create(gbm_,
                                 connector_.mode.hdisplay,
                                 connector_.mode.vdisplay,
@@ -643,19 +886,27 @@ private:
                                 GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT | GBM_BO_USE_LINEAR);
     }
     if (!buffer.bo) throw std::runtime_error("gbm_bo_create failed for KMS atomic scanout buffer");
+    if (directScanoutRender_ && !directScanoutRenderForced_ && gbmModifier(buffer.bo) == DRM_FORMAT_MOD_LINEAR) {
+      destroyPartialBuffer(buffer);
+      throw std::runtime_error("automatic direct scanout selected a linear buffer");
+    }
     try {
       buffer.fbId = createFramebuffer(buffer.bo);
       importBufferToVulkan(buffer);
-      createOffscreenTarget(buffer);
+      if (!directScanoutRender_) {
+        createOffscreenTarget(buffer);
+      }
       allocateCommandBuffer(buffer);
+      VkImage renderImage = directScanoutRender_ ? buffer.image : buffer.offscreenImage;
+      VkImageView renderView = directScanoutRender_ ? buffer.view : buffer.offscreenView;
       buffer.spec = VulkanRenderTargetSpec{
-          .image = buffer.offscreenImage,
-          .view = buffer.offscreenView,
+          .image = renderImage,
+          .view = renderView,
           .format = VK_FORMAT_B8G8R8A8_UNORM,
           .width = connector_.mode.hdisplay,
           .height = connector_.mode.vdisplay,
           .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-          .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+          .finalLayout = directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
           .commandBuffer = buffer.commandBuffer,
       };
       std::fprintf(stderr,
@@ -669,6 +920,57 @@ private:
       throw;
     }
     return buffer;
+  }
+
+  static VkImageUsageFlags directScanoutImageUsage() noexcept {
+    return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+           VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  }
+
+  static VkImageUsageFlags copyScanoutImageUsage() noexcept {
+    return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  }
+
+  VkImageUsageFlags scanoutImageUsage() const noexcept {
+    return directScanoutRender_ ? directScanoutImageUsage() : copyScanoutImageUsage();
+  }
+
+  bool shouldUseAutomaticDirectScanoutRender() const {
+    if (disableAutomaticDirectScanoutRender()) return false;
+    auto const modifiers = scanoutModifiersForUsage(fd_,
+                                                    planeId_,
+                                                    flux::VulkanContext::instance().physicalDevice(),
+                                                    directScanoutImageUsage(),
+                                                    false);
+    if (modifiers.empty()) return false;
+    std::fprintf(stderr,
+                 "lambda-window-manager: automatic direct scanout candidate modifier=0x%016llx count=%zu\n",
+                 static_cast<unsigned long long>(modifiers.front()),
+                 modifiers.size());
+    return true;
+  }
+
+  std::vector<std::uint64_t> preferredScanoutModifiers() const {
+    if (forceLinearScanout()) return {DRM_FORMAT_MOD_LINEAR};
+    std::vector<std::uint64_t> const planeModifiers = planeModifiersForFormat(fd_, planeId_, DRM_FORMAT_ARGB8888);
+    std::vector<std::uint64_t> const vulkanModifiers = vulkanModifiersForFormat(
+        flux::VulkanContext::instance().physicalDevice(), VK_FORMAT_B8G8R8A8_UNORM, scanoutImageUsage());
+    std::vector<std::uint64_t> const modifiers =
+        scanoutModifiersForUsage(fd_,
+                                 planeId_,
+                                 flux::VulkanContext::instance().physicalDevice(),
+                                 scanoutImageUsage(),
+                                 true);
+    if (!modifiers.empty()) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: atomic scanout modifiers: plane=%zu vulkan=%zu selected=%zu first=0x%016llx%s\n",
+                   planeModifiers.size(),
+                   vulkanModifiers.size(),
+                   modifiers.size(),
+                   static_cast<unsigned long long>(modifiers.front()),
+                   modifiers.front() == DRM_FORMAT_MOD_LINEAR ? " linear" : "");
+    }
+    return modifiers;
   }
 
   void createOffscreenTarget(Buffer& buffer) {
@@ -756,35 +1058,37 @@ private:
 
   void finishRenderCommandBuffer(Buffer& buffer) {
     if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
-    transitionImage(buffer.commandBuffer,
-                    buffer.image,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_NONE,
-                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    VK_ACCESS_2_NONE,
-                    VK_ACCESS_2_TRANSFER_WRITE_BIT);
-    VkImageCopy copy{};
-    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.srcSubresource.layerCount = 1;
-    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.dstSubresource.layerCount = 1;
-    copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
-    vkCmdCopyImage(buffer.commandBuffer,
-                   buffer.offscreenImage,
-                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   buffer.image,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   1,
-                   &copy);
-    transitionImage(buffer.commandBuffer,
-                    buffer.image,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    VK_ACCESS_2_MEMORY_READ_BIT);
+    if (!directScanoutRender_) {
+      transitionImage(buffer.commandBuffer,
+                      buffer.image,
+                      VK_IMAGE_LAYOUT_UNDEFINED,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                      VK_PIPELINE_STAGE_2_NONE,
+                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                      VK_ACCESS_2_NONE,
+                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
+      VkImageCopy copy{};
+      copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      copy.srcSubresource.layerCount = 1;
+      copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      copy.dstSubresource.layerCount = 1;
+      copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+      vkCmdCopyImage(buffer.commandBuffer,
+                     buffer.offscreenImage,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     buffer.image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     1,
+                     &copy);
+      transitionImage(buffer.commandBuffer,
+                      buffer.image,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                      VK_IMAGE_LAYOUT_GENERAL,
+                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                      VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                      VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                      VK_ACCESS_2_MEMORY_READ_BIT);
+    }
     vkCheck(vkEndCommandBuffer(buffer.commandBuffer), "vkEndCommandBuffer atomic KMS presenter");
     buffer.commandBufferRecording = false;
 
@@ -895,8 +1199,7 @@ private:
       imageInfo.arrayLayers = 1;
       imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
       imageInfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-      imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+      imageInfo.usage = scanoutImageUsage();
       imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
       imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       vkCheck(vkCreateImage(device, &imageInfo, nullptr, &buffer.image), "vkCreateImage atomic KMS buffer");
@@ -924,15 +1227,17 @@ private:
               "vkAllocateMemory atomic KMS buffer");
       fd = -1;
       vkCheck(vkBindImageMemory(device, buffer.image, buffer.memory, 0), "vkBindImageMemory atomic KMS buffer");
-      VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-      viewInfo.image = buffer.image;
-      viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
-      viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      viewInfo.subresourceRange.levelCount = 1;
-      viewInfo.subresourceRange.layerCount = 1;
-      vkCheck(vkCreateImageView(device, &viewInfo, nullptr, &buffer.view),
-              "vkCreateImageView atomic KMS buffer");
+      if (directScanoutRender_) {
+        VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        viewInfo.image = buffer.image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.layerCount = 1;
+        vkCheck(vkCreateImageView(device, &viewInfo, nullptr, &buffer.view),
+                "vkCreateImageView atomic KMS buffer");
+      }
     } catch (...) {
       if (fd >= 0) close(fd);
       throw;
@@ -1004,11 +1309,14 @@ private:
   std::uint32_t planeInFenceFd_ = 0;
   bool useRenderInFence_ = false;
   bool useAsyncRenderFence_ = false;
+  bool directScanoutRenderForced_ = false;
+  bool directScanoutRender_ = false;
   bool modesetDone_ = false;
   bool pageFlipPending_ = false;
   int displayedBuffer_ = -1;
   int pendingBuffer_ = -1;
   int renderBuffer_ = -1;
+  int activePreparedBuffer_ = -1;
   std::uint32_t nextPresentId_ = 1;
   KmsAtomicPresenter::PageFlipTiming pendingTiming_{};
   std::vector<Buffer> buffers_;
@@ -1047,28 +1355,36 @@ Canvas& KmsAtomicPresenter::canvas() {
   return impl_->canvas();
 }
 
+bool KmsAtomicPresenter::canPrepareFrame() {
+  return impl_ && impl_->canPrepareFrame();
+}
+
 void KmsAtomicPresenter::prepareFrame() {
   if (impl_) impl_->prepareFrame();
 }
 
-void KmsAtomicPresenter::markFrameRendered() {
-  if (impl_) impl_->markFrameRendered();
+std::uint32_t KmsAtomicPresenter::markFrameRendered() {
+  return impl_ ? impl_->markFrameRendered() : 0u;
 }
 
-bool KmsAtomicPresenter::updateRenderReady() {
-  return impl_ ? impl_->updateRenderReady() : true;
+bool KmsAtomicPresenter::updateRenderReady(std::uint32_t token) {
+  return impl_ ? impl_->updateRenderReady(token) : true;
 }
 
-bool KmsAtomicPresenter::canSchedulePresent() {
-  return impl_ && impl_->canSchedulePresent();
+bool KmsAtomicPresenter::canSchedulePresent(std::uint32_t token) {
+  return impl_ && impl_->canSchedulePresent(token);
 }
 
-int KmsAtomicPresenter::renderReadyFd() const noexcept {
-  return impl_ ? impl_->renderReadyFd() : -1;
+int KmsAtomicPresenter::renderReadyFd(std::uint32_t token) const noexcept {
+  return impl_ ? impl_->renderReadyFd(token) : -1;
 }
 
-std::uint32_t KmsAtomicPresenter::schedulePresent() {
-  return impl_ ? impl_->schedulePresent() : 0u;
+void KmsAtomicPresenter::discardPreparedFrame(std::uint32_t token) {
+  if (impl_) impl_->discardPreparedFrame(token);
+}
+
+std::uint32_t KmsAtomicPresenter::schedulePresent(std::uint32_t token) {
+  return impl_ ? impl_->schedulePresent(token) : 0u;
 }
 
 KmsAtomicPresenter::PageFlipTiming KmsAtomicPresenter::present() {

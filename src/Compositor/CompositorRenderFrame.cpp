@@ -121,9 +121,10 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     auto const canvasPresentStart = profileNow();
     ctx.canvas.present();
     atomicFrameProfile.canvasPresentMs = profileMs(canvasPresentStart);
+    std::uint32_t presentToken = 0;
     if (atomicPresenter) {
       auto const kmsPresentStart = profileNow();
-      atomicPresenter->markFrameRendered();
+      presentToken = atomicPresenter->markFrameRendered();
       atomicFrameProfile.kmsPresentMs = profileMs(kmsPresentStart);
     }
     atomicFrameProfile.presentMs = profileMs(phaseStart);
@@ -152,6 +153,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
               : 0.0;
       *ctx.atomicReadyFrame = AtomicReadyFrame{
           .ready = true,
+          .presentToken = presentToken,
           .timing = presentationTiming,
           .surfaceCount = committedSurfaceCount,
           .frameTime = frameTime,
@@ -189,6 +191,8 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       atomicFrameProfile.maxBufferWidth = surface.bufferWidth;
       atomicFrameProfile.maxBufferHeight = surface.bufferHeight;
       atomicFrameProfile.maxDmabufFormat = surface.dmabufFormat;
+      atomicFrameProfile.maxDmabufModifier =
+          surface.dmabufPlanes.empty() ? 0 : surface.dmabufPlanes.front().modifier;
     }
     if (surface.width * surface.height > atomicFrameProfile.maxFrameWidth * atomicFrameProfile.maxFrameHeight) {
       atomicFrameProfile.maxFrameWidth = surface.width;
@@ -295,9 +299,10 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   auto const canvasPresentStart = profileNow();
   ctx.canvas.present();
   atomicFrameProfile.canvasPresentMs = profileMs(canvasPresentStart);
+  std::uint32_t presentToken = 0;
   if (atomicPresenter) {
     auto const kmsPresentStart = profileNow();
-    atomicPresenter->markFrameRendered();
+    presentToken = atomicPresenter->markFrameRendered();
     atomicFrameProfile.kmsPresentMs = profileMs(kmsPresentStart);
   }
   atomicFrameProfile.presentMs = profileMs(phaseStart);
@@ -309,6 +314,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
             : 0.0;
     *ctx.atomicReadyFrame = AtomicReadyFrame{
         .ready = true,
+        .presentToken = presentToken,
         .timing = presentationTiming,
         .surfaceCount = committedSurfaceCount,
         .frameTime = frameTime,

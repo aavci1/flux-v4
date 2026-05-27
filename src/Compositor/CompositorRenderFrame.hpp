@@ -27,6 +27,7 @@ struct LoopInstrumentation;
 
 struct AtomicReadyFrame {
   bool ready = false;
+  std::uint32_t presentToken = 0;
   PresentationTiming timing{};
   std::size_t surfaceCount = 0;
   std::chrono::steady_clock::time_point frameTime{};
