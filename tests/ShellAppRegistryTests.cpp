@@ -332,6 +332,8 @@ TEST_CASE("Shell app registry resolves configured icon themes through XDG roots"
   std::ofstream(shellConfig) << "[appearance]\nicon_theme = \"Lambda\"\n";
 
   CHECK(lambda_shell::configuredIconThemeName() == "Lambda");
+  std::ofstream(shellConfig) << "[appearance]\nicon_theme = 'Lambda'\n";
+  CHECK(lambda_shell::configuredIconThemeName() == "Lambda");
   CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "Lambda", 48) == themedIcon);
   CHECK(lambda_shell::resolveIconThemePath("lambda-files", "Lambda", 48) == inheritedIcon);
   CHECK(lambda_shell::resolveIconThemePath("lambda-settings", "Lambda", 48) == fallbackIcon);

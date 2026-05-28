@@ -53,6 +53,7 @@ endif()
 
 flux_add_example(lambda-files lambda-files/main.cpp lambda-files/FilesStore.cpp ${CMAKE_SOURCE_DIR}/src/Shell/ShellAppRegistry.cpp)
 target_include_directories(lambda-files PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(lambda-files PRIVATE tomlplusplus::tomlplusplus)
 flux_add_example(lambda-settings lambda-settings/main.cpp lambda-settings/SettingsBackend.cpp)
 target_link_libraries(lambda-settings PRIVATE tomlplusplus::tomlplusplus)
 

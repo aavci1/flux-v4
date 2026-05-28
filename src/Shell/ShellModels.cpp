@@ -2,8 +2,11 @@
 
 #include <Flux/Shell/ShellIpc.hpp>
 
+#include <toml++/toml.hpp>
+
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -118,56 +121,24 @@ std::string tomlStringArray(std::vector<std::string> const& values) {
   return output;
 }
 
-std::string trim(std::string_view value) {
-  std::size_t begin = 0;
-  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
-  std::size_t end = value.size();
-  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
-  return std::string(value.substr(begin, end - begin));
+std::optional<std::int64_t> readTomlInt(toml::table const& table, char const* key) {
+  return table[key].value<std::int64_t>();
 }
 
-bool parseBoolValue(std::string value, bool fallback) {
-  value = lowerAscii(trim(value));
-  if (value == "true" || value == "1" || value == "yes") return true;
-  if (value == "false" || value == "0" || value == "no") return false;
-  return fallback;
+std::optional<bool> readTomlBool(toml::table const& table, char const* key) {
+  return table[key].value<bool>();
 }
 
-std::optional<long long> parseIntegerValue(std::string value) {
-  value = trim(value);
-  char* end = nullptr;
-  long long parsed = std::strtoll(value.c_str(), &end, 10);
-  if (end == value.c_str() || *end != '\0') return std::nullopt;
-  return parsed;
+std::optional<std::string> readTomlString(toml::table const& table, char const* key) {
+  return table[key].value<std::string>();
 }
 
-std::vector<std::string> parseStringArray(std::string_view value) {
+std::vector<std::string> readTomlStringArray(toml::table const& table, char const* key) {
   std::vector<std::string> strings;
-  auto left = value.find('[');
-  auto right = value.rfind(']');
-  if (left == std::string_view::npos || right == std::string_view::npos || right <= left) return strings;
-  std::string current;
-  bool quoted = false;
-  bool escaped = false;
-  for (char ch : value.substr(left + 1u, right - left - 1u)) {
-    if (escaped) {
-      current.push_back(ch);
-      escaped = false;
-      continue;
-    }
-    if (ch == '\\') {
-      escaped = true;
-      continue;
-    }
-    if (ch == '"') {
-      if (quoted) {
-        strings.push_back(current);
-        current.clear();
-      }
-      quoted = !quoted;
-      continue;
-    }
-    if (quoted) current.push_back(ch);
+  auto* array = table[key].as_array();
+  if (!array) return strings;
+  for (auto const& item : *array) {
+    if (auto value = item.value<std::string>()) strings.push_back(*value);
   }
   return strings;
 }
@@ -649,102 +620,81 @@ ClipboardHistoryPolicy clipboardHistoryPolicy(ShellConfig const& config) {
 
 ShellConfig parseShellConfig(std::string_view tomlText) {
   ShellConfig config = defaultShellConfig();
-  std::istringstream input{std::string(tomlText)};
-  std::string section;
-  std::string line;
-  while (std::getline(input, line)) {
-    std::string_view view(line);
-    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
-    std::string stripped = trim(view);
-    if (stripped.empty()) continue;
-    if (stripped.front() == '[' && stripped.back() == ']') {
-      section = stripped.substr(1u, stripped.size() - 2u);
-      continue;
+  toml::table root;
+  try {
+    root = toml::parse(std::string(tomlText));
+  } catch (...) {
+    return config;
+  }
+
+  if (auto* appearance = root["appearance"].as_table()) {
+    if (auto value = readTomlString(*appearance, "icon_theme")) config.iconTheme = *value;
+    if (auto value = readTomlString(*appearance, "symbolic_icon_theme")) config.symbolicIconTheme = *value;
+    if (auto value = readTomlInt(*appearance, "icon_size"); value && *value > 0 && *value <= 512) {
+      config.iconSize = static_cast<int>(*value);
     }
-    auto equals = stripped.find('=');
-    if (equals == std::string::npos) continue;
-    std::string key = trim(std::string_view(stripped).substr(0, equals));
-    std::string value = trim(std::string_view(stripped).substr(equals + 1u));
-    std::string fullKey = section.empty() ? key : section + "." + key;
-    if (fullKey == "appearance.icon_theme") {
-      if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
-        config.iconTheme = value.substr(1u, value.size() - 2u);
-      }
-    } else if (fullKey == "appearance.symbolic_icon_theme") {
-      if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
-        config.symbolicIconTheme = value.substr(1u, value.size() - 2u);
-      }
-    } else if (fullKey == "appearance.icon_size") {
-      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 512) {
-        config.iconSize = static_cast<int>(*parsed);
-      }
-    } else if (fullKey == "appearance.reduced_motion") {
-      config.reducedMotion = parseBoolValue(value, config.reducedMotion);
-    } else if (fullKey == "dock.position") {
-      if (value == "\"left\"" || value == "\"right\"" || value == "\"bottom\"") {
-        config.dockPosition = value.substr(1u, value.size() - 2u);
-      }
-    } else if (fullKey == "dock.auto_hide") {
-      config.dockAutoHide = parseBoolValue(value, config.dockAutoHide);
-    } else if (fullKey == "dock.show_running_unpinned") {
-      config.showRunningUnpinned = parseBoolValue(value, config.showRunningUnpinned);
-    } else if (fullKey == "dock.show_tooltips") {
-      config.dockShowTooltips = parseBoolValue(value, config.dockShowTooltips);
-    } else if (fullKey == "dock.pinned") {
-      auto pins = parseStringArray(value);
-      if (!pins.empty()) config.dockPinned = std::move(pins);
-    } else if (fullKey == "top_bar.clock_format") {
-      if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
-        config.topBarClockFormat = value.substr(1u, value.size() - 2u);
-      }
-    } else if (fullKey == "top_bar.show_active_title") {
-      config.topBarShowActiveTitle = parseBoolValue(value, config.topBarShowActiveTitle);
-    } else if (fullKey == "top_bar.modules") {
-      auto modules = parseStringArray(value);
-      if (!modules.empty()) config.topBarModules = std::move(modules);
-    } else if (fullKey == "quick_settings.modules") {
-      auto modules = parseStringArray(value);
-      if (!modules.empty()) config.quickSettingsModules = std::move(modules);
-    } else if (fullKey == "notifications.enabled") {
-      config.notificationsEnabled = parseBoolValue(value, config.notificationsEnabled);
-    } else if (fullKey == "notifications.do_not_disturb") {
-      config.notificationsDoNotDisturb = parseBoolValue(value, config.notificationsDoNotDisturb);
-    } else if (fullKey == "notifications.banner_timeout_seconds") {
-      if (auto parsed = parseIntegerValue(value); parsed && *parsed >= 0 && *parsed <= 3600) {
-        config.notificationBannerTimeoutSeconds = static_cast<int>(*parsed);
-      }
-    } else if (fullKey == "notifications.history_limit") {
-      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 1000) {
-        config.notificationHistoryLimit = static_cast<std::size_t>(*parsed);
-      }
-    } else if (fullKey == "notifications.show_previews") {
-      config.notificationShowPreviews = parseBoolValue(value, config.notificationShowPreviews);
-    } else if (fullKey == "clipboard_history.enabled") {
-      config.clipboardHistoryEnabled = parseBoolValue(value, config.clipboardHistoryEnabled);
-    } else if (fullKey == "clipboard_history.persist") {
-      config.clipboardHistoryPersist = parseBoolValue(value, config.clipboardHistoryPersist);
-    } else if (fullKey == "clipboard_history.max_entries") {
-      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 1000) {
-        config.clipboardHistoryMaxEntries = static_cast<std::size_t>(*parsed);
-      }
-    } else if (fullKey == "clipboard_history.max_text_bytes") {
-      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 128 * 1024 * 1024) {
-        config.clipboardHistoryMaxTextBytes = static_cast<std::size_t>(*parsed);
-      }
-    } else if (fullKey == "clipboard_history.record_primary_selection") {
-      config.clipboardHistoryRecordPrimarySelection =
-          parseBoolValue(value, config.clipboardHistoryRecordPrimarySelection);
-    } else if (fullKey == "launcher.empty_query") {
-      if (value == "\"recommended\"" || value == "\"apps\"" || value == "\"recent\"") {
-        config.launcherEmptyQuery = value.substr(1u, value.size() - 2u);
-      }
-    } else if (fullKey == "launcher.max_results") {
-      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 100) {
-        config.launcherMaxResults = static_cast<std::size_t>(*parsed);
-      }
-    } else if (fullKey == "launcher.show_categories") {
-      config.launcherShowCategories = parseBoolValue(value, config.launcherShowCategories);
+    if (auto value = readTomlBool(*appearance, "reduced_motion")) config.reducedMotion = *value;
+  }
+
+  if (auto* dock = root["dock"].as_table()) {
+    if (auto value = readTomlString(*dock, "position");
+        value && (*value == "left" || *value == "right" || *value == "bottom")) {
+      config.dockPosition = *value;
     }
+    if (auto value = readTomlBool(*dock, "auto_hide")) config.dockAutoHide = *value;
+    if (auto value = readTomlBool(*dock, "show_running_unpinned")) config.showRunningUnpinned = *value;
+    if (auto value = readTomlBool(*dock, "show_tooltips")) config.dockShowTooltips = *value;
+    auto pins = readTomlStringArray(*dock, "pinned");
+    if (!pins.empty()) config.dockPinned = std::move(pins);
+  }
+
+  if (auto* topBar = root["top_bar"].as_table()) {
+    if (auto value = readTomlString(*topBar, "clock_format")) config.topBarClockFormat = *value;
+    if (auto value = readTomlBool(*topBar, "show_active_title")) config.topBarShowActiveTitle = *value;
+    auto modules = readTomlStringArray(*topBar, "modules");
+    if (!modules.empty()) config.topBarModules = std::move(modules);
+  }
+
+  if (auto* quickSettings = root["quick_settings"].as_table()) {
+    auto modules = readTomlStringArray(*quickSettings, "modules");
+    if (!modules.empty()) config.quickSettingsModules = std::move(modules);
+  }
+
+  if (auto* notifications = root["notifications"].as_table()) {
+    if (auto value = readTomlBool(*notifications, "enabled")) config.notificationsEnabled = *value;
+    if (auto value = readTomlBool(*notifications, "do_not_disturb")) config.notificationsDoNotDisturb = *value;
+    if (auto value = readTomlInt(*notifications, "banner_timeout_seconds"); value && *value >= 0 && *value <= 3600) {
+      config.notificationBannerTimeoutSeconds = static_cast<int>(*value);
+    }
+    if (auto value = readTomlInt(*notifications, "history_limit"); value && *value > 0 && *value <= 1000) {
+      config.notificationHistoryLimit = static_cast<std::size_t>(*value);
+    }
+    if (auto value = readTomlBool(*notifications, "show_previews")) config.notificationShowPreviews = *value;
+  }
+
+  if (auto* clipboard = root["clipboard_history"].as_table()) {
+    if (auto value = readTomlBool(*clipboard, "enabled")) config.clipboardHistoryEnabled = *value;
+    if (auto value = readTomlBool(*clipboard, "persist")) config.clipboardHistoryPersist = *value;
+    if (auto value = readTomlInt(*clipboard, "max_entries"); value && *value > 0 && *value <= 1000) {
+      config.clipboardHistoryMaxEntries = static_cast<std::size_t>(*value);
+    }
+    if (auto value = readTomlInt(*clipboard, "max_text_bytes"); value && *value > 0 && *value <= 128 * 1024 * 1024) {
+      config.clipboardHistoryMaxTextBytes = static_cast<std::size_t>(*value);
+    }
+    if (auto value = readTomlBool(*clipboard, "record_primary_selection")) {
+      config.clipboardHistoryRecordPrimarySelection = *value;
+    }
+  }
+
+  if (auto* launcher = root["launcher"].as_table()) {
+    if (auto value = readTomlString(*launcher, "empty_query");
+        value && (*value == "recommended" || *value == "apps" || *value == "recent")) {
+      config.launcherEmptyQuery = *value;
+    }
+    if (auto value = readTomlInt(*launcher, "max_results"); value && *value > 0 && *value <= 100) {
+      config.launcherMaxResults = static_cast<std::size_t>(*value);
+    }
+    if (auto value = readTomlBool(*launcher, "show_categories")) config.launcherShowCategories = *value;
   }
   return config;
 }

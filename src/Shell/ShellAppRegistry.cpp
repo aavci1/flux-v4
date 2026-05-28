@@ -1,5 +1,7 @@
 #include "Shell/ShellAppRegistry.hpp"
 
+#include <toml++/toml.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -108,28 +110,6 @@ std::vector<std::string> splitCommaList(std::string_view value) {
   return list;
 }
 
-std::string parseQuotedTomlString(std::string_view value) {
-  value = trim(value);
-  if (value.size() < 2u || value.front() != '"' || value.back() != '"') return {};
-  std::string out;
-  out.reserve(value.size() - 2u);
-  bool escaped = false;
-  for (std::size_t i = 1u; i + 1u < value.size(); ++i) {
-    char const ch = value[i];
-    if (escaped) {
-      out.push_back(ch);
-      escaped = false;
-      continue;
-    }
-    if (ch == '\\') {
-      escaped = true;
-      continue;
-    }
-    out.push_back(ch);
-  }
-  return out;
-}
-
 bool parseBool(std::string_view value) {
   std::string text = lowerAscii(trim(value));
   return text == "true" || text == "1" || text == "yes";
@@ -192,23 +172,15 @@ std::filesystem::path configuredShellPath() {
 std::string iconThemeFromShellConfig(std::filesystem::path const& path) {
   std::ifstream input(path);
   if (!input) return {};
-  bool inAppearance = false;
-  std::string line;
-  while (std::getline(input, line)) {
-    std::string_view view(line);
-    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
-    std::string stripped = trim(view);
-    if (stripped.empty()) continue;
-    if (stripped.front() == '[' && stripped.back() == ']') {
-      inAppearance = stripped == "[appearance]";
-      continue;
+  std::ostringstream contents;
+  contents << input.rdbuf();
+  try {
+    toml::table const root = toml::parse(contents.str());
+    if (auto* appearance = root["appearance"].as_table()) {
+      if (auto theme = (*appearance)["icon_theme"].value<std::string>()) return *theme;
     }
-    if (!inAppearance) continue;
-    auto equals = stripped.find('=');
-    if (equals == std::string::npos) continue;
-    std::string key = trim(std::string_view(stripped).substr(0, equals));
-    if (key != "icon_theme") continue;
-    return parseQuotedTomlString(std::string_view(stripped).substr(equals + 1u));
+  } catch (...) {
+    return {};
   }
   return {};
 }

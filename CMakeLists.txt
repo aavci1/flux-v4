@@ -567,7 +567,7 @@ target_compile_options(lambda-shell-ui PRIVATE
   -Wextra
   -Wpedantic
 )
-target_link_libraries(lambda-shell-ui PUBLIC flux)
+target_link_libraries(lambda-shell-ui PUBLIC flux tomlplusplus::tomlplusplus)
 
 if(FLUX_PLATFORM_MACOS)
   target_compile_definitions(flux

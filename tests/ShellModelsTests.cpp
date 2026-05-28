@@ -411,6 +411,33 @@ max_results = 1000
   CHECK(lambda_shell::parseShellConfig(lambda_shell::writeShellConfigToml(parsed)) == parsed);
 }
 
+TEST_CASE("Shell config accepts TOML literal string values emitted by settings") {
+  auto parsed = lambda_shell::parseShellConfig(R"(
+[appearance]
+icon_theme = 'Lambda'
+symbolic_icon_theme = 'same'
+[dock]
+position = 'left'
+pinned = ['lambda-terminal', 'lambda-settings']
+[top_bar]
+clock_format = '%H:%M'
+modules = ['notifications', 'clock']
+[quick_settings]
+modules = ['audio', 'battery']
+[launcher]
+empty_query = 'apps'
+)");
+
+  CHECK(parsed.iconTheme == "Lambda");
+  CHECK(parsed.symbolicIconTheme == "same");
+  CHECK(parsed.dockPosition == "left");
+  CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-settings"});
+  CHECK(parsed.topBarClockFormat == "%H:%M");
+  CHECK(parsed.topBarModules == std::vector<std::string>{"notifications", "clock"});
+  CHECK(parsed.quickSettingsModules == std::vector<std::string>{"audio", "battery"});
+  CHECK(parsed.launcherEmptyQuery == "apps");
+}
+
 TEST_CASE("Shell config load creates defaults and reads configured pins") {
   auto root = tempRoot("lambda-shell-config-load-test");
   auto configPath = root / "lambda-shell" / "config.toml";
