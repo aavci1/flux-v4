@@ -12,6 +12,8 @@
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
+#include "Graphics/Vulkan/generated/callout_frag_spv.hpp"
+#include "Graphics/Vulkan/generated/callout_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_unpremultiply_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/image_vert_spv.hpp"
@@ -498,10 +500,12 @@ struct SharedVulkanCore {
     VkDescriptorSetLayout textureDescriptorLayout = VK_NULL_HANDLE;
     VkSampler sampler = VK_NULL_HANDLE;
     VkPipelineLayout rectPipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout calloutPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout backdropPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
     VkPipeline rectPipeline = VK_NULL_HANDLE;
+    VkPipeline calloutPipeline = VK_NULL_HANDLE;
     VkPipeline imagePipeline = VK_NULL_HANDLE;
     VkPipeline imageUnpremultiplyPipeline = VK_NULL_HANDLE;
     VkPipeline backdropPipeline = VK_NULL_HANDLE;
@@ -914,6 +918,8 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
     vkDestroyPipeline(device, res.pathPipeline, nullptr);
   if (res.rectPipeline)
     vkDestroyPipeline(device, res.rectPipeline, nullptr);
+  if (res.calloutPipeline)
+    vkDestroyPipeline(device, res.calloutPipeline, nullptr);
   if (res.imagePipeline)
     vkDestroyPipeline(device, res.imagePipeline, nullptr);
   if (res.imageUnpremultiplyPipeline)
@@ -926,6 +932,8 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
     vkDestroyPipelineLayout(device, res.pathPipelineLayout, nullptr);
   if (res.rectPipelineLayout)
     vkDestroyPipelineLayout(device, res.rectPipelineLayout, nullptr);
+  if (res.calloutPipelineLayout)
+    vkDestroyPipelineLayout(device, res.calloutPipelineLayout, nullptr);
   if (res.imagePipelineLayout)
     vkDestroyPipelineLayout(device, res.imagePipelineLayout, nullptr);
   if (res.backdropPipelineLayout)
@@ -1249,6 +1257,7 @@ public:
     destroyBuffer(pendingFrameCaptureBuffer_);
     destroyBuffer(pathBuffer_);
     destroyBuffer(rectBuffer_);
+    destroyBuffer(calloutBuffer_);
     destroyBuffer(quadBuffer_);
     for (VkSemaphore semaphore : imageAvailable_) {
       if (semaphore)
@@ -1384,6 +1393,7 @@ public:
     hasCaptureSavedState_ = false;
     captureSavedStack_.clear();
     rects_.clear();
+    callouts_.clear();
     quads_.clear();
     batches_.clear();
     ops_.clear();
@@ -2269,6 +2279,63 @@ public:
     appendDrawOp(target.ops, op);
   }
 
+  bool drawCalloutMaterial(Rect const &bounds,
+                           Rect const &card,
+                           CornerRadius const &corners,
+                           Color baseColor,
+                           Color tintColor,
+                           Color borderColor,
+                           float borderWidth,
+                           VulkanCalloutPlacement placement,
+                           float arrowWidth,
+                           float) {
+    if (captureTarget_ || bounds.width <= 0.f || bounds.height <= 0.f || card.width <= 0.f || card.height <= 0.f)
+      return false;
+    Rect const transformed = transformedBounds(bounds);
+    if (!state_.clip.intersects(transformed))
+      return true;
+
+    Point p00 = state_.transform.apply({bounds.x, bounds.y});
+    Point p10 = state_.transform.apply({bounds.x + bounds.width, bounds.y});
+    Point p01 = state_.transform.apply({bounds.x, bounds.y + bounds.height});
+    CalloutInstance inst{};
+    inst.rect[0] = 0.f;
+    inst.rect[1] = 0.f;
+    inst.rect[2] = bounds.width;
+    inst.rect[3] = bounds.height;
+    inst.axisX[0] = p00.x;
+    inst.axisX[1] = p00.y;
+    inst.axisX[2] = p10.x - p00.x;
+    inst.axisX[3] = p10.y - p00.y;
+    inst.axisY[0] = p01.x - p00.x;
+    inst.axisY[1] = p01.y - p00.y;
+    inst.card[0] = card.x - bounds.x;
+    inst.card[1] = card.y - bounds.y;
+    inst.card[2] = card.width;
+    inst.card[3] = card.height;
+    CornerRadius cr = clampRadii(corners, card.width, card.height);
+    inst.radii[0] = cr.topLeft;
+    inst.radii[1] = cr.topRight;
+    inst.radii[2] = cr.bottomRight;
+    inst.radii[3] = cr.bottomLeft;
+    putColor(inst.base, baseColor, state_.opacity);
+    putColor(inst.tint, tintColor, state_.opacity);
+    putColor(inst.stroke, borderColor, state_.opacity);
+    inst.params[0] = std::max(0.f, borderWidth);
+    inst.params[1] = static_cast<float>(placement);
+    inst.params[2] = std::max(0.f, arrowWidth);
+    applyCurrentRoundedClip(inst);
+
+    std::uint32_t const first = static_cast<std::uint32_t>(callouts_.size());
+    callouts_.push_back(inst);
+    DrawOp op = makeDrawOp(DrawOp::Kind::Callout, nullptr, first, 1);
+    std::uint64_t signature = 14695981039346656037ULL;
+    hashValue(signature, inst);
+    op.geometrySignature = nonZeroSignature(signature);
+    appendDrawOp(ops_, op);
+    return true;
+  }
+
   void *gpuDevice() const override { return device_; }
 
   void evictImageTexture(VulkanImage const *image) {
@@ -2619,6 +2686,20 @@ private:
     inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
   }
 
+  void applyCurrentRoundedClip(CalloutInstance &inst) const {
+    if (!state_.roundedClip.active) {
+      return;
+    }
+    inst.clipRect[0] = state_.roundedClip.rect.x;
+    inst.clipRect[1] = state_.roundedClip.rect.y;
+    inst.clipRect[2] = state_.roundedClip.rect.width;
+    inst.clipRect[3] = state_.roundedClip.rect.height;
+    inst.clipRadii[0] = state_.roundedClip.radii.topLeft;
+    inst.clipRadii[1] = state_.roundedClip.radii.topRight;
+    inst.clipRadii[2] = state_.roundedClip.radii.bottomRight;
+    inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
+  }
+
   static void translateQuadInstance(QuadInstance &inst, float dx, float dy, float opacityScale) {
     inst.axisX[0] += dx;
     inst.axisX[1] += dy;
@@ -2660,6 +2741,8 @@ private:
         switch (op.kind) {
         case DrawOp::Kind::Rect:
           op.externalStorageDescriptor = recorded.preparedRectDescriptor;
+          break;
+        case DrawOp::Kind::Callout:
           break;
         case DrawOp::Kind::Path:
           op.externalVertexBuffer = recorded.preparedPathVertexBuffer;
@@ -2721,6 +2804,8 @@ private:
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         op.first += rectBase;
+        break;
+      case DrawOp::Kind::Callout:
         break;
       case DrawOp::Kind::Path:
         op.first += pathBase;
@@ -3004,11 +3089,18 @@ private:
   void createPipelines() {
     auto &res = resources();
     res.rectPipelineLayout = createPipelineLayout({res.rectDescriptorLayout}, true);
+    res.calloutPipelineLayout = createPipelineLayout({res.rectDescriptorLayout}, true);
     res.imagePipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.backdropPipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.pathPipelineLayout = createPipelineLayout({}, true);
     res.rectPipeline = createPipeline(res.rectPipelineLayout, flux_rect_vert_spv, flux_rect_vert_spv_len,
                                       flux_rect_frag_spv, flux_rect_frag_spv_len, {});
+    res.calloutPipeline = createPipeline(res.calloutPipelineLayout,
+                                         flux_callout_vert_spv,
+                                         flux_callout_vert_spv_len,
+                                         flux_callout_frag_spv,
+                                         flux_callout_frag_spv_len,
+                                         {});
     res.imagePipeline = createPipeline(res.imagePipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
                                        flux_image_frag_spv, flux_image_frag_spv_len, {});
     res.imageUnpremultiplyPipeline =
@@ -3449,6 +3541,11 @@ private:
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     upload(rectBuffer_, rects_.data(), rects_.size() * sizeof(RectInstance));
     ensureStorageDescriptor(rectDescriptorSet_, resources().rectDescriptorLayout, rectBuffer_);
+    ensureBuffer(calloutBuffer_,
+                 std::max<VkDeviceSize>(sizeof(CalloutInstance), callouts_.size() * sizeof(CalloutInstance)),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    upload(calloutBuffer_, callouts_.data(), callouts_.size() * sizeof(CalloutInstance));
+    ensureStorageDescriptor(calloutDescriptorSet_, resources().rectDescriptorLayout, calloutBuffer_);
     ensureBuffer(quadBuffer_, std::max<VkDeviceSize>(sizeof(QuadInstance), quads_.size() * sizeof(QuadInstance)),
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     upload(quadBuffer_, quads_.data(), quads_.size() * sizeof(QuadInstance));
@@ -3724,6 +3821,8 @@ private:
         hashValue(h, rects[index]);
       }
       break;
+    case DrawOp::Kind::Callout:
+      break;
     case DrawOp::Kind::Path:
       for (std::uint32_t index = op.first; index < end && index < pathVerts.size(); ++index) {
         hashValue(h, pathVerts[index]);
@@ -3970,6 +4069,23 @@ private:
     bindPipeline(commandBuffer, state, res.rectPipeline, res.rectPipelineLayout);
     bindDescriptorSet(commandBuffer, state, res.rectPipelineLayout, 0, storageDescriptor);
     pushDrawConstants(commandBuffer, state, res.rectPipelineLayout, translationX, translationY);
+    vkCmdDraw(commandBuffer, 6, count, 0, first);
+  }
+
+  void drawCalloutRange(VkCommandBuffer commandBuffer,
+                        VulkanCommandState &state,
+                        std::uint32_t first,
+                        std::uint32_t count,
+                        float translationX = 0.f,
+                        float translationY = 0.f) {
+    if (count == 0)
+      return;
+    auto const &res = resources();
+    if (!calloutDescriptorSet_)
+      return;
+    bindPipeline(commandBuffer, state, res.calloutPipeline, res.calloutPipelineLayout);
+    bindDescriptorSet(commandBuffer, state, res.calloutPipelineLayout, 0, calloutDescriptorSet_);
+    pushDrawConstants(commandBuffer, state, res.calloutPipelineLayout, translationX, translationY);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
@@ -4268,6 +4384,14 @@ private:
       case DrawOp::Kind::Rect:
         drawRectRange(commandBuffer, commandState, op.first, op.count, op.externalStorageDescriptor,
                       op.externalTranslationX, op.externalTranslationY);
+        break;
+      case DrawOp::Kind::Callout:
+        drawCalloutRange(commandBuffer,
+                         commandState,
+                         op.first,
+                         op.count,
+                         op.externalTranslationX,
+                         op.externalTranslationY);
         break;
       case DrawOp::Kind::Path:
         drawPathRange(commandBuffer, commandState, op.first, op.count, op.externalVertexBuffer,
@@ -5006,6 +5130,7 @@ private:
   std::vector<DrawState> captureSavedStack_;
   bool hasCaptureSavedState_ = false;
   std::vector<RectInstance> rects_;
+  std::vector<CalloutInstance> callouts_;
   std::vector<QuadInstance> quads_;
   std::vector<ImageBatch> batches_;
   std::vector<DrawOp> ops_;
@@ -5047,8 +5172,10 @@ private:
   std::vector<std::uint64_t> backdropOpPrefixHashes_;
   std::uint32_t backdropBlurBaseDownsample_ = kDefaultBackdropBlurBaseDownsample;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet calloutDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
   Buffer rectBuffer_;
+  Buffer calloutBuffer_;
   Buffer quadBuffer_;
   Buffer pathBuffer_;
   Buffer pendingScreenshotBuffer_;
@@ -5242,6 +5369,30 @@ bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
 bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan ? vulkan->setTransparentSurface(enabled) : false;
+}
+
+bool drawVulkanCalloutMaterial(Canvas* canvas,
+                               Rect const& bounds,
+                               Rect const& card,
+                               CornerRadius const& corners,
+                               Color baseColor,
+                               Color tintColor,
+                               Color borderColor,
+                               float borderWidth,
+                               VulkanCalloutPlacement placement,
+                               float arrowWidth,
+                               float arrowHeight) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->drawCalloutMaterial(bounds,
+                                               card,
+                                               corners,
+                                               baseColor,
+                                               tintColor,
+                                               borderColor,
+                                               borderWidth,
+                                               placement,
+                                               arrowWidth,
+                                               arrowHeight);
 }
 
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas) {

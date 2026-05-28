@@ -20,6 +20,13 @@ struct VulkanCanvasOptions {
   bool transparentSurface = false;
 };
 
+enum class VulkanCalloutPlacement : std::uint8_t {
+  Below,
+  Above,
+  End,
+  Start,
+};
+
 struct VulkanPastPresentationTiming {
   std::uint32_t presentId = 0;
   std::uint64_t desiredPresentTime = 0;
@@ -53,6 +60,17 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
 bool setVulkanCanvasBackdropBlurBaseDownsample(Canvas* canvas, std::uint32_t downsample);
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled);
 bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled);
+bool drawVulkanCalloutMaterial(Canvas* canvas,
+                               Rect const& bounds,
+                               Rect const& card,
+                               CornerRadius const& corners,
+                               Color baseColor,
+                               Color tintColor,
+                               Color borderColor,
+                               float borderWidth,
+                               VulkanCalloutPlacement placement,
+                               float arrowWidth,
+                               float arrowHeight);
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas);
 std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas);
 std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas);

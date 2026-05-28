@@ -289,6 +289,22 @@ Path materialPath(Rect const& rect, CornerRadius const& corners, ResolvedGlassMa
   return translatedPath(local, rect.x, rect.y);
 }
 
+#if FLUX_VULKAN
+VulkanCalloutPlacement vulkanCalloutPlacement(BackgroundEffectCalloutPlacement placement) {
+  switch (placement) {
+  case BackgroundEffectCalloutPlacement::Above:
+    return VulkanCalloutPlacement::Above;
+  case BackgroundEffectCalloutPlacement::End:
+    return VulkanCalloutPlacement::End;
+  case BackgroundEffectCalloutPlacement::Start:
+    return VulkanCalloutPlacement::Start;
+  case BackgroundEffectCalloutPlacement::Below:
+  default:
+    return VulkanCalloutPlacement::Below;
+  }
+}
+#endif
+
 void drawSurfaceBackgroundBlur(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
                                Rect const& fullContentRect,
@@ -299,6 +315,22 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   auto drawMaterialRect = [&](Rect const& rect, CornerRadius const& corners) {
     Rect const blurRect = material.shape == BackgroundEffectShape::Callout ? calloutCardRect(rect, material) : rect;
     canvas.drawBackdropBlur(blurRect, material.blurRadius, Colors::transparent, corners);
+#if FLUX_VULKAN
+    if (material.shape == BackgroundEffectShape::Callout &&
+        drawVulkanCalloutMaterial(&canvas,
+                                  rect,
+                                  calloutCardRect(rect, material),
+                                  corners,
+                                  material.baseColor,
+                                  material.tintColor,
+                                  material.borderColor,
+                                  1.f,
+                                  vulkanCalloutPlacement(material.calloutPlacement),
+                                  material.arrowWidth,
+                                  material.arrowHeight)) {
+      return;
+    }
+#endif
     if (material.baseColor.a > 0.f) {
       if (material.shape == BackgroundEffectShape::Callout) {
         Path const path = materialPath(rect, corners, material);
@@ -314,6 +346,10 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
       } else {
         canvas.drawRect(rect, corners, FillStyle::solid(material.tintColor), StrokeStyle::none(), ShadowStyle::none());
       }
+    }
+    if (material.shape == BackgroundEffectShape::Callout && material.borderColor.a > 0.f) {
+      Path const path = materialPath(rect, corners, material);
+      canvas.drawPath(path, FillStyle::none(), StrokeStyle::solid(material.borderColor, 1.f), ShadowStyle::none());
     }
   };
 
@@ -347,6 +383,7 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
                                CornerRadius const& windowCorners) {
   ResolvedGlassMaterial const material = resolvedGlassMaterial(surface);
   if (!material.enabled || material.borderColor.a <= 0.f) return;
+  if (material.shape == BackgroundEffectShape::Callout) return;
 
   if (windowExternalTitleBarHeight(surface) > 0.f) {
     Rect const frameRect = windowFrameRect(surface);

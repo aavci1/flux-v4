@@ -50,11 +50,26 @@ struct QuadInstance {
   float radii[4]{};
 };
 
+struct CalloutInstance {
+  float rect[4]{};
+  float axisX[4]{};
+  float axisY[4]{};
+  float card[4]{};
+  float radii[4]{};
+  float base[4]{};
+  float tint[4]{};
+  float stroke[4]{};
+  float params[4]{};
+  float clipRect[4]{};
+  float clipRadii[4]{};
+};
+
 struct DrawOp {
   enum class Kind : std::uint8_t { Rect,
                                    Path,
                                    Image,
-                                   BackdropBlur };
+                                   BackdropBlur,
+                                   Callout };
   Kind kind = Kind::Rect;
   Texture *texture = nullptr;
   std::uint32_t first = 0;

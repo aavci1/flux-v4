@@ -34,7 +34,9 @@ void clampCornerRadii(float w, float h, CornerRadius& r) {
 }
 
 void appendArc(Path& p, Point c, float rad, float a0, float a1) {
-  int const n = 8;
+  int const n = std::clamp(static_cast<int>(std::ceil(std::abs(a1 - a0) * std::max(rad, 1.f) * 0.9f)),
+                           12,
+                           48);
   for (int i = 1; i <= n; ++i) {
     float const t = static_cast<float>(i) / static_cast<float>(n);
     float const a = a0 + (a1 - a0) * t;
