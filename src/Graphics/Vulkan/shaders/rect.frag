@@ -34,6 +34,15 @@ float roundedRectSDF(vec2 p, vec2 halfSize, vec4 radii) {
   return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
 }
 
+float antialiasWidth(float d) {
+  return max(0.75 * length(vec2(dFdx(d), dFdy(d))), 0.0001);
+}
+
+float distanceCoverage(float d) {
+  float aa = antialiasWidth(d);
+  return 1.0 - smoothstep(-aa, aa, d);
+}
+
 float roundedClipCoverage(RectInstance r, vec2 world) {
   if (r.clipRect.z <= 0.0 || r.clipRect.w <= 0.0 ||
       max(max(r.clipRadii.x, r.clipRadii.y), max(r.clipRadii.z, r.clipRadii.w)) <= 0.0) {
@@ -42,7 +51,7 @@ float roundedClipCoverage(RectInstance r, vec2 world) {
   vec2 halfSize = r.clipRect.zw * 0.5;
   vec2 local = world - r.clipRect.xy - halfSize;
   float d = roundedRectSDF(local, halfSize, r.clipRadii);
-  return 1.0 - smoothstep(-0.75, 0.75, d);
+  return distanceCoverage(d);
 }
 
 vec4 sampleStops(RectInstance r, float t) {
@@ -91,12 +100,17 @@ void main() {
   vec2 halfSize = size * 0.5;
   vec2 local = vLocal - halfSize;
   float d = roundedRectSDF(local, halfSize, r.radii);
-  float fillCoverage = 1.0 - smoothstep(-0.75, 0.75, d);
+  float aa = antialiasWidth(d);
+  float fillCoverage = 1.0 - smoothstep(-aa, aa, d);
   float strokeWidth = r.params.z;
   float strokeCoverage = 0.0;
   if (strokeWidth > 0.0) {
     float strokeDistance = abs(d) - strokeWidth * 0.5;
-    strokeCoverage = 1.0 - smoothstep(-0.75, 0.75, strokeDistance);
+    strokeCoverage = 1.0 - smoothstep(-aa, aa, strokeDistance);
+  }
+  float clipCoverage = roundedClipCoverage(r, vWorld);
+  if (clipCoverage <= 0.001) {
+    discard;
   }
   float shapeCoverage = max(fillCoverage, strokeCoverage);
   if (shapeCoverage <= 0.001) {
@@ -107,10 +121,6 @@ void main() {
   float strokeAlpha = r.stroke.a * strokeCoverage;
   float outAlpha = strokeAlpha + fillAlpha * (1.0 - strokeAlpha);
   if (outAlpha <= 0.001) {
-    discard;
-  }
-  float clipCoverage = roundedClipCoverage(r, vWorld);
-  if (clipCoverage <= 0.001) {
     discard;
   }
   vec3 outRgb = (r.stroke.rgb * strokeAlpha + fill.rgb * fillAlpha * (1.0 - strokeAlpha)) / outAlpha;

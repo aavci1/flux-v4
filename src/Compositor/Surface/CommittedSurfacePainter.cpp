@@ -299,12 +299,21 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   auto drawMaterialRect = [&](Rect const& rect, CornerRadius const& corners) {
     Rect const blurRect = material.shape == BackgroundEffectShape::Callout ? calloutCardRect(rect, material) : rect;
     canvas.drawBackdropBlur(blurRect, material.blurRadius, Colors::transparent, corners);
-    Path const path = materialPath(rect, corners, material);
     if (material.baseColor.a > 0.f) {
-      canvas.drawPath(path, FillStyle::solid(material.baseColor), StrokeStyle::none(), ShadowStyle::none());
+      if (material.shape == BackgroundEffectShape::Callout) {
+        Path const path = materialPath(rect, corners, material);
+        canvas.drawPath(path, FillStyle::solid(material.baseColor), StrokeStyle::none(), ShadowStyle::none());
+      } else {
+        canvas.drawRect(rect, corners, FillStyle::solid(material.baseColor), StrokeStyle::none(), ShadowStyle::none());
+      }
     }
     if (material.tintColor.a > 0.f) {
-      canvas.drawPath(path, FillStyle::solid(material.tintColor), StrokeStyle::none(), ShadowStyle::none());
+      if (material.shape == BackgroundEffectShape::Callout) {
+        Path const path = materialPath(rect, corners, material);
+        canvas.drawPath(path, FillStyle::solid(material.tintColor), StrokeStyle::none(), ShadowStyle::none());
+      } else {
+        canvas.drawRect(rect, corners, FillStyle::solid(material.tintColor), StrokeStyle::none(), ShadowStyle::none());
+      }
     }
   };
 
@@ -367,8 +376,13 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
                                      : sameRect(rect, fullContentRect)
                                            ? effectCorners
                                            : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
-    Path const path = materialPath(rect, corners, material);
-    canvas.drawPath(path, FillStyle::none(), StrokeStyle::solid(material.borderColor, 1.f), ShadowStyle::none());
+    StrokeStyle const stroke = StrokeStyle::solid(material.borderColor, 1.f);
+    if (material.shape == BackgroundEffectShape::Callout) {
+      Path const path = materialPath(rect, corners, material);
+      canvas.drawPath(path, FillStyle::none(), stroke, ShadowStyle::none());
+    } else {
+      canvas.drawRect(rect, corners, FillStyle::none(), stroke, ShadowStyle::none());
+    }
   }
 }
 

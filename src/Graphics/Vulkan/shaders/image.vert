@@ -35,13 +35,18 @@ vec2 unitVertex(uint i) {
 void main() {
   QuadInstance q = quads.instances[gl_InstanceIndex];
   vec2 unit = unitVertex(gl_VertexIndex);
-  vec2 pos = q.axisX.xy + unit.x * q.axisX.zw + unit.y * q.axisY.xy + pc.translation;
+  vec2 size = max(q.rect.zw, vec2(0.000001));
+  float maxRadius = max(max(q.radii.x, q.radii.y), max(q.radii.z, q.radii.w));
+  float pad = step(0.0001, maxRadius);
+  vec2 local = unit * (size + vec2(pad * 2.0)) - vec2(pad);
+  vec2 axisUnit = local / size;
+  vec2 pos = q.axisX.xy + axisUnit.x * q.axisX.zw + axisUnit.y * q.axisY.xy + pc.translation;
   vec2 ndc = vec2(pos.x / pc.viewport.x * 2.0 - 1.0,
                   pos.y / pc.viewport.y * 2.0 - 1.0);
   gl_Position = vec4(ndc, 0.0, 1.0);
-  vUv = mix(q.uv.xy, q.uv.zw, unit);
+  vUv = mix(q.uv.xy, q.uv.zw, axisUnit);
   vColor = q.color;
-  vLocal = unit * q.rect.zw;
-  vSize = q.rect.zw;
+  vLocal = local;
+  vSize = size;
   vRadii = q.radii;
 }
