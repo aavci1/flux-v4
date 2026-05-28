@@ -1,13 +1,13 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Layout/LayoutEngine.hpp>
-#include <Flux/UI/Views/OffsetView.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Layout/LayoutEngine.hpp>
+#include <Lambda/UI/Views/OffsetView.hpp>
 
 #include <span>
 #include <vector>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 struct ScrollIndicatorMetrics {
   float x = 0.f;
@@ -48,4 +48,4 @@ ScrollIndicatorMetrics makeVerticalIndicator(Point const& offset, Size const& vi
 ScrollIndicatorMetrics makeHorizontalIndicator(Point const& offset, Size const& viewport,
                                                Size const& content, bool reserveTrailing);
 
-} // namespace flux::layout
+} // namespace lambda::layout

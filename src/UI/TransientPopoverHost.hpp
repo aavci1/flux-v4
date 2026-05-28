@@ -1,21 +1,21 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Reactive/SmallFn.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/EnvironmentBinding.hpp>
-#include <Flux/UI/Input.hpp>
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Views/Popover.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Reactive/SmallFn.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/EnvironmentBinding.hpp>
+#include <Lambda/UI/Input.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
 
 #include <functional>
 #include <memory>
 #include <optional>
 
-namespace flux {
+namespace lambda {
 
 class TransientPopoverHost {
 public:
@@ -52,4 +52,4 @@ private:
   Size measuredSize_{};
 };
 
-} // namespace flux
+} // namespace lambda

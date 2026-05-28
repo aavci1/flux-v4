@@ -2,7 +2,7 @@
 
 #include <memory>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 class SceneNode;
 class PreparedRenderOps;
@@ -22,4 +22,4 @@ struct SceneNodeAccess {
 };
 
 } // namespace detail
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

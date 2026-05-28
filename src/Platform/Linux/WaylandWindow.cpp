@@ -4,16 +4,16 @@
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
-#include <Flux/Debug/DebugFlags.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Events.hpp>
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/UI/MenuItem.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Views/Popover.hpp>
+#include <Lambda/Debug/DebugFlags.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Events.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/MenuItem.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
 
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
@@ -52,7 +52,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 class WaylandWindow;
 
@@ -137,7 +137,7 @@ MouseButton mouseButtonFromLinux(std::uint32_t button) {
 }
 
 bool debugDecorations() {
-  static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_WAYLAND_DECORATIONS"));
+  static bool const enabled = debug::envNonZero(std::getenv("LAMBDA_DEBUG_WAYLAND_DECORATIONS"));
   return enabled;
 }
 
@@ -301,7 +301,7 @@ void markWaylandConnectionDead(SharedWaylandConnection* shared, char const* cont
     shared->fatalError = true;
     shared->fatalErrno = error;
     shared->fatalContext = context ? context : "Wayland display";
-    std::fprintf(stderr, "flux-wayland: compositor connection lost during %s: %s\n",
+    std::fprintf(stderr, "lambda-wayland: compositor connection lost during %s: %s\n",
                  shared->fatalContext.c_str(), std::strerror(error));
   }
   requestWaylandShutdown(shared);
@@ -450,7 +450,7 @@ WaylandMenuBuffer createWaylandMenuBuffer(wl_shm* shm, int width, int height) {
   buffer.height = std::max(1, height);
   buffer.stride = buffer.width * 4;
   buffer.size = buffer.stride * buffer.height;
-  buffer.fd = createPopupSharedMemoryFile("flux-popup-menu", static_cast<std::size_t>(buffer.size));
+  buffer.fd = createPopupSharedMemoryFile("lambda-popup-menu", static_cast<std::size_t>(buffer.size));
   buffer.pixels = mmap(nullptr, static_cast<std::size_t>(buffer.size), PROT_READ | PROT_WRITE, MAP_SHARED,
                        buffer.fd, 0);
   if (buffer.pixels == MAP_FAILED) {
@@ -878,7 +878,7 @@ public:
     if (wakePipe_[1] >= 0) close(wakePipe_[1]);
   }
 
-  void setFluxWindow(::flux::Window* window) override { fluxWindow_ = window; }
+  void setLambdaWindow(::lambda::Window* window) override { lambdaWindow_ = window; }
 
   void show() override {
     updateCanvasDpi();
@@ -886,7 +886,7 @@ public:
     Application::instance().flushRedraw();
   }
 
-  std::unique_ptr<Canvas> createCanvas(::flux::Window&) override {
+  std::unique_ptr<Canvas> createCanvas(::lambda::Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
     configureVulkanCanvasRuntime(Application::instance().platformApp().requiredVulkanInstanceExtensions(),
                                  Application::instance().cacheDir());
@@ -914,7 +914,7 @@ public:
         return;
       }
     }
-    if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+    if (lambdaWindow_) lambdaWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     if (canvas_) {
       canvas_->resize(static_cast<int>(std::max(1, static_cast<int>(std::lround(size_.width)))),
                       static_cast<int>(std::max(1, static_cast<int>(std::lround(size_.height)))));
@@ -1128,7 +1128,7 @@ public:
   }
 
   PopoverSurfaceId showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial = 0) override {
-    if (!shared_ || !shared_->compositor || !shared_->wmBase || !surface_ || !fluxWindow_ ||
+    if (!shared_ || !shared_->compositor || !shared_->wmBase || !surface_ || !lambdaWindow_ ||
         !canSendWaylandRequests(shared_)) {
       return kInvalidPopoverSurfaceId;
     }
@@ -1136,7 +1136,7 @@ public:
       return kInvalidPopoverSurfaceId;
     }
 
-    Theme const theme = fluxWindow_->theme();
+    Theme const theme = lambdaWindow_->theme();
     popover.gap = resolveFloat(popover.gap, theme.space2);
     Size const maxSize = popover.maxSize.value_or(Size{std::max(1.f, size_.width - 24.f),
                                                        std::max(1.f, size_.height - 24.f)});
@@ -1151,7 +1151,7 @@ public:
                              : 0;
     state->host = std::make_unique<TransientPopoverHost>(TransientPopoverHost::Config{
         .popover = popover,
-        .environment = fluxWindow_->environmentBinding(),
+        .environment = lambdaWindow_->environmentBinding(),
         .maxSize = maxSize,
         .useNativeShell = false,
         .requestRedraw = [this, id] {
@@ -1560,7 +1560,7 @@ private:
       state.canvas->resize(state.width, state.height);
       return true;
     } catch (std::exception const& e) {
-      std::fprintf(stderr, "Flux Wayland popover render error: %s\n", e.what());
+      std::fprintf(stderr, "Lambda Wayland popover render error: %s\n", e.what());
       return false;
     }
   }
@@ -1716,8 +1716,8 @@ private:
     dismissPopupMenu();
     if (item.handler) {
       item.handler();
-    } else if (fluxWindow_ && !item.actionName.empty()) {
-      fluxWindow_->dispatchAction(item.actionName);
+    } else if (lambdaWindow_ && !item.actionName.empty()) {
+      lambdaWindow_->dispatchAction(item.actionName);
     }
   }
 
@@ -1868,11 +1868,11 @@ private:
     if (self->serverSideDecorationsActive_) {
       if (debugDecorations() && !self->loggedDecorationMode_) {
         self->loggedDecorationMode_ = true;
-        std::fprintf(stderr, "Flux Wayland: compositor accepted server-side decorations.\n");
+        std::fprintf(stderr, "Lambda Wayland: compositor accepted server-side decorations.\n");
       }
     } else if (!self->warnedDecorationFallback_) {
       self->warnedDecorationFallback_ = true;
-      std::fprintf(stderr, "Flux Wayland: compositor refused server-side decorations; resize chrome may be absent.\n");
+      std::fprintf(stderr, "Lambda Wayland: compositor refused server-side decorations; resize chrome may be absent.\n");
     }
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
   }
@@ -1945,7 +1945,7 @@ private:
                                  static_cast<int>(std::lround(size_.height)));
     updateViewportDestination();
     updateBackgroundEffectRegion();
-    if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+    if (lambdaWindow_) lambdaWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
@@ -1963,7 +1963,7 @@ private:
   }
 
   void updateCanvasDpi() {
-    if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+    if (lambdaWindow_) lambdaWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
   }
 
   void resizeCanvasForCurrentSize() {
@@ -1984,7 +1984,7 @@ private:
                                 fractionalProtocol ? 1
                                                    : static_cast<std::int32_t>(std::max(1.f, std::round(scale))));
     updateViewportDestination();
-    if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+    if (lambdaWindow_) lambdaWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     resizeCanvasForCurrentSize();
     Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
                                                           .handle = handle_,
@@ -2085,14 +2085,14 @@ private:
     if (!shared_ || !shared_->decorationManager) {
       if (!warnedDecorationFallback_) {
         warnedDecorationFallback_ = true;
-        std::fprintf(stderr, "Flux Wayland: compositor does not expose xdg-decoration; server-side decorations are unavailable.\n");
+        std::fprintf(stderr, "Lambda Wayland: compositor does not expose xdg-decoration; server-side decorations are unavailable.\n");
       }
       return;
     }
     if (shared_->decorationManagerVersion < 2 && surfaceCommitted_) {
       if (!warnedDecorationFallback_) {
         warnedDecorationFallback_ = true;
-        std::fprintf(stderr, "Flux Wayland: xdg-decoration v1 cannot create decorations after the first commit.\n");
+        std::fprintf(stderr, "Lambda Wayland: xdg-decoration v1 cannot create decorations after the first commit.\n");
       }
       return;
     }
@@ -2501,7 +2501,7 @@ private:
   std::vector<std::unique_ptr<WaylandPopoverSurfaceState>> popovers_;
   std::uint64_t nextPopoverId_ = 1;
 
-  ::flux::Window* fluxWindow_ = nullptr;
+  ::lambda::Window* lambdaWindow_ = nullptr;
   unsigned int handle_ = 0;
   Size size_{};
   std::string title_;
@@ -2914,4 +2914,4 @@ std::unique_ptr<Window> createWindow(WindowConfig const& config) {
 }
 
 } // namespace platform
-} // namespace flux
+} // namespace lambda

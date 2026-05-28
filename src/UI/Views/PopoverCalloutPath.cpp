@@ -1,11 +1,11 @@
-#include <Flux/UI/Views/PopoverCalloutPath.hpp>
+#include <Lambda/UI/Views/PopoverCalloutPath.hpp>
 
-#include <Flux/Graphics/Path.hpp>
+#include <Lambda/Graphics/Path.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -215,4 +215,4 @@ Path buildPopoverCalloutPath(PopoverPlacement placement, CornerRadius cornerRadi
   return p;
 }
 
-} // namespace flux
+} // namespace lambda

@@ -1,4 +1,4 @@
-#include <Flux/UI/Views/TextEditUtils.hpp>
+#include <Lambda/UI/Views/TextEditUtils.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -206,7 +206,7 @@ int utf8NextWordImpl(std::string const &s, int pos) {
     return p;
 }
 
-float caretXInRun(flux::TextLayout::PlacedRun const &pr, int byteOffset) {
+float caretXInRun(lambda::TextLayout::PlacedRun const &pr, int byteOffset) {
     int const b0 = static_cast<int>(pr.utf8Begin);
     int const b1 = static_cast<int>(pr.utf8End);
     int const nB = b1 - b0;
@@ -232,7 +232,7 @@ float caretXInRun(flux::TextLayout::PlacedRun const &pr, int byteOffset) {
     return pr.origin.x + t * pr.run.width;
 }
 
-int glyphIndexForLocalX(flux::TextRun const &run, float localX) {
+int glyphIndexForLocalX(lambda::TextRun const &run, float localX) {
     int const nG = static_cast<int>(run.positions.size());
     if (nG == 0) {
         return 0;
@@ -249,7 +249,7 @@ int glyphIndexForLocalX(flux::TextRun const &run, float localX) {
     return nG - 1;
 }
 
-int byteAtLocalXInRun(flux::TextLayout::PlacedRun const &pr, float localX, std::string const &buf) {
+int byteAtLocalXInRun(lambda::TextLayout::PlacedRun const &pr, float localX, std::string const &buf) {
     int const b0 = static_cast<int>(pr.utf8Begin);
     int const b1 = static_cast<int>(pr.utf8End);
     int const nBytes = b1 - b0;
@@ -266,27 +266,27 @@ int byteAtLocalXInRun(flux::TextLayout::PlacedRun const &pr, float localX, std::
         int p = b0;
         int remaining = std::clamp(idx, 0, nBytes);
         while (remaining-- > 0 && p < b1) {
-            p = flux::detail::utf8NextChar(buf, p);
+            p = lambda::detail::utf8NextChar(buf, p);
             if (p > b1) {
                 p = b1;
                 break;
             }
         }
-        return flux::detail::utf8Clamp(buf, std::min(p, b1));
+        return lambda::detail::utf8Clamp(buf, std::min(p, b1));
     }
 
     int const g = glyphIndexForLocalX(pr.run, localX);
     int p = b0;
     for (int i = 0; i < g && p < b1; ++i) {
-        p = flux::detail::utf8NextChar(buf, p);
+        p = lambda::detail::utf8NextChar(buf, p);
     }
-    return flux::detail::utf8Clamp(buf, std::min(p, b1));
+    return lambda::detail::utf8Clamp(buf, std::min(p, b1));
 }
 
-int visualLineEndByte(flux::detail::LineMetrics const &line, std::string const &buf) {
-    int end = flux::detail::utf8Clamp(buf, line.byteEnd);
+int visualLineEndByte(lambda::detail::LineMetrics const &line, std::string const &buf) {
+    int end = lambda::detail::utf8Clamp(buf, line.byteEnd);
     while (end > line.byteStart) {
-        int const prev = flux::detail::utf8PrevChar(buf, end);
+        int const prev = lambda::detail::utf8PrevChar(buf, end);
         char32_t cp = 0;
         int len = 1;
         if (!utf8DecodeAt(buf, prev, cp, len)) {
@@ -302,7 +302,7 @@ int visualLineEndByte(flux::detail::LineMetrics const &line, std::string const &
 
 } // namespace
 
-namespace flux::detail {
+namespace lambda::detail {
 
 int utf8NextChar(std::string const &s, int pos) noexcept {
     return utf8NextCharImpl(s, pos);
@@ -1198,4 +1198,4 @@ std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSel
     return rects;
 }
 
-} // namespace flux::detail
+} // namespace lambda::detail

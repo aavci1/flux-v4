@@ -1,5 +1,5 @@
 // Micro-benchmarks for paragraph shape cache.
-// Build: cmake -B build -DFLUX_BUILD_BENCHMARKS=ON && cmake --build build --target paragraph_cache_bench
+// Build: cmake -B build -DLAMBDA_BUILD_BENCHMARKS=ON && cmake --build build --target paragraph_cache_bench
 
 #if defined(__APPLE__)
 #include "Graphics/CoreTextSystem.hpp"
@@ -7,8 +7,8 @@
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #endif
 
-#include <Flux/Graphics/AttributedString.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Graphics/AttributedString.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
 
 #include <chrono>
 #include <cstdlib>
@@ -22,9 +22,9 @@ constexpr int kParas = 5000;
 constexpr int kCharsPerPara = 80;
 
 #if defined(__APPLE__)
-using BenchTextSystem = flux::CoreTextSystem;
+using BenchTextSystem = lambda::CoreTextSystem;
 #else
-using BenchTextSystem = flux::FreeTypeTextSystem;
+using BenchTextSystem = lambda::FreeTypeTextSystem;
 #endif
 
 std::string makeDocument() {
@@ -46,8 +46,8 @@ double secondsSince(std::chrono::steady_clock::time_point t0) {
   return std::chrono::duration<double>(t1 - t0).count();
 }
 
-flux::Font makeBenchFont() {
-  flux::Font f{};
+lambda::Font makeBenchFont() {
+  lambda::Font f{};
 #if defined(__APPLE__)
   f.family = ".AppleSystemUIFont";
 #else
@@ -60,20 +60,20 @@ flux::Font makeBenchFont() {
 
 void disableParagraphCache() {
 #if defined(__APPLE__)
-  setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+  setenv("LAMBDA_DISABLE_PARAGRAPH_CACHE", "1", 1);
 #endif
 }
 
 void enableParagraphCache() {
 #if defined(__APPLE__)
-  unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+  unsetenv("LAMBDA_DISABLE_PARAGRAPH_CACHE");
 #endif
 }
 
 } // namespace
 
 int main() {
-  using namespace flux;
+  using namespace lambda;
   std::string const doc = makeDocument();
   Font f = makeBenchFont();
   AttributedString const as = AttributedString::plain(doc, f, Colors::black);

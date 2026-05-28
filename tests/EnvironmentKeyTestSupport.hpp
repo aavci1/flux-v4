@@ -1,15 +1,15 @@
 #pragma once
 
-#include <Flux/UI/Environment.hpp>
+#include <Lambda/UI/Environment.hpp>
 
-namespace flux {
+namespace lambda {
 
-FLUX_DEFINE_ENVIRONMENT_KEY(SharedEnvironmentTestKey, int, 17);
+LAMBDA_DEFINE_ENVIRONMENT_KEY(SharedEnvironmentTestKey, int, 17);
 
-} // namespace flux
+} // namespace lambda
 
-namespace flux::tests {
+namespace lambda::tests {
 
 std::uint16_t sharedEnvironmentTestKeyIndexFromOtherTranslationUnit();
 
-} // namespace flux::tests
+} // namespace lambda::tests

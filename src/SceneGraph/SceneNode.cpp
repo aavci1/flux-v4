@@ -1,7 +1,7 @@
-#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
 
-#include <Flux/SceneGraph/Interaction.hpp>
-#include <Flux/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/Interaction.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
 
 #include "SceneGraph/LayoutDebugHooks.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 namespace {
 
@@ -211,7 +211,7 @@ bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstra
     if (effectiveStoreConstraints) {
         setLayoutConstraints(constraints);
     }
-    bool const shouldDump = ::flux::layoutDebugEnabled() && gRelayoutDepth == 0;
+    bool const shouldDump = ::lambda::layoutDebugEnabled() && gRelayoutDepth == 0;
     ++gRelayoutDepth;
     TransientRelayoutScope const transientScope{!storeConstraints};
     relayout_(constraints);
@@ -387,4 +387,4 @@ std::unique_ptr<PreparedRenderOps>& detail::SceneNodeAccess::preparedRenderOps(
     return node.preparedRenderOps_;
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

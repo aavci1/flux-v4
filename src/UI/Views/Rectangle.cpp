@@ -1,11 +1,11 @@
-#include <Flux/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
 
-#include <Flux/UI/MeasureContext.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 Size Rectangle::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                         LayoutHints const&, TextSystem&) const {
@@ -15,4 +15,4 @@ Size Rectangle::measure(MeasureContext& ctx, LayoutConstraints const& constraint
   return Size{width, height};
 }
 
-} // namespace flux
+} // namespace lambda

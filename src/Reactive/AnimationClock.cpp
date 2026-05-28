@@ -1,5 +1,5 @@
-#include <Flux/Reactive/AnimationClock.hpp>
-#include <Flux/Reactive/Animation.hpp>
+#include <Lambda/Reactive/AnimationClock.hpp>
+#include <Lambda/Reactive/Animation.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 AnimationClock::AnimationClock() = default;
 
@@ -230,4 +230,4 @@ void AnimationClock::stopFramePump() {
   running_ = false;
 }
 
-} // namespace flux
+} // namespace lambda

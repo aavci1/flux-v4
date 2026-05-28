@@ -10,8 +10,8 @@
 #include "Graphics/TextSystemPrivate.hpp"
 #include "Debug/PerfCounters.hpp"
 
-#include <Flux/Detail/SmallVector.hpp>
-#include <Flux/Graphics/TextLayout.hpp>
+#include <Lambda/Detail/SmallVector.hpp>
+#include <Lambda/Graphics/TextLayout.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -33,7 +33,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 struct ContentHash {
   std::uint64_t hi = 0;
@@ -110,7 +110,7 @@ constexpr char const* kDefaultFontFamily = ".AppleSystemUIFont";
 constexpr float kDefaultFontSize = 14.f;
 constexpr float kDefaultFontWeight = 400.f;
 constexpr float kPadPx = 1.f;
-NSString* const kFluxBackgroundColorAttributeName = @"FluxBackgroundColorRGBA";
+NSString* const kLambdaBackgroundColorAttributeName = @"LambdaBackgroundColorRGBA";
 
 constexpr std::size_t kMinFastPathBytes = 512u;
 constexpr std::uint32_t kMinHardLineBreaks = 4u;
@@ -247,7 +247,7 @@ static void releaseRef(T ref) noexcept {
 }
 
 static bool paragraphCacheDisabledByEnv() noexcept {
-  char const* const s = std::getenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+  char const* const s = std::getenv("LAMBDA_DISABLE_PARAGRAPH_CACHE");
   return s != nullptr && s[0] == '1' && s[1] == '\0';
 }
 
@@ -863,7 +863,7 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
   NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
   CTFontRef ctFont = (__bridge CTFontRef)attrs[(id)kCTFontAttributeName];
   CGColorRef cgColor = (__bridge CGColorRef)attrs[(id)kCTForegroundColorAttributeName];
-  NSNumber* bgPacked = attrs[kFluxBackgroundColorAttributeName];
+  NSNumber* bgPacked = attrs[kLambdaBackgroundColorAttributeName];
 
   std::uint32_t fontId = 0;
   float fontSize = 0.f;
@@ -971,15 +971,15 @@ struct LayoutSlot {
   float maxWidthExact = 0.f;
   std::int32_t maxLines = 0;
   std::shared_ptr<TextLayout const> unboxed;
-  flux::detail::SmallVector<BoxSlot, 4> boxes;
+  lambda::detail::SmallVector<BoxSlot, 4> boxes;
 };
 
 struct FramesetterEntry {
   CFAttributedStringRef attrString = nullptr;
   CTFramesetterRef framesetter = nullptr;
-  flux::detail::SmallVector<MeasureSlot, 4> measures;
-  flux::detail::SmallVector<LayoutSlot, 4> layouts;
-  flux::detail::SmallVector<std::uint32_t, 4> fontIds;
+  lambda::detail::SmallVector<MeasureSlot, 4> measures;
+  lambda::detail::SmallVector<LayoutSlot, 4> layouts;
+  lambda::detail::SmallVector<std::uint32_t, 4> fontIds;
   std::uint64_t lastTouchFrame = 0;
   std::uint32_t approxBytes = 0;
 };
@@ -1018,12 +1018,12 @@ struct ParagraphLayoutVariant {
 
 struct ShapedParagraph {
   CTTypesetterRef typesetter = nullptr;
-  flux::detail::SmallVector<std::uint32_t, 4> fontIds;
+  lambda::detail::SmallVector<std::uint32_t, 4> fontIds;
   std::uint32_t byteLength = 0;
   CFIndex utf16Length = 0;
   std::uint32_t approxBytes = 0;
   std::uint64_t lastTouchFrame = 0;
-  flux::detail::SmallVector<std::shared_ptr<ParagraphLayoutVariant>, 2> variants{};
+  lambda::detail::SmallVector<std::shared_ptr<ParagraphLayoutVariant>, 2> variants{};
 };
 
 static std::shared_ptr<void> typeErasedVariantRef(std::shared_ptr<ParagraphLayoutVariant> const& v) noexcept {
@@ -1252,7 +1252,7 @@ private:
 // Deleted: AssemblyCache (replaced by LastLayoutMemo in CoreTextSystem::Impl)
 // PLACEHOLDER_FOR_ASSEMBLY_CACHE_END
 
-static LayoutMemoKey computeLayoutMemoKey(flux::detail::SmallVector<ParagraphHash, 32> const& hashes,
+static LayoutMemoKey computeLayoutMemoKey(lambda::detail::SmallVector<ParagraphHash, 32> const& hashes,
                                           std::uint32_t maxWidthQ1, TextLayoutOptions const& opt) {
   XXH3_state_t st{};
   XXH3_128bits_reset(&st);
@@ -1346,12 +1346,12 @@ struct CoreTextSystem::Impl {
                               std::uint32_t runStart, std::uint32_t runEnd, std::uint32_t byteStart,
                               TextLayoutOptions const& opt);
 
-  flux::detail::SmallVector<Paragraph, 32> splitIntoParagraphs(
+  lambda::detail::SmallVector<Paragraph, 32> splitIntoParagraphs(
       CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
       TextLayoutOptions const& opt);
 
   struct IncrementalSplitResult {
-    flux::detail::SmallVector<Paragraph, 32> paragraphs;
+    lambda::detail::SmallVector<Paragraph, 32> paragraphs;
     std::size_t firstChanged = 0;        ///< First dirty paragraph index in the NEW list.
     std::size_t lastChangedExcl = 0;     ///< Exclusive end of dirty range in the NEW list.
     std::size_t firstChangedOld = 0;     ///< First dirty paragraph index in the OLD list.
@@ -1376,7 +1376,7 @@ struct CoreTextSystem::Impl {
   std::shared_ptr<TextLayout const> layoutViaParagraphCache(
       CoreTextSystem& sys, AttributedString const& text, float maxWidth,
       TextLayoutOptions const& options, std::vector<ResolvedStyle> const& resolved,
-      flux::detail::SmallVector<Paragraph, 32>&& paragraphs, IncrementalSplitResult const* incr = nullptr,
+      lambda::detail::SmallVector<Paragraph, 32>&& paragraphs, IncrementalSplitResult const* incr = nullptr,
       bool noMemoSideEffects = false);
 
   std::shared_ptr<ParagraphLayoutVariant> buildParagraphVariant(
@@ -1534,7 +1534,7 @@ struct CoreTextSystem::Impl {
       attrs = @{
         (id)kCTFontAttributeName : (__bridge id)font,
         (id)kCTForegroundColorAttributeName : (__bridge id)cg,
-        kFluxBackgroundColorAttributeName : @(backgroundRgba),
+        kLambdaBackgroundColorAttributeName : @(backgroundRgba),
       };
     } else {
       attrs = @{
@@ -1608,7 +1608,7 @@ struct CoreTextSystem::Impl {
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    flux::detail::SmallVector<ResolvedStyle, 4> resolved;
+    lambda::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
     return createCFAttributed(sys, as, {resolved.data(), resolved.size()}, options);
   }
@@ -2249,10 +2249,10 @@ static bool paragraphCachePredicate(AttributedString const& text, TextLayoutOpti
   return true;
 }
 
-flux::detail::SmallVector<Paragraph, 32> CoreTextSystem::Impl::splitIntoParagraphs(
+lambda::detail::SmallVector<Paragraph, 32> CoreTextSystem::Impl::splitIntoParagraphs(
     CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
     TextLayoutOptions const& opt) {
-  flux::detail::SmallVector<Paragraph, 32> out;
+  lambda::detail::SmallVector<Paragraph, 32> out;
   char const* const bytes = text.utf8.data();
   std::uint32_t const n = static_cast<std::uint32_t>(text.utf8.size());
   std::uint32_t seg = 0;
@@ -2488,10 +2488,10 @@ ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys
 
 std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options,
-    std::vector<ResolvedStyle> const& resolved, flux::detail::SmallVector<Paragraph, 32>&& paragraphs,
+    std::vector<ResolvedStyle> const& resolved, lambda::detail::SmallVector<Paragraph, 32>&& paragraphs,
     IncrementalSplitResult const* incr, bool const noMemoSideEffects) {
-#if defined(FLUX_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
-  flux::detail::SmallVector<Paragraph, 32> parallelRefParagraphs;
+#if defined(LAMBDA_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
+  lambda::detail::SmallVector<Paragraph, 32> parallelRefParagraphs;
   if (incr != nullptr) {
     parallelRefParagraphs = paragraphs;
   }
@@ -2504,7 +2504,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
   // check would always miss.  Skip the O(N) phashes build and hash computation entirely.
   if (!noMemoSideEffects) {
     if (incr == nullptr) {
-      flux::detail::SmallVector<ParagraphHash, 32> phashes;
+      lambda::detail::SmallVector<ParagraphHash, 32> phashes;
       phashes.reserve(paraCount);
       for (std::size_t i = 0; i < paraCount; ++i) {
         phashes.push_back(paragraphs[i].hash);
@@ -2561,7 +2561,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     }
     if (!sp) return false;
 
-#if defined(FLUX_DISABLE_VARIANT_CACHE)
+#if defined(LAMBDA_DISABLE_VARIANT_CACHE)
     std::shared_ptr<ParagraphLayoutVariant> v;
 #else
     std::shared_ptr<ParagraphLayoutVariant> v = findVariant(*sp, wq, options, paragraphCache_, suppressStats);
@@ -2740,14 +2740,14 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     recomputeTextLayoutMetrics(*out);
   }
 
-#if defined(FLUX_DISABLE_VARIANT_REFS)
+#if defined(LAMBDA_DISABLE_VARIANT_REFS)
   // Deep-copy glyphs into owned storage (rollback when variant reference-counting is disabled).
   std::shared_ptr<TextLayout const> const result = cloneTextLayout(*out);
 #else
   std::shared_ptr<TextLayout const> const result = std::const_pointer_cast<TextLayout const>(out);
 #endif
 
-#if defined(FLUX_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
+#if defined(LAMBDA_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
   if (!noMemoSideEffects && canIncrAssemble && incr != nullptr) {
     std::string dump;
     auto const ref =
@@ -2898,7 +2898,7 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    flux::detail::SmallVector<ResolvedStyle, 4> resolved;
+    lambda::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, {resolved.data(), resolved.size()}, options, *this);
   }();
@@ -3018,7 +3018,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    flux::detail::SmallVector<ResolvedStyle, 4> resolved;
+    lambda::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, {resolved.data(), resolved.size()}, options, *this);
   }();
@@ -3326,4 +3326,4 @@ std::shared_ptr<TextLayout const> paragraphCacheFullAssemblyForTest(
 
 } // namespace detail
 
-} // namespace flux
+} // namespace lambda

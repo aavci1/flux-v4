@@ -2,9 +2,9 @@
 
 #import <Metal/Metal.h>
 
-namespace flux::detail {
+namespace lambda::detail {
 
-/// Loads the embedded `FluxShaders.metallib` once per `MTLDevice` (cached).
-id<MTLLibrary> fluxLoadShaderLibrary(id<MTLDevice> device);
+/// Loads the embedded `LambdaShaders.metallib` once per `MTLDevice` (cached).
+id<MTLLibrary> lambdaLoadShaderLibrary(id<MTLDevice> device);
 
-} // namespace flux::detail
+} // namespace lambda::detail

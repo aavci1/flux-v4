@@ -5,30 +5,30 @@
 #include <vector>
 
 TEST_CASE("layer shell reserved zones aggregate top bar and dock") {
-  std::vector<flux::compositor::LayerShellReservedZoneInput> layers{
+  std::vector<lambda::compositor::LayerShellReservedZoneInput> layers{
       {.nameSpace = "lambda.topbar", .exclusiveZone = 36},
       {.nameSpace = "lambda.dock",
        .exclusiveZone = 0,
-       .anchor = flux::compositor::kLayerShellAnchorBottom,
+       .anchor = lambda::compositor::kLayerShellAnchorBottom,
        .marginBottom = 8,
        .extent = 64},
   };
-  auto const zones = flux::compositor::aggregateLayerShellReservedZones(layers);
+  auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
   CHECK(zones.topBar == 36);
   CHECK(zones.dock == 72);
 }
 
 TEST_CASE("layer shell reserved zones ignore unrelated namespaces") {
-  std::vector<flux::compositor::LayerShellReservedZoneInput> layers{
+  std::vector<lambda::compositor::LayerShellReservedZoneInput> layers{
       {.nameSpace = "com.example.panel", .exclusiveZone = 48},
   };
-  auto const zones = flux::compositor::aggregateLayerShellReservedZones(layers);
+  auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
   CHECK(zones.topBar == 0);
   CHECK(zones.dock == 0);
 }
 
 TEST_CASE("layer shell configure size resolves output-relative dimensions") {
-  using namespace flux::compositor;
+  using namespace lambda::compositor;
 
   auto const horizontal = resolveLayerShellConfigureSize({
       .requestedWidth = 0,

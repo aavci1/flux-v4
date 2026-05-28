@@ -4,11 +4,11 @@
 ///
 /// RAII helpers for retained-scene layout measurement.
 
-#include <Flux/UI/MeasureContext.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
 
 #include <cassert>
 
-namespace flux {
+namespace lambda {
 
 class ContainerMeasureScope {
 public:
@@ -46,4 +46,4 @@ private:
 #endif
 };
 
-} // namespace flux
+} // namespace lambda

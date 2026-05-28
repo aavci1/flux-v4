@@ -2,7 +2,7 @@
 
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 
-namespace flux {
+namespace lambda {
 
 MetalFrameRecorder::~MetalFrameRecorder() {
   clear();
@@ -135,4 +135,4 @@ void MetalFrameRecorder::clear() {
   glyphAtlasGeneration = 0;
 }
 
-} // namespace flux
+} // namespace lambda

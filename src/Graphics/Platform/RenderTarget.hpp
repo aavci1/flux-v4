@@ -1,10 +1,10 @@
 #pragma once
 
-#include <Flux/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
 
 #include <memory>
 
-namespace flux::platform {
+namespace lambda::platform {
 
 class RenderTarget {
 public:
@@ -15,12 +15,12 @@ public:
   virtual void endFrame() = 0;
 };
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 std::unique_ptr<RenderTarget> createRenderTarget(VulkanRenderTargetSpec const& spec);
 #endif
 
-#if FLUX_METAL
+#if LAMBDA_METAL
 std::unique_ptr<RenderTarget> createRenderTarget(MetalRenderTargetSpec const& spec);
 #endif
 
-} // namespace flux::platform
+} // namespace lambda::platform

@@ -1,12 +1,12 @@
 #pragma once
 
-#include <Flux/Graphics/TextLayout.hpp>
-#include <Flux/UI/Detail/PrimitiveForwards.hpp>
-#include <Flux/UI/ViewModifiers.hpp>
+#include <Lambda/Graphics/TextLayout.hpp>
+#include <Lambda/UI/Detail/PrimitiveForwards.hpp>
+#include <Lambda/UI/ViewModifiers.hpp>
 
 #include <memory>
 
-namespace flux {
+namespace lambda {
 
 struct InternalTextLayoutLeaf : ViewModifiers<InternalTextLayoutLeaf> {
   std::shared_ptr<TextLayout const> layout;
@@ -21,4 +21,4 @@ struct InternalTextLayoutLeaf : ViewModifiers<InternalTextLayoutLeaf> {
   }
 };
 
-} // namespace flux
+} // namespace lambda

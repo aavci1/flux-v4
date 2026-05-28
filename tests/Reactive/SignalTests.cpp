@@ -1,13 +1,13 @@
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/Reactive/SmallFn.hpp>
-#include <Flux/Reactive/Untrack.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/Reactive/SmallFn.hpp>
+#include <Lambda/Reactive/Untrack.hpp>
 
 #include <array>
 #include <doctest/doctest.h>
 #include <functional>
 
-using namespace flux::Reactive;
+using namespace lambda::Reactive;
 
 TEST_CASE("Reactive Signal reads writes and skips equal writes") {
   Signal<int> count(1);

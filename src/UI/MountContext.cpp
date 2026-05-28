@@ -1,21 +1,21 @@
-#include <Flux/UI/MountContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
 
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/TextNode.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Detail/MountPosition.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/ControlFlowDetail.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/TextNode.hpp>
+#include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Detail/MountPosition.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/ControlFlowDetail.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
-#include <Flux/Reactive/Effect.hpp>
+#include <Lambda/Reactive/Effect.hpp>
 
 #include "Layout/Algorithms/StackLayout.hpp"
 #include "UI/ViewLayout/ContainerScope.hpp"
@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -981,4 +981,4 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
 }
 
 } // namespace detail
-} // namespace flux
+} // namespace lambda

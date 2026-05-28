@@ -1,9 +1,9 @@
-#include <Flux/Reactive/Easing.hpp>
+#include <Lambda/Reactive/Easing.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace flux::Easing {
+namespace lambda::Easing {
 
 float linear(float t) {
   return t;
@@ -46,4 +46,4 @@ std::function<float(float)> spring(float stiffness, float damping) {
   };
 }
 
-} // namespace flux::Easing
+} // namespace lambda::Easing

@@ -1,4 +1,4 @@
-# Flux documentation
+# Lambda documentation
 
 ## Start here
 
@@ -7,7 +7,7 @@
 | [roadmap.md](roadmap.md) | **Project status, Lambda desktop readiness, active backlog, archived milestones** |
 | [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
 
-## Flux v5 (application framework)
+## Lambda v5 (application framework)
 
 | Document | Contents |
 |----------|----------|

@@ -1,8 +1,8 @@
-#include <Flux/UI/Views/Tooltip.hpp>
+#include <Lambda/UI/Views/Tooltip.hpp>
 
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 void useTooltip(TooltipConfig const& config) {
   (void)config;
@@ -12,4 +12,4 @@ void useTooltip(std::string text) {
   useTooltip(TooltipConfig {.text = std::move(text)});
 }
 
-} // namespace flux
+} // namespace lambda

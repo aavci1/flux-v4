@@ -1,60 +1,60 @@
-# Flux v5 Codebase Conventions
+# Lambda v5 Codebase Conventions
 
 This document describes the current repository layout and coding patterns.
 
 ## Project Identity
 
-- **Name / version:** Flux v5 (`CMakeLists.txt`: `project(flux VERSION 5.0.0 ...)`).
-- **Platform:** `FLUX_PLATFORM` selects one backend at build time: `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`. `AUTO` picks macOS on Apple hosts and Wayland on Unix hosts.
+- **Name / version:** Lambda v5 (`CMakeLists.txt`: `project(lambda VERSION 5.0.0 ...)`).
+- **Platform:** `LAMBDA_PLATFORM` selects one backend at build time: `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`. `AUTO` picks macOS on Apple hosts and Wayland on Unix hosts.
 - **Language:** C++23, extensions off.
 - **Minimum macOS:** 11.0.
-- **Library:** Static library target `flux`.
-- **Examples:** Optional executable targets in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt), enabled with `FLUX_BUILD_EXAMPLES=ON`.
+- **Library:** Static library target `lambda`.
+- **Examples:** Optional executable targets in [`demos/CMakeLists.txt`](../demos/CMakeLists.txt), enabled with `LAMBDA_BUILD_EXAMPLES=ON`.
 
 ## Build System
 
 - CMake minimum is 3.25.
 - C is enabled for vendored `libtess2`; Objective-C and Objective-C++ are enabled only for the macOS backend.
 - Public includes come from `include/`; private implementation helpers come from `src/`.
-- The `flux` target builds with `-Wall -Wextra -Wpedantic`.
+- The `lambda` target builds with `-Wall -Wextra -Wpedantic`.
 - Metal shaders compile through `xcrun metal`, `metallib`, and `xxd` into an embedded shader header.
 
 ## Directory Layout
 
 | Path | Role |
 |------|------|
-| `include/Flux/` | Public headers |
-| `include/Flux.hpp` | Umbrella include |
-| `include/Flux/Reactive/` | Signals, computed values, effects, scopes, bindings, animation |
-| `include/Flux/UI/` | Declarative UI, hooks, views, layout, mount runtime |
-| `include/Flux/SceneGraph/` | Retained scene tree and renderer-facing nodes |
-| `include/Flux/Graphics/` | Canvas, text, path, and style types |
-| `include/Flux/Detail/` | Implementation-facing public headers |
+| `include/Lambda/` | Public headers |
+| `include/Lambda.hpp` | Umbrella include |
+| `include/Lambda/Reactive/` | Signals, computed values, effects, scopes, bindings, animation |
+| `include/Lambda/UI/` | Declarative UI, hooks, views, layout, mount runtime |
+| `include/Lambda/SceneGraph/` | Retained scene tree and renderer-facing nodes |
+| `include/Lambda/Graphics/` | Canvas, text, path, and style types |
+| `include/Lambda/Detail/` | Implementation-facing public headers |
 | `src/Core/` | `Application`, `Window`, event loop, platform window factory |
 | `src/UI/` | Mount/runtime/layout implementation |
 | `src/Reactive/` | Non-template reactive and animation implementation |
 | `src/SceneGraph/` | Scene graph storage, traversal, hit testing, rendering |
 | `src/Graphics/` | Portable graphics plus Metal/CoreText implementations |
 | `src/Platform/Mac/` | macOS windowing |
-| `examples/` | Sample apps |
+| `demos/` | Sample apps |
 | `docs/` | Documentation |
 
 ## Namespace
 
-- Public API lives in `flux`.
-- Reactive primitives live in `flux::Reactive`.
-- `flux::detail` is reserved for implementation helpers not meant as app-facing API.
+- Public API lives in `lambda`.
+- Reactive primitives live in `lambda::Reactive`.
+- `lambda::detail` is reserved for implementation helpers not meant as app-facing API.
 
 ## Public And Private Headers
 
-- Headers under `include/Flux/...` are public.
+- Headers under `include/Lambda/...` are public.
 - Headers under `src/...` are private and must not be required by external consumers.
 - Public headers must stay Objective-C-free.
 
 ## Umbrella Includes
 
-- Use `#include <Flux.hpp>` for applications that want core, graphics, scene graph, and reactive primitives.
-- Use `#include <Flux/UI/UI.hpp>` for declarative UI applications.
+- Use `#include <Lambda.hpp>` for applications that want core, graphics, scene graph, and reactive primitives.
+- Use `#include <Lambda/UI/UI.hpp>` for declarative UI applications.
 - Finer-grained includes are preferred inside library headers and tests when they reduce dependencies.
 
 ## Pimpl
@@ -76,7 +76,7 @@ This applies to `Application`, `Window`, `EventQueue`, macOS platform implementa
 
 ## Retained UI
 
-Flux v5 mounts UI once and updates retained scene nodes through reactive dependencies:
+Lambda v5 mounts UI once and updates retained scene nodes through reactive dependencies:
 
 - `MountRoot` owns the root scene node and root `Reactive::Scope`.
 - Hooks require an active owner scope.
@@ -105,7 +105,7 @@ Flux v5 mounts UI once and updates retained scene nodes through reactive depende
 
 ## Platform Abstraction
 
-`platform::Window` is private to `src/UI/Platform`. Portable UI code calls `flux::platform::createWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
+`platform::Window` is private to `src/UI/Platform`. Portable UI code calls `lambda::platform::createWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
 
 ## Includes
 
@@ -116,4 +116,4 @@ Flux v5 mounts UI once and updates retained scene nodes through reactive depende
 
 ## Examples
 
-Examples are intentionally small and are registered by `flux_add_example()` in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt). Shared v5 example scaffolding lives in [`examples/common/V5ExampleApp.hpp`](../examples/common/V5ExampleApp.hpp).
+Examples are intentionally small and are registered by `lambda_add_example()` in [`demos/CMakeLists.txt`](../demos/CMakeLists.txt). Shared v5 example scaffolding lives in [`demos/common/V5ExampleApp.hpp`](../demos/common/V5ExampleApp.hpp).

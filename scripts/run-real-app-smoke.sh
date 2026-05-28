@@ -140,7 +140,7 @@ lambda_exe() {
   if [[ "$1" == "lambda-shell" ]]; then
     printf "%s/%s" "$BUILD_DIR" "$1"
   else
-    printf "%s/examples/%s" "$BUILD_DIR" "$1"
+    printf "%s/demos/%s" "$BUILD_DIR" "$1"
   fi
 }
 

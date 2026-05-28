@@ -1,31 +1,31 @@
-#include <Flux/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
 
 #include "Graphics/Platform/RenderTarget.hpp"
 
 #include <stdexcept>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
 platform::RenderTarget& checkedTarget(std::unique_ptr<platform::RenderTarget> const& impl) {
   if (!impl) {
-    throw std::runtime_error("Flux RenderTarget backend is unavailable");
+    throw std::runtime_error("Lambda RenderTarget backend is unavailable");
   }
   return *impl;
 }
 
 } // namespace
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 RenderTarget::RenderTarget(VulkanRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);
 }
 #endif
 
-#if FLUX_METAL
+#if LAMBDA_METAL
 RenderTarget::RenderTarget(MetalRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);
@@ -48,4 +48,4 @@ void RenderTarget::endFrame() {
   checkedTarget(impl_).endFrame();
 }
 
-} // namespace flux
+} // namespace lambda

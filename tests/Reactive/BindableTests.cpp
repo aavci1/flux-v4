@@ -1,13 +1,13 @@
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Core/Color.hpp>
-#include <Flux/Reactive/Bindable.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Core/Color.hpp>
+#include <Lambda/Reactive/Bindable.hpp>
 
 #include <doctest/doctest.h>
 
 #include <string>
 
-using namespace flux;
-using namespace flux::Reactive;
+using namespace lambda;
+using namespace lambda::Reactive;
 
 TEST_CASE("Reactive Bindable stores plain values") {
   Bindable<int> integer(42);
@@ -34,7 +34,7 @@ TEST_CASE("Reactive Bindable stores reactive closures") {
   CHECK(integer.evaluate() == 10);
 }
 
-TEST_CASE("Reactive Bindable works with Flux value types") {
+TEST_CASE("Reactive Bindable works with Lambda value types") {
   Bindable<Color> color(Color::hex(0x4080BF));
   CHECK(color.evaluate() == Color::hex(0x4080BF));
 

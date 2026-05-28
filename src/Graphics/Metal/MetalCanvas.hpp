@@ -1,12 +1,12 @@
 #pragma once
 
-#include <Flux/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
 
 #include <functional>
 #include <memory>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 class Image;
 struct MetalRenderTargetSpec;
@@ -56,4 +56,4 @@ bool requestNextFrameCaptureForCanvas(Canvas* canvas);
 bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, std::uint32_t& width,
                                 std::uint32_t& height);
 
-} // namespace flux
+} // namespace lambda

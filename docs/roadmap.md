@@ -1,4 +1,4 @@
-# Flux and Lambda roadmap
+# Lambda and Lambda roadmap
 
 **Last updated:** 2026-05-27
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
@@ -16,7 +16,7 @@ This document replaces the older roadmap, Lambda desktop readiness index, compon
 | [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, and run `lambda-window-manager` from a TTY |
 | [linux-development.md](linux-development.md) | Linux package setup and KMS/Vulkan development notes |
 | [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
-| [reactive-graph.md](reactive-graph.md), [composites.md](composites.md), [migrating-to-v5.md](migrating-to-v5.md), [ui-view-body-style.md](ui-view-body-style.md), [event_queue.md](event_queue.md) | Flux v5 framework reference |
+| [reactive-graph.md](reactive-graph.md), [composites.md](composites.md), [migrating-to-v5.md](migrating-to-v5.md), [ui-view-body-style.md](ui-view-body-style.md), [event_queue.md](event_queue.md) | Lambda v5 framework reference |
 
 Deleted/superseded docs:
 
@@ -51,7 +51,7 @@ Deleted/superseded docs:
 
 | Area | Current status |
 | --- | --- |
-| Flux v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
+| Lambda v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
 | App platforms | macOS Metal, Linux Wayland Vulkan, Linux KMS Vulkan. |
 | Examples | Demo and Lambda app targets build through CMake when examples are enabled. |
 | Window Manager | Core compositor is usable for dogfooding on the target hardware; remaining gate is broader real-app validation and visual polish. |
@@ -157,7 +157,7 @@ Terminal:
 Current implementation:
 
 - `lambda-window-manager` owns a selected KMS output, runs a Wayland server, renders through Vulkan/Canvas, and hosts Lambda plus normal Wayland apps.
-- Core idle behavior, Flux app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
+- Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths.
 - Firefox dogfooding blockers addressed in the tested paths: xdg-popup lifecycle cleanup follows the wlroots-style inert-resource pattern, Firefox crash/recovery windows no longer grow on focus changes, fullscreen video can restore, and fullscreen preserves pre-fullscreen maximized/snapped/normal state.
@@ -289,7 +289,7 @@ Status testing:
 
 Current implementation:
 
-- `lambda-settings` opens as a system-titlebar Flux app.
+- `lambda-settings` opens as a system-titlebar Lambda app.
 - It reads and writes Window Manager and Shell owner config files directly.
 - It generates owner configs with defaults when missing.
 - Schema metadata exists for displayed settings.
@@ -322,7 +322,7 @@ Deferred:
 
 Current implementation:
 
-- `lambda-files` opens as an integrated-titlebar Flux app with glass background.
+- `lambda-files` opens as an integrated-titlebar Lambda app with glass background.
 - Live UI supports sidebar places, breadcrumbs, back/forward/up, grid/list view, hidden-file toggle, pointer/keyboard multi-select, range select, select all, clear selection, activation, create folder/file, copy/cut/paste, duplicate, trash-first delete, reveal, default open, context menus, and periodic refresh.
 - Preferences persist for hidden files and view mode.
 - Clipboard uses internal copy/cut state plus `text/uri-list` text for compatible clients.
@@ -342,7 +342,7 @@ Open gate:
 - Add visible sort controls for name/kind/size/modified time and direction.
 - Add explicit open-with chooser UI.
 - Replace polling refresh with native watcher integration where practical.
-- Add Flux-level file drag source/target widgets before advertising drag/drop.
+- Add Lambda-level file drag source/target widgets before advertising drag/drop.
 
 Validation:
 
@@ -444,32 +444,32 @@ Manual validation coverage inherited from the old readiness specs:
 Useful targeted checks:
 
 ```sh
-./build/flux_tests --test-case="Shell*"
-./build/flux_tests --test-case="Settings*"
-./build/flux_tests --test-case="*Files*"
-./build/flux_tests --test-case="Terminal*"
-./build/flux_tests --test-case="screenshot*"
-./build/flux_tests --test-case="surface*"
+./build/lambda_tests --test-case="Shell*"
+./build/lambda_tests --test-case="Settings*"
+./build/lambda_tests --test-case="*Files*"
+./build/lambda_tests --test-case="Terminal*"
+./build/lambda_tests --test-case="screenshot*"
+./build/lambda_tests --test-case="surface*"
 ```
 
 `ctest --test-dir build --output-on-failure` may require a live Wayland display and Vulkan device depending on the environment.
 
 ## Archived Completed Work
 
-Flux v5:
+Lambda v5:
 
 - Retained mounting and fine-grained reactivity are the current public API.
 - `MountRoot`, `MountContext`, `Signal`, `Computed`, `Effect`, `Scope`, `Bindable`, `For`, `Show`, and `Switch` are implemented.
-- Framework docs live in the focused Flux v5 reference docs.
+- Framework docs live in the focused Lambda v5 reference docs.
 
 Compositor structural cleanup:
 
-- Wayland globals split into `src/Compositor/Wayland/Globals/`.
+- Wayland globals split into `apps/lambda-window-manager/Compositor/Wayland/Globals/`.
 - `WaylandServer` uses a pimpl.
 - Runtime split into `CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`, and related modules.
 - Window/input logic split into `FocusStack`, `PointerRouter`, `InteractiveMoveResize`, `KeyboardShortcuts`, and `LayerShellInput`.
-- Resize tracing unified under `flux::detail::resizeTrace`.
-- Protocol codegen consolidated through `cmake/FluxWaylandProtocols.cmake`.
+- Resize tracing unified under `lambda::detail::resizeTrace`.
+- Protocol codegen consolidated through `cmake/LambdaWaylandProtocols.cmake`.
 
 Compositor and Shell framework work:
 

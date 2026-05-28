@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Flux/UI/MenuItem.hpp>
-#include <Flux/UI/Input.hpp>
+#include <Lambda/UI/MenuItem.hpp>
+#include <Lambda/UI/Input.hpp>
 
 #include <functional>
 #include <memory>
@@ -17,7 +17,7 @@ struct VkSurfaceKHR_T;
 using VkSurfaceKHR = VkSurfaceKHR_T*;
 #endif
 
-namespace flux::platform {
+namespace lambda::platform {
 
 struct ShortcutKey {
   KeyCode key = 0;
@@ -56,4 +56,4 @@ public:
 
 std::unique_ptr<Application> createApplication();
 
-} // namespace flux::platform
+} // namespace lambda::platform

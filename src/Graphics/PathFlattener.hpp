@@ -1,14 +1,14 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Core/Color.hpp>
-#include <Flux/Graphics/Path.hpp>
-#include <Flux/Graphics/Styles.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Core/Color.hpp>
+#include <Lambda/Graphics/Path.hpp>
+#include <Lambda/Graphics/Styles.hpp>
 
 #include <cstdint>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 /** Vertex layout for GPU path rendering (matches path shader). */
 struct PathVertex {
@@ -58,4 +58,4 @@ private:
                           float tol, int depth);
 };
 
-} // namespace flux
+} // namespace lambda

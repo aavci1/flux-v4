@@ -1,20 +1,20 @@
-#include <Flux/UI/Views/Toast.hpp>
+#include <Lambda/UI/Views/Toast.hpp>
 
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Icon.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/VStack.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Icon.hpp>
+#include <Lambda/UI/Views/Spacer.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
 
 #include <algorithm>
 #include <memory>
 #include <unordered_map>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -306,4 +306,4 @@ useToast() {
   return {std::move(show), std::move(dismiss), std::move(clear), !registry->overlays.empty()};
 }
 
-} // namespace flux
+} // namespace lambda

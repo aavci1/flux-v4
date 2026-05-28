@@ -1,24 +1,24 @@
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Events.hpp>
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Core/Color.hpp>
-#include <Flux/UI/Cursor.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/MenuItem.hpp>
-#include <Flux/UI/Views/Popover.hpp>
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/SceneGraph/SceneInteraction.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/SceneRenderer.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/UI/EnvironmentBinding.hpp>
-#include <Flux/UI/EnvironmentKeys.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Events.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Core/Color.hpp>
+#include <Lambda/UI/Cursor.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/MenuItem.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/EnvironmentBinding.hpp>
+#include <Lambda/UI/EnvironmentKeys.hpp>
+#include <Lambda/UI/Theme.hpp>
 
 #include <memory>
 #include <utility>
@@ -35,7 +35,7 @@
 #include <chrono>
 #include <optional>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -54,14 +54,14 @@ void logUnsupportedWindowConfigOnce(char const* feature) {
   if (!slot || *slot) return;
   *slot = true;
   if (std::strcmp(feature, "background") == 0) {
-    std::fprintf(stderr, "flux: Window.background is not supported on this platform backend\n");
+    std::fprintf(stderr, "lambda: Window.background is not supported on this platform backend\n");
   } else {
-    std::fprintf(stderr, "flux: WindowConfig.%s is not supported on this platform backend\n", feature);
+    std::fprintf(stderr, "lambda: WindowConfig.%s is not supported on this platform backend\n", feature);
   }
 }
 
 void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities const& capabilities) {
-  char const* env = std::getenv("FLUX_LOG_WINDOW_CONFIG");
+  char const* env = std::getenv("LAMBDA_LOG_WINDOW_CONFIG");
   if (!env || !*env || *env == '0') return;
 
   if (config.layerShell.enabled && !capabilities.supportsLayerShell) {
@@ -80,7 +80,7 @@ void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities
 }
 
 void validateWindowBackground(WindowBackground const& background, PlatformWindowCapabilities const& capabilities) {
-  char const* env = std::getenv("FLUX_LOG_WINDOW_CONFIG");
+  char const* env = std::getenv("LAMBDA_LOG_WINDOW_CONFIG");
   if (!env || !*env || *env == '0') return;
 
   if (background.kind == WindowBackgroundKind::Glass && !capabilities.supportsWindowGlass) {
@@ -277,7 +277,7 @@ Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>(*this, config);
   d->platform_ = platform::createWindow(config);
   validateWindowConfig(config, d->platform_->capabilities());
-  d->platform_->setFluxWindow(this);
+  d->platform_->setLambdaWindow(this);
   d->refreshChromeMetrics();
   Application::instance().eventQueue().post(WindowLifecycleEvent{
       .kind = WindowLifecycleEvent::Kind::Registered,
@@ -596,4 +596,4 @@ void Window::render(Canvas& canvas) {
   }
 }
 
-} // namespace flux
+} // namespace lambda

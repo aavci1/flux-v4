@@ -1,13 +1,13 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Layout/Alignment.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Layout/Alignment.hpp>
 
 #include <optional>
 #include <span>
 #include <vector>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 enum class StackAxis {
   Vertical,
@@ -54,4 +54,4 @@ StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
                               float assignedCrossSize,
                               bool hasAssignedCrossSize);
 
-} // namespace flux::layout
+} // namespace lambda::layout

@@ -1,8 +1,8 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Window.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Window.hpp>
 
 #include "UI/Platform/Application.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
@@ -24,7 +24,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 namespace {
 
 std::atomic<unsigned int> gNextHandle{1};
@@ -80,7 +80,7 @@ drmModeModeInfo selectMode(KmsConnector const& connector, int width, int height,
     }
   }
   std::fprintf(stderr,
-               "[flux:kms] requested mode %dx%d@%d for connector %s is unavailable; using preferred mode.\n",
+               "[lambda:kms] requested mode %dx%d@%d for connector %s is unavailable; using preferred mode.\n",
                width, height, refreshHz, connector.name.c_str());
   return preferredMode(connector);
 }
@@ -155,12 +155,12 @@ KmsWindow::~KmsWindow() {
   if (frameTimerFd_ >= 0) close(frameTimerFd_);
 }
 
-void KmsWindow::setFluxWindow(::flux::Window* window) {
-  fluxWindow_ = window;
+void KmsWindow::setLambdaWindow(::lambda::Window* window) {
+  lambdaWindow_ = window;
 }
 
 void KmsWindow::show() {
-  if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(1.f, 1.f);
+  if (lambdaWindow_) lambdaWindow_->updateCanvasDpiScale(1.f, 1.f);
   Point const center{std::max(0.f, size_.width * 0.5f), std::max(0.f, size_.height * 0.5f)};
   app_.setPointerPosition(this, center);
   cursorPos_ = center;
@@ -170,7 +170,7 @@ void KmsWindow::show() {
   Application::instance().flushRedraw();
 }
 
-std::unique_ptr<Canvas> KmsWindow::createCanvas(::flux::Window&) {
+std::unique_ptr<Canvas> KmsWindow::createCanvas(::lambda::Window&) {
   configureVulkanCanvasRuntime(app_.requiredVulkanInstanceExtensions(), app_.cacheDir());
   VkInstance instance = ensureSharedVulkanInstance();
   VkSurfaceKHR surface = app_.createVulkanSurface(instance, &connector_);
@@ -314,7 +314,7 @@ void KmsWindow::applyCursor() {
   }
   if (rc != 0) {
     if (!cursorVisible_) {
-      std::fprintf(stderr, "[flux:kms] failed to set hardware cursor on connector %s.\n", connector_.name.c_str());
+      std::fprintf(stderr, "[lambda:kms] failed to set hardware cursor on connector %s.\n", connector_.name.c_str());
     }
     cursorVisible_ = false;
     return;
@@ -342,7 +342,7 @@ bool KmsWindow::ensureCursorBuffer() {
   create.height = height;
   create.bpp = 32;
   if (drmIoctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &create) != 0) {
-    std::fprintf(stderr, "[flux:kms] failed to create cursor buffer.\n");
+    std::fprintf(stderr, "[lambda:kms] failed to create cursor buffer.\n");
     return false;
   }
   drm_mode_map_dumb map{};
@@ -351,7 +351,7 @@ bool KmsWindow::ensureCursorBuffer() {
     drm_mode_destroy_dumb destroy{};
     destroy.handle = create.handle;
     drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
-    std::fprintf(stderr, "[flux:kms] failed to map cursor buffer.\n");
+    std::fprintf(stderr, "[lambda:kms] failed to map cursor buffer.\n");
     return false;
   }
   void* mapped = mmap(nullptr, create.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, map.offset);
@@ -359,7 +359,7 @@ bool KmsWindow::ensureCursorBuffer() {
     drm_mode_destroy_dumb destroy{};
     destroy.handle = create.handle;
     drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
-    std::fprintf(stderr, "[flux:kms] failed to mmap cursor buffer.\n");
+    std::fprintf(stderr, "[lambda:kms] failed to mmap cursor buffer.\n");
     return false;
   }
   drawArrowCursor(static_cast<std::uint32_t*>(mapped), create.pitch / sizeof(std::uint32_t), height);
@@ -395,4 +395,4 @@ std::unique_ptr<Window> createWindow(WindowConfig const& config) {
 }
 
 } // namespace platform
-} // namespace flux
+} // namespace lambda

@@ -335,7 +335,14 @@ TEST_CASE("Shell snapshot parser handles reordered fields and escaped strings") 
 
 TEST_CASE("Shell config parses defaults and invalid fallback") {
   auto defaults = lambda_shell::defaultShellConfig();
-  CHECK(defaults.dockPinned == std::vector<std::string>{"lambda-files", "lambda-terminal", "lambda-settings", "firefox"});
+  CHECK(defaults.dockPinned == std::vector<std::string>{
+                                   "lambda-files",
+                                   "lambda-editor",
+                                   "lambda-preview",
+                                   "lambda-terminal",
+                                   "lambda-settings",
+                                   "firefox",
+                               });
   CHECK(defaults.iconSize == 48);
   CHECK(defaults.topBarModules.back() == "clock");
   CHECK(defaults.clipboardHistoryEnabled);

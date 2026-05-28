@@ -4,16 +4,16 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/Cursor.hpp>
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Events.hpp>
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/MenuItem.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Views/Popover.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Profile.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/Cursor.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Events.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/MenuItem.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Profile.hpp>
 
 #include "UI/Platform/Window.hpp"
 #include "UI/Platform/WindowFactory.hpp"
@@ -32,56 +32,56 @@
 #include <string>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 class MacMetalWindow;
 class MacPopoverSurface;
 class Window;
-::flux::Window* fluxWindowForPlatform(MacMetalWindow* platform);
-CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform);
-} // namespace flux
+::lambda::Window* lambdaWindowForPlatform(MacMetalWindow* platform);
+CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
+} // namespace lambda
 
 /// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
-@interface NSCursor (FluxPrivateResizeCursors)
+@interface NSCursor (LambdaPrivateResizeCursors)
 + (NSCursor*)_windowResizeNorthEastSouthWestCursor;
 + (NSCursor*)_windowResizeNorthWestSouthEastCursor;
 @end
 
-@interface FluxMetalView : NSView <NSTextInputClient>
-@property(nonatomic, assign) flux::MacMetalWindow* fluxPlatform;
-- (CAMetalLayer*)fluxMetalLayer;
+@interface LambdaMetalView : NSView <NSTextInputClient>
+@property(nonatomic, assign) lambda::MacMetalWindow* lambdaPlatform;
+- (CAMetalLayer*)lambdaMetalLayer;
 - (void)updateDrawableSize;
-- (BOOL)fluxWantsTextInput;
-- (void)fluxHandleDisplayLink:(id)displayLink;
+- (BOOL)lambdaWantsTextInput;
+- (void)lambdaHandleDisplayLink:(id)displayLink;
 @end
 
-@interface FluxPopupMenuTarget : NSObject {
+@interface LambdaPopupMenuTarget : NSObject {
 @public
-  flux::Window* fluxWindow;
+  lambda::Window* lambdaWindow;
   std::vector<std::function<void()>> handlers;
   std::vector<std::string> actionNames;
 }
-- (void)fluxPopupMenuAction:(id)sender;
+- (void)lambdaPopupMenuAction:(id)sender;
 @end
 
-@interface FluxPopoverView : NSView <NSTextInputClient>
-@property(nonatomic, assign) flux::MacPopoverSurface* surface;
-- (CAMetalLayer*)fluxMetalLayer;
+@interface LambdaPopoverView : NSView <NSTextInputClient>
+@property(nonatomic, assign) lambda::MacPopoverSurface* surface;
+- (CAMetalLayer*)lambdaMetalLayer;
 - (void)updateDrawableSize;
 @end
 
-@interface FluxPopoverDelegate : NSObject <NSPopoverDelegate>
-@property(nonatomic, assign) flux::MacMetalWindow* platform;
+@interface LambdaPopoverDelegate : NSObject <NSPopoverDelegate>
+@property(nonatomic, assign) lambda::MacMetalWindow* platform;
 @property(nonatomic, assign) std::uint64_t popoverId;
 @end
 
-namespace flux {
+namespace lambda {
 namespace detail {
-void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
-void postTextInput(FluxMetalView* view, std::string text);
+void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
+void postTextInput(LambdaMetalView* view, std::string text);
 } // namespace detail
-} // namespace flux
+} // namespace lambda
 
-@implementation FluxMetalView
+@implementation LambdaMetalView
 
 /// NSView may use `NSViewBackingLayer` unless we supply a Metal layer here.
 /// `+layerClass` alone is not always reliable on newer macOS for `setDevice:`.
@@ -120,13 +120,13 @@ void postTextInput(FluxMetalView* view, std::string text);
   return self;
 }
 
-// Flux owns cursor state. Prevent NSView's cursor-rect machinery from
+// Lambda owns cursor state. Prevent NSView's cursor-rect machinery from
 // registering any rects on this view, so AppKit won't set cursors behind us.
 - (void)resetCursorRects {
   // Intentionally empty.
 }
 
-- (CAMetalLayer*)fluxMetalLayer {
+- (CAMetalLayer*)lambdaMetalLayer {
   CALayer* layer = self.layer;
   if ([layer isKindOfClass:[CAMetalLayer class]]) {
     return static_cast<CAMetalLayer*>(layer);
@@ -134,7 +134,7 @@ void postTextInput(FluxMetalView* view, std::string text);
   return nil;
 }
 
-- (CGFloat)fluxBackingScale {
+- (CGFloat)lambdaBackingScale {
   NSWindow* w = self.window;
   if (w) {
     return w.backingScaleFactor;
@@ -149,7 +149,7 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
   if (metalLayer && self.window) {
     metalLayer.contentsScale = self.window.backingScaleFactor;
   }
@@ -159,7 +159,7 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 - (void)viewDidChangeBackingProperties {
   [super viewDidChangeBackingProperties];
-  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
   if (metalLayer && self.window) {
     metalLayer.contentsScale = self.window.backingScaleFactor;
   }
@@ -167,11 +167,11 @@ void postTextInput(FluxMetalView* view, std::string text);
 }
 
 - (void)updateDrawableSize {
-  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
   if (!metalLayer) {
     return;
   }
-  CGFloat scale = [self fluxBackingScale];
+  CGFloat scale = [self lambdaBackingScale];
   CGSize bounds = self.bounds.size;
   CGFloat w = (std::max)(bounds.width * scale, static_cast<CGFloat>(1.0));
   CGFloat h = (std::max)(bounds.height * scale, static_cast<CGFloat>(1.0));
@@ -209,14 +209,14 @@ void postTextInput(FluxMetalView* view, std::string text);
 }
 
 - (void)keyDown:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyDown, event);
-  if ([self fluxWantsTextInput]) {
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::KeyDown, event);
+  if ([self lambdaWantsTextInput]) {
     [self interpretKeyEvents:@[event]];
   }
 }
 
 - (void)keyUp:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyUp, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::KeyUp, event);
 }
 
 - (void)doCommandBySelector:(SEL)selector {
@@ -266,7 +266,7 @@ void postTextInput(FluxMetalView* view, std::string text);
     s = (NSString*)string;
   }
   std::string utf8 = s ? [s UTF8String] : "";
-  flux::detail::postTextInput(self, std::move(utf8));
+  lambda::detail::postTextInput(self, std::move(utf8));
 }
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)point {
@@ -274,26 +274,26 @@ void postTextInput(FluxMetalView* view, std::string text);
   return NSNotFound;
 }
 
-- (BOOL)fluxWantsTextInput {
-  flux::MacMetalWindow* platform = self.fluxPlatform;
-  flux::Window* window = flux::fluxWindowForPlatform(platform);
+- (BOOL)lambdaWantsTextInput {
+  lambda::MacMetalWindow* platform = self.lambdaPlatform;
+  lambda::Window* window = lambda::lambdaWindowForPlatform(platform);
   return window && window->wantsTextInput();
 }
 
 - (NSTextInputContext*)inputContext {
-  if (![self fluxWantsTextInput]) {
+  if (![self lambdaWantsTextInput]) {
     return nil;
   }
   return [super inputContext];
 }
 
-- (void)fluxHandleDisplayLink:(id)displayLink {
+- (void)lambdaHandleDisplayLink:(id)displayLink {
   (void)displayLink;
-  flux::MacMetalWindow* platform = self.fluxPlatform;
+  lambda::MacMetalWindow* platform = self.lambdaPlatform;
   if (!platform) {
     return;
   }
-  (void)flux::fluxHandleDisplayLinkTick(platform);
+  (void)lambda::lambdaHandleDisplayLinkTick(platform);
 }
 
 - (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
@@ -305,9 +305,9 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 @end
 
-@implementation FluxPopupMenuTarget
+@implementation LambdaPopupMenuTarget
 
-- (void)fluxPopupMenuAction:(id)sender {
+- (void)lambdaPopupMenuAction:(id)sender {
   NSMenuItem* item = [sender isKindOfClass:[NSMenuItem class]] ? sender : nil;
   if (!item) {
     return;
@@ -321,18 +321,18 @@ void postTextInput(FluxMetalView* view, std::string text);
     handler();
     return;
   }
-  if (static_cast<std::size_t>(tag) < actionNames.size() && fluxWindow && !actionNames[static_cast<std::size_t>(tag)].empty()) {
-    fluxWindow->dispatchAction(actionNames[static_cast<std::size_t>(tag)]);
+  if (static_cast<std::size_t>(tag) < actionNames.size() && lambdaWindow && !actionNames[static_cast<std::size_t>(tag)].empty()) {
+    lambdaWindow->dispatchAction(actionNames[static_cast<std::size_t>(tag)]);
   }
 }
 
 @end
 
-@interface FluxWindowDelegate : NSObject <NSWindowDelegate>
-@property (nonatomic, assign) flux::MacMetalWindow* platform;
+@interface LambdaWindowDelegate : NSObject <NSWindowDelegate>
+@property (nonatomic, assign) lambda::MacMetalWindow* platform;
 @end
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -343,7 +343,7 @@ NSString* ns(std::string const& text) {
   return out ? out : @"";
 }
 
-bool popupItemEnabled(flux::MenuItem const& item, flux::Window* window) {
+bool popupItemEnabled(lambda::MenuItem const& item, lambda::Window* window) {
   if (item.isEnabled && !item.isEnabled()) {
     return false;
   }
@@ -353,22 +353,22 @@ bool popupItemEnabled(flux::MenuItem const& item, flux::Window* window) {
   return true;
 }
 
-void addPopupMenuItem(NSMenu* menu, flux::MenuItem const& item, FluxPopupMenuTarget* target) {
-  if (item.role == flux::MenuRole::Separator) {
+void addPopupMenuItem(NSMenu* menu, lambda::MenuItem const& item, LambdaPopupMenuTarget* target) {
+  if (item.role == lambda::MenuRole::Separator) {
     [menu addItem:[NSMenuItem separatorItem]];
     return;
   }
 
-  if (item.role == flux::MenuRole::Submenu) {
+  if (item.role == lambda::MenuRole::Submenu) {
     NSMenuItem* submenuItem = [[NSMenuItem alloc] initWithTitle:ns(item.label)
                                                         action:nil
                                                  keyEquivalent:@""];
     NSMenu* submenu = [[NSMenu alloc] initWithTitle:ns(item.label)];
-    for (flux::MenuItem const& child : item.children) {
+    for (lambda::MenuItem const& child : item.children) {
       addPopupMenuItem(submenu, child, target);
     }
     submenuItem.submenu = submenu;
-    submenuItem.enabled = popupItemEnabled(item, target ? target->fluxWindow : nullptr);
+    submenuItem.enabled = popupItemEnabled(item, target ? target->lambdaWindow : nullptr);
     [menu addItem:submenuItem];
     return;
   }
@@ -379,12 +379,12 @@ void addPopupMenuItem(NSMenu* menu, flux::MenuItem const& item, FluxPopupMenuTar
     target->actionNames.push_back(item.actionName);
   }
   NSMenuItem* nsItem = [[NSMenuItem alloc] initWithTitle:ns(item.label)
-                                                  action:@selector(fluxPopupMenuAction:)
+                                                  action:@selector(lambdaPopupMenuAction:)
                                            keyEquivalent:@""];
   nsItem.target = target;
   nsItem.tag = tag;
   nsItem.state = item.checked ? NSControlStateValueOn : NSControlStateValueOff;
-  nsItem.enabled = popupItemEnabled(item, target ? target->fluxWindow : nullptr) &&
+  nsItem.enabled = popupItemEnabled(item, target ? target->lambdaWindow : nullptr) &&
                    (static_cast<bool>(item.handler) || !item.actionName.empty());
   [menu addItem:nsItem];
 }
@@ -401,7 +401,7 @@ public:
   explicit MacMetalWindow(const WindowConfig& config);
   ~MacMetalWindow() override;
 
-  void setFluxWindow(::flux::Window* window) override;
+  void setLambdaWindow(::lambda::Window* window) override;
   void show() override;
   void resize(const Size& newSize) override;
   void setMinSize(Size size) override;
@@ -425,7 +425,7 @@ public:
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
 
-  std::unique_ptr<Canvas> createCanvas(::flux::Window& owner) override;
+  std::unique_ptr<Canvas> createCanvas(::lambda::Window& owner) override;
 
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
@@ -438,7 +438,7 @@ public:
   [[nodiscard]] PlatformWindowCapabilities capabilities() const override;
   void rememberPointerDownEvent(NSEvent* event);
 
-  ::flux::Window* fluxWindow() const;
+  ::lambda::Window* lambdaWindow() const;
   CVReturn onDisplayLinkTick();
   void handlePopoverClosed(PopoverSurfaceId id);
 
@@ -464,7 +464,7 @@ public:
   MacPopoverSurface& operator=(MacPopoverSurface const&) = delete;
 
   PopoverSurfaceId id() const noexcept { return id_; }
-  bool show(FluxMetalView* parentView, Rect anchor);
+  bool show(LambdaMetalView* parentView, Rect anchor);
   void reposition(Popover const& popover, Rect anchor);
   void close();
   void notifyNativeClosed();
@@ -500,11 +500,11 @@ private:
   MacMetalWindow* owner_ = nullptr;
   PopoverSurfaceId id_{};
   Popover popover_{};
-  FluxMetalView* parentView_ = nil;
+  LambdaMetalView* parentView_ = nil;
   NSPopover* nativePopover_ = nil;
   NSViewController* controller_ = nil;
-  FluxPopoverView* view_ = nil;
-  FluxPopoverDelegate* delegate_ = nil;
+  LambdaPopoverView* view_ = nil;
+  LambdaPopoverDelegate* delegate_ = nil;
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<TransientPopoverHost> host_;
   Size size_{};
@@ -527,9 +527,9 @@ struct MacMetalWindow::Impl {
   NSWindow* window_{nil};
   NSVisualEffectView* materialView_{nil};
   NSView* tintView_{nil};
-  FluxMetalView* metalView_{nil};
-  FluxWindowDelegate* delegate_{nil};
-  ::flux::Window* fluxWindow_{nullptr};
+  LambdaMetalView* metalView_{nil};
+  LambdaWindowDelegate* delegate_{nil};
+  ::lambda::Window* lambdaWindow_{nullptr};
   unsigned int handle_{0};
   id displayLink_ = nil;
   CVDisplayLinkRef legacyDisplayLink_{nullptr};
@@ -578,15 +578,15 @@ MouseButton buttonFromNSEvent(NSEvent* e) {
   }
 }
 
-bool fluxDebugInputMacPost() {
+bool lambdaDebugInputMacPost() {
   return debug::inputEnabled();
 }
 
-void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {
-  MacMetalWindow* p = view.fluxPlatform;
-  if (!p || !p->fluxWindow()) {
-    if (fluxDebugInputMacPost()) {
-      std::fprintf(stderr, "[flux:input:mac] postInputFromView: no platform/window (dropped)\n");
+void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {
+  MacMetalWindow* p = view.lambdaPlatform;
+  if (!p || !p->lambdaWindow()) {
+    if (lambdaDebugInputMacPost()) {
+      std::fprintf(stderr, "[lambda:input:mac] postInputFromView: no platform/window (dropped)\n");
     }
     return;
   }
@@ -595,7 +595,7 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
   }
   InputEvent ie;
   ie.kind = kind;
-  ie.handle = p->fluxWindow()->handle();
+  ie.handle = p->lambdaWindow()->handle();
   if (kind == InputEvent::Kind::Scroll) {
     NSPoint pt = [view convertPoint:[e locationInWindow] fromView:nil];
     ie.position = Vec2{static_cast<float>(pt.x), static_cast<float>(pt.y)};
@@ -624,17 +624,17 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
     ie.pressedButtons = pb;
   }
   ie.text = std::move(text);
-  if (fluxDebugInputMacPost()) {
+  if (lambdaDebugInputMacPost()) {
     if (kind == InputEvent::Kind::Scroll) {
       std::fprintf(stderr,
-                   "[flux:input:mac] post Scroll handle=%u pos=(%.1f,%.1f) delta=(%.2f,%.2f)\n",
+                   "[lambda:input:mac] post Scroll handle=%u pos=(%.1f,%.1f) delta=(%.2f,%.2f)\n",
                    static_cast<unsigned>(ie.handle), static_cast<double>(ie.position.x),
                    static_cast<double>(ie.position.y), static_cast<double>(ie.scrollDelta.x),
                    static_cast<double>(ie.scrollDelta.y));
     } else if (kind == InputEvent::Kind::PointerMove) {
       static int moveN;
       if (++moveN % 20 == 1) {
-        std::fprintf(stderr, "[flux:input:mac] post PointerMove handle=%u pos=(%.1f,%.1f) (sampled)\n",
+        std::fprintf(stderr, "[lambda:input:mac] post PointerMove handle=%u pos=(%.1f,%.1f) (sampled)\n",
                      static_cast<unsigned>(ie.handle), static_cast<double>(ie.position.x),
                      static_cast<double>(ie.position.y));
       }
@@ -650,7 +650,7 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
       default:
         break;
       }
-      std::fprintf(stderr, "[flux:input:mac] post %s handle=%u pos=(%.1f,%.1f)\n", kn,
+      std::fprintf(stderr, "[lambda:input:mac] post %s handle=%u pos=(%.1f,%.1f)\n", kn,
                    static_cast<unsigned>(ie.handle), static_cast<double>(ie.position.x),
                    static_cast<double>(ie.position.y));
     }
@@ -658,14 +658,14 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
   Application::instance().eventQueue().post(ie);
 }
 
-void postTextInput(FluxMetalView* view, std::string text) {
-  MacMetalWindow* p = view.fluxPlatform;
-  if (!p || !p->fluxWindow()) {
+void postTextInput(LambdaMetalView* view, std::string text) {
+  MacMetalWindow* p = view.lambdaPlatform;
+  if (!p || !p->lambdaWindow()) {
     return;
   }
   InputEvent ie;
   ie.kind = InputEvent::Kind::TextInput;
-  ie.handle = p->fluxWindow()->handle();
+  ie.handle = p->lambdaWindow()->handle();
   ie.modifiers = modifiersFromFlags([NSEvent modifierFlags]);
   ie.text = std::move(text);
   Application::instance().eventQueue().post(ie);
@@ -694,7 +694,7 @@ Size popoverMaxSize(MacMetalWindow* owner, Popover const& popover) {
 
 MacPopoverSurface::MacPopoverSurface(MacMetalWindow* owner, PopoverSurfaceId id, Popover popover)
     : owner_(owner), id_(id), popover_(std::move(popover)) {
-  ::flux::Window* window = owner_ ? owner_->fluxWindow() : nullptr;
+  ::lambda::Window* window = owner_ ? owner_->lambdaWindow() : nullptr;
   EnvironmentBinding environment = window ? window->environmentBinding() : EnvironmentBinding{};
   Size const maxSize = popoverMaxSize(owner_, popover_);
   host_ = std::make_unique<TransientPopoverHost>(TransientPopoverHost::Config{
@@ -726,8 +726,8 @@ MacPopoverSurface::~MacPopoverSurface() {
   host_.reset();
 }
 
-bool MacPopoverSurface::show(FluxMetalView* parentView, Rect anchor) {
-  if (!owner_ || !owner_->fluxWindow() || !parentView || !host_) {
+bool MacPopoverSurface::show(LambdaMetalView* parentView, Rect anchor) {
+  if (!owner_ || !owner_->lambdaWindow() || !parentView || !host_) {
     return false;
   }
   parentView_ = parentView;
@@ -737,7 +737,7 @@ bool MacPopoverSurface::show(FluxMetalView* parentView, Rect anchor) {
                                                          : NSPopoverBehaviorApplicationDefined;
   nativePopover_.animates = YES;
 
-  delegate_ = [[FluxPopoverDelegate alloc] init];
+  delegate_ = [[LambdaPopoverDelegate alloc] init];
   delegate_.platform = owner_;
   delegate_.popoverId = id_.value;
   nativePopover_.delegate = delegate_;
@@ -745,18 +745,18 @@ bool MacPopoverSurface::show(FluxMetalView* parentView, Rect anchor) {
   controller_ = [[NSViewController alloc] init];
   controller_.preferredContentSize = NSMakeSize(static_cast<CGFloat>(size_.width),
                                                 static_cast<CGFloat>(size_.height));
-  view_ = [[FluxPopoverView alloc] initWithFrame:NSMakeRect(0, 0,
+  view_ = [[LambdaPopoverView alloc] initWithFrame:NSMakeRect(0, 0,
                                                             static_cast<CGFloat>(size_.width),
                                                             static_cast<CGFloat>(size_.height))];
   view_.surface = this;
   controller_.view = view_;
   nativePopover_.contentViewController = controller_;
 
-  CAMetalLayer* layer = [view_ fluxMetalLayer];
+  CAMetalLayer* layer = [view_ lambdaMetalLayer];
   if (!layer) {
     return false;
   }
-  canvas_ = createMetalCanvas(owner_->fluxWindow(), (__bridge void*)layer, owner_->handle(),
+  canvas_ = createMetalCanvas(owner_->lambdaWindow(), (__bridge void*)layer, owner_->handle(),
                               Application::instance().textSystem(), [this] {
                                 render();
                               });
@@ -923,9 +923,9 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   return NSMaxYEdge;
 }
 
-} // namespace flux
+} // namespace lambda
 
-@implementation FluxPopoverView
+@implementation LambdaPopoverView
 
 - (CALayer*)makeBackingLayer {
   CAMetalLayer* metalLayer = [CAMetalLayer layer];
@@ -957,7 +957,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   return self;
 }
 
-- (CAMetalLayer*)fluxMetalLayer {
+- (CAMetalLayer*)lambdaMetalLayer {
   CALayer* layer = self.layer;
   if ([layer isKindOfClass:[CAMetalLayer class]]) {
     return static_cast<CAMetalLayer*>(layer);
@@ -965,7 +965,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   return nil;
 }
 
-- (CGFloat)fluxBackingScale {
+- (CGFloat)lambdaBackingScale {
   NSWindow* w = self.window;
   return w ? w.backingScaleFactor : [NSScreen mainScreen].backingScaleFactor;
 }
@@ -977,7 +977,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
   if (metalLayer && self.window) {
     metalLayer.contentsScale = self.window.backingScaleFactor;
   }
@@ -987,7 +987,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)viewDidChangeBackingProperties {
   [super viewDidChangeBackingProperties];
-  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
   if (metalLayer && self.window) {
     metalLayer.contentsScale = self.window.backingScaleFactor;
   }
@@ -995,11 +995,11 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 }
 
 - (void)updateDrawableSize {
-  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
   if (!metalLayer) {
     return;
   }
-  CGFloat const scale = [self fluxBackingScale];
+  CGFloat const scale = [self lambdaBackingScale];
   CGSize const bounds = self.bounds.size;
   metalLayer.drawableSize = CGSizeMake((std::max)(bounds.width * scale, static_cast<CGFloat>(1.0)),
                                        (std::max)(bounds.height * scale, static_cast<CGFloat>(1.0)));
@@ -1144,33 +1144,33 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 @end
 
-@implementation FluxPopoverDelegate
+@implementation LambdaPopoverDelegate
 
 - (void)popoverDidClose:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalWindow* platform = self.platform;
+  lambda::MacMetalWindow* platform = self.platform;
   if (platform) {
-    platform->handlePopoverClosed(flux::PopoverSurfaceId{self.popoverId});
+    platform->handlePopoverClosed(lambda::PopoverSurfaceId{self.popoverId});
   }
 }
 
 @end
 
-@implementation FluxWindowDelegate
+@implementation LambdaWindowDelegate
 
 - (void)windowWillClose:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalWindow* platform = self.platform;
+  lambda::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  flux::Window* w = platform->fluxWindow();
+  lambda::Window* w = platform->lambdaWindow();
   if (!w) {
     return;
   }
   void (^block)(void) = ^{
-    flux::Application::instance().eventQueue().post(flux::WindowEvent{flux::WindowEvent::Kind::CloseRequest,
-                                                                        w->handle(), flux::Size{}, 1.0f});
+    lambda::Application::instance().eventQueue().post(lambda::WindowEvent{lambda::WindowEvent::Kind::CloseRequest,
+                                                                        w->handle(), lambda::Size{}, 1.0f});
   };
   if ([NSThread isMainThread]) {
     block();
@@ -1180,135 +1180,135 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
-  flux::MacMetalWindow* platform = self.platform;
+  lambda::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  flux::Window* fw = platform->fluxWindow();
+  lambda::Window* fw = platform->lambdaWindow();
   if (!fw) {
     return;
   }
-  flux::Size const currentSize = platform->currentSize();
+  lambda::Size const currentSize = platform->currentSize();
   platform->positionNativeWindowControls();
-  flux::Application::instance().eventQueue().post(
-      flux::WindowEvent{flux::WindowEvent::Kind::Resize, fw->handle(), currentSize, 1.0f});
+  lambda::Application::instance().eventQueue().post(
+      lambda::WindowEvent{lambda::WindowEvent::Kind::Resize, fw->handle(), currentSize, 1.0f});
   // Live resize runs in NSEventTrackingRunLoopMode; our main loop waits in NSDefaultRunLoopMode, so it does not
   // run the redraw pass until tracking ends. Dispatch + flush presents immediately during the drag.
-  flux::Application::instance().eventQueue().dispatch();
+  lambda::Application::instance().eventQueue().dispatch();
   // `flushRedraw` only presents when `requestRedraw` has been set. Declarative windows get this from
   // `Runtime`'s resize subscription; imperative apps must not rely on that — always request here.
-  flux::Application::instance().requestRedraw();
+  lambda::Application::instance().requestRedraw();
   fw->canvas().resize(static_cast<int>(std::lround(currentSize.width)),
                       static_cast<int>(std::lround(currentSize.height)));
   platform->setMetalLayerPresentsWithTransaction(true);
-  flux::setSyncPresentForCanvas(&fw->canvas(), true);
-  flux::Application::instance().flushRedraw();
+  lambda::setSyncPresentForCanvas(&fw->canvas(), true);
+  lambda::Application::instance().flushRedraw();
   platform->setMetalLayerPresentsWithTransaction(false);
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalWindow* platform = self.platform;
+  lambda::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  flux::Window* fw = platform->fluxWindow();
+  lambda::Window* fw = platform->lambdaWindow();
   if (!fw) {
     return;
   }
-  flux::Application::instance().eventQueue().post(
-      flux::WindowEvent{flux::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
-  flux::Application::instance().requestRedraw();
+  lambda::Application::instance().eventQueue().post(
+      lambda::WindowEvent{lambda::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
+  lambda::Application::instance().requestRedraw();
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
   (void)notification;
-  flux::MacMetalWindow* platform = self.platform;
+  lambda::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  flux::Window* fw = platform->fluxWindow();
+  lambda::Window* fw = platform->lambdaWindow();
   if (!fw) {
     return;
   }
-  flux::Application::instance().eventQueue().post(
-      flux::WindowEvent{flux::WindowEvent::Kind::FocusLost, fw->handle(), {}, 1.0f});
+  lambda::Application::instance().eventQueue().post(
+      lambda::WindowEvent{lambda::WindowEvent::Kind::FocusLost, fw->handle(), {}, 1.0f});
 }
 
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification {
   NSWindow* win = static_cast<NSWindow*>(notification.object);
-  flux::MacMetalWindow* platform = self.platform;
-  if (!platform || !platform->fluxWindow()) {
+  lambda::MacMetalWindow* platform = self.platform;
+  if (!platform || !platform->lambdaWindow()) {
     return;
   }
   CGFloat scale = win ? win.backingScaleFactor : 1.0;
-  flux::Window* fw = platform->fluxWindow();
-  flux::Application::instance().eventQueue().post(flux::WindowEvent{flux::WindowEvent::Kind::DpiChanged,
+  lambda::Window* fw = platform->lambdaWindow();
+  lambda::Application::instance().eventQueue().post(lambda::WindowEvent{lambda::WindowEvent::Kind::DpiChanged,
                                                        fw->handle(), {}, static_cast<float>(scale)});
 }
 
 @end
 
-@implementation FluxMetalView (FluxInput)
+@implementation LambdaMetalView (LambdaInput)
 
 - (void)mouseDown:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerDown, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerDown, event);
 }
 
 - (void)mouseUp:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerUp, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerUp, event);
 }
 
 - (void)mouseMoved:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerMove, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerMove, event);
 }
 
 - (void)mouseDragged:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerMove, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerMove, event);
 }
 
 - (void)rightMouseDown:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerDown, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerDown, event);
 }
 
 - (void)rightMouseUp:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerUp, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerUp, event);
 }
 
 - (void)otherMouseDown:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerDown, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerDown, event);
 }
 
 - (void)otherMouseUp:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::PointerUp, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerUp, event);
 }
 
 - (void)scrollWheel:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::Scroll, event);
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::Scroll, event);
 }
 
 @end
 
-namespace flux {
+namespace lambda {
 
-::flux::Window* fluxWindowForPlatform(MacMetalWindow* platform) {
-  return platform ? platform->fluxWindow() : nullptr;
+::lambda::Window* lambdaWindowForPlatform(MacMetalWindow* platform) {
+  return platform ? platform->lambdaWindow() : nullptr;
 }
 
-CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform) {
+CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform) {
   if (!platform) {
     return kCVReturnSuccess;
   }
   return platform->onDisplayLinkTick();
 }
 
-::flux::Window* MacMetalWindow::fluxWindow() const {
-  return d ? d->fluxWindow_ : nullptr;
+::lambda::Window* MacMetalWindow::lambdaWindow() const {
+  return d ? d->lambdaWindow_ : nullptr;
 }
 
 namespace {
 
-constexpr CGFloat kFluxTitlebarHeight = 48.0;
+constexpr CGFloat kLambdaTitlebarHeight = 48.0;
 constexpr CGFloat kNativeControlReservePadding = 8.0;
 
 void setStandardWindowButtonsHidden(NSWindow* window, BOOL hidden) {
@@ -1369,7 +1369,7 @@ void MacMetalWindow::positionNativeWindowControls() {
 
     NSRect const contentRect = [contentView convertRect:[button frame] fromView:buttonSuperview];
     NSPoint const desiredCenterInContent =
-        NSMakePoint(NSMidX(contentRect), kFluxTitlebarHeight * 0.5);
+        NSMakePoint(NSMidX(contentRect), kLambdaTitlebarHeight * 0.5);
     NSPoint const desiredCenterInSuperview =
         [buttonSuperview convertPoint:desiredCenterInContent fromView:contentView];
 
@@ -1448,7 +1448,7 @@ void MacMetalWindow::applyBackground() {
 
 MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
   d->handle_ = gNextHandle.fetch_add(1, std::memory_order_relaxed);
-  d->fluxWindow_ = nullptr;
+  d->lambdaWindow_ = nullptr;
   d->window_ = nil;
   d->metalView_ = nil;
   d->materialView_ = nil;
@@ -1476,7 +1476,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
                                               defer:NO];
   applyTitlebarMode();
   [d->window_ setReleasedWhenClosed:NO];
-  // Flux owns cursor state. Stops _NSTrackingAreaAKManager from running its
+  // Lambda owns cursor state. Stops _NSTrackingAreaAKManager from running its
   // cursor logic on this window and clobbering our setCursor decisions.
   [d->window_ disableCursorRects];
   if (config.minSize.width > 0.f || config.minSize.height > 0.f) {
@@ -1491,9 +1491,9 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   // Avoid scaling a stale snapshot during live resize; custom Metal content must update each frame.
   d->window_.preservesContentDuringLiveResize = NO;
 
-  d->metalView_ = [[FluxMetalView alloc] initWithFrame:[[d->window_ contentView] bounds]];
+  d->metalView_ = [[LambdaMetalView alloc] initWithFrame:[[d->window_ contentView] bounds]];
   d->metalView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  d->metalView_.fluxPlatform = this;
+  d->metalView_.lambdaPlatform = this;
   [d->window_ setContentView:d->metalView_];
   applyBackground();
   positionNativeWindowControls();
@@ -1504,7 +1504,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   }
   [d->window_ setTitle:title];
 
-  d->delegate_ = [[FluxWindowDelegate alloc] init];
+  d->delegate_ = [[LambdaWindowDelegate alloc] init];
   d->delegate_.platform = this;
   [d->window_ setDelegate:d->delegate_];
 
@@ -1516,7 +1516,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   }
   if (@available(macOS 14.0, *)) {
     d->displayLink_ = [d->metalView_ displayLinkWithTarget:d->metalView_
-                                                  selector:@selector(fluxHandleDisplayLink:)];
+                                                  selector:@selector(lambdaHandleDisplayLink:)];
     if (d->displayLink_) {
       [d->displayLink_ addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
       [d->displayLink_ setPaused:YES];
@@ -1531,7 +1531,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
     }
 #pragma clang diagnostic pop
   }
-  // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setFluxWindow`.
+  // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setLambdaWindow`.
 }
 
 MacMetalWindow::~MacMetalWindow() {
@@ -1555,7 +1555,7 @@ MacMetalWindow::~MacMetalWindow() {
   }
   if (d) {
     if (d->metalView_) {
-      d->metalView_.fluxPlatform = nullptr;
+      d->metalView_.lambdaPlatform = nullptr;
     }
     d->delegate_ = nil;
     d->metalView_ = nil;
@@ -1566,8 +1566,8 @@ MacMetalWindow::~MacMetalWindow() {
   d.reset();
 }
 
-void MacMetalWindow::setFluxWindow(::flux::Window* window) {
-  d->fluxWindow_ = window;
+void MacMetalWindow::setLambdaWindow(::lambda::Window* window) {
+  d->lambdaWindow_ = window;
 }
 
 void MacMetalWindow::show() {
@@ -1656,7 +1656,7 @@ WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
     return metrics;
   }
 
-  metrics.titlebarHeight = static_cast<float>(kFluxTitlebarHeight);
+  metrics.titlebarHeight = static_cast<float>(kLambdaTitlebarHeight);
   metrics.systemControlsVisible = d->titlebarMode_ == WindowTitlebarMode::Integrated;
   if (!metrics.systemControlsVisible || !d->metalView_) {
     return metrics;
@@ -1712,8 +1712,8 @@ bool MacMetalWindow::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t pl
     return false;
   }
 
-  FluxPopupMenuTarget* target = [[FluxPopupMenuTarget alloc] init];
-  target->fluxWindow = d->fluxWindow_;
+  LambdaPopupMenuTarget* target = [[LambdaPopupMenuTarget alloc] init];
+  target->lambdaWindow = d->lambdaWindow_;
   NSMenu* nsMenu = [[NSMenu alloc] initWithTitle:@""];
   for (MenuItem const& item : menu.items) {
     addPopupMenuItem(nsMenu, item, target);
@@ -1730,7 +1730,7 @@ bool MacMetalWindow::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t pl
 
 PopoverSurfaceId MacMetalWindow::showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial) {
   (void)platformSerial;
-  if (!d || !d->metalView_ || !d->fluxWindow_ || !d->window_ || ![d->window_ isVisible]) {
+  if (!d || !d->metalView_ || !d->lambdaWindow_ || !d->window_ || ![d->window_ isVisible]) {
     return kInvalidPopoverSurfaceId;
   }
   PopoverSurfaceId const id{d->nextPopoverId_++};
@@ -1861,13 +1861,13 @@ void MacMetalWindow::setMetalLayerPresentsWithTransaction(bool enable) {
   if (!d->metalView_) {
     return;
   }
-  CAMetalLayer* ml = [d->metalView_ fluxMetalLayer];
+  CAMetalLayer* ml = [d->metalView_ lambdaMetalLayer];
   if (ml) {
     ml.presentsWithTransaction = enable ? YES : NO;
   }
 }
 
-std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::flux::Window& owner) {
+std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambda::Window& owner) {
   (void)owner;
   void* layerPtr = nativeGraphicsSurface();
   if (!layerPtr) {
@@ -2069,4 +2069,4 @@ std::unique_ptr<Window> createWindow(const WindowConfig& config) {
 
 } // namespace platform
 
-} // namespace flux
+} // namespace lambda

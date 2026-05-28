@@ -1,12 +1,12 @@
-#include <Flux/Graphics/RenderTarget.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
 
-namespace flux {
+namespace lambda {
 
 void RenderTarget::renderScene(scenegraph::SceneGraph const& scene) {
   scenegraph::SceneRenderer renderer(canvas());
   renderer.render(scene);
 }
 
-} // namespace flux
+} // namespace lambda

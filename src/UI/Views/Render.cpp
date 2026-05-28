@@ -1,14 +1,14 @@
-#include <Flux/UI/Views/Render.hpp>
+#include <Lambda/UI/Views/Render.hpp>
 
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/SceneGraph/RenderNode.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/SceneGraph/RenderNode.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -132,4 +132,4 @@ std::unique_ptr<scenegraph::SceneNode> Render::mount(MountContext& ctx) const {
   return node;
 }
 
-} // namespace flux
+} // namespace lambda

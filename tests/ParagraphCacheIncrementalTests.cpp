@@ -5,13 +5,13 @@
 #include "Graphics/CoreTextSystem.hpp"
 #include "Graphics/TextSystemPrivate.hpp"
 
-#include <Flux/Graphics/AttributedString.hpp>
-#include <Flux/Graphics/TextLayout.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Graphics/AttributedString.hpp>
+#include <Lambda/Graphics/TextLayout.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
 
 #include <string>
 
-using namespace flux;
+using namespace lambda;
 
 namespace {
 
@@ -74,7 +74,7 @@ TEST_CASE("Paragraph cache incremental: single-character delete") {
 
 // Topology-changing edits (new hard breaks, leading insert) can diverge between `tryIncrementalSplit`'s
 // rebuilt paragraph list and `splitIntoParagraphs` — reference layout uses the latter. Covered by
-// `FLUX_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT` once lists match.
+// `LAMBDA_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT` once lists match.
 
 TEST_CASE("Paragraph cache incremental: delete newline merges paragraphs") {
   CoreTextSystem sys;

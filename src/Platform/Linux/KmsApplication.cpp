@@ -2,9 +2,9 @@
 
 #include "UI/Platform/WindowFactory.hpp"
 
-#include <Flux/Debug/DebugFlags.hpp>
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
+#include <Lambda/Debug/DebugFlags.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
 
 #include <fcntl.h>
 #include <libinput.h>
@@ -36,7 +36,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 namespace {
 
 KmsApplication* gKmsApplication = nullptr;
@@ -98,13 +98,13 @@ void restoreTerminationSignalHandlers() {
 }
 
 bool debugKms() {
-  static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_KMS"));
+  static bool const enabled = debug::envNonZero(std::getenv("LAMBDA_DEBUG_KMS"));
   return enabled;
 }
 
 void debugLog(char const* format, ...) {
   if (!debugKms()) return;
-  std::fprintf(stderr, "[flux:kms] ");
+  std::fprintf(stderr, "[lambda:kms] ");
   va_list args;
   va_start(args, format);
   std::vfprintf(stderr, format, args);
@@ -127,7 +127,7 @@ int readActiveVt() {
 
 void libinputLog(libinput*, libinput_log_priority priority, char const* format, va_list args) {
   if (!debugKms()) return;
-  std::fprintf(stderr, "[flux:kms:libinput:%d] ", static_cast<int>(priority));
+  std::fprintf(stderr, "[lambda:kms:libinput:%d] ", static_cast<int>(priority));
   std::vfprintf(stderr, format, args);
   std::fflush(stderr);
 }
@@ -157,11 +157,11 @@ std::string sanitizeAppName(std::string name) {
     if (std::isalnum(c) || c == '-' || c == '_' || c == '.') out.push_back(static_cast<char>(c));
     else if (c == ' ') out.push_back('-');
   }
-  return out.empty() ? "flux" : out;
+  return out.empty() ? "lambda" : out;
 }
 
 std::string appDir(std::string const& base, std::string const& appName) {
-  std::filesystem::path path = std::filesystem::path(base) / "flux" / sanitizeAppName(appName);
+  std::filesystem::path path = std::filesystem::path(base) / "lambda" / sanitizeAppName(appName);
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
   return path.string();
@@ -547,7 +547,7 @@ void KmsApplication::initializeInput() {
   debugLog("input initialization complete with %d device(s)", inputDeviceCount_);
   if (inputDeviceCount_ == 0) {
     std::fprintf(stderr,
-                 "[flux:kms] warning: no input devices are readable; mouse and keyboard input will not work. "
+                 "[lambda:kms] warning: no input devices are readable; mouse and keyboard input will not work. "
                  "Grant access to /dev/input/event* or run under a seat manager.\n");
     std::fflush(stderr);
   }
@@ -609,13 +609,13 @@ void KmsApplication::reEnumerateConnectors() {
   for (KmsConnector const& connector : connectors_) previousById.emplace(connector.connectorId, connector);
   for (KmsConnector const& connector : next) nextById.emplace(connector.connectorId, connector);
 
-  bool const hasApplication = ::flux::Application::hasInstance();
+  bool const hasApplication = ::lambda::Application::hasInstance();
 
   for (KmsConnector const& connector : connectors_) {
     if (nextById.contains(connector.connectorId)) continue;
     debugLog("KMS output removed: %s", connector.name.c_str());
     if (hasApplication) {
-      ::flux::Application::instance().eventQueue().post(
+      ::lambda::Application::instance().eventQueue().post(
           WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputRemoved,
                                .handle = 0,
                                .window = nullptr,
@@ -623,7 +623,7 @@ void KmsApplication::reEnumerateConnectors() {
     }
     for (KmsWindow* window : windows_) {
       if (hasApplication && window && window->connectorId() == connector.connectorId) {
-        ::flux::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::CloseRequest,
+        ::lambda::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::CloseRequest,
                                                                       .handle = window->handle(),
                                                                       .size = {},
                                                                       .dpi = 1.f,
@@ -638,7 +638,7 @@ void KmsApplication::reEnumerateConnectors() {
     if (previous == previousById.end()) {
       debugLog("KMS output added: %s", connector.name.c_str());
       if (hasApplication) {
-        ::flux::Application::instance().eventQueue().post(
+        ::lambda::Application::instance().eventQueue().post(
             WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputAdded,
                                  .handle = 0,
                                  .window = nullptr,
@@ -655,7 +655,7 @@ void KmsApplication::reEnumerateConnectors() {
       if (!window || window->connectorId() != connector.connectorId) continue;
       window->updateConnector(connector);
       if (hasApplication && dpiChanged) {
-        ::flux::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
+        ::lambda::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
                                                                       .handle = window->handle(),
                                                                       .size = {},
                                                                       .dpi = 1.f,
@@ -663,7 +663,7 @@ void KmsApplication::reEnumerateConnectors() {
                                                                       .dpiY = 1.f});
       }
       if (hasApplication && modeChanged) {
-        ::flux::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
+        ::lambda::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
                                                                       .handle = window->handle(),
                                                                       .size = window->currentSize(),
                                                                       .dpi = 1.f,
@@ -675,7 +675,7 @@ void KmsApplication::reEnumerateConnectors() {
 
   connectors_ = std::move(next);
   if (hasApplication) {
-    ::flux::Application::instance().eventQueue().dispatch();
+    ::lambda::Application::instance().eventQueue().dispatch();
   }
 }
 
@@ -684,7 +684,7 @@ void KmsApplication::setApplicationName(std::string name) {
 }
 
 std::string KmsApplication::applicationName() const {
-  return appName_.empty() ? "flux" : appName_;
+  return appName_.empty() ? "lambda" : appName_;
 }
 
 void KmsApplication::setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) {
@@ -782,7 +782,7 @@ VkSurfaceKHR KmsApplication::createVulkanSurface(VkInstance instance, void* nati
           VkResult const acquireResult = acquireDrmDisplay(physical, drmFd_, drmDisplay);
           if (acquireResult != VK_SUCCESS && acquireResult != VK_ERROR_INITIALIZATION_FAILED) {
             std::fprintf(stderr,
-                         "[flux:kms] vkAcquireDrmDisplayEXT failed for connector %s with %s (%d); trying surface creation anyway.\n",
+                         "[lambda:kms] vkAcquireDrmDisplayEXT failed for connector %s with %s (%d); trying surface creation anyway.\n",
                          connector->name.c_str(), vkResultName(acquireResult), static_cast<int>(acquireResult));
           }
         }
@@ -854,13 +854,13 @@ VkSurfaceKHR KmsApplication::createVulkanSurface(VkInstance instance, void* nati
   }
 
   std::fprintf(stderr,
-               "[flux:kms] no Vulkan display surface for connector %s id=%u (%ux%u @ %u mHz); "
+               "[lambda:kms] no Vulkan display surface for connector %s id=%u (%ux%u @ %u mHz); "
                "VK_EXT_acquire_drm_display=%s mapped=%s candidates=%zu.\n",
                connector->name.c_str(), connector->connectorId, connector->mode.hdisplay,
                connector->mode.vdisplay, refreshRateMilliHz(connector->mode),
                hasDrmDisplayExtension ? "yes" : "no", drmDisplayMapped ? "yes" : "no", candidates.size());
   for (std::string const& line : diagnostics) {
-    std::fprintf(stderr, "[flux:kms] %s\n", line.c_str());
+    std::fprintf(stderr, "[lambda:kms] %s\n", line.c_str());
   }
   throw std::runtime_error("No Vulkan display surface matched the selected KMS connector");
 }
@@ -1386,4 +1386,4 @@ std::unique_ptr<Application> createApplication() {
 }
 
 } // namespace platform
-} // namespace flux
+} // namespace lambda

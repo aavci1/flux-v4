@@ -1,10 +1,10 @@
-#include <Flux/UI/OverlaySurfaceHelpers.hpp>
+#include <Lambda/UI/OverlaySurfaceHelpers.hpp>
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Core/Color.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Core/Color.hpp>
+#include <Lambda/UI/Theme.hpp>
 
-namespace flux {
+namespace lambda {
 
 ResolvedAlertCardColors resolveAlertCardColors(Color cardColor, Color cardStrokeColor, float cornerRadius,
                                                Theme const& theme) {
@@ -33,4 +33,4 @@ Color resolvePopoverBackdropColor(Color backdropColor, Theme const& theme) {
   return resolveColor(backdropColor, theme.popoverScrimColor, theme);
 }
 
-} // namespace flux
+} // namespace lambda

@@ -1,6 +1,6 @@
-#include <Flux/UI/EventQueue.hpp>
+#include <Lambda/UI/EventQueue.hpp>
 
-#include <Flux/UI/Application.hpp>
+#include <Lambda/UI/Application.hpp>
 
 #include <algorithm>
 #include <any>
@@ -14,7 +14,7 @@
 #include <variant>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -142,4 +142,4 @@ void detail::EventQueueImplAccess::dispatchOne(EventQueue& q, Event& event) {
       event);
 }
 
-} // namespace flux
+} // namespace lambda

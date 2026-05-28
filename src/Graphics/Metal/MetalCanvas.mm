@@ -3,11 +3,11 @@
 #import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Image.hpp>
-#include <Flux/Graphics/RenderTarget.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Graphics/TextLayout.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/Image.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/TextLayout.hpp>
 
 #include "Graphics/Metal/GlyphAtlas.hpp"
 #include "Graphics/Metal/MetalImage.hpp"
@@ -17,7 +17,7 @@
 #include "Graphics/Metal/MetalPathRasterizer.hpp"
 #include "Debug/PerfCounters.hpp"
 
-namespace flux {
+namespace lambda {
 class Window;
 }
 
@@ -40,7 +40,7 @@ class Window;
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -3010,4 +3010,4 @@ bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, 
   return false;
 }
 
-} // namespace flux
+} // namespace lambda

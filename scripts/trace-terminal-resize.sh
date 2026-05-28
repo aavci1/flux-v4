@@ -23,7 +23,7 @@ Environment overrides:
   LAMBDA_TERMINAL_TEST_ROWS              Grid rows drawn by workload. Default: 48
   LAMBDA_TERMINAL_TEST_SEGMENTS          Color runs per row in grid mode. Default: 14
   LAMBDA_TERMINAL_FRAME_SLEEP            Workload frame sleep. Default: 0.016
-  FLUX_RESIZE_TRACE_STDERR               Mirror resize trace to stderr. Default: 0
+  LAMBDA_RESIZE_TRACE_STDERR               Mirror resize trace to stderr. Default: 0
 EOF
   exit 0
 fi
@@ -42,9 +42,9 @@ export LAMBDA_TERMINAL_TEST_SECONDS="$TEST_SECONDS"
 export LAMBDA_TERMINAL_TEST_MODE="${LAMBDA_TERMINAL_TEST_MODE:-grid}"
 export LAMBDA_TERMINAL_RENDER_LOG="$RENDER_LOG"
 export LAMBDA_TERMINAL_RESIZE_LOG="$RESIZE_LOG"
-export FLUX_DEBUG_PERF="${FLUX_DEBUG_PERF:-2}"
-export FLUX_RESIZE_TRACE=1
-export FLUX_RESIZE_TRACE_STDERR="${FLUX_RESIZE_TRACE_STDERR:-0}"
+export LAMBDA_DEBUG_PERF="${LAMBDA_DEBUG_PERF:-2}"
+export LAMBDA_RESIZE_TRACE=1
+export LAMBDA_RESIZE_TRACE_STDERR="${LAMBDA_RESIZE_TRACE_STDERR:-0}"
 
 set +e
 "$ROOT/scripts/trace-terminal-rendering.sh"

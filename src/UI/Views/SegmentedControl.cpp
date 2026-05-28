@@ -1,20 +1,20 @@
-#include <Flux/UI/Views/SegmentedControl.hpp>
+#include <Lambda/UI/Views/SegmentedControl.hpp>
 
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/Reactive/Interpolatable.hpp>
-#include <Flux/Reactive/Transition.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/Reactive/Interpolatable.hpp>
+#include <Lambda/Reactive/Transition.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <algorithm>
 #include <cstdint>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -234,4 +234,4 @@ Element SegmentedControl::body() const {
     return root;
 }
 
-} // namespace flux
+} // namespace lambda

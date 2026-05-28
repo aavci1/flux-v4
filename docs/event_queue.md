@@ -55,7 +55,7 @@ Within each bucket, order is FIFO.
 
 ## Threading
 
-Flux expects `post`, `dispatch`, and `on` to be called on the application main thread. Background systems should marshal results to the UI thread before posting custom events.
+Lambda expects `post`, `dispatch`, and `on` to be called on the application main thread. Background systems should marshal results to the UI thread before posting custom events.
 
 ## Re-entrancy
 

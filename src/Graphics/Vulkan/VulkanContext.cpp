@@ -1,10 +1,10 @@
-#include <Flux/Graphics/VulkanContext.hpp>
+#include <Lambda/Graphics/VulkanContext.hpp>
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 
-namespace flux {
+namespace lambda {
 
 VulkanContext& VulkanContext::instance() {
   static VulkanContext context;
@@ -51,6 +51,6 @@ void VulkanContext::ensureInitialized() {
   detail::vulkanContextEnsureInitialized();
 }
 
-} // namespace flux
+} // namespace lambda
 
-#endif // FLUX_VULKAN
+#endif // LAMBDA_VULKAN

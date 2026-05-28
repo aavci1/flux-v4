@@ -1,6 +1,6 @@
 # Reactive Graph
 
-Flux v5 uses a fine-grained reactive graph under `Flux/Reactive`.
+Lambda v5 uses a fine-grained reactive graph under `Lambda/Reactive`.
 
 ## Primitives
 
@@ -10,7 +10,7 @@ Flux v5 uses a fine-grained reactive graph under `Flux/Reactive`.
 - `Scope` owns effects, nested scopes, and cleanup callbacks.
 - `Bindable<T>` stores either a constant or a closure that can be evaluated inside an effect.
 
-The `Flux/Reactive/Reactive.hpp` umbrella also exports convenient aliases in namespace `flux`: `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `makeComputed`, `withOwner`, `onCleanup`, and `untrack`.
+The `Lambda/Reactive/Reactive.hpp` umbrella also exports convenient aliases in namespace `lambda`: `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `makeComputed`, `withOwner`, `onCleanup`, and `untrack`.
 
 ## Ownership
 
@@ -27,7 +27,7 @@ withOwner(scope, [&] {
 
 ## UI Bindings
 
-Element modifiers accept constants and `Bindable<T>` values. During mount, Flux installs effects that evaluate bindables and apply the resulting value to the retained scene node.
+Element modifiers accept constants and `Bindable<T>` values. During mount, Lambda installs effects that evaluate bindables and apply the resulting value to the retained scene node.
 
 ```cpp
 auto width = useState(120.f);

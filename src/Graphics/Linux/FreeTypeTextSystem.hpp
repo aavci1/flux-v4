@@ -1,12 +1,12 @@
 #pragma once
 
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include <functional>
 #include <memory>
 #include <string>
 
-namespace flux {
+namespace lambda {
 
 class FreeTypeTextSystem final : public TextSystem {
 public:
@@ -36,4 +36,4 @@ private:
   std::unique_ptr<Impl> d;
 };
 
-} // namespace flux
+} // namespace lambda

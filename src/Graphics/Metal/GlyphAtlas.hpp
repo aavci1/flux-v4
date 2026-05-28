@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -12,7 +12,7 @@
 #import <Metal/Metal.h>
 #endif
 
-namespace flux {
+namespace lambda {
 
 struct GlyphKey {
   std::uint32_t fontId = 0;
@@ -84,4 +84,4 @@ private:
   std::function<bool()> beforeGrow_{};
 };
 
-} // namespace flux
+} // namespace lambda

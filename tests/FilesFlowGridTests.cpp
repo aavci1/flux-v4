@@ -1,22 +1,22 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/SceneInteraction.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScrollView.hpp>
-#include <Flux/UI/Views/Show.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/VStack.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScrollView.hpp>
+#include <Lambda/UI/Views/Show.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
 
 #include "FilesFlowGrid.hpp"
 #include "FilesApp.hpp"
@@ -34,7 +34,7 @@
 
 namespace {
 
-using namespace flux;
+using namespace lambda;
 using namespace lambda_files;
 
 class FakeTextSystem final : public TextSystem {

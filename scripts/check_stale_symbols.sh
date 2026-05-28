@@ -45,7 +45,7 @@ has_out_of_class_implementation() {
 }
 
 for stale_path in \
-  "include/Flux/UI/SceneBuilder.hpp" \
+  "include/Lambda/UI/SceneBuilder.hpp" \
   "src/UI/SceneBuilder/MeasureLayoutCache.hpp" \
   "src/UI/SceneBuilder" \
   "tests/SceneBuilderLayoutTests.cpp" \
@@ -58,12 +58,12 @@ for stale_path in \
   fi
 done
 
-if rg -n "MeasureLayoutCache|SceneBuilder|SceneBuilderTestSupport|include/Flux/UI/SceneBuilder\\.hpp|src/UI/SceneBuilder" include src tests examples CMakeLists.txt README.md >/tmp/flux-stale-symbols.$$ 2>/dev/null; then
+if rg -n "MeasureLayoutCache|SceneBuilder|SceneBuilderTestSupport|include/Lambda/UI/SceneBuilder\\.hpp|src/UI/SceneBuilder" include src tests examples CMakeLists.txt README.md >/tmp/lambda-stale-symbols.$$ 2>/dev/null; then
   while IFS= read -r line; do
     add_failure "stale SceneBuilder/MeasureLayoutCache reference: $line"
-  done </tmp/flux-stale-symbols.$$
+  done </tmp/lambda-stale-symbols.$$
 fi
-rm -f /tmp/flux-stale-symbols.$$
+rm -f /tmp/lambda-stale-symbols.$$
 
 while IFS= read -r source; do
   if ! rg -q "$(basename "$source")" CMakeLists.txt; then

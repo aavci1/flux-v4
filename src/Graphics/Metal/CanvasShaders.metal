@@ -1,4 +1,4 @@
-// SDF shaders adapted from aavci1/flux (GLSL → Metal).
+// SDF shaders adapted from aavci1/lambda (GLSL → Metal).
 
 #include <metal_stdlib>
 using namespace metal;
@@ -541,7 +541,7 @@ fragment float4 line_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
 }
 
 // -----------------------------------------------------------------------------
-// Path mesh (triangulated fill / expanded stroke — same convention as upstream flux path shaders)
+// Path mesh (triangulated fill / expanded stroke — same convention as upstream lambda path shaders)
 // -----------------------------------------------------------------------------
 
 struct PathVertexIn {

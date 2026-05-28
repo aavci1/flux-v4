@@ -1,19 +1,19 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Scope.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/Show.hpp>
-#include <Flux/UI/Views/Switch.hpp>
-#include <Flux/UI/Views/VStack.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Scope.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/Show.hpp>
+#include <Lambda/UI/Views/Switch.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
 
 #include <memory>
 #include <limits>
@@ -22,26 +22,26 @@
 
 namespace {
 
-class FakeTextSystem final : public flux::TextSystem {
+class FakeTextSystem final : public lambda::TextSystem {
 public:
-  std::shared_ptr<flux::TextLayout const>
-  layout(flux::AttributedString const&, float, flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  std::shared_ptr<flux::TextLayout const>
-  layout(std::string_view, flux::Font const&, flux::Color const&, float,
-         flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
+         lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  flux::Size measure(flux::AttributedString const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(lambda::AttributedString const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  flux::Size measure(std::string_view, flux::Font const&, flux::Color const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
@@ -50,7 +50,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           flux::Point& outBearing) override {
+                                           lambda::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -58,12 +58,12 @@ public:
   }
 };
 
-flux::EnvironmentBinding testEnvironment() {
-  return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
+lambda::EnvironmentBinding testEnvironment() {
+  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
 }
 
-flux::scenegraph::SceneNode const& rootGroup(flux::scenegraph::SceneGraph const& sceneGraph) {
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+lambda::scenegraph::SceneNode const& rootGroup(lambda::scenegraph::SceneGraph const& sceneGraph) {
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   return sceneGraph.root();
 }
 
@@ -71,32 +71,32 @@ flux::scenegraph::SceneNode const& rootGroup(flux::scenegraph::SceneGraph const&
 
 TEST_CASE("Show replaces branches and disposes the inactive scope") {
   struct Root {
-    flux::Reactive::Signal<bool> visible;
+    lambda::Reactive::Signal<bool> visible;
     int* thenCreated = nullptr;
     int* thenDisposed = nullptr;
     int* elseCreated = nullptr;
     int* elseDisposed = nullptr;
 
-    flux::Element body() const {
-      return flux::Show(
+    lambda::Element body() const {
+      return lambda::Show(
           visible,
           [thenCreated = thenCreated, thenDisposed = thenDisposed] {
             ++*thenCreated;
-            flux::Reactive::onCleanup([thenDisposed] {
+            lambda::Reactive::onCleanup([thenDisposed] {
               ++*thenDisposed;
             });
-            return flux::Element{flux::Rectangle{}}
+            return lambda::Element{lambda::Rectangle{}}
                 .size(20.f, 10.f)
-                .fill(flux::Colors::red);
+                .fill(lambda::Colors::red);
           },
           [elseCreated = elseCreated, elseDisposed = elseDisposed] {
             ++*elseCreated;
-            flux::Reactive::onCleanup([elseDisposed] {
+            lambda::Reactive::onCleanup([elseDisposed] {
               ++*elseDisposed;
             });
-            return flux::Element{flux::Rectangle{}}
+            return lambda::Element{lambda::Rectangle{}}
                 .size(12.f, 8.f)
-                .fill(flux::Colors::blue);
+                .fill(lambda::Colors::blue);
           });
     }
   };
@@ -105,15 +105,15 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
   int thenDisposed = 0;
   int elseCreated = 0;
   int elseDisposed = 0;
-  flux::Reactive::Signal<bool> visible{true};
+  lambda::Reactive::Signal<bool> visible{true};
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(
           std::in_place, Root{visible, &thenCreated, &thenDisposed, &elseCreated, &elseDisposed}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -150,29 +150,29 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
 
 TEST_CASE("Show false branch collapses out of stack spacing") {
   struct Root {
-    flux::Element body() const {
-      return flux::VStack{
+    lambda::Element body() const {
+      return lambda::VStack{
           .spacing = 12.f,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::red),
-              flux::Show(false, [] {
-                return flux::Element{flux::Rectangle{}}
+                  .fill(lambda::Colors::red),
+              lambda::Show(false, [] {
+                return lambda::Element{lambda::Rectangle{}}
                     .size(20.f, 10.f)
-                    .fill(flux::Colors::blue);
+                    .fill(lambda::Colors::blue);
               })),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -188,50 +188,50 @@ TEST_CASE("Show branch composite effects are scoped once and disposed with branc
     int* activeEffects = nullptr;
     int* cleanups = nullptr;
 
-    flux::Element body() const {
-      flux::useEffect([activeEffects = activeEffects, cleanups = cleanups] {
+    lambda::Element body() const {
+      lambda::useEffect([activeEffects = activeEffects, cleanups = cleanups] {
         ++*activeEffects;
-        flux::Reactive::onCleanup([activeEffects, cleanups] {
+        lambda::Reactive::onCleanup([activeEffects, cleanups] {
           --*activeEffects;
           ++*cleanups;
         });
       });
-      return flux::Element{flux::Rectangle{}}
+      return lambda::Element{lambda::Rectangle{}}
           .size(20.f, 10.f)
-          .fill(flux::Colors::red);
+          .fill(lambda::Colors::red);
     }
   };
 
   struct Root {
-    flux::Reactive::Signal<bool> visible;
+    lambda::Reactive::Signal<bool> visible;
     int* activeEffects = nullptr;
     int* cleanups = nullptr;
 
-    flux::Element body() const {
-      return flux::Show(
+    lambda::Element body() const {
+      return lambda::Show(
           visible,
           [activeEffects = activeEffects, cleanups = cleanups] {
-            return flux::Element{EffectfulChild{activeEffects, cleanups}};
+            return lambda::Element{EffectfulChild{activeEffects, cleanups}};
           },
           [] {
-            return flux::Element{flux::Rectangle{}}
+            return lambda::Element{lambda::Rectangle{}}
                 .size(12.f, 8.f)
-                .fill(flux::Colors::blue);
+                .fill(lambda::Colors::blue);
           });
     }
   };
 
   int activeEffects = 0;
   int cleanups = 0;
-  flux::Reactive::Signal<bool> visible{true};
+  lambda::Reactive::Signal<bool> visible{true};
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(
           std::in_place, Root{visible, &activeEffects, &cleanups}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -249,35 +249,35 @@ TEST_CASE("Show branch composite effects are scoped once and disposed with branc
 
 TEST_CASE("Show hidden stack child stays mounted and expands later") {
   struct Root {
-    flux::Reactive::Signal<bool> visible;
+    lambda::Reactive::Signal<bool> visible;
 
-    flux::Element body() const {
-      return flux::VStack{
+    lambda::Element body() const {
+      return lambda::VStack{
           .spacing = 12.f,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::red),
-              flux::Show(visible, [] {
-                return flux::Element{flux::Rectangle{}}
+                  .fill(lambda::Colors::red),
+              lambda::Show(visible, [] {
+                return lambda::Element{lambda::Rectangle{}}
                     .size(20.f, 10.f)
-                    .fill(flux::Colors::blue);
+                    .fill(lambda::Colors::blue);
               }),
-              flux::Element{flux::Rectangle{}}
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::green)),
+                  .fill(lambda::Colors::green)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<bool> visible{false};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{visible}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<bool> visible{false};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{visible}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -305,30 +305,30 @@ TEST_CASE("Show hidden stack child stays mounted and expands later") {
 
 TEST_CASE("Show keeps natural constraints after transient zero-size layout") {
   FakeTextSystem textSystem;
-  flux::EnvironmentBinding environment = testEnvironment();
-  flux::MeasureContext measure{textSystem, environment};
-  flux::Reactive::Scope owner;
-  flux::Reactive::Signal<bool> visible{false};
-  flux::Element show{flux::Show(
+  lambda::EnvironmentBinding environment = testEnvironment();
+  lambda::MeasureContext measure{textSystem, environment};
+  lambda::Reactive::Scope owner;
+  lambda::Reactive::Signal<bool> visible{false};
+  lambda::Element show{lambda::Show(
       [visible] {
         return visible.get();
       },
       [] {
-        return flux::Element{flux::Rectangle{}}
+        return lambda::Element{lambda::Rectangle{}}
             .size(80.f, 20.f)
-            .fill(flux::Colors::blue);
+            .fill(lambda::Colors::blue);
       })};
 
-  flux::LayoutConstraints natural{
+  lambda::LayoutConstraints natural{
       .maxWidth = 100.f,
       .maxHeight = std::numeric_limits<float>::infinity(),
       .minWidth = 0.f,
       .minHeight = 0.f,
   };
-  flux::MountContext mount{owner, textSystem, measure, natural, {}, {}, environment};
-  std::unique_ptr<flux::scenegraph::SceneNode> node = show.mount(mount);
+  lambda::MountContext mount{owner, textSystem, measure, natural, {}, {}, environment};
+  std::unique_ptr<lambda::scenegraph::SceneNode> node = show.mount(mount);
 
-  node->relayout(flux::LayoutConstraints{
+  node->relayout(lambda::LayoutConstraints{
                      .maxWidth = 100.f,
                      .maxHeight = 0.f,
                      .minWidth = 100.f,
@@ -345,28 +345,28 @@ TEST_CASE("Show keeps natural constraints after transient zero-size layout") {
 
 TEST_CASE("Show relayouts active branch into flexible stack slot") {
   struct Root {
-    flux::Element body() const {
-      return flux::HStack{
+    lambda::Element body() const {
+      return lambda::HStack{
           .spacing = 0.f,
-          .alignment = flux::Alignment::Stretch,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .alignment = lambda::Alignment::Stretch,
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::red),
-              flux::Element{flux::Show(true, [] {
-                return flux::Rectangle{}.fill(flux::Colors::blue);
+                  .fill(lambda::Colors::red),
+              lambda::Element{lambda::Show(true, [] {
+                return lambda::Rectangle{}.fill(lambda::Colors::blue);
               })}.flex(1.f, 1.f, 0.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 40.f},
+      lambda::Size{100.f, 40.f},
   };
 
   root.mount(sceneGraph);
@@ -383,39 +383,39 @@ TEST_CASE("Show relayouts active branch into flexible stack slot") {
 
 TEST_CASE("Show size changes grow wrapper ancestors and move following stack siblings") {
   struct Root {
-    flux::Reactive::Signal<bool> visible;
+    lambda::Reactive::Signal<bool> visible;
 
-    flux::Element body() const {
-      return flux::VStack{
+    lambda::Element body() const {
+      return lambda::VStack{
           .spacing = 12.f,
-          .children = flux::children(
-              flux::Element{flux::VStack{
+          .children = lambda::children(
+              lambda::Element{lambda::VStack{
                   .spacing = 12.f,
-                  .children = flux::children(
-                      flux::Element{flux::Rectangle{}}
+                  .children = lambda::children(
+                      lambda::Element{lambda::Rectangle{}}
                           .size(20.f, 10.f)
-                          .fill(flux::Colors::red),
-                      flux::Show(visible, [] {
-                        return flux::Element{flux::Rectangle{}}
+                          .fill(lambda::Colors::red),
+                      lambda::Show(visible, [] {
+                        return lambda::Element{lambda::Rectangle{}}
                             .size(20.f, 10.f)
-                            .fill(flux::Colors::blue);
+                            .fill(lambda::Colors::blue);
                       })),
               }}.padding(16.f),
-              flux::Element{flux::Rectangle{}}
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::green)),
+                  .fill(lambda::Colors::green)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<bool> visible{false};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{visible}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<bool> visible{false};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{visible}),
       textSystem,
       testEnvironment(),
-      flux::Size{120.f, 120.f},
+      lambda::Size{120.f, 120.f},
   };
 
   root.mount(sceneGraph);
@@ -442,43 +442,43 @@ TEST_CASE("Show size changes grow wrapper ancestors and move following stack sib
 
 TEST_CASE("Switch replaces scopes when the selected case changes") {
   struct Root {
-    flux::Reactive::Signal<int> mode;
+    lambda::Reactive::Signal<int> mode;
     int* created = nullptr;
     int* disposed = nullptr;
 
-    flux::Element body() const {
-      auto branch = [created = created, disposed = disposed](flux::Color color) {
+    lambda::Element body() const {
+      auto branch = [created = created, disposed = disposed](lambda::Color color) {
         return [created, disposed, color] {
           ++*created;
-          flux::Reactive::onCleanup([disposed] {
+          lambda::Reactive::onCleanup([disposed] {
             ++*disposed;
           });
-          return flux::Element{flux::Rectangle{}}
+          return lambda::Element{lambda::Rectangle{}}
               .size(18.f, 18.f)
               .fill(color);
         };
       };
 
-      return flux::Switch(
+      return lambda::Switch(
           [mode = mode] { return mode.get(); },
           std::vector{
-              flux::Case(0, branch(flux::Colors::red)),
-              flux::Case(1, branch(flux::Colors::green)),
+              lambda::Case(0, branch(lambda::Colors::red)),
+              lambda::Case(1, branch(lambda::Colors::green)),
           },
-          branch(flux::Colors::blue));
+          branch(lambda::Colors::blue));
     }
   };
 
   int created = 0;
   int disposed = 0;
-  flux::Reactive::Signal<int> mode{0};
+  lambda::Reactive::Signal<int> mode{0};
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{mode, &created, &disposed}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{mode, &created, &disposed}),
       textSystem,
       testEnvironment(),
-      flux::Size{160.f, 100.f},
+      lambda::Size{160.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -508,40 +508,40 @@ TEST_CASE("Switch replaces scopes when the selected case changes") {
 
 TEST_CASE("Switch relayouts newly selected branch into flexible stack slot") {
   struct Root {
-    flux::Reactive::Signal<int> mode;
+    lambda::Reactive::Signal<int> mode;
 
-    flux::Element body() const {
-      auto branch = [](flux::Color color) {
+    lambda::Element body() const {
+      auto branch = [](lambda::Color color) {
         return [color] {
-          return flux::Rectangle{}.fill(color);
+          return lambda::Rectangle{}.fill(color);
         };
       };
 
-      return flux::HStack{
+      return lambda::HStack{
           .spacing = 0.f,
-          .alignment = flux::Alignment::Stretch,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .alignment = lambda::Alignment::Stretch,
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::red),
-              flux::Element{flux::Switch(
+                  .fill(lambda::Colors::red),
+              lambda::Element{lambda::Switch(
                   [mode = mode] { return mode.get(); },
                   std::vector{
-                      flux::Case(0, branch(flux::Colors::blue)),
-                      flux::Case(1, branch(flux::Colors::green)),
+                      lambda::Case(0, branch(lambda::Colors::blue)),
+                      lambda::Case(1, branch(lambda::Colors::green)),
                   })}.flex(1.f, 1.f, 0.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<int> mode{0};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{mode}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<int> mode{0};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{mode}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 40.f},
+      lambda::Size{100.f, 40.f},
   };
 
   root.mount(sceneGraph);

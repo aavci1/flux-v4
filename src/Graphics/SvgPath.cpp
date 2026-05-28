@@ -1,4 +1,4 @@
-#include <Flux/Graphics/SvgPath.hpp>
+#include <Lambda/Graphics/SvgPath.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include <numbers>
 #include <string>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -444,4 +444,4 @@ Path parseSvgPath(std::string_view d, SvgPathParseError* error) {
   return Parser{d}.parse(error);
 }
 
-} // namespace flux
+} // namespace lambda

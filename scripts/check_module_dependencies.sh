@@ -10,7 +10,7 @@ check_module() {
   local allowed="$3"
   local violations
 
-  violations="$(grep -Rnh '^#include <Flux/' "$path" | grep -v "$allowed" || true)"
+  violations="$(grep -Rnh '^#include <Lambda/' "$path" | grep -v "$allowed" || true)"
   if [[ -n "$violations" ]]; then
     printf '%s module has upward or cross-layer includes:\n%s\n' "$name" "$violations" >&2
     return 1
@@ -28,7 +28,7 @@ check_source_module() {
   fi
 
   violations="$(
-    grep -RnE '^#include[[:space:]]+[<"]((Flux/)?(Detail|Core|Reactive|Graphics|SceneGraph|Layout|UI)/)' "$path" |
+    grep -RnE '^#include[[:space:]]+[<"]((Lambda/)?(Detail|Core|Reactive|Graphics|SceneGraph|Layout|UI)/)' "$path" |
       grep -Ev "$allowed" || true
   )"
   if [[ -n "$violations" ]]; then
@@ -37,15 +37,15 @@ check_source_module() {
   fi
 }
 
-check_module "Detail" "include/Flux/Detail/" 'Flux/Detail/'
-check_module "Core" "include/Flux/Core/" 'Flux/Core/\|Flux/Detail/'
-check_module "Reactive" "include/Flux/Reactive/" 'Flux/Core/\|Flux/Detail/\|Flux/Reactive/'
-check_module "Graphics" "include/Flux/Graphics/" 'Flux/Core/\|Flux/Detail/\|Flux/Graphics/'
-check_module "SceneGraph" "include/Flux/SceneGraph/" 'Flux/Core/\|Flux/Reactive/\|Flux/Graphics/\|Flux/Detail/\|Flux/SceneGraph/'
-check_module "Layout" "include/Flux/Layout/" 'Flux/Core/\|Flux/SceneGraph/\|Flux/Detail/\|Flux/Layout/'
+check_module "Detail" "include/Lambda/Detail/" 'Lambda/Detail/'
+check_module "Core" "include/Lambda/Core/" 'Lambda/Core/\|Lambda/Detail/'
+check_module "Reactive" "include/Lambda/Reactive/" 'Lambda/Core/\|Lambda/Detail/\|Lambda/Reactive/'
+check_module "Graphics" "include/Lambda/Graphics/" 'Lambda/Core/\|Lambda/Detail/\|Lambda/Graphics/'
+check_module "SceneGraph" "include/Lambda/SceneGraph/" 'Lambda/Core/\|Lambda/Reactive/\|Lambda/Graphics/\|Lambda/Detail/\|Lambda/SceneGraph/'
+check_module "Layout" "include/Lambda/Layout/" 'Lambda/Core/\|Lambda/SceneGraph/\|Lambda/Detail/\|Lambda/Layout/'
 
-check_source_module "Core" "src/Core/" '(<Flux/(Core|Detail)/)|"(Core|Detail)/'
-check_source_module "Reactive" "src/Reactive/" '(<Flux/(Core|Detail|Reactive)/)|"(Core|Detail|Reactive)/'
-check_source_module "Graphics" "src/Graphics/" '(<Flux/(Core|Detail|Graphics)/)|"(Core|Detail|Graphics)/'
-check_source_module "SceneGraph" "src/SceneGraph/" '(<Flux/(Core|Reactive|Graphics|Detail|SceneGraph)/)|"(Core|Reactive|Graphics|Detail|SceneGraph)/'
-check_source_module "Layout" "src/Layout/" '(<Flux/(Core|SceneGraph|Detail|Layout)/)|"(Core|SceneGraph|Detail|Layout)/'
+check_source_module "Core" "src/Core/" '(<Lambda/(Core|Detail)/)|"(Core|Detail)/'
+check_source_module "Reactive" "src/Reactive/" '(<Lambda/(Core|Detail|Reactive)/)|"(Core|Detail|Reactive)/'
+check_source_module "Graphics" "src/Graphics/" '(<Lambda/(Core|Detail|Graphics)/)|"(Core|Detail|Graphics)/'
+check_source_module "SceneGraph" "src/SceneGraph/" '(<Lambda/(Core|Reactive|Graphics|Detail|SceneGraph)/)|"(Core|Reactive|Graphics|Detail|SceneGraph)/'
+check_source_module "Layout" "src/Layout/" '(<Lambda/(Core|SceneGraph|Detail|Layout)/)|"(Core|SceneGraph|Detail|Layout)/'

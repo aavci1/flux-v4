@@ -1,9 +1,9 @@
-#include <Flux/UI/InputFieldChrome.hpp>
+#include <Lambda/UI/InputFieldChrome.hpp>
 
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/Theme.hpp>
 
-namespace flux {
+namespace lambda {
 
 ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme) {
   return ResolvedInputFieldChrome{
@@ -23,4 +23,4 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
   };
 }
 
-} // namespace flux
+} // namespace lambda

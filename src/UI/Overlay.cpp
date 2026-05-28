@@ -1,16 +1,16 @@
-#include <Flux/UI/Overlay.hpp>
+#include <Lambda/UI/Overlay.hpp>
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
 
 #include "UI/ViewLayout/OverlayLayout.hpp"
 
@@ -19,7 +19,7 @@
 #include <tuple>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -328,7 +328,7 @@ void mountOverlay(OverlayEntry& entry, Size windowSize, Runtime& runtime,
 
 std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay() {
   Runtime* runtime = Runtime::current();
-  assert(runtime && "useOverlay must be called while mounting a Flux view");
+  assert(runtime && "useOverlay must be called while mounting a Lambda view");
 
   auto id = std::make_shared<OverlayId>(kInvalidOverlayId);
   Window* window = &runtime->window();
@@ -483,4 +483,4 @@ OverlayEntry const* OverlayManager::find(OverlayId id) const {
   return nullptr;
 }
 
-} // namespace flux
+} // namespace lambda

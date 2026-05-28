@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 namespace {
 
@@ -210,4 +210,4 @@ StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
   return result;
 }
 
-} // namespace flux::layout
+} // namespace lambda::layout

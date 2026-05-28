@@ -1,6 +1,6 @@
-# Migrating To Flux v5
+# Migrating To Lambda v5
 
-Flux v5 is a hard cutover to retained mounting and fine-grained reactivity. Code should move data changes into signals and bind mounted scene-node properties to those signals.
+Lambda v5 is a hard cutover to retained mounting and fine-grained reactivity. Code should move data changes into signals and bind mounted scene-node properties to those signals.
 
 ## Component Shape
 
@@ -73,7 +73,7 @@ Environment lookups are compile-time keyed. Define a key once, colocating its
 value type and default:
 
 ```cpp
-FLUX_DEFINE_ENVIRONMENT_KEY(LocaleKey, Locale, Locale{});
+LAMBDA_DEFINE_ENVIRONMENT_KEY(LocaleKey, Locale, Locale{});
 ```
 
 Use these APIs:

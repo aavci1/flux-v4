@@ -1,10 +1,10 @@
 #pragma once
 
-#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
 
 #include <algorithm>
 
-namespace flux::scenegraph::detail {
+namespace lambda::scenegraph::detail {
 
 inline bool rectEmpty(Rect const& rect) noexcept {
   return rect.width == 0.f && rect.height == 0.f;
@@ -47,4 +47,4 @@ inline Rect subtreeLocalVisualBounds(SceneNode const& node) noexcept {
   return bounds;
 }
 
-} // namespace flux::scenegraph::detail
+} // namespace lambda::scenegraph::detail

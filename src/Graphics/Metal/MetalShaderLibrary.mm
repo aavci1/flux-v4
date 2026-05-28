@@ -4,13 +4,13 @@
 
 #include "Graphics/Metal/MetalShaderLibrary.hpp"
 
-#include "FluxShaders.metallib.h"
+#include "LambdaShaders.metallib.h"
 
 #include <stdexcept>
 
-namespace flux::detail {
+namespace lambda::detail {
 
-id<MTLLibrary> fluxLoadShaderLibrary(id<MTLDevice> device) {
+id<MTLLibrary> lambdaLoadShaderLibrary(id<MTLDevice> device) {
   static NSMutableDictionary* cache = nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
@@ -26,15 +26,15 @@ id<MTLLibrary> fluxLoadShaderLibrary(id<MTLDevice> device) {
 
     NSError* err = nil;
     dispatch_data_t libData = dispatch_data_create(
-        FluxShaders_metallib, static_cast<size_t>(FluxShaders_metallib_len), nil, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
+        LambdaShaders_metallib, static_cast<size_t>(LambdaShaders_metallib_len), nil, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     id<MTLLibrary> lib = [device newLibraryWithData:libData error:&err];
     if (!lib) {
-      NSLog(@"Flux: failed to load embedded metallib: %@", err);
-      throw std::runtime_error("flux: embedded metallib load failed");
+      NSLog(@"Lambda: failed to load embedded metallib: %@", err);
+      throw std::runtime_error("lambda: embedded metallib load failed");
     }
     cache[key] = lib;
     return lib;
   }
 }
 
-} // namespace flux::detail
+} // namespace lambda::detail

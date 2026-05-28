@@ -1,19 +1,19 @@
 #include <doctest/doctest.h>
-#include <Flux/Reactive/Animation.hpp>
+#include <Lambda/Reactive/Animation.hpp>
 
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Toggle.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Toggle.hpp>
 
 #include <memory>
 #include <string_view>
 #include <vector>
 
-using namespace flux;
+using namespace lambda;
 
 namespace {
 

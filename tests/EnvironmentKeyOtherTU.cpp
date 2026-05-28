@@ -1,9 +1,9 @@
 #include "EnvironmentKeyTestSupport.hpp"
 
-namespace flux::tests {
+namespace lambda::tests {
 
 std::uint16_t sharedEnvironmentTestKeyIndexFromOtherTranslationUnit() {
-  return EnvironmentKey<flux::SharedEnvironmentTestKey>::slot().index();
+  return EnvironmentKey<lambda::SharedEnvironmentTestKey>::slot().index();
 }
 
-} // namespace flux::tests
+} // namespace lambda::tests

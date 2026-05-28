@@ -1,8 +1,8 @@
-#include <Flux/UI/Detail/LayoutDebugDump.hpp>
+#include <Lambda/UI/Detail/LayoutDebugDump.hpp>
 
-#include <Flux/Debug/DebugFlags.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/TextNode.hpp>
+#include <Lambda/Debug/DebugFlags.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/TextNode.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -66,7 +66,7 @@ void dumpSceneNode(scenegraph::SceneNode const& node, int depth) {
   }
   printIndent(depth);
   std::fprintf(stderr,
-               "[flux:layout] node kind=%.*s pos=(%.1f, %.1f) bounds=(%.1f, %.1f, %.1f, %.1f)%s%s\n",
+               "[lambda:layout] node kind=%.*s pos=(%.1f, %.1f) bounds=(%.1f, %.1f, %.1f, %.1f)%s%s\n",
                static_cast<int>(scenegraph::sceneNodeKindName(node.kind()).size()),
                scenegraph::sceneNodeKindName(node.kind()).data(),
                static_cast<double>(node.position().x), static_cast<double>(node.position().y),
@@ -90,14 +90,14 @@ void layoutDebugBeginPass() {
     return;
   }
   gMeasureCount = 0;
-  std::fprintf(stderr, "[flux:layout] --- rebuild ---\n");
+  std::fprintf(stderr, "[lambda:layout] --- rebuild ---\n");
 }
 
 void layoutDebugEndPass() {
   if (!layoutDebugEnabled()) {
     return;
   }
-  std::fprintf(stderr, "[flux:layout] --- end ---\n");
+  std::fprintf(stderr, "[lambda:layout] --- end ---\n");
 }
 
 namespace detail {
@@ -113,7 +113,7 @@ void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
     return;
   }
 
-  std::fprintf(stderr, "[flux:layout] scene graph:\n");
+  std::fprintf(stderr, "[lambda:layout] scene graph:\n");
   dumpSceneNode(graph.root(), 0);
 
   std::vector<std::pair<ComponentKey, Rect>> entries = graph.snapshotGeometry();
@@ -134,15 +134,15 @@ void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
     return aIds.size() < bIds.size();
   });
 
-  std::fprintf(stderr, "[flux:layout] geometry entries=%zu\n", entries.size());
+  std::fprintf(stderr, "[lambda:layout] geometry entries=%zu\n", entries.size());
   for (auto const& [key, rect] : entries) {
     std::string const keyText = formatComponentKey(key);
-    std::fprintf(stderr, "[flux:layout]   key=%s frame=(%.1f, %.1f, %.1f, %.1f)\n", keyText.c_str(),
+    std::fprintf(stderr, "[lambda:layout]   key=%s frame=(%.1f, %.1f, %.1f, %.1f)\n", keyText.c_str(),
                  static_cast<double>(rect.x), static_cast<double>(rect.y), static_cast<double>(rect.width),
                  static_cast<double>(rect.height));
   }
 
-  std::fprintf(stderr, "[flux:layout] measure calls=%zu\n", gMeasureCount);
+  std::fprintf(stderr, "[lambda:layout] measure calls=%zu\n", gMeasureCount);
 }
 
 void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph) {
@@ -155,10 +155,10 @@ void layoutDebugDumpAttached(char const* reason) {
   }
   layoutDebugBeginPass();
   if (reason && *reason) {
-    std::fprintf(stderr, "[flux:layout] reason=%s\n", reason);
+    std::fprintf(stderr, "[lambda:layout] reason=%s\n", reason);
   }
   layoutDebugDumpRetained(*gAttachedSceneGraph);
   layoutDebugEndPass();
 }
 
-} // namespace flux
+} // namespace lambda

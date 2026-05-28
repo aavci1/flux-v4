@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Graphics/Styles.hpp>
+#include <Lambda/Graphics/Styles.hpp>
 
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/PathFlattener.hpp"
@@ -15,7 +15,7 @@
 #import <QuartzCore/QuartzCore.h>
 #endif
 
-namespace flux {
+namespace lambda {
 
 struct MetalFrameRecorder;
 
@@ -106,4 +106,4 @@ private:
   void ensureRoundedClipArenaCapacity(std::uint32_t roundedClipCount);
 };
 
-} // namespace flux
+} // namespace lambda

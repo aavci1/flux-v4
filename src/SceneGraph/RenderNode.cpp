@@ -1,10 +1,10 @@
-#include <Flux/SceneGraph/RenderNode.hpp>
+#include <Lambda/SceneGraph/RenderNode.hpp>
 
-#include <Flux/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
 
 #include <utility>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 RenderNode::RenderNode(Rect bounds, DrawFunction draw)
     : SceneNode(SceneNodeKind::Render, bounds), draw_(std::move(draw)) {}
@@ -49,4 +49,4 @@ bool RenderNode::canPrepareRenderOps() const noexcept {
     return purity_ == Purity::Pure;
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

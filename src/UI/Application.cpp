@@ -1,10 +1,10 @@
-#include <Flux/UI/Application.hpp>
+#include <Lambda/UI/Application.hpp>
 
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Events.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Reactive/AnimationClock.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Events.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Reactive/AnimationClock.hpp>
 
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
@@ -34,7 +34,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace detail {
 bool signalBridgeApplicationHasInstance() {
@@ -85,11 +85,11 @@ std::filesystem::path windowStatePath(std::string const& userDataDir) {
 
 std::string appNameFromArgv(int argc, char** argv) {
   if (argc <= 0 || !argv || !argv[0] || !*argv[0]) {
-    return "flux";
+    return "lambda";
   }
   std::filesystem::path path(argv[0]);
   std::string name = path.stem().string();
-  return name.empty() ? "flux" : name;
+  return name.empty() ? "lambda" : name;
 }
 
 void loadWindowStatesFromDisk(std::filesystem::path const& path,
@@ -167,7 +167,7 @@ void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::funct
     item.shortcut = detail::standardRoleShortcut(item.role);
   }
   if (item.actionName.empty() && item.handler) {
-    item.actionName = "__flux.menu.handler." + std::to_string(nextId++);
+    item.actionName = "__lambda.menu.handler." + std::to_string(nextId++);
     handlers[item.actionName] = item.handler;
   }
   if (!item.actionName.empty() && item.isEnabled) {
@@ -646,7 +646,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
                               static_cast<double>(elapsed) / 1000.0);
         }
       } catch (std::exception const& e) {
-        std::fprintf(stderr, "Flux Linux render error on window %u: %s\n", w->handle(), e.what());
+        std::fprintf(stderr, "Lambda Linux render error on window %u: %s\n", w->handle(), e.what());
         d->pendingCloseHandles_.push_back(w->handle());
         state.frameReady = false;
         state.frameBudgetPending = false;
@@ -791,4 +791,4 @@ Application& Application::instance() {
 
 bool Application::hasInstance() { return gCurrent != nullptr; }
 
-} // namespace flux
+} // namespace lambda

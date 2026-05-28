@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
+#include <Lambda/Core/Geometry.hpp>
 
 #include <vulkan/vulkan.h>
 
@@ -9,7 +9,7 @@
 struct VmaAllocation_T;
 using VmaAllocation = VmaAllocation_T *;
 
-namespace flux {
+namespace lambda {
 
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
@@ -101,4 +101,4 @@ struct VulkanPathVertex {
   float params[4]{};
 };
 
-} // namespace flux
+} // namespace lambda

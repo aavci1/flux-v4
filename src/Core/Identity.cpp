@@ -1,5 +1,5 @@
-#include <Flux/Core/Identity.hpp>
-#include <Flux/Detail/SmallVector.hpp>
+#include <Lambda/Core/Identity.hpp>
+#include <Lambda/Detail/SmallVector.hpp>
 
 #include "Debug/PerfCounters.hpp"
 
@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <thread>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -268,7 +268,7 @@ ComponentKey ComponentKey::fromScope(void const* scope) {
   scopeId.value = bits;
 
   return ComponentKey{
-      LocalId::fromString("__flux_scope__"),
+      LocalId::fromString("__lambda_scope__"),
       scopeId,
   };
 }
@@ -370,4 +370,4 @@ bool keySharesPrefix(ComponentKey const& a, ComponentKey const& b) noexcept {
   return a.sharesPrefix(b);
 }
 
-} // namespace flux
+} // namespace lambda

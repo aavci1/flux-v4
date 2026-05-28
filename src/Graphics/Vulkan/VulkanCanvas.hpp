@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -10,7 +10,7 @@
 
 #include <vulkan/vulkan.h>
 
-namespace flux {
+namespace lambda {
 
 class TextSystem;
 struct VulkanFrameRecorder;
@@ -75,4 +75,4 @@ bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas);
 std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas);
 std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas);
 
-} // namespace flux
+} // namespace lambda

@@ -1,10 +1,10 @@
 #include "Graphics/PathFlattener.hpp"
 
-#include <Flux/Graphics/Path.hpp>
+#include <Lambda/Graphics/Path.hpp>
 
 #include <doctest/doctest.h>
 
-using namespace flux;
+using namespace lambda;
 
 TEST_CASE("PathFlattener flattens rounded rect commands without recursion") {
   Path path;

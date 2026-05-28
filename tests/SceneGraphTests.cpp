@@ -1,28 +1,28 @@
-#include <Flux/Core/Identity.hpp>
-#include <Flux/UI/Cursor.hpp>
-#include <Flux/Graphics/Image.hpp>
-#include <Flux/Graphics/Path.hpp>
+#include <Lambda/Core/Identity.hpp>
+#include <Lambda/UI/Cursor.hpp>
+#include <Lambda/Graphics/Image.hpp>
+#include <Lambda/Graphics/Path.hpp>
 #include <doctest/doctest.h>
 
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/ImageNode.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/PathNode.hpp>
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/Renderer.hpp>
-#include <Flux/SceneGraph/SceneInteraction.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneRenderer.hpp>
-#include <Flux/SceneGraph/TextNode.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/ImageNode.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/PathNode.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/SceneGraph/TextNode.hpp>
 
 #include <memory>
 #include <vector>
 
 namespace {
 
-using namespace flux;
-using namespace flux::scenegraph;
+using namespace lambda;
+using namespace lambda::scenegraph;
 
 class DummyImage final : public Image {
   public:

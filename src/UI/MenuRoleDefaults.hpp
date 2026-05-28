@@ -1,13 +1,13 @@
 #pragma once
 
-#include <Flux/UI/MenuItem.hpp>
-#include <Flux/UI/Shortcut.hpp>
+#include <Lambda/UI/MenuItem.hpp>
+#include <Lambda/UI/Shortcut.hpp>
 
 #include <string>
 
-namespace flux::detail {
+namespace lambda::detail {
 
 std::string standardRoleActionName(MenuRole role);
 Shortcut standardRoleShortcut(MenuRole role);
 
-} // namespace flux::detail
+} // namespace lambda::detail

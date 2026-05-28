@@ -1,19 +1,19 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Scope.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/For.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/VStack.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Scope.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/For.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
 
 #include <memory>
 #include <string_view>
@@ -21,26 +21,26 @@
 
 namespace {
 
-class FakeTextSystem final : public flux::TextSystem {
+class FakeTextSystem final : public lambda::TextSystem {
 public:
-  std::shared_ptr<flux::TextLayout const>
-  layout(flux::AttributedString const&, float, flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  std::shared_ptr<flux::TextLayout const>
-  layout(std::string_view, flux::Font const&, flux::Color const&, float,
-         flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
+         lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  flux::Size measure(flux::AttributedString const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(lambda::AttributedString const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  flux::Size measure(std::string_view, flux::Font const&, flux::Color const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
@@ -49,7 +49,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           flux::Point& outBearing) override {
+                                           lambda::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -57,12 +57,12 @@ public:
   }
 };
 
-flux::EnvironmentBinding testEnvironment() {
-  return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
+lambda::EnvironmentBinding testEnvironment() {
+  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
 }
 
-flux::scenegraph::SceneNode const& rootGroup(flux::scenegraph::SceneGraph const& sceneGraph) {
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+lambda::scenegraph::SceneNode const& rootGroup(lambda::scenegraph::SceneGraph const& sceneGraph) {
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   return sceneGraph.root();
 }
 
@@ -70,29 +70,29 @@ flux::scenegraph::SceneNode const& rootGroup(flux::scenegraph::SceneGraph const&
 
 TEST_CASE("For preserves row scopes and scene nodes across reorder") {
   struct Root {
-    flux::Reactive::Signal<std::vector<int>> items;
+    lambda::Reactive::Signal<std::vector<int>> items;
     int* created = nullptr;
     int* disposed = nullptr;
 
-    flux::Element body() const {
-      return flux::For(
+    lambda::Element body() const {
+      return lambda::For(
           items,
           [](int value) { return value; },
           [created = created, disposed = disposed](int value,
-                                                   flux::Reactive::Signal<std::size_t> index) {
-            auto local = flux::useState(value * 10);
+                                                   lambda::Reactive::Signal<std::size_t> index) {
+            auto local = lambda::useState(value * 10);
             (void)local;
             ++*created;
-            flux::Reactive::onCleanup([disposed] {
+            lambda::Reactive::onCleanup([disposed] {
               ++*disposed;
             });
 
-            flux::Reactive::Bindable<float> width{[index] {
+            lambda::Reactive::Bindable<float> width{[index] {
               return 20.f + static_cast<float>(index.get());
             }};
-            return flux::Element{flux::Rectangle{}}
+            return lambda::Element{lambda::Rectangle{}}
                 .size(std::move(width), 8.f)
-                .fill(flux::Colors::blue);
+                .fill(lambda::Colors::blue);
           },
           2.f);
     }
@@ -100,14 +100,14 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
 
   int created = 0;
   int disposed = 0;
-  flux::Reactive::Signal<std::vector<int>> items{{1, 2, 3}};
+  lambda::Reactive::Signal<std::vector<int>> items{{1, 2, 3}};
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{items, &created, &disposed}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{items, &created, &disposed}),
       textSystem,
       testEnvironment(),
-      flux::Size{240.f, 160.f},
+      lambda::Size{240.f, 160.f},
   };
 
   root.mount(sceneGraph);
@@ -155,38 +155,38 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
 
 TEST_CASE("For empty stack child stays mounted and lays out inserted rows") {
   struct Root {
-    flux::Reactive::Signal<std::vector<int>> items;
+    lambda::Reactive::Signal<std::vector<int>> items;
 
-    flux::Element body() const {
-      return flux::VStack{
+    lambda::Element body() const {
+      return lambda::VStack{
           .spacing = 12.f,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::red),
-              flux::For(
+                  .fill(lambda::Colors::red),
+              lambda::For(
                   items,
                   [](int value) { return value; },
                   [](int) {
-                    return flux::Element{flux::Rectangle{}}
+                    return lambda::Element{lambda::Rectangle{}}
                         .size(20.f, 8.f)
-                        .fill(flux::Colors::blue);
+                        .fill(lambda::Colors::blue);
                   }),
-              flux::Element{flux::Rectangle{}}
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::green)),
+                  .fill(lambda::Colors::green)),
       };
     }
   };
 
-  flux::Reactive::Signal<std::vector<int>> items{{}};
+  lambda::Reactive::Signal<std::vector<int>> items{{}};
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{items}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{items}),
       textSystem,
       testEnvironment(),
-      flux::Size{240.f, 160.f},
+      lambda::Size{240.f, 160.f},
   };
 
   root.mount(sceneGraph);
@@ -207,51 +207,51 @@ TEST_CASE("For empty stack child stays mounted and lays out inserted rows") {
 
 TEST_CASE("For measures retained rows without rebuilding factory output") {
   struct Root {
-    flux::Reactive::Signal<std::vector<int>> items;
+    lambda::Reactive::Signal<std::vector<int>> items;
     int* factoryCalls = nullptr;
 
-    flux::Element body() const {
-      return flux::VStack{
+    lambda::Element body() const {
+      return lambda::VStack{
           .spacing = 12.f,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::red),
-              flux::For(
+                  .fill(lambda::Colors::red),
+              lambda::For(
                   items,
                   [](int value) { return value; },
                   [factoryCalls = factoryCalls](int) {
                     ++*factoryCalls;
-                    return flux::Element{flux::Rectangle{}}
+                    return lambda::Element{lambda::Rectangle{}}
                         .size(20.f, 8.f)
-                        .fill(flux::Colors::blue);
+                        .fill(lambda::Colors::blue);
                   },
                   2.f),
-              flux::Element{flux::Rectangle{}}
+              lambda::Element{lambda::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(flux::Colors::green)),
+                  .fill(lambda::Colors::green)),
       };
     }
   };
 
   int factoryCalls = 0;
   int measureOnlyFactoryCalls = 0;
-  flux::Reactive::Signal<std::vector<int>> items{{1, 2}};
+  lambda::Reactive::Signal<std::vector<int>> items{{1, 2}};
   FakeTextSystem textSystem;
 
   {
-    auto measuredOnly = flux::For(
+    auto measuredOnly = lambda::For(
         items,
         [](int value) { return value; },
         [&measureOnlyFactoryCalls](int) {
           ++measureOnlyFactoryCalls;
-          return flux::Element{flux::Rectangle{}}
+          return lambda::Element{lambda::Rectangle{}}
               .size(20.f, 8.f)
-              .fill(flux::Colors::blue);
+              .fill(lambda::Colors::blue);
         },
         2.f);
-    flux::MeasureContext measureContext{textSystem, testEnvironment()};
-    flux::LayoutConstraints constraints{
+    lambda::MeasureContext measureContext{textSystem, testEnvironment()};
+    lambda::LayoutConstraints constraints{
         .maxWidth = 240.f,
         .maxHeight = 160.f,
         .minWidth = 0.f,
@@ -265,13 +265,13 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
   }
   CHECK(measureOnlyFactoryCalls == 2);
 
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(
           std::in_place, Root{items, &factoryCalls}),
       textSystem,
       testEnvironment(),
-      flux::Size{240.f, 160.f},
+      lambda::Size{240.f, 160.f},
   };
 
   root.mount(sceneGraph);
@@ -283,7 +283,7 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
   CHECK(mounted.children()[1]->size().height == doctest::Approx(18.f));
   CHECK(mounted.children()[2]->position().y == doctest::Approx(52.f));
 
-  root.resize(flux::Size{260.f, 180.f}, sceneGraph);
+  root.resize(lambda::Size{260.f, 180.f}, sceneGraph);
 
   auto const& resized = rootGroup(sceneGraph);
   REQUIRE(resized.children().size() == 3);

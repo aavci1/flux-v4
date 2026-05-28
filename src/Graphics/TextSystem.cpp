@@ -1,4 +1,4 @@
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include "Graphics/TextSystemPrivate.hpp"
 
@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 void recomputeTextLayoutMetrics(TextLayout &L) {
     if (L.runs.empty()) {
@@ -477,4 +477,4 @@ std::shared_ptr<TextLayout const> TextSystem::layoutBoxedImpl(AttributedString c
     return mut;
 }
 
-} // namespace flux
+} // namespace lambda

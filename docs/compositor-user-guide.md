@@ -1,24 +1,24 @@
-# Flux Compositor User Guide
+# Lambda Compositor User Guide
 
 This guide covers the current Linux KMS compositor as it exists in this repository. It is meant for daily testing from a TTY, not for installation as a display manager.
 
 ## Build
 
-Configure one Linux build. On Linux, `FLUX_PLATFORM=AUTO` selects Wayland for normal Flux
+Configure one Linux build. On Linux, `LAMBDA_PLATFORM=AUTO` selects Wayland for normal Lambda
 apps and still builds the KMS-only `lambda-window-manager` target by default.
 
 ```sh
 cmake -S . -B build -G Ninja \
-  -DFLUX_BUILD_TESTS=ON \
-  -DFLUX_BUILD_EXAMPLES=ON
+  -DLAMBDA_BUILD_TESTS=ON \
+  -DLAMBDA_BUILD_EXAMPLES=ON
 cmake --build build
 ```
 
 Run the unit tests that cover deterministic compositor logic:
 
 ```sh
-cmake --build build --target flux_tests
-./build/flux_tests --test-case="*compositor*"
+cmake --build build --target lambda_tests
+./build/lambda_tests --test-case="*compositor*"
 ```
 
 ## Launch
@@ -68,7 +68,7 @@ Expected shell behavior:
 - `Super+Space`, the top-bar Lambda label, or the dock launcher icon opens the shell command launcher.
 - The dock reflects running/focused application state reported by `lambda-window-manager`.
 
-Clients can connect without setting `WAYLAND_DISPLAY` if they use the Flux demo helper. For other Wayland clients, use the display name written to:
+Clients can connect without setting `WAYLAND_DISPLAY` if they use the Lambda demo helper. For other Wayland clients, use the display name written to:
 
 ```sh
 $XDG_RUNTIME_DIR/lambda-window-manager-display
@@ -110,7 +110,7 @@ If the cursor is visible but does not move, or no shortcuts work, check ACLs fir
 | `LAMBDA_WINDOW_MANAGER_PACING_TRACE` | Verbose presentation pacing trace. |
 | `LAMBDA_WINDOW_MANAGER_PROFILE` | Aggregate frame-profile stats every ~2s. |
 | `LAMBDA_WINDOW_MANAGER_IDLE_PROFILE` | Poll/idle loop stats every ~2s. |
-| `FLUX_RESIZE_TRACE` | Log resize/configure traces (compositor + clients). |
+| `LAMBDA_RESIZE_TRACE` | Log resize/configure traces (compositor + clients). |
 | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Enable Vulkan validation layers during development. |
 
 Typical TTY session:
@@ -231,7 +231,7 @@ terminate = "ctrl+alt+backspace"
 Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
 the framework image loader supports stb_image formats, including JPEG and PNG.
 
-Normal-window glass is client-requested. Flux apps that use `WindowBackground::glassEffect()` send a complete
+Normal-window glass is client-requested. Lambda apps that use `WindowBackground::glassEffect()` send a complete
 glass material descriptor to the compositor, including blur radius, base color, tint, border color, and opacity.
 The compositor does not synthesize default glass for windows that did not request it.
 `[chrome.glass]` configures compositor chrome previews and layer-shell chrome styling, not normal-window glass.

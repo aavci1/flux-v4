@@ -1,8 +1,8 @@
-#include <Flux/UI/Views/BackdropBlur.hpp>
+#include <Lambda/UI/Views/BackdropBlur.hpp>
 
-#include <Flux/UI/Views/Render.hpp>
+#include <Lambda/UI/Views/Render.hpp>
 
-namespace flux {
+namespace lambda {
 
 Element BackdropBlur::body() const {
   return Render{
@@ -12,4 +12,4 @@ Element BackdropBlur::body() const {
   };
 }
 
-} // namespace flux
+} // namespace lambda

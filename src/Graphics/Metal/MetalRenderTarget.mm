@@ -1,7 +1,7 @@
 #import <Metal/Metal.h>
 
-#include <Flux/Graphics/RenderTarget.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include "Graphics/CoreTextSystem.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
@@ -10,7 +10,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace flux::platform {
+namespace lambda::platform {
 
 namespace {
 
@@ -42,4 +42,4 @@ std::unique_ptr<RenderTarget> createRenderTarget(MetalRenderTargetSpec const& sp
   return std::make_unique<MetalRenderTarget>(spec);
 }
 
-} // namespace flux::platform
+} // namespace lambda::platform

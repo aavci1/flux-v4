@@ -1,9 +1,9 @@
-#include <Flux/SceneGraph/Renderer.hpp>
-#include <Flux/SceneGraph/TextNode.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/TextNode.hpp>
 
 #include <utility>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 TextNode::TextNode(Rect bounds, std::shared_ptr<TextLayout const> layout)
     : SceneNode(SceneNodeKind::Text, bounds), layout_(std::move(layout)) {}
@@ -29,4 +29,4 @@ void TextNode::render(Renderer &renderer) const {
     renderer.drawTextLayout(*layout_);
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

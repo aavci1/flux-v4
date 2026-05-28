@@ -1,12 +1,12 @@
-#include <Flux/UI/MeasureContext.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
 
 #include <cassert>
 #include <cmath>
 #include <utility>
 
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -103,4 +103,4 @@ CurrentMeasureContextScope::~CurrentMeasureContextScope() {
 
 } // namespace detail
 
-} // namespace flux
+} // namespace lambda

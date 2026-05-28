@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/UI/Input.hpp>
+#include <Lambda/UI/Input.hpp>
 
 #include <cstdint>
 #include <string>
@@ -9,7 +9,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-namespace flux::linux_platform {
+namespace lambda::linux_platform {
 
 class XkbState {
 public:
@@ -41,4 +41,4 @@ private:
   Modifiers modifiers_ = Modifiers::None;
 };
 
-} // namespace flux::linux_platform
+} // namespace lambda::linux_platform

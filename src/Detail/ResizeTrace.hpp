@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Debug/DebugFlags.hpp>
+#include <Lambda/Debug/DebugFlags.hpp>
 
 #include <cstdarg>
 #include <cstdint>
@@ -8,11 +8,11 @@
 #include <cstdlib>
 #include <ctime>
 
-namespace flux::detail {
+namespace lambda::detail {
 
 inline bool resizeTraceEnabled() {
   static bool const enabled = [] {
-    char const* value = std::getenv("FLUX_RESIZE_TRACE");
+    char const* value = std::getenv("LAMBDA_RESIZE_TRACE");
     return debug::envNonZero(value);
   }();
   return enabled;
@@ -26,7 +26,7 @@ inline std::uint64_t resizeTraceTimestampNanoseconds() {
 }
 
 inline bool resizeTraceMirrorStderr() {
-  char const* value = std::getenv("FLUX_RESIZE_TRACE_STDERR");
+  char const* value = std::getenv("LAMBDA_RESIZE_TRACE_STDERR");
   return !value || debug::envNonZero(value);
 }
 
@@ -49,9 +49,9 @@ inline void resizeTrace(char const* prefix, char const* format, ...) {
     va_end(stderrArgs);
   }
 
-  char const* path = std::getenv("FLUX_RESIZE_TRACE_LOG");
+  char const* path = std::getenv("LAMBDA_RESIZE_TRACE_LOG");
   if (!path || !*path) {
-    path = "/tmp/flux-resize-trace.log";
+    path = "/tmp/lambda-resize-trace.log";
   }
   if (FILE* file = std::fopen(path, "a")) {
     write(file, args);
@@ -60,4 +60,4 @@ inline void resizeTrace(char const* prefix, char const* format, ...) {
   va_end(args);
 }
 
-} // namespace flux::detail
+} // namespace lambda::detail

@@ -1,14 +1,14 @@
 #pragma once
 
-#include <Flux/Layout/Alignment.hpp>
-#include <Flux/Layout/LayoutEngine.hpp>
+#include <Lambda/Layout/Alignment.hpp>
+#include <Lambda/Layout/LayoutEngine.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 /// When the parent assigned a frame (width/height > 0), use it; otherwise use the finite constraint span.
 inline float assignedSpan(float parentSpan, float outerSpan) {
@@ -77,4 +77,4 @@ inline float vAlignOffset(float childH, float innerH, Alignment a) {
 
 constexpr float kFlexEpsilon = 1e-4f;
 
-} // namespace flux::layout
+} // namespace lambda::layout

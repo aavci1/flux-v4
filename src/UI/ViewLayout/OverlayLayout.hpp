@@ -1,12 +1,12 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Graphics/Path.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/UI/Views/PopoverCalloutPath.hpp>
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Graphics/Path.hpp>
+#include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/Views/PopoverCalloutPath.hpp>
+#include <Lambda/UI/Views/PopoverCalloutShape.hpp>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 struct PopoverCalloutLayout {
   Size totalSize{};
@@ -25,4 +25,4 @@ PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size
 
 Rect resolveOverlayFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds);
 
-} // namespace flux::layout
+} // namespace lambda::layout

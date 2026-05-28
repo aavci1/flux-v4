@@ -1,21 +1,21 @@
 #include "UI/WindowRender.hpp"
 
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Styles.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneRenderer.hpp>
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/UI/Window.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/Styles.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/Window.hpp>
 
-#include <Flux/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
 
 #include "Detail/ResizeTrace.hpp"
 
 #include <chrono>
 
-namespace flux {
+namespace lambda {
 
 void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        std::optional<scenegraph::SceneGraph> const& sceneGraph,
@@ -88,4 +88,4 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
   }
 }
 
-} // namespace flux
+} // namespace lambda

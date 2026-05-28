@@ -1,16 +1,16 @@
-#include <Flux/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/SceneInteraction.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneTraversal.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/Overlay.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneTraversal.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/Overlay.hpp>
 
 #include "Detail/ResizeTrace.hpp"
 
@@ -21,7 +21,7 @@
 #include <vector>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -916,4 +916,4 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
   }
 }
 
-} // namespace flux
+} // namespace lambda

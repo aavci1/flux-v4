@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Flux/UI/Clipboard.hpp>
+#include <Lambda/UI/Clipboard.hpp>
 
-namespace flux {
+namespace lambda {
 
 class MacClipboard final : public Clipboard {
 public:
@@ -11,4 +11,4 @@ public:
   bool hasText() const override;
 };
 
-} // namespace flux
+} // namespace lambda

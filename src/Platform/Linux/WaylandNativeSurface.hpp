@@ -3,11 +3,11 @@
 struct wl_display;
 struct wl_surface;
 
-namespace flux {
+namespace lambda {
 
 struct WaylandNativeSurface {
   wl_display* display = nullptr;
   wl_surface* surface = nullptr;
 };
 
-} // namespace flux
+} // namespace lambda

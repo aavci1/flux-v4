@@ -1,20 +1,20 @@
-#include <Flux/UI/MountRoot.hpp>
+#include <Lambda/UI/MountRoot.hpp>
 
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/Detail/LayoutDebugDump.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/Detail/LayoutDebugDump.hpp>
+#include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
 
 #include "Detail/ResizeTrace.hpp"
 
 #include <chrono>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -122,4 +122,4 @@ void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
   }
 }
 
-} // namespace flux
+} // namespace lambda

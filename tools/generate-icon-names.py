@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate-icon-names.py — Regenerate include/Flux/UI/IconName.hpp from the
+generate-icon-names.py — Regenerate include/Lambda/UI/IconName.hpp from the
 Material Symbols Rounded variable font.
 
 Requirements:
@@ -94,7 +94,7 @@ def generate_header(entries: list[tuple[str, int, str]]) -> str:
         '',
         '#include <cstdint>',
         '',
-        'namespace flux {',
+        'namespace lambda {',
         '',
         '/// Material Symbols Rounded — complete icon set.',
         '///',
@@ -125,7 +125,7 @@ def generate_header(entries: list[tuple[str, int, str]]) -> str:
         '  return static_cast<char32_t>(name);',
         '}',
         '',
-        '} // namespace flux',
+        '} // namespace lambda',
         '',
     ]
 
@@ -137,13 +137,13 @@ def main():
     parser.add_argument('--font', default=None,
                         help='Path to MaterialSymbolsRounded .ttf or .woff2')
     parser.add_argument('--output', default=None,
-                        help='Output path (default: include/Flux/UI/IconName.hpp)')
+                        help='Output path (default: include/Lambda/UI/IconName.hpp)')
     args = parser.parse_args()
 
     # Resolve paths relative to repo root
     repo_root = Path(__file__).resolve().parent.parent
     font_path = args.font or str(repo_root / 'resources' / 'fonts' / 'MaterialSymbolsRounded.ttf')
-    output_path = args.output or str(repo_root / 'include' / 'Flux' / 'UI' / 'IconName.hpp')
+    output_path = args.output or str(repo_root / 'include' / 'Lambda' / 'UI' / 'IconName.hpp')
 
     if not os.path.isfile(font_path):
         print(f'Error: font not found at {font_path}', file=sys.stderr)

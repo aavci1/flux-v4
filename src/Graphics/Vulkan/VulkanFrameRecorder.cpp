@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -122,4 +122,4 @@ void VulkanFrameRecorder::clear() {
   geometrySignaturesPrepared = false;
 }
 
-} // namespace flux
+} // namespace lambda

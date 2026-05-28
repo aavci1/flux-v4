@@ -1,7 +1,7 @@
-#include <Flux/UI/Views/Card.hpp>
-#include <Flux/UI/Hooks.hpp>
+#include <Lambda/UI/Views/Card.hpp>
+#include <Lambda/UI/Hooks.hpp>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -45,4 +45,4 @@ Element Card::body() const {
       .shadow(resolved.shadow);
 }
 
-} // namespace flux
+} // namespace lambda

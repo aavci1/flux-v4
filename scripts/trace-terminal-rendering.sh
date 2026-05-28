@@ -8,15 +8,15 @@ LOG_PATH="${LAMBDA_TERMINAL_RENDER_LOG:-$LOG_DIR/lambda-terminal-render.log}"
 RESIZE_LOG_PATH="${LAMBDA_TERMINAL_RESIZE_LOG:-$LOG_DIR/lambda-terminal-resize.log}"
 TEST_SECONDS="${LAMBDA_TERMINAL_TEST_SECONDS:-45}"
 TEST_MODE="${LAMBDA_TERMINAL_TEST_MODE:-grid}"
-PERF_LEVEL="${FLUX_DEBUG_PERF:-2}"
-RESIZE_TRACE="${FLUX_RESIZE_TRACE:-0}"
+PERF_LEVEL="${LAMBDA_DEBUG_PERF:-2}"
+RESIZE_TRACE="${LAMBDA_RESIZE_TRACE:-0}"
 WORKLOAD_PATH="$LOG_DIR/lambda-terminal-workload.sh"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<EOF
 Usage: scripts/trace-terminal-rendering.sh
 
-Builds and runs lambda-terminal with a synthetic terminal workload and Flux
+Builds and runs lambda-terminal with a synthetic terminal workload and Lambda
 rendering perf logs enabled.
 
 Environment overrides:
@@ -29,8 +29,8 @@ Environment overrides:
   LAMBDA_TERMINAL_TEST_ROWS      Grid rows drawn by workload. Default: 48
   LAMBDA_TERMINAL_TEST_SEGMENTS  Color runs per row in grid mode. Default: 14
   LAMBDA_TERMINAL_FRAME_SLEEP    Workload frame sleep. Default: 0.016
-  FLUX_DEBUG_PERF                1, 2, anomaly, or 0. Default: $PERF_LEVEL
-  FLUX_RESIZE_TRACE              Enable resize logs. Default: $RESIZE_TRACE
+  LAMBDA_DEBUG_PERF                1, 2, anomaly, or 0. Default: $PERF_LEVEL
+  LAMBDA_RESIZE_TRACE              Enable resize logs. Default: $RESIZE_TRACE
 EOF
   exit 0
 fi
@@ -116,7 +116,7 @@ echo "Run this while lambda-window-manager is active; resize the terminal during
 export LAMBDA_TERMINAL_TEST_MODE="$TEST_MODE"
 export LAMBDA_TERMINAL_WORKLOAD_SECONDS="$((TEST_SECONDS + 5))"
 
-terminal_binary="$BUILD_DIR/examples/lambda-terminal"
+terminal_binary="$BUILD_DIR/demos/lambda-terminal"
 if [[ ! -x "$terminal_binary" ]]; then
   terminal_binary="$BUILD_DIR/lambda-terminal"
 fi
@@ -136,9 +136,9 @@ set +e
 (
   cd "$ROOT"
   SHELL="$WORKLOAD_PATH" \
-  FLUX_DEBUG_PERF="$PERF_LEVEL" \
-  FLUX_RESIZE_TRACE="$RESIZE_TRACE" \
-  FLUX_RESIZE_TRACE_LOG="$RESIZE_LOG_PATH" \
+  LAMBDA_DEBUG_PERF="$PERF_LEVEL" \
+  LAMBDA_RESIZE_TRACE="$RESIZE_TRACE" \
+  LAMBDA_RESIZE_TRACE_LOG="$RESIZE_LOG_PATH" \
   "${command[@]}"
 ) 2>&1 | tee "$LOG_PATH"
 status=${PIPESTATUS[0]}

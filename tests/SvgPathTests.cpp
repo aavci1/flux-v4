@@ -1,8 +1,8 @@
-#include <Flux/Graphics/SvgPath.hpp>
+#include <Lambda/Graphics/SvgPath.hpp>
 
 #include <doctest/doctest.h>
 
-using namespace flux;
+using namespace lambda;
 
 namespace {
 

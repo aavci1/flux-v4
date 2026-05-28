@@ -1,8 +1,8 @@
-#include <Flux/Graphics/Styles.hpp>
+#include <Lambda/Graphics/Styles.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -148,4 +148,4 @@ bool StrokeStyle::solidColor(Color* out) const {
   return true;
 }
 
-} // namespace flux
+} // namespace lambda

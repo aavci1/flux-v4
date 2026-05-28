@@ -1,9 +1,9 @@
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/UI/MeasureContext.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
 
 #include "Layout/Algorithms/StackLayout.hpp"
 #include "UI/ViewLayout/ContainerScope.hpp"
@@ -17,7 +17,7 @@
 #include <optional>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -115,8 +115,8 @@ void warnFlexGrowIfParentMainAxisUnconstrained(std::vector<Element> const& child
   for (Element const& child : children) {
     if (child.flexGrow() > layout::kFlexEpsilon) {
       std::fprintf(stderr,
-                   "[flux:layout] flexGrow>0 has no effect: parent stack has no finite main-axis size "
-                   "(FLUX_DEBUG_LAYOUT)\n");
+                   "[lambda:layout] flexGrow>0 has no effect: parent stack has no finite main-axis size "
+                   "(LAMBDA_DEBUG_LAYOUT)\n");
       break;
     }
   }
@@ -288,4 +288,4 @@ Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return Size{width, height};
 }
 
-} // namespace flux
+} // namespace lambda

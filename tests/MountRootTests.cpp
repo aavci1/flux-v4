@@ -1,28 +1,28 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountRoot.hpp>
-#include <Flux/UI/MountContext.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Grid.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Popover.hpp>
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
-#include <Flux/UI/Views/ScrollView.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/TextInput.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountRoot.hpp>
+#include <Lambda/UI/MountContext.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Grid.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
+#include <Lambda/UI/Views/PopoverCalloutShape.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScaleAroundCenter.hpp>
+#include <Lambda/UI/Views/ScrollView.hpp>
+#include <Lambda/UI/Views/Spacer.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/TextInput.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <cmath>
 #include <limits>
@@ -33,26 +33,26 @@
 
 namespace {
 
-class FakeTextSystem final : public flux::TextSystem {
+class FakeTextSystem final : public lambda::TextSystem {
 public:
-  std::shared_ptr<flux::TextLayout const>
-  layout(flux::AttributedString const&, float, flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  std::shared_ptr<flux::TextLayout const>
-  layout(std::string_view, flux::Font const&, flux::Color const&, float,
-         flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
+         lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  flux::Size measure(flux::AttributedString const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(lambda::AttributedString const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  flux::Size measure(std::string_view, flux::Font const&, flux::Color const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
@@ -61,7 +61,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           flux::Point& outBearing) override {
+                                           lambda::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -69,26 +69,26 @@ public:
   }
 };
 
-class MeasuringTextSystem final : public flux::TextSystem {
+class MeasuringTextSystem final : public lambda::TextSystem {
 public:
-  std::shared_ptr<flux::TextLayout const>
-  layout(flux::AttributedString const&, float, flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  std::shared_ptr<flux::TextLayout const>
-  layout(std::string_view, flux::Font const&, flux::Color const&, float,
-         flux::TextLayoutOptions const&) override {
-    return std::make_shared<flux::TextLayout>();
+  std::shared_ptr<lambda::TextLayout const>
+  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
+         lambda::TextLayoutOptions const&) override {
+    return std::make_shared<lambda::TextLayout>();
   }
 
-  flux::Size measure(flux::AttributedString const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(lambda::AttributedString const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {80.f, 16.f};
   }
 
-  flux::Size measure(std::string_view text, flux::Font const&, flux::Color const&, float,
-                     flux::TextLayoutOptions const&) override {
+  lambda::Size measure(std::string_view text, lambda::Font const&, lambda::Color const&, float,
+                     lambda::TextLayoutOptions const&) override {
     return {std::max(24.f, static_cast<float>(text.size()) * 6.f), 16.f};
   }
 
@@ -97,7 +97,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           flux::Point& outBearing) override {
+                                           lambda::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -105,41 +105,41 @@ public:
   }
 };
 
-flux::EnvironmentBinding testEnvironment() {
-  return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
+lambda::EnvironmentBinding testEnvironment() {
+  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
 }
 
-flux::Color solidColor(flux::scenegraph::RectNode const& rect) {
-  flux::Color color{};
+lambda::Color solidColor(lambda::scenegraph::RectNode const& rect) {
+  lambda::Color color{};
   CHECK(rect.fill().solidColor(&color));
   return color;
 }
 
 struct IntrinsicBox {
-  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const&,
-                     flux::LayoutHints const&, flux::TextSystem&) const {
+  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const&,
+                     lambda::LayoutHints const&, lambda::TextSystem&) const {
     ctx.advanceChildSlot();
     return {24.f, 12.f};
   }
 
-  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext&) const {
-    return std::make_unique<flux::scenegraph::RectNode>(
-        flux::Rect{0.f, 0.f, 24.f, 12.f});
+  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext&) const {
+    return std::make_unique<lambda::scenegraph::RectNode>(
+        lambda::Rect{0.f, 0.f, 24.f, 12.f});
   }
 };
 
 struct StretchBox {
-  flux::Size intrinsic{24.f, 12.f};
+  lambda::Size intrinsic{24.f, 12.f};
 
-  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const&,
-                     flux::LayoutHints const&, flux::TextSystem&) const {
+  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const&,
+                     lambda::LayoutHints const&, lambda::TextSystem&) const {
     ctx.advanceChildSlot();
     return intrinsic;
   }
 
-  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
-    auto sizeFor = [intrinsic = intrinsic](flux::LayoutConstraints const& constraints) {
-      flux::Size size{
+  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
+    auto sizeFor = [intrinsic = intrinsic](lambda::LayoutConstraints const& constraints) {
+      lambda::Size size{
           std::isfinite(constraints.maxWidth) ? constraints.maxWidth : intrinsic.width,
           std::isfinite(constraints.maxHeight) ? constraints.maxHeight : intrinsic.height,
       };
@@ -148,20 +148,20 @@ struct StretchBox {
       return size;
     };
 
-    flux::Size const initialSize = sizeFor(ctx.constraints());
-    auto group = std::make_unique<flux::scenegraph::SceneNode>(
-        flux::Rect{0.f, 0.f, initialSize.width, initialSize.height});
+    lambda::Size const initialSize = sizeFor(ctx.constraints());
+    auto group = std::make_unique<lambda::scenegraph::SceneNode>(
+        lambda::Rect{0.f, 0.f, initialSize.width, initialSize.height});
     auto* rawGroup = group.get();
     rawGroup->setRelayout([rawGroup, sizeFor = std::move(sizeFor)](
-                              flux::LayoutConstraints const& constraints) {
+                              lambda::LayoutConstraints const& constraints) {
       rawGroup->setSize(sizeFor(constraints));
     });
     return group;
   }
 };
 
-flux::LayoutConstraints fixedConstraints(flux::Size size) {
-  return flux::LayoutConstraints{
+lambda::LayoutConstraints fixedConstraints(lambda::Size size) {
+  return lambda::LayoutConstraints{
       .maxWidth = std::max(0.f, size.width),
       .maxHeight = std::max(0.f, size.height),
       .minWidth = std::max(0.f, size.width),
@@ -170,28 +170,28 @@ flux::LayoutConstraints fixedConstraints(flux::Size size) {
 }
 
 struct RelayoutProbeFrame {
-  flux::Element child;
+  lambda::Element child;
   int* relayouts = nullptr;
 
-  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const&,
-                     flux::LayoutHints const&, flux::TextSystem&) const {
+  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const&,
+                     lambda::LayoutHints const&, lambda::TextSystem&) const {
     ctx.advanceChildSlot();
     return {100.f, 100.f};
   }
 
-  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
-    auto group = std::make_unique<flux::scenegraph::SceneNode>(
-        flux::Rect{0.f, 0.f, 100.f, 100.f});
-    flux::MountContext childCtx = ctx.childWithSharedScope(fixedConstraints({100.f, 100.f}), ctx.hints());
+  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
+    auto group = std::make_unique<lambda::scenegraph::SceneNode>(
+        lambda::Rect{0.f, 0.f, 100.f, 100.f});
+    lambda::MountContext childCtx = ctx.childWithSharedScope(fixedConstraints({100.f, 100.f}), ctx.hints());
     auto childNode = child.mount(childCtx);
-    flux::scenegraph::SceneNode* rawChild = childNode.get();
+    lambda::scenegraph::SceneNode* rawChild = childNode.get();
     if (childNode) {
       group->appendChild(std::move(childNode));
     }
     auto* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
     rawGroup->setRelayout([rawGroup, rawChild, relayouts = relayouts](
-                              flux::LayoutConstraints const&) {
+                              lambda::LayoutConstraints const&) {
       if (relayouts) {
         ++*relayouts;
       }
@@ -205,25 +205,25 @@ struct RelayoutProbeFrame {
 };
 
 struct RelayoutPassthroughFrame {
-  flux::Element child;
+  lambda::Element child;
 
-  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const& constraints,
-                     flux::LayoutHints const& hints, flux::TextSystem& textSystem) const {
+  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const& constraints,
+                     lambda::LayoutHints const& hints, lambda::TextSystem& textSystem) const {
     return child.measure(ctx, constraints, hints, textSystem);
   }
 
-  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
-    auto group = std::make_unique<flux::scenegraph::SceneNode>();
-    flux::MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
+  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
+    auto group = std::make_unique<lambda::scenegraph::SceneNode>();
+    lambda::MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
     auto childNode = child.mount(childCtx);
-    flux::scenegraph::SceneNode* rawChild = childNode.get();
+    lambda::scenegraph::SceneNode* rawChild = childNode.get();
     if (childNode) {
       group->setSize(childNode->size());
       group->appendChild(std::move(childNode));
     }
-    flux::scenegraph::SceneNode* rawGroup = group.get();
+    lambda::scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
-    rawGroup->setRelayout([rawGroup, rawChild](flux::LayoutConstraints const& constraints) {
+    rawGroup->setRelayout([rawGroup, rawChild](lambda::LayoutConstraints const& constraints) {
       if (rawChild) {
         rawChild->relayout(constraints);
         rawGroup->setSize(rawChild->size());
@@ -235,18 +235,18 @@ struct RelayoutPassthroughFrame {
 
 struct DeepRelayoutNode {
   int depth = 0;
-  flux::Reactive::Signal<float> width;
+  lambda::Reactive::Signal<float> width;
 
-  flux::Element body() const {
+  lambda::Element body() const {
     if (depth <= 0) {
-      return flux::Element{flux::Rectangle{}}
+      return lambda::Element{lambda::Rectangle{}}
           .size([width = width] {
                   return width.get();
                 },
                 10.f);
     }
-    return flux::Element{RelayoutPassthroughFrame{
-        .child = flux::Element{DeepRelayoutNode{depth - 1, width}},
+    return lambda::Element{RelayoutPassthroughFrame{
+        .child = lambda::Element{DeepRelayoutNode{depth - 1, width}},
     }};
   }
 };
@@ -259,97 +259,97 @@ TEST_CASE("MountRoot mounts a static root once") {
   struct Root {
     int* bodyCalls = nullptr;
 
-    flux::Element body() const {
+    lambda::Element body() const {
       ++*bodyCalls;
-      return flux::Element{flux::Rectangle{}}
+      return lambda::Element{lambda::Rectangle{}}
           .size(20.f, 30.f)
-          .fill(flux::Colors::red);
+          .fill(lambda::Colors::red);
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
   CHECK(root.mounted());
   CHECK(bodyCalls == 1);
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
-  auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
-  CHECK(rect.size() == flux::Size{20.f, 30.f});
-  CHECK(solidColor(rect) == flux::Colors::red);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  CHECK(rect.size() == lambda::Size{20.f, 30.f});
+  CHECK(solidColor(rect) == lambda::Colors::red);
 }
 
 TEST_CASE("Popover body mounts callout chrome and reserves arrow depth") {
   struct Root {
-    flux::Element body() const {
-      return flux::Popover{
-          .content = flux::Element{flux::Rectangle{}}
+    lambda::Element body() const {
+      return lambda::Popover{
+          .content = lambda::Element{lambda::Rectangle{}}
                          .size(100.f, 20.f)
-                         .fill(flux::Colors::blue),
-          .placement = flux::PopoverPlacement::Below,
+                         .fill(lambda::Colors::blue),
+          .placement = lambda::PopoverPlacement::Below,
           .arrow = true,
       };
     }
   };
 
-  flux::Theme const theme = flux::Theme::light();
+  lambda::Theme const theme = lambda::Theme::light();
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
-      flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(theme),
-      flux::Size{300.f, 200.f},
+      lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(theme),
+      lambda::Size{300.f, 200.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   CHECK(sceneGraph.root().size().width == doctest::Approx(100.f + 2.f * theme.space3));
   CHECK(sceneGraph.root().size().height ==
-        doctest::Approx(20.f + 2.f * theme.space3 + flux::PopoverCalloutShape::kArrowH));
+        doctest::Approx(20.f + 2.f * theme.space3 + lambda::PopoverCalloutShape::kArrowH));
   REQUIRE(sceneGraph.root().children().size() == 2);
-  CHECK(sceneGraph.root().children()[0]->kind() == flux::scenegraph::SceneNodeKind::Path);
+  CHECK(sceneGraph.root().children()[0]->kind() == lambda::scenegraph::SceneNodeKind::Path);
   CHECK(sceneGraph.root().children()[1]->position().y ==
-        doctest::Approx(flux::PopoverCalloutShape::kArrowH + theme.space3));
+        doctest::Approx(lambda::PopoverCalloutShape::kArrowH + theme.space3));
 }
 
 TEST_CASE("Popover body follows resolved overlay placement from environment") {
   struct Root {
-    flux::Element body() const {
-      return flux::Popover{
-          .content = flux::Element{flux::Rectangle{}}
+    lambda::Element body() const {
+      return lambda::Popover{
+          .content = lambda::Element{lambda::Rectangle{}}
                          .size(100.f, 20.f)
-                         .fill(flux::Colors::blue),
-          .placement = flux::PopoverPlacement::Below,
+                         .fill(lambda::Colors::blue),
+          .placement = lambda::PopoverPlacement::Below,
           .arrow = true,
       };
     }
   };
 
-  flux::Theme const theme = flux::Theme::light();
+  lambda::Theme const theme = lambda::Theme::light();
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
-      flux::EnvironmentBinding{}
-          .withValue<flux::ThemeKey>(theme)
-          .withValue<flux::ResolvedOverlayPlacementKey>(
-              std::optional<flux::OverlayConfig::Placement>{flux::OverlayConfig::Placement::Above}),
-      flux::Size{300.f, 200.f},
+      lambda::EnvironmentBinding{}
+          .withValue<lambda::ThemeKey>(theme)
+          .withValue<lambda::ResolvedOverlayPlacementKey>(
+              std::optional<lambda::OverlayConfig::Placement>{lambda::OverlayConfig::Placement::Above}),
+      lambda::Size{300.f, 200.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 2);
   CHECK(sceneGraph.root().children()[1]->position().y == doctest::Approx(theme.space3));
 }
@@ -360,62 +360,62 @@ TEST_CASE("composite child body is materialized once across measure and mount") 
   struct Probe {
     int* bodyCalls = nullptr;
 
-    flux::Element body() const {
+    lambda::Element body() const {
       ++*bodyCalls;
-      return flux::Rectangle{}.size(20.f, 10.f);
+      return lambda::Rectangle{}.size(20.f, 10.f);
     }
   };
 
   struct Root {
     int* bodyCalls = nullptr;
 
-    flux::Element body() const {
-      return flux::VStack{
-          .children = flux::children(Probe{bodyCalls}),
+    lambda::Element body() const {
+      return lambda::VStack{
+          .children = lambda::children(Probe{bodyCalls}),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
   CHECK(bodyCalls == 1);
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
-  CHECK(sceneGraph.root().children()[0]->size() == flux::Size{20.f, 10.f});
+  CHECK(sceneGraph.root().children()[0]->size() == lambda::Size{20.f, 10.f});
 }
 
 TEST_CASE("interaction hooks attach reactive signals to mounted interaction data") {
   struct Root {
-    flux::Element body() const {
-      flux::Reactive::Signal<bool> hovered = flux::useHover();
-      flux::Reactive::Signal<bool> pressed = flux::usePress();
-      flux::Reactive::Signal<bool> focused = flux::useFocus();
-      flux::Reactive::Signal<bool> keyboardFocused = flux::useKeyboardFocus();
-      return flux::Rectangle{}
+    lambda::Element body() const {
+      lambda::Reactive::Signal<bool> hovered = lambda::useHover();
+      lambda::Reactive::Signal<bool> pressed = lambda::usePress();
+      lambda::Reactive::Signal<bool> focused = lambda::useFocus();
+      lambda::Reactive::Signal<bool> keyboardFocused = lambda::useKeyboardFocus();
+      return lambda::Rectangle{}
           .size(20.f, 10.f)
           .fill([hovered, pressed, focused, keyboardFocused] {
             if (keyboardFocused.get()) {
-              return flux::Colors::yellow;
+              return lambda::Colors::yellow;
             }
             if (focused.get()) {
-              return flux::Colors::blue;
+              return lambda::Colors::blue;
             }
             if (pressed.get()) {
-              return flux::Colors::green;
+              return lambda::Colors::green;
             }
             if (hovered.get()) {
-              return flux::Colors::red;
+              return lambda::Colors::red;
             }
-            return flux::Colors::black;
+            return lambda::Colors::black;
           })
           .focusable(true)
           .onTap([] {});
@@ -423,101 +423,101 @@ TEST_CASE("interaction hooks attach reactive signals to mounted interaction data
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
-  auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
-  auto const* interaction = flux::interactionData(rect);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const* interaction = lambda::interactionData(rect);
   REQUIRE(interaction != nullptr);
-  CHECK(solidColor(rect) == flux::Colors::black);
+  CHECK(solidColor(rect) == lambda::Colors::black);
 
   interaction->hoverSignal.set(true);
-  CHECK(solidColor(rect) == flux::Colors::red);
+  CHECK(solidColor(rect) == lambda::Colors::red);
   interaction->hoverSignal.set(false);
-  CHECK(solidColor(rect) == flux::Colors::black);
+  CHECK(solidColor(rect) == lambda::Colors::black);
 
   interaction->pressSignal.set(true);
-  CHECK(solidColor(rect) == flux::Colors::green);
+  CHECK(solidColor(rect) == lambda::Colors::green);
   interaction->pressSignal.set(false);
-  CHECK(solidColor(rect) == flux::Colors::black);
+  CHECK(solidColor(rect) == lambda::Colors::black);
 
   interaction->focusSignal.set(true);
-  CHECK(solidColor(rect) == flux::Colors::blue);
+  CHECK(solidColor(rect) == lambda::Colors::blue);
   interaction->focusSignal.set(false);
-  CHECK(solidColor(rect) == flux::Colors::black);
+  CHECK(solidColor(rect) == lambda::Colors::black);
 
   interaction->keyboardFocusSignal.set(true);
-  CHECK(solidColor(rect) == flux::Colors::yellow);
+  CHECK(solidColor(rect) == lambda::Colors::yellow);
   interaction->keyboardFocusSignal.set(false);
-  CHECK(solidColor(rect) == flux::Colors::black);
+  CHECK(solidColor(rect) == lambda::Colors::black);
 }
 
 TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   struct Root {
-    flux::Element body() const {
-      return flux::Element{IntrinsicBox{}}
+    lambda::Element body() const {
+      return lambda::Element{IntrinsicBox{}}
           .onTap([] {});
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
-  CHECK(sceneGraph.root().size() == flux::Size{200.f, 100.f});
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  CHECK(sceneGraph.root().size() == lambda::Size{200.f, 100.f});
   REQUIRE(sceneGraph.root().children().size() == 1);
-  CHECK(sceneGraph.root().children()[0]->size() == flux::Size{24.f, 12.f});
+  CHECK(sceneGraph.root().children()[0]->size() == lambda::Size{24.f, 12.f});
 }
 
 TEST_CASE("HStack flex children honor assigned main-axis size with explicit modifiers") {
   struct Root {
-    flux::Element body() const {
-      return flux::HStack{
+    lambda::Element body() const {
+      return lambda::HStack{
           .spacing = 12.f,
-          .alignment = flux::Alignment::Center,
-          .children = flux::children(
-              flux::Element{flux::Rectangle{}}
+          .alignment = lambda::Alignment::Center,
+          .children = lambda::children(
+              lambda::Element{lambda::Rectangle{}}
                   .size(56.f, 54.f)
-                  .fill(flux::Colors::red)
+                  .fill(lambda::Colors::red)
                   .flex(2.f, 1.f, 0.f),
-              flux::Rectangle{}.size(56.f, 76.f),
-              flux::Element{flux::Rectangle{}}
+              lambda::Rectangle{}.size(56.f, 76.f),
+              lambda::Element{lambda::Rectangle{}}
                   .size(56.f, 40.f)
-                  .fill(flux::Colors::blue)
+                  .fill(lambda::Colors::blue)
                   .flex(1.f, 1.f, 0.f),
-              flux::Rectangle{}.size(56.f, 54.f)),
+              lambda::Rectangle{}.size(56.f, 54.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{704.f, 100.f},
+      lambda::Size{704.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 4);
   CHECK(group.children()[0]->size().width == doctest::Approx(370.666f).epsilon(0.001));
@@ -528,30 +528,30 @@ TEST_CASE("HStack flex children honor assigned main-axis size with explicit modi
 
 TEST_CASE("Spacer as composite expands to fill main axis in HStack") {
   struct Root {
-    flux::Element body() const {
-      return flux::HStack{
+    lambda::Element body() const {
+      return lambda::HStack{
           .spacing = 0.f,
-          .alignment = flux::Alignment::Stretch,
-          .children = flux::children(
-              flux::Rectangle{}.size(20.f, 10.f),
-              flux::Spacer{},
-              flux::Rectangle{}.size(30.f, 10.f)),
+          .alignment = lambda::Alignment::Stretch,
+          .children = lambda::children(
+              lambda::Rectangle{}.size(20.f, 10.f),
+              lambda::Spacer{},
+              lambda::Rectangle{}.size(30.f, 10.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 40.f},
+      lambda::Size{200.f, 40.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 3);
   CHECK(group.children()[0]->size().width == doctest::Approx(20.f));
@@ -563,29 +563,29 @@ TEST_CASE("Spacer as composite expands to fill main axis in HStack") {
 
 TEST_CASE("Spacer as composite respects user-set minMainSize override") {
   struct Root {
-    flux::Element body() const {
-      return flux::HStack{
+    lambda::Element body() const {
+      return lambda::HStack{
           .spacing = 0.f,
-          .alignment = flux::Alignment::Stretch,
-          .children = flux::children(
-              flux::Spacer{}.minMainSize(40.f),
-              flux::Rectangle{}.size(10.f, 10.f)),
+          .alignment = lambda::Alignment::Stretch,
+          .children = lambda::children(
+              lambda::Spacer{}.minMainSize(40.f),
+              lambda::Rectangle{}.size(10.f, 10.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{30.f, 40.f},
+      lambda::Size{30.f, 40.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 2);
   CHECK(group.children()[0]->size().width == doctest::Approx(40.f));
@@ -594,17 +594,17 @@ TEST_CASE("Spacer as composite respects user-set minMainSize override") {
 
 TEST_CASE("Grid expands row tracks when flex assigns extra height") {
   struct Root {
-    flux::Element body() const {
-      return flux::VStack{
+    lambda::Element body() const {
+      return lambda::VStack{
           .spacing = 0.f,
-          .alignment = flux::Alignment::Stretch,
-          .children = flux::children(
-              flux::Grid{
+          .alignment = lambda::Alignment::Stretch,
+          .children = lambda::children(
+              lambda::Grid{
                   .columns = 1,
                   .horizontalSpacing = 0.f,
                   .verticalSpacing = 8.f,
-                  .verticalAlignment = flux::Alignment::Stretch,
-                  .children = flux::children(
+                  .verticalAlignment = lambda::Alignment::Stretch,
+                  .children = lambda::children(
                       StretchBox{{20.f, 10.f}},
                       StretchBox{{20.f, 160.f}},
                       StretchBox{{20.f, 10.f}},
@@ -615,19 +615,19 @@ TEST_CASE("Grid expands row tracks when flex assigns extra height") {
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 400.f},
+      lambda::Size{100.f, 400.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
-  flux::scenegraph::SceneNode const& gridNode = *sceneGraph.root().children()[0];
+  lambda::scenegraph::SceneNode const& gridNode = *sceneGraph.root().children()[0];
   CHECK(gridNode.size().height == doctest::Approx(400.f));
   REQUIRE(gridNode.children().size() == 4);
 
@@ -643,46 +643,46 @@ TEST_CASE("Grid expands row tracks when flex assigns extra height") {
 
 TEST_CASE("reactive size changes relayout ancestor stack alignment") {
   struct Root {
-    flux::Reactive::Signal<float> barHeight;
+    lambda::Reactive::Signal<float> barHeight;
 
-    flux::Element body() const {
-      return flux::ZStack{
-          .horizontalAlignment = flux::Alignment::Center,
-          .verticalAlignment = flux::Alignment::Center,
-          .children = flux::children(
-              flux::Rectangle{}.size(100.f, 100.f),
-              flux::HStack{
+    lambda::Element body() const {
+      return lambda::ZStack{
+          .horizontalAlignment = lambda::Alignment::Center,
+          .verticalAlignment = lambda::Alignment::Center,
+          .children = lambda::children(
+              lambda::Rectangle{}.size(100.f, 100.f),
+              lambda::HStack{
                   .spacing = 8.f,
-                  .alignment = flux::Alignment::Center,
-                  .children = flux::children(
-                      flux::Rectangle{}.size(
+                  .alignment = lambda::Alignment::Center,
+                  .children = lambda::children(
+                      lambda::Rectangle{}.size(
                           20.f,
                           [barHeight = barHeight] {
                             return barHeight.get();
                           }),
-                      flux::Rectangle{}.size(20.f, 20.f)),
+                      lambda::Rectangle{}.size(20.f, 20.f)),
               }),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<float> barHeight{20.f};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{barHeight}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<float> barHeight{20.f};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{barHeight}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   auto const& zstack = sceneGraph.root();
   REQUIRE(zstack.children().size() == 2);
   auto const& row = *zstack.children()[1];
-  REQUIRE(row.kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(row.kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(row.children().size() == 2);
   CHECK(row.position().y == doctest::Approx(40.f));
   CHECK(row.children()[1]->position().y == doctest::Approx(0.f));
@@ -696,23 +696,23 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
 
 TEST_CASE("reactive size relayout propagates through a 32-level scene tree") {
   FakeTextSystem textSystem;
-  flux::Reactive::Scope scope;
-  flux::MeasureContext measureContext{textSystem, testEnvironment()};
-  flux::MountContext context{
+  lambda::Reactive::Scope scope;
+  lambda::MeasureContext measureContext{textSystem, testEnvironment()};
+  lambda::MountContext context{
       scope,
       textSystem,
       measureContext,
-      flux::LayoutConstraints{
+      lambda::LayoutConstraints{
           .maxWidth = std::numeric_limits<float>::infinity(),
           .maxHeight = std::numeric_limits<float>::infinity(),
           .minWidth = 0.f,
           .minHeight = 0.f,
       },
   };
-  flux::Reactive::Signal<float> width{20.f};
-  flux::Element root{DeepRelayoutNode{32, width}};
+  lambda::Reactive::Signal<float> width{20.f};
+  lambda::Element root{DeepRelayoutNode{32, width}};
 
-  std::unique_ptr<flux::scenegraph::SceneNode> node = root.mount(context);
+  std::unique_ptr<lambda::scenegraph::SceneNode> node = root.mount(context);
 
   REQUIRE(node);
   CHECK(node->size().width == doctest::Approx(20.f));
@@ -724,26 +724,26 @@ TEST_CASE("reactive size relayout propagates through a 32-level scene tree") {
 
 TEST_CASE("reactive size relayout stops at unchanged ancestors") {
   struct Root {
-    flux::Reactive::Signal<float> barHeight;
+    lambda::Reactive::Signal<float> barHeight;
     int* outerRelayouts = nullptr;
 
-    flux::Element body() const {
+    lambda::Element body() const {
       return RelayoutProbeFrame{
-          .child = flux::Element{flux::ZStack{
-              .horizontalAlignment = flux::Alignment::Center,
-              .verticalAlignment = flux::Alignment::Center,
-              .children = flux::children(
-                  flux::Rectangle{}.size(100.f, 100.f),
-                  flux::HStack{
+          .child = lambda::Element{lambda::ZStack{
+              .horizontalAlignment = lambda::Alignment::Center,
+              .verticalAlignment = lambda::Alignment::Center,
+              .children = lambda::children(
+                  lambda::Rectangle{}.size(100.f, 100.f),
+                  lambda::HStack{
                       .spacing = 8.f,
-                      .alignment = flux::Alignment::Center,
-                      .children = flux::children(
-                          flux::Rectangle{}.size(
+                      .alignment = lambda::Alignment::Center,
+                      .children = lambda::children(
+                          lambda::Rectangle{}.size(
                               20.f,
                               [barHeight = barHeight] {
                                 return barHeight.get();
                               }),
-                          flux::Rectangle{}.size(20.f, 20.f)),
+                          lambda::Rectangle{}.size(20.f, 20.f)),
                   }),
           }},
           .relayouts = outerRelayouts,
@@ -752,15 +752,15 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<float> barHeight{20.f};
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<float> barHeight{20.f};
   int outerRelayouts = 0;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(
           std::in_place, Root{barHeight, &outerRelayouts}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -770,20 +770,20 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
 }
 
 TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
-  flux::Reactive::Scope rootScope;
+  lambda::Reactive::Scope rootScope;
   FakeTextSystem textSystem;
-  flux::MeasureContext measureContext{textSystem, testEnvironment()};
-  flux::MountContext rootContext{
+  lambda::MeasureContext measureContext{textSystem, testEnvironment()};
+  lambda::MountContext rootContext{
       rootScope,
       textSystem,
       measureContext,
-      flux::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
+      lambda::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
   };
 
   int childCleanups = 0;
   {
-    flux::MountContext childContext =
-        rootContext.childWithOwnScope(flux::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+    lambda::MountContext childContext =
+        rootContext.childWithOwnScope(lambda::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
     CHECK(&childContext.owner() != &rootContext.owner());
     childContext.owner().onCleanup([&childCleanups] {
       ++childCleanups;
@@ -796,18 +796,18 @@ TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
 }
 
 TEST_CASE("MountContext childWithSharedScope reuses parent owner") {
-  flux::Reactive::Scope rootScope;
+  lambda::Reactive::Scope rootScope;
   FakeTextSystem textSystem;
-  flux::MeasureContext measureContext{textSystem, testEnvironment()};
-  flux::MountContext rootContext{
+  lambda::MeasureContext measureContext{textSystem, testEnvironment()};
+  lambda::MountContext rootContext{
       rootScope,
       textSystem,
       measureContext,
-      flux::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
+      lambda::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
   };
 
-  flux::MountContext childContext =
-      rootContext.childWithSharedScope(flux::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+  lambda::MountContext childContext =
+      rootContext.childWithSharedScope(lambda::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
   CHECK(&childContext.owner() == &rootContext.owner());
 }
 
@@ -817,10 +817,10 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
   struct Root {
     int* bodyCalls = nullptr;
 
-    flux::Element body() const {
+    lambda::Element body() const {
       ++*bodyCalls;
-      auto width = flux::useState(20.f);
-      return flux::Element{flux::Rectangle{}}
+      auto width = lambda::useState(20.f);
+      return lambda::Element{lambda::Rectangle{}}
           .width([width] {
             return width.get();
           })
@@ -832,25 +832,25 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
-  auto const* interaction = flux::interactionData(sceneGraph.root());
+  auto const* interaction = lambda::interactionData(sceneGraph.root());
   REQUIRE(interaction != nullptr);
   REQUIRE(interaction->onTap);
-  interaction->onTap(flux::MouseButton::Left);
-  CHECK(sceneGraph.root().size() == flux::Size{64.f, 10.f});
+  interaction->onTap(lambda::MouseButton::Left);
+  CHECK(sceneGraph.root().size() == lambda::Size{64.f, 10.f});
 
-  root.resize(flux::Size{320.f, 180.f}, sceneGraph);
+  root.resize(lambda::Size{320.f, 180.f}, sceneGraph);
 
   CHECK(bodyCalls == 1);
-  CHECK(sceneGraph.root().size() == flux::Size{64.f, 10.f});
+  CHECK(sceneGraph.root().size() == lambda::Size{64.f, 10.f});
 }
 
 TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
@@ -859,28 +859,28 @@ TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
   struct Root {
     int* bodyCalls = nullptr;
 
-    flux::Element body() const {
+    lambda::Element body() const {
       ++*bodyCalls;
-      return flux::Rectangle{};
+      return lambda::Rectangle{};
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
-  CHECK(sceneGraph.root().size() == flux::Size{200.f, 100.f});
+  CHECK(sceneGraph.root().size() == lambda::Size{200.f, 100.f});
 
-  root.resize(flux::Size{320.f, 180.f}, sceneGraph);
+  root.resize(lambda::Size{320.f, 180.f}, sceneGraph);
 
   CHECK(bodyCalls == 1);
-  CHECK(sceneGraph.root().size() == flux::Size{320.f, 180.f});
+  CHECK(sceneGraph.root().size() == lambda::Size{320.f, 180.f});
 }
 
 TEST_CASE("MountRoot repeated resize applies each viewport synchronously without remount") {
@@ -889,27 +889,27 @@ TEST_CASE("MountRoot repeated resize applies each viewport synchronously without
   struct Root {
     int* bodyCalls = nullptr;
 
-    flux::Element body() const {
+    lambda::Element body() const {
       ++*bodyCalls;
-      return flux::VStack{
-          .children = flux::children(flux::Rectangle{}, flux::Rectangle{}),
+      return lambda::VStack{
+          .children = lambda::children(lambda::Rectangle{}, lambda::Rectangle{}),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
   for (int i = 0; i < 64; ++i) {
-    flux::Size const next{200.f + static_cast<float>(i * 3),
+    lambda::Size const next{200.f + static_cast<float>(i * 3),
                           100.f + static_cast<float>(i * 2)};
     root.resize(next, sceneGraph);
     CHECK(sceneGraph.root().size() == next);
@@ -920,43 +920,43 @@ TEST_CASE("MountRoot repeated resize applies each viewport synchronously without
 
 TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   struct Root {
-    flux::Element body() const {
-      return flux::ScrollView{
-          .axis = flux::ScrollAxis::Vertical,
-          .children = flux::children(
-              flux::Element{flux::VStack{
+    lambda::Element body() const {
+      return lambda::ScrollView{
+          .axis = lambda::ScrollAxis::Vertical,
+          .children = lambda::children(
+              lambda::Element{lambda::VStack{
                   .spacing = 16.f,
-                  .alignment = flux::Alignment::Stretch,
-                  .children = flux::children(
-                      flux::Text{.text = "Alert demo", .font = flux::Font::largeTitle()},
-                      flux::Text{.text = "Modal alerts via useAlert().",
-                                 .font = flux::Font::body(),
-                                 .wrapping = flux::TextWrapping::Wrap},
-                      flux::Text{.text = "Tap a button to open an alert.",
-                                 .font = flux::Font::footnote(),
-                                 .wrapping = flux::TextWrapping::Wrap}),
+                  .alignment = lambda::Alignment::Stretch,
+                  .children = lambda::children(
+                      lambda::Text{.text = "Alert demo", .font = lambda::Font::largeTitle()},
+                      lambda::Text{.text = "Modal alerts via useAlert().",
+                                 .font = lambda::Font::body(),
+                                 .wrapping = lambda::TextWrapping::Wrap},
+                      lambda::Text{.text = "Tap a button to open an alert.",
+                                 .font = lambda::Font::footnote(),
+                                 .wrapping = lambda::TextWrapping::Wrap}),
               }}.padding(24.f)),
       };
     }
   };
 
   MeasuringTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{800.f, 800.f},
+      lambda::Size{800.f, 800.f},
   };
 
   root.mount(sceneGraph);
 
-  auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const& viewport = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
   auto const& content = *viewport.children()[0];
-  REQUIRE(content.kind() == flux::scenegraph::SceneNodeKind::Group);
-  auto const& paddedStack = static_cast<flux::scenegraph::RectNode const&>(*content.children()[0]);
+  REQUIRE(content.kind() == lambda::scenegraph::SceneNodeKind::Group);
+  auto const& paddedStack = static_cast<lambda::scenegraph::RectNode const&>(*content.children()[0]);
   auto const& stack = *paddedStack.children()[0];
-  REQUIRE(stack.kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(stack.kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(stack.children().size() == 3);
   float const firstY = stack.children()[0]->position().y;
   float const secondY = stack.children()[1]->position().y;
@@ -965,7 +965,7 @@ TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   CHECK(secondY > firstY);
   CHECK(thirdY > secondY);
 
-  root.resize(flux::Size{900.f, 700.f}, sceneGraph);
+  root.resize(lambda::Size{900.f, 700.f}, sceneGraph);
 
   CHECK(stack.children()[0]->position().y == doctest::Approx(firstY));
   CHECK(stack.children()[1]->position().y == doctest::Approx(secondY));
@@ -974,52 +974,52 @@ TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
 
 TEST_CASE("modifier-wrapped root ScrollView keeps viewport height after resize") {
   struct Root {
-    flux::Reactive::Signal<flux::Point> offset;
-    flux::Reactive::Signal<flux::Size> viewport;
-    flux::Reactive::Signal<flux::Size> content;
+    lambda::Reactive::Signal<lambda::Point> offset;
+    lambda::Reactive::Signal<lambda::Size> viewport;
+    lambda::Reactive::Signal<lambda::Size> content;
 
-    flux::Element body() const {
-      return flux::ScrollView{
-          .axis = flux::ScrollAxis::Vertical,
+    lambda::Element body() const {
+      return lambda::ScrollView{
+          .axis = lambda::ScrollAxis::Vertical,
           .scrollOffset = offset,
           .viewportSize = viewport,
           .contentSize = content,
-          .children = flux::children(
-              flux::Rectangle{}.size(80.f, 100.f),
-              flux::Rectangle{}.size(80.f, 100.f)),
-      }.fill(flux::Colors::red);
+          .children = lambda::children(
+              lambda::Rectangle{}.size(80.f, 100.f),
+              lambda::Rectangle{}.size(80.f, 100.f)),
+      }.fill(lambda::Colors::red);
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
-  flux::Reactive::Signal<flux::Size> viewport{flux::Size{}};
-  flux::Reactive::Signal<flux::Size> content{flux::Size{}};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Size> viewport{lambda::Size{}};
+  lambda::Reactive::Signal<lambda::Size> content{lambda::Size{}};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(
           std::in_place, Root{offset, viewport, content}),
       textSystem,
       testEnvironment(),
-      flux::Size{80.f, 80.f},
+      lambda::Size{80.f, 80.f},
   };
 
   root.mount(sceneGraph);
-  root.resize(flux::Size{80.f, 60.f}, sceneGraph);
+  root.resize(lambda::Size{80.f, 60.f}, sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
-  auto const& wrapper = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  auto const& wrapper = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
   REQUIRE(wrapper.children().size() == 1);
-  auto const& scrollViewport = static_cast<flux::scenegraph::RectNode const&>(*wrapper.children()[0]);
-  CHECK(wrapper.size() == flux::Size{80.f, 60.f});
-  CHECK(scrollViewport.size() == flux::Size{80.f, 60.f});
+  auto const& scrollViewport = static_cast<lambda::scenegraph::RectNode const&>(*wrapper.children()[0]);
+  CHECK(wrapper.size() == lambda::Size{80.f, 60.f});
+  CHECK(scrollViewport.size() == lambda::Size{80.f, 60.f});
   CHECK(viewport.get().height == doctest::Approx(60.f));
   CHECK(content.get().height == doctest::Approx(200.f));
 
-  auto const* scrollInteraction = flux::interactionData(scrollViewport);
+  auto const* scrollInteraction = lambda::interactionData(scrollViewport);
   REQUIRE(scrollInteraction != nullptr);
   REQUIRE(scrollInteraction->onScroll);
-  scrollInteraction->onScroll(flux::Vec2{0.f, -12.f});
+  scrollInteraction->onScroll(lambda::Vec2{0.f, -12.f});
 
   CHECK(offset.get().y == doctest::Approx(12.f));
   REQUIRE(scrollViewport.children().size() >= 1);
@@ -1028,50 +1028,50 @@ TEST_CASE("modifier-wrapped root ScrollView keeps viewport height after resize")
 
 TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
   struct Root {
-    flux::Reactive::Signal<flux::Point> offset;
+    lambda::Reactive::Signal<lambda::Point> offset;
 
-    flux::Element body() const {
-      return flux::ScrollView{
-          .axis = flux::ScrollAxis::Vertical,
+    lambda::Element body() const {
+      return lambda::ScrollView{
+          .axis = lambda::ScrollAxis::Vertical,
           .scrollOffset = offset,
-          .children = flux::children(
-              flux::Rectangle{}.size(80.f, 80.f),
-              flux::Rectangle{}.size(80.f, 80.f)),
+          .children = lambda::children(
+              lambda::Rectangle{}.size(80.f, 80.f),
+              lambda::Rectangle{}.size(80.f, 80.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 20.f}};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{offset}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 20.f}};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{offset}),
       textSystem,
       testEnvironment(),
-      flux::Size{80.f, 80.f},
+      lambda::Size{80.f, 80.f},
   };
 
   root.mount(sceneGraph);
 
-  auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const& viewport = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
   REQUIRE(viewport.children().size() >= 1);
   auto const& content = *viewport.children()[0];
-  REQUIRE(content.kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(content.kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(content.children().size() == 2);
   CHECK(content.position().y == doctest::Approx(-20.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
   CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
 
-  root.resize(flux::Size{80.f, 60.f}, sceneGraph);
+  root.resize(lambda::Size{80.f, 60.f}, sceneGraph);
 
   CHECK(content.position().y == doctest::Approx(-20.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
   CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
 
-  auto const* scrollInteraction = flux::interactionData(viewport);
+  auto const* scrollInteraction = lambda::interactionData(viewport);
   REQUIRE(scrollInteraction != nullptr);
   REQUIRE(scrollInteraction->onScroll);
-  scrollInteraction->onScroll(flux::Vec2{0.f, -12.f});
+  scrollInteraction->onScroll(lambda::Vec2{0.f, -12.f});
 
   CHECK(content.position().y == doctest::Approx(-32.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
@@ -1080,34 +1080,34 @@ TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
 
 TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
   struct Root {
-    flux::Reactive::Signal<float> scale;
+    lambda::Reactive::Signal<float> scale;
 
-    flux::Element body() const {
-      return flux::ScaleAroundCenter{
-          .scale = flux::Reactive::Bindable<float>{[scale = scale] {
+    lambda::Element body() const {
+      return lambda::ScaleAroundCenter{
+          .scale = lambda::Reactive::Bindable<float>{[scale = scale] {
             return scale.get();
           }},
-          .child = flux::Element{flux::Rectangle{}}
+          .child = lambda::Element{lambda::Rectangle{}}
                        .size(20.f, 10.f)
-                       .fill(flux::Colors::red),
+                       .fill(lambda::Colors::red),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<float> scale{0.96f};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{scale}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<float> scale{0.96f};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{scale}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
   scale.set(0.92f);
 
-  root.resize(flux::Size{320.f, 180.f}, sceneGraph);
+  root.resize(lambda::Size{320.f, 180.f}, sceneGraph);
 
   CHECK(sceneGraph.root().size().width >= 20.f);
   CHECK(sceneGraph.root().size().height >= 10.f);
@@ -1115,24 +1115,24 @@ TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
 
 TEST_CASE("element transform modifiers compose in call order") {
   struct TranslateThenRotate {
-    flux::Element body() const {
-      return flux::Rectangle{}
+    lambda::Element body() const {
+      return lambda::Rectangle{}
           .size(10.f, 10.f)
           .translate(10.f, 0.f)
           .rotate(1.5707963267948966f);
     }
   };
   struct RotateThenTranslate {
-    flux::Element body() const {
-      return flux::Rectangle{}
+    lambda::Element body() const {
+      return lambda::Rectangle{}
           .size(10.f, 10.f)
           .rotate(1.5707963267948966f)
           .translate(10.f, 0.f);
     }
   };
   struct RepeatedTranslate {
-    flux::Element body() const {
-      return flux::Rectangle{}
+    lambda::Element body() const {
+      return lambda::Rectangle{}
           .size(10.f, 10.f)
           .translate(10.f, 2.f)
           .translate(3.f, 4.f);
@@ -1140,39 +1140,39 @@ TEST_CASE("element transform modifiers compose in call order") {
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph translateThenRotateGraph;
-  flux::scenegraph::SceneGraph rotateThenTranslateGraph;
-  flux::scenegraph::SceneGraph repeatedTranslateGraph;
+  lambda::scenegraph::SceneGraph translateThenRotateGraph;
+  lambda::scenegraph::SceneGraph rotateThenTranslateGraph;
+  lambda::scenegraph::SceneGraph repeatedTranslateGraph;
 
-  flux::MountRoot translateThenRotateRoot{
-      std::make_unique<flux::TypedRootHolder<TranslateThenRotate>>(std::in_place),
+  lambda::MountRoot translateThenRotateRoot{
+      std::make_unique<lambda::TypedRootHolder<TranslateThenRotate>>(std::in_place),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
-  flux::MountRoot rotateThenTranslateRoot{
-      std::make_unique<flux::TypedRootHolder<RotateThenTranslate>>(std::in_place),
+  lambda::MountRoot rotateThenTranslateRoot{
+      std::make_unique<lambda::TypedRootHolder<RotateThenTranslate>>(std::in_place),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
-  flux::MountRoot repeatedTranslateRoot{
-      std::make_unique<flux::TypedRootHolder<RepeatedTranslate>>(std::in_place),
+  lambda::MountRoot repeatedTranslateRoot{
+      std::make_unique<lambda::TypedRootHolder<RepeatedTranslate>>(std::in_place),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
 
   translateThenRotateRoot.mount(translateThenRotateGraph);
   rotateThenTranslateRoot.mount(rotateThenTranslateGraph);
   repeatedTranslateRoot.mount(repeatedTranslateGraph);
 
-  flux::Point const sample{1.f, 0.f};
-  flux::Point const tr =
+  lambda::Point const sample{1.f, 0.f};
+  lambda::Point const tr =
       translateThenRotateGraph.root().transform().apply(sample);
-  flux::Point const rt =
+  lambda::Point const rt =
       rotateThenTranslateGraph.root().transform().apply(sample);
-  flux::Point const repeated =
+  lambda::Point const repeated =
       repeatedTranslateGraph.root().transform().apply({0.f, 0.f});
 
   CHECK(tr.x == doctest::Approx(10.f).epsilon(0.001));
@@ -1185,12 +1185,12 @@ TEST_CASE("element transform modifiers compose in call order") {
 
 TEST_CASE("reactive element transform modifiers update mounted node") {
   struct Root {
-    flux::Reactive::Signal<float> dx;
+    lambda::Reactive::Signal<float> dx;
 
-    flux::Element body() const {
-      return flux::Rectangle{}
+    lambda::Element body() const {
+      return lambda::Rectangle{}
           .size(10.f, 10.f)
-          .translate(flux::Reactive::Bindable<float>{[dx = dx] {
+          .translate(lambda::Reactive::Bindable<float>{[dx = dx] {
             return dx.get();
           }},
                      0.f);
@@ -1198,13 +1198,13 @@ TEST_CASE("reactive element transform modifiers update mounted node") {
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<float> dx{0.f};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{dx}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<float> dx{0.f};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{dx}),
       textSystem,
       testEnvironment(),
-      flux::Size{100.f, 100.f},
+      lambda::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -1217,11 +1217,11 @@ TEST_CASE("reactive element transform modifiers update mounted node") {
 
 TEST_CASE("TextInput fills finite assigned stack width") {
   struct Root {
-    flux::Element body() const {
-      auto value = flux::useState(std::string{"hello"});
-      return flux::VStack{
-          .alignment = flux::Alignment::Start,
-          .children = flux::children(flux::TextInput{
+    lambda::Element body() const {
+      auto value = lambda::useState(std::string{"hello"});
+      return lambda::VStack{
+          .alignment = lambda::Alignment::Start,
+          .children = lambda::children(lambda::TextInput{
               .value = value,
               .multiline = true,
               .multilineHeight = {.fixed = 40.f},
@@ -1231,61 +1231,61 @@ TEST_CASE("TextInput fills finite assigned stack width") {
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{180.f, 100.f},
+      lambda::Size{180.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
   CHECK(sceneGraph.root().children()[0]->size().width == doctest::Approx(180.f));
 }
 
 TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
   struct Root {
-    flux::Element body() const {
-      return flux::ScrollView{
-          .axis = flux::ScrollAxis::Vertical,
-          .children = flux::children(
-              flux::Rectangle{}.size(60.f, 30.f),
-              flux::Rectangle{}.size(60.f, 30.f)),
+    lambda::Element body() const {
+      return lambda::ScrollView{
+          .axis = lambda::ScrollAxis::Vertical,
+          .children = lambda::children(
+              lambda::Rectangle{}.size(60.f, 30.f),
+              lambda::Rectangle{}.size(60.f, 30.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{80.f, 40.f},
+      lambda::Size{80.f, 40.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
-  auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  auto const& viewport = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
   CHECK(viewport.clipsContents());
   REQUIRE(viewport.children().size() == 2);
-  REQUIRE(viewport.children()[0]->kind() == flux::scenegraph::SceneNodeKind::Group);
-  REQUIRE(viewport.children()[1]->kind() == flux::scenegraph::SceneNodeKind::Rect);
+  REQUIRE(viewport.children()[0]->kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(viewport.children()[1]->kind() == lambda::scenegraph::SceneNodeKind::Rect);
 
-  auto const& overlay = static_cast<flux::scenegraph::RectNode const&>(*viewport.children()[1]);
+  auto const& overlay = static_cast<lambda::scenegraph::RectNode const&>(*viewport.children()[1]);
   CHECK(overlay.opacity() == doctest::Approx(0.f));
   REQUIRE(overlay.children().size() == 1);
   CHECK(overlay.children()[0]->bounds().x == doctest::Approx(73.f));
   float const initialIndicatorY = overlay.children()[0]->bounds().y;
 
-  auto const* scrollInteraction = flux::interactionData(viewport);
+  auto const* scrollInteraction = lambda::interactionData(viewport);
   REQUIRE(scrollInteraction != nullptr);
   REQUIRE(scrollInteraction->onScroll);
-  scrollInteraction->onScroll(flux::Vec2{0.f, -12.f});
+  scrollInteraction->onScroll(lambda::Vec2{0.f, -12.f});
 
   CHECK(viewport.children()[0]->position().y == doctest::Approx(-12.f));
   CHECK(overlay.opacity() == doctest::Approx(0.f));
@@ -1294,15 +1294,15 @@ TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
 
 TEST_CASE("ScrollView updates content size when mounted content grows reactively") {
   struct Root {
-    flux::Reactive::Signal<float> childHeight;
-    flux::Reactive::Signal<flux::Size> contentSize;
+    lambda::Reactive::Signal<float> childHeight;
+    lambda::Reactive::Signal<lambda::Size> contentSize;
 
-    flux::Element body() const {
-      return flux::ScrollView{
-          .axis = flux::ScrollAxis::Vertical,
+    lambda::Element body() const {
+      return lambda::ScrollView{
+          .axis = lambda::ScrollAxis::Vertical,
           .contentSize = contentSize,
-          .children = flux::children(
-              flux::Rectangle{}.size(60.f, [childHeight = childHeight] {
+          .children = lambda::children(
+              lambda::Rectangle{}.size(60.f, [childHeight = childHeight] {
                 return childHeight.get();
               })),
       };
@@ -1310,15 +1310,15 @@ TEST_CASE("ScrollView updates content size when mounted content grows reactively
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<float> childHeight{30.f};
-  flux::Reactive::Signal<flux::Size> contentSize{};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<float> childHeight{30.f};
+  lambda::Reactive::Signal<lambda::Size> contentSize{};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(
           std::in_place, Root{.childHeight = childHeight, .contentSize = contentSize}),
       textSystem,
       testEnvironment(),
-      flux::Size{80.f, 40.f},
+      lambda::Size{80.f, 40.f},
   };
 
   root.mount(sceneGraph);
@@ -1327,81 +1327,81 @@ TEST_CASE("ScrollView updates content size when mounted content grows reactively
   childHeight = 90.f;
 
   CHECK(contentSize.peek().height == doctest::Approx(90.f));
-  auto const* scrollInteraction = flux::interactionData(sceneGraph.root());
+  auto const* scrollInteraction = lambda::interactionData(sceneGraph.root());
   REQUIRE(scrollInteraction != nullptr);
-  scrollInteraction->onScroll(flux::Vec2{0.f, -50.f});
+  scrollInteraction->onScroll(lambda::Vec2{0.f, -50.f});
   REQUIRE(sceneGraph.root().children().size() >= 1);
   CHECK(sceneGraph.root().children()[0]->position().y == doctest::Approx(-50.f));
 }
 
 TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
   struct Root {
-    flux::Reactive::Signal<bool> hot;
+    lambda::Reactive::Signal<bool> hot;
 
-    flux::Element body() const {
-      return flux::Element{flux::Rectangle{}}
+    lambda::Element body() const {
+      return lambda::Element{lambda::Rectangle{}}
           .size(10.f, 10.f)
           .fill([hot = hot] {
-            return hot() ? flux::Colors::red : flux::Colors::blue;
+            return hot() ? lambda::Colors::red : lambda::Colors::blue;
           });
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<bool> hot{true};
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{hot}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<bool> hot{true};
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{hot}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
-  auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
-  CHECK(solidColor(rect) == flux::Colors::red);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  CHECK(solidColor(rect) == lambda::Colors::red);
 
   hot.set(false);
-  CHECK(solidColor(rect) == flux::Colors::blue);
+  CHECK(solidColor(rect) == lambda::Colors::blue);
 
   root.unmount(sceneGraph);
   CHECK_FALSE(root.mounted());
-  CHECK(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  CHECK(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   hot.set(true);
 }
 
 TEST_CASE("nested body component bindings inherit the root redraw callback") {
   struct Child {
-    flux::Reactive::Signal<bool> hot;
+    lambda::Reactive::Signal<bool> hot;
 
-    flux::Element body() const {
-      return flux::Element{flux::Rectangle{}}
+    lambda::Element body() const {
+      return lambda::Element{lambda::Rectangle{}}
           .size(10.f, 10.f)
           .fill([hot = hot] {
-            return hot() ? flux::Colors::red : flux::Colors::blue;
+            return hot() ? lambda::Colors::red : lambda::Colors::blue;
           });
     }
   };
 
   struct Root {
-    flux::Reactive::Signal<bool> hot;
+    lambda::Reactive::Signal<bool> hot;
 
-    flux::Element body() const {
-      return flux::Element{Child{hot}};
+    lambda::Element body() const {
+      return lambda::Element{Child{hot}};
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive::Signal<bool> hot{true};
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::Reactive::Signal<bool> hot{true};
   int redraws = 0;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{hot}),
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{hot}),
       textSystem,
       testEnvironment(),
-      flux::Size{200.f, 100.f},
+      lambda::Size{200.f, 100.f},
       [&] { ++redraws; },
   };
 
@@ -1414,36 +1414,36 @@ TEST_CASE("nested body component bindings inherit the root redraw callback") {
 
 TEST_CASE("container mounting composes slot origin with explicit child position") {
   struct Root {
-    flux::Element body() const {
-      return flux::ZStack{
-          .horizontalAlignment = flux::Alignment::Start,
-          .verticalAlignment = flux::Alignment::Start,
-          .children = flux::children(
-              flux::Rectangle{}
+    lambda::Element body() const {
+      return lambda::ZStack{
+          .horizontalAlignment = lambda::Alignment::Start,
+          .verticalAlignment = lambda::Alignment::Start,
+          .children = lambda::children(
+              lambda::Rectangle{}
                   .size(44.f, 26.f)
-                  .fill(flux::Colors::blue),
-              flux::Rectangle{}
+                  .fill(lambda::Colors::blue),
+              lambda::Rectangle{}
                   .size(18.f, 18.f)
                   .position(22.f, 4.f)
-                  .fill(flux::Colors::red)),
+                  .fill(lambda::Colors::red)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  flux::scenegraph::SceneGraph sceneGraph;
-  flux::MountRoot root{
-      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      flux::Size{44.f, 26.f},
+      lambda::Size{44.f, 26.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 2);
-  CHECK(group.children()[0]->position() == flux::Point{0.f, 0.f});
-  CHECK(group.children()[1]->position() == flux::Point{22.f, 4.f});
+  CHECK(group.children()[0]->position() == lambda::Point{0.f, 0.f});
+  CHECK(group.children()[1]->position() == lambda::Point{22.f, 4.f});
 }

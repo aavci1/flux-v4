@@ -5,14 +5,14 @@
 #include <cstdint>
 #include <string>
 
-#include <Flux/UI/Cursor.hpp>
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/UI/MenuItem.hpp>
-#include <Flux/UI/Views/Popover.hpp>
-#include <Flux/UI/WindowChrome.hpp>
-#include <Flux/UI/Window.hpp>
+#include <Lambda/UI/Cursor.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/UI/MenuItem.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
+#include <Lambda/UI/WindowChrome.hpp>
+#include <Lambda/UI/Window.hpp>
 
-namespace flux {
+namespace lambda {
 
 class Window;
 class Canvas;
@@ -26,14 +26,14 @@ class Window {
 public:
   virtual ~Window() = default;
 
-  virtual void setFluxWindow(::flux::Window* window) = 0;
+  virtual void setLambdaWindow(::lambda::Window* window) = 0;
 
-  /// Present the native window after the Flux `Window` is registered and `setFluxWindow` has run.
+  /// Present the native window after the Lambda `Window` is registered and `setLambdaWindow` has run.
   /// Implementations should not order the window on screen before this (so lifecycle callbacks see a
   /// valid `Window*`). Default: no-op.
   virtual void show() {}
 
-  virtual std::unique_ptr<::flux::Canvas> createCanvas(::flux::Window& owner) = 0;
+  virtual std::unique_ptr<::lambda::Canvas> createCanvas(::lambda::Window& owner) = 0;
 
   virtual void resize(const Size& newSize) = 0;
   virtual void setMinSize(Size /*size*/) {}
@@ -95,4 +95,4 @@ public:
 };
 
 } // namespace platform
-} // namespace flux
+} // namespace lambda

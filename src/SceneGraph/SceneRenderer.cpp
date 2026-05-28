@@ -1,20 +1,20 @@
-#include <Flux/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
 
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/SceneGraph/PathNode.hpp>
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/RenderNode.hpp>
-#include <Flux/SceneGraph/Renderer.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/SceneGraph/PathNode.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/RenderNode.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
 
-#if FLUX_METAL
+#if LAMBDA_METAL
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 #endif
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 #endif
@@ -32,7 +32,7 @@
 
 #include "Debug/PerfCounters.hpp"
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 namespace {
 
@@ -97,7 +97,7 @@ float rasterCacheDpiScaleForCanvas(Canvas* canvas) noexcept {
     return canvas ? canvas->dpiScale() : 1.f;
 }
 
-#if FLUX_METAL
+#if LAMBDA_METAL
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -120,7 +120,7 @@ MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
 }
 #endif
 
-#if FLUX_METAL
+#if LAMBDA_METAL
 bool roundedClipHasEntries(MetalRoundedClipStack const &clip) noexcept {
     return clip.header.x > 0.f;
 }
@@ -138,7 +138,7 @@ bool recordedOpsContainClipState(MetalFrameRecorder const &recorded) noexcept {
 }
 #endif
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 bool sameClipRect(Rect a, Rect b) noexcept {
     constexpr float eps = 1e-4f;
     return std::abs(a.x - b.x) <= eps &&
@@ -185,7 +185,7 @@ class CanvasRenderer final : public Renderer {
     Canvas &canvas_;
 };
 
-#if FLUX_METAL
+#if LAMBDA_METAL
 class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
   public:
     explicit MetalCanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
@@ -200,7 +200,7 @@ class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
 };
 #endif
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
   public:
     explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded) : recorded_(std::move(recorded)) {}
@@ -222,7 +222,7 @@ class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
 };
 
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
-#if FLUX_METAL
+#if LAMBDA_METAL
     MetalFrameRecorder recorded;
     if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
         node.render(*this);
@@ -235,7 +235,7 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
         return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
     }
 #endif
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
     VulkanFrameRecorder recorded;
     if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
         node.render(*this);
@@ -268,7 +268,7 @@ struct SceneRenderer::Impl {
 
     void render(SceneNode const &node) {
         debug::perf::recordSceneRenderPass();
-        bool const traceResize = ::flux::detail::resizeTraceEnabled();
+        bool const traceResize = ::lambda::detail::resizeTraceEnabled();
         auto const renderStart = traceResize ? std::chrono::steady_clock::now()
                                              : std::chrono::steady_clock::time_point{};
         std::int64_t prepareElapsed = 0;
@@ -290,7 +290,7 @@ struct SceneRenderer::Impl {
             auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - renderStart).count();
             std::string_view const rootKind = sceneNodeKindName(node.kind());
-            ::flux::detail::resizeTrace("scene-render",
+            ::lambda::detail::resizeTrace("scene-render",
                                         "root=%.*s dirty=%d prepare=%.3fms traversal=%.3fms elapsed=%.3fms\n",
                                         static_cast<int>(rootKind.size()),
                                         rootKind.data(),
@@ -417,7 +417,7 @@ struct SceneRenderer::Impl {
         if (!canvas) {
             return nullptr;
         }
-#if FLUX_METAL
+#if LAMBDA_METAL
         MetalFrameRecorder recorded;
         if (beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
@@ -432,7 +432,7 @@ struct SceneRenderer::Impl {
             return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
         }
 #endif
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
         VulkanFrameRecorder recorded;
         if (beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
@@ -675,4 +675,4 @@ void SceneRenderer::render(SceneNode const &node) {
     impl_->render(node);
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

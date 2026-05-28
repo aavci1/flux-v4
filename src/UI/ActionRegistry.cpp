@@ -1,8 +1,8 @@
-#include <Flux/UI/ActionRegistry.hpp>
+#include <Lambda/UI/ActionRegistry.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 void ActionRegistry::beginRebuild() {
   viewClaims_.clear();
@@ -198,4 +198,4 @@ bool ActionRegistry::isHandlerEnabled(ComponentKey const& focusedKey, std::strin
   return false;
 }
 
-} // namespace flux
+} // namespace lambda

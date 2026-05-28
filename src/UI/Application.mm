@@ -1,10 +1,10 @@
-#include <Flux/UI/Application.hpp>
+#include <Lambda/UI/Application.hpp>
 
-#include <Flux/UI/EventQueue.hpp>
-#include <Flux/UI/Events.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Reactive/AnimationClock.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Events.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Reactive/AnimationClock.hpp>
 
 #include "UI/MenuRoleDefaults.hpp"
 #include "UI/Platform/Window.hpp"
@@ -36,7 +36,7 @@
 #import <CoreText/CoreText.h>
 #import <dispatch/dispatch.h>
 
-namespace flux {
+namespace lambda {
 
 namespace detail {
 
@@ -148,7 +148,7 @@ void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::funct
     item.shortcut = detail::standardRoleShortcut(item.role);
   }
   if (item.actionName.empty() && item.handler) {
-    item.actionName = "__flux.menu.handler." + std::to_string(nextId++);
+    item.actionName = "__lambda.menu.handler." + std::to_string(nextId++);
     handlers[item.actionName] = item.handler;
   }
   if (!item.actionName.empty() && item.isEnabled) {
@@ -752,4 +752,4 @@ Application& Application::instance() {
 
 bool Application::hasInstance() { return gCurrent != nullptr; }
 
-} // namespace flux
+} // namespace lambda

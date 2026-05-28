@@ -1,11 +1,11 @@
-#include <Flux/UI/PopupMenu.hpp>
+#include <Lambda/UI/PopupMenu.hpp>
 
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/UI/Window.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/Window.hpp>
 
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 std::function<bool(PopupMenu)> usePopupMenu() {
   Runtime* runtime = Runtime::current();
@@ -19,4 +19,4 @@ std::function<bool(PopupMenu)> usePopupMenu() {
   };
 }
 
-} // namespace flux
+} // namespace lambda

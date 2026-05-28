@@ -1,12 +1,12 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Core/Color.hpp>
-#include <Flux/Graphics/TextCacheDebugOverlay.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Core/Color.hpp>
+#include <Lambda/Graphics/TextCacheDebugOverlay.hpp>
 
 #include <optional>
 
-namespace flux {
+namespace lambda {
 
 class Canvas;
 class OverlayManager;
@@ -23,4 +23,4 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        WindowBackground const& background,
                        TextCacheRingBuffer& textCacheRing);
 
-} // namespace flux
+} // namespace lambda

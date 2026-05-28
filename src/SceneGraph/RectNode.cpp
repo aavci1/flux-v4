@@ -1,10 +1,10 @@
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
 
 #include <algorithm>
 #include <utility>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 namespace {
 
@@ -117,4 +117,4 @@ void RectNode::render(Renderer &renderer) const {
                       fill_, stroke_, shadow_);
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

@@ -1,9 +1,9 @@
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
+#include <Lambda/UI/Views/PopoverCalloutShape.hpp>
 
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/PathNode.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/PathNode.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
 
 #include "UI/ViewLayout/OverlayLayout.hpp"
 #include "UI/ViewLayout/ContainerScope.hpp"
@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -106,4 +106,4 @@ std::unique_ptr<scenegraph::SceneNode> PopoverCalloutShape::mount(MountContext& 
   return group;
 }
 
-} // namespace flux
+} // namespace lambda

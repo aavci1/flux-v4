@@ -1,6 +1,6 @@
 # Retained Components
 
-Flux v5 treats component `body()` functions as mount-time declarations. A component is mounted into a `SceneNode` subtree once, and reactive values update retained nodes through bindings and effects after that.
+Lambda v5 treats component `body()` functions as mount-time declarations. A component is mounted into a `SceneNode` subtree once, and reactive values update retained nodes through bindings and effects after that.
 
 ## Component Contract
 
@@ -11,7 +11,7 @@ Flux v5 treats component `body()` functions as mount-time declarations. A compon
 
 ## Retention Model
 
-The retained scene tree is the identity layer. Flux does not re-run arbitrary component bodies to discover changes. Instead:
+The retained scene tree is the identity layer. Lambda does not re-run arbitrary component bodies to discover changes. Instead:
 
 - `Bindable<T>` modifier values install effects against mounted scene nodes.
 - `For` keeps keyed row scopes alive across reorder and disposes removed rows.

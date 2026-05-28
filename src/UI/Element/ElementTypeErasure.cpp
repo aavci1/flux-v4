@@ -1,15 +1,15 @@
-#include <Flux/UI/Element.hpp>
+#include <Lambda/UI/Element.hpp>
 
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/MountContext.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Detail/LayoutDebugDump.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/MountContext.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Detail/LayoutDebugDump.hpp>
+#include <Lambda/UI/Views/Spacer.hpp>
 
 #include "UI/Element/ModifierLayoutHelpers.hpp"
 
@@ -23,7 +23,7 @@
 #include <optional>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -163,7 +163,7 @@ void relayoutStoredAncestors(scenegraph::SceneNode& node) {
   constexpr float epsilon = 0.01f;
   // Trees deeper than 64 stored scene-graph ancestors are not supported for reactive
   // relayout propagation. This bounds the synchronous relayout walk; current demos are
-  // far shallower (lambda-studio max observed retained depth is 16).
+  // far shallower than this retained depth guard.
   scenegraph::SceneNode* current = &node;
   for (int depth = 0; depth < 64; ++depth) {
     scenegraph::SceneNode* parent = current->parent();
@@ -635,4 +635,4 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   return wrapper;
 }
 
-} // namespace flux
+} // namespace lambda

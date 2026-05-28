@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 namespace {
 
@@ -202,4 +202,4 @@ Rect resolveOverlayFrame(Size win, OverlayConfig const& cfg, Rect contentBounds)
   return Rect{x, y, contentBounds.width, contentBounds.height};
 }
 
-} // namespace flux::layout
+} // namespace lambda::layout

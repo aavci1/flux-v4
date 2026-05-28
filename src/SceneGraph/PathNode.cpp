@@ -1,9 +1,9 @@
-#include <Flux/SceneGraph/PathNode.hpp>
-#include <Flux/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/PathNode.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
 
 #include <utility>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 PathNode::PathNode(Rect bounds, Path path, FillStyle fill, StrokeStyle stroke, ShadowStyle shadow)
     : SceneNode(SceneNodeKind::Path, bounds)
@@ -70,4 +70,4 @@ void PathNode::render(Renderer& renderer) const {
     renderer.drawPath(path_, fill_, stroke_, shadow_);
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

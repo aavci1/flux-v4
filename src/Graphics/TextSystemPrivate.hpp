@@ -4,16 +4,16 @@
 ///
 /// Internal helpers shared by \c TextSystem.cpp and \c CoreTextSystem.mm (not public API).
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Graphics/TextLayout.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Graphics/TextLayout.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
 
 #include <cstddef>
 #include <span>
 #include <string>
 #include <vector>
 
-namespace flux::detail {
+namespace lambda::detail {
 
 void normalizeOriginsToTopLeft(TextLayout& layout);
 
@@ -28,4 +28,4 @@ bool paragraphCacheLayoutsStructurallyEqual(TextLayout const& a, TextLayout cons
 bool hasNotdefGlyph(std::span<std::uint32_t const> gids) noexcept;
 void collectDrawableGlyphIndices(std::span<std::uint32_t const> gids, std::vector<std::size_t>& out);
 
-} // namespace flux::detail
+} // namespace lambda::detail

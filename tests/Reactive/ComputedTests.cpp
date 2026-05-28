@@ -1,10 +1,10 @@
-#include <Flux/Reactive/Computed.hpp>
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/Reactive/Signal.hpp>
+#include <Lambda/Reactive/Computed.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/Reactive/Signal.hpp>
 
 #include <doctest/doctest.h>
 
-using namespace flux::Reactive;
+using namespace lambda::Reactive;
 
 TEST_CASE("Reactive Computed recomputes lazily") {
   Signal<int> source(2);

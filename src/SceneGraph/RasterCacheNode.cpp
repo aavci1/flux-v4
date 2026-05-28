@@ -1,6 +1,6 @@
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
 
-#include <Flux/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -8,7 +8,7 @@
 #include <cmath>
 #include <memory>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 RasterCacheNode::RasterCacheNode(Rect bounds)
     : SceneNode(SceneNodeKind::RasterCache, bounds) {}
@@ -84,7 +84,7 @@ void RasterCacheNode::noteRasterized() const {
   if (!rasterizeWarningLogged_ && rasterizeBurstCount_ > kWarningThreshold) {
     rasterizeWarningLogged_ = true;
     std::fprintf(stderr,
-                 "[flux:render] RasterCacheNode re-rasterized %u times in %.0fms; "
+                 "[lambda:render] RasterCacheNode re-rasterized %u times in %.0fms; "
                  "remove .rasterize() from animated content\n",
                  rasterizeBurstCount_, kWindowSeconds * 1000.0);
   }
@@ -99,4 +99,4 @@ bool RasterCacheNode::canPrepareRenderOps() const noexcept {
   return false;
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

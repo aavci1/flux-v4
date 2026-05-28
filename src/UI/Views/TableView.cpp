@@ -2,20 +2,20 @@
 #include <numeric>
 #include <string>
 
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Views/TableView.hpp>
-#include <Flux/UI/Views/Badge.hpp>
-#include <Flux/UI/Views/For.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Icon.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScrollView.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Views/TableView.hpp>
+#include <Lambda/UI/Views/Badge.hpp>
+#include <Lambda/UI/Views/For.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Icon.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScrollView.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
-namespace flux {
+namespace lambda {
 
 struct TableColumnLayout {
     float width = 0.f;
@@ -41,9 +41,9 @@ template<>
 struct EnvironmentKey<TableLayoutContextKey> {
     using Value = TableLayoutContext;
     static Value defaultValue() { return {}; }
-    static ::flux::detail::EnvironmentSlot const& slot() {
-        static ::flux::detail::EnvironmentSlot s{
-            ::flux::detail::allocateEnvironmentSlot(typeid(TableLayoutContextKey))};
+    static ::lambda::detail::EnvironmentSlot const& slot() {
+        static ::lambda::detail::EnvironmentSlot s{
+            ::lambda::detail::allocateEnvironmentSlot(typeid(TableLayoutContextKey))};
         return s;
     }
 };
@@ -53,9 +53,9 @@ template<>
 struct EnvironmentKey<TableColumnIndexKey> {
     using Value = TableColumnIndex;
     static Value defaultValue() { return {}; }
-    static ::flux::detail::EnvironmentSlot const& slot() {
-        static ::flux::detail::EnvironmentSlot s{
-            ::flux::detail::allocateEnvironmentSlot(typeid(TableColumnIndexKey))};
+    static ::lambda::detail::EnvironmentSlot const& slot() {
+        static ::lambda::detail::EnvironmentSlot s{
+            ::lambda::detail::allocateEnvironmentSlot(typeid(TableColumnIndexKey))};
         return s;
     }
 };
@@ -477,4 +477,4 @@ Element TableView::body() const {
         .fill(FillStyle::solid(resolved.backgroundColor));
 }
 
-} // namespace flux
+} // namespace lambda

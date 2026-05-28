@@ -40,20 +40,20 @@ TEST_CASE("compositor config hot reload detects scale and wallpaper edits") {
   }
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = flux::compositor::loadConfigWithMetadata();
+  auto loaded = lambda::compositor::loadConfigWithMetadata();
   CHECK(loaded.config.scale == doctest::Approx(1.0f));
   REQUIRE(loaded.config.wallpaperPath);
   CHECK(*loaded.config.wallpaperPath == "/tmp/a.png");
-  CHECK_FALSE(flux::compositor::configChanged(loaded));
+  CHECK_FALSE(lambda::compositor::configChanged(loaded));
 
   {
     std::ofstream file(path);
     file << "scale = 1.25\n";
     file << "wallpaper = \"/tmp/b.png\"\n";
   }
-  CHECK(flux::compositor::configChanged(loaded));
+  CHECK(lambda::compositor::configChanged(loaded));
 
-  loaded = flux::compositor::loadConfigWithMetadata();
+  loaded = lambda::compositor::loadConfigWithMetadata();
   CHECK(loaded.config.scale == doctest::Approx(1.25f));
   REQUIRE(loaded.config.wallpaperPath);
   CHECK(*loaded.config.wallpaperPath == "/tmp/b.png");

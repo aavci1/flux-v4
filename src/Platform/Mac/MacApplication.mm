@@ -1,6 +1,6 @@
 #include "UI/Platform/Application.hpp"
 
-#include <Flux/UI/KeyCodes.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -11,16 +11,16 @@
 
 #import <Cocoa/Cocoa.h>
 
-namespace flux {
+namespace lambda {
 class MacApplication;
 }
 
-@interface FluxAppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>
-@property(nonatomic, assign) flux::MacApplication* owner;
-- (void)fluxMenuAction:(id)sender;
+@interface LambdaAppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>
+@property(nonatomic, assign) lambda::MacApplication* owner;
+- (void)lambdaMenuAction:(id)sender;
 @end
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -34,7 +34,7 @@ std::string appNameFromBundle() {
   if (!name || name.length == 0) {
     name = [[NSProcessInfo processInfo] processName];
   }
-  return name ? std::string([name UTF8String]) : std::string("Flux");
+  return name ? std::string([name UTF8String]) : std::string("Lambda");
 }
 
 std::string roleActionName(MenuRole role) {
@@ -227,7 +227,7 @@ NSURL* directoryURL(NSSearchPathDirectory directory, std::string const& explicit
       appName = [[NSProcessInfo processInfo] processName];
     }
   }
-  NSURL* appDir = [base URLByAppendingPathComponent:(appName ? appName : @"Flux")];
+  NSURL* appDir = [base URLByAppendingPathComponent:(appName ? appName : @"Lambda")];
   [[NSFileManager defaultManager] createDirectoryAtURL:appDir
                            withIntermediateDirectories:YES
                                             attributes:nil
@@ -241,15 +241,15 @@ class MacApplication final : public platform::Application {
 public:
   void initialize() override {
     [NSApplication sharedApplication];
-#if defined(FLUX_TESTING)
+#if defined(LAMBDA_TESTING)
     NSString* processName = [[NSProcessInfo processInfo] processName];
-    bool const headlessTestProcess = processName && [processName isEqualToString:@"flux_tests"];
+    bool const headlessTestProcess = processName && [processName isEqualToString:@"lambda_tests"];
     [NSApp setActivationPolicy:headlessTestProcess ? NSApplicationActivationPolicyProhibited
                                                    : NSApplicationActivationPolicyRegular];
 #else
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #endif
-    delegate_ = [[FluxAppDelegate alloc] init];
+    delegate_ = [[LambdaAppDelegate alloc] init];
     delegate_.owner = this;
     [NSApp setDelegate:delegate_];
   }
@@ -434,7 +434,7 @@ private:
     }
     NSString* key = keyEquivalent(shortcut.key);
     NSMenuItem* nsItem = [[NSMenuItem alloc] initWithTitle:ns(title)
-                                                    action:@selector(fluxMenuAction:)
+                                                    action:@selector(lambdaMenuAction:)
                                              keyEquivalent:(key ? key : @"")];
     nsItem.target = delegate_;
     if (!actionName.empty()) {
@@ -448,7 +448,7 @@ private:
     [menu addItem:nsItem];
   }
 
-  __strong FluxAppDelegate* delegate_{nil};
+  __strong LambdaAppDelegate* delegate_{nil};
   platform::MenuActionDispatcher dispatcher_;
   std::function<void()> terminateHandler_;
   std::function<bool(std::string const&)> isEnabled_;
@@ -462,9 +462,9 @@ std::unique_ptr<Application> createApplication() {
 }
 } // namespace platform
 
-} // namespace flux
+} // namespace lambda
 
-@implementation FluxAppDelegate
+@implementation LambdaAppDelegate
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
   (void)sender;
@@ -479,7 +479,7 @@ std::unique_ptr<Application> createApplication() {
   return NSTerminateNow;
 }
 
-- (void)fluxMenuAction:(id)sender {
+- (void)lambdaMenuAction:(id)sender {
   NSMenuItem* item = [sender isKindOfClass:[NSMenuItem class]] ? sender : nil;
   if (item && self.owner) {
     self.owner->dispatchMenuItem(item);

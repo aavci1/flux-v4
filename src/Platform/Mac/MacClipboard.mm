@@ -5,7 +5,7 @@
 #include <optional>
 #include <string>
 
-namespace flux {
+namespace lambda {
 
 std::optional<std::string> MacClipboard::readText() const {
   NSPasteboard* pb = [NSPasteboard generalPasteboard];
@@ -34,4 +34,4 @@ bool MacClipboard::hasText() const {
   return [pb availableTypeFromArray:@[NSPasteboardTypeString]] != nil;
 }
 
-} // namespace flux
+} // namespace lambda

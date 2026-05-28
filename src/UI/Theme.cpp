@@ -1,9 +1,9 @@
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Environment.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Environment.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 Font resolveFont(Font const& override, Font const& themeValue) {
   if (override.semanticToken() == 1) {
@@ -519,4 +519,4 @@ Theme Theme::withDensity(float d) const {
   return t;
 }
 
-} // namespace flux
+} // namespace lambda

@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 namespace {
 
 void vkCheck(VkResult result, char const* what) {
@@ -39,11 +39,11 @@ std::string sanitizeAppName(std::string name) {
       out.push_back('-');
     }
   }
-  return out.empty() ? "flux" : out;
+  return out.empty() ? "lambda" : out;
 }
 
 std::string appDir(std::string const& base, std::string const& appName) {
-  std::filesystem::path path = std::filesystem::path(base) / "flux" / sanitizeAppName(appName);
+  std::filesystem::path path = std::filesystem::path(base) / "lambda" / sanitizeAppName(appName);
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
   return path.string();
@@ -58,7 +58,7 @@ public:
   }
 
   std::string applicationName() const override {
-    return appName_.empty() ? "flux" : appName_;
+    return appName_.empty() ? "lambda" : appName_;
   }
 
   void setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) override {
@@ -135,7 +135,7 @@ private:
   platform::MenuActionDispatcher dispatcher_;
   std::function<void()> terminateHandler_;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
-  std::string appName_ = "flux";
+  std::string appName_ = "lambda";
 };
 
 } // namespace
@@ -147,4 +147,4 @@ std::unique_ptr<Application> createApplication() {
 }
 
 } // namespace platform
-} // namespace flux
+} // namespace lambda

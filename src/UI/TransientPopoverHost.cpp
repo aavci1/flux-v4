@@ -1,24 +1,24 @@
 #include "UI/TransientPopoverHost.hpp"
 
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Scope.hpp>
-#include <Flux/SceneGraph/SceneInteraction.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/SceneRenderer.hpp>
-#include <Flux/SceneGraph/SceneTraversal.hpp>
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/OverlaySurfaceHelpers.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Scope.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/SceneGraph/SceneTraversal.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/OverlaySurfaceHelpers.hpp>
+#include <Lambda/UI/Theme.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 namespace {
 
 struct ElementRootHolder final : RootHolder {
@@ -460,4 +460,4 @@ void TransientPopoverHost::notifyDismissed() {
   }
 }
 
-} // namespace flux
+} // namespace lambda

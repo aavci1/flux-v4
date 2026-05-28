@@ -10,7 +10,7 @@
 struct VmaAllocator_T;
 using VmaAllocator = VmaAllocator_T *;
 
-namespace flux {
+namespace lambda {
 
 /// Per-frame CPU-side Vulkan display list, detachable from a canvas and replayable
 /// into later frames.
@@ -52,4 +52,4 @@ struct VulkanFrameRecorder {
   void clear();
 };
 
-} // namespace flux
+} // namespace lambda

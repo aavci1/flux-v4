@@ -1,14 +1,14 @@
-#include <Flux/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/Text.hpp>
 
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/Theme.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -48,4 +48,4 @@ Size Text::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return size;
 }
 
-} // namespace flux
+} // namespace lambda

@@ -12,7 +12,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -189,7 +189,7 @@ id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib
   NSError* err = nil;
   id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
   if (!pso && err) {
-    NSLog(@"Flux MetalDeviceResources: pipeline error: %@", err);
+    NSLog(@"Lambda MetalDeviceResources: pipeline error: %@", err);
   }
   return pso;
 }
@@ -225,7 +225,7 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
   NSError* err = nil;
   id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
   if (!pso && err) {
-    NSLog(@"Flux MetalDeviceResources: path pipeline error: %@", err);
+    NSLog(@"Lambda MetalDeviceResources: path pipeline error: %@", err);
   }
   return pso;
 }
@@ -273,7 +273,7 @@ id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary
   NSError* err = nil;
   id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
   if (!pso && err) {
-    NSLog(@"Flux MetalDeviceResources: glyph pipeline error: %@", err);
+    NSLog(@"Lambda MetalDeviceResources: glyph pipeline error: %@", err);
   }
   return pso;
 }
@@ -391,7 +391,7 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
   pixelFormat_ = layer_.pixelFormat;
   queue_ = [device_ newCommandQueue];
 
-  lib_ = flux::detail::fluxLoadShaderLibrary(device_);
+  lib_ = lambda::detail::lambdaLoadShaderLibrary(device_);
 
   static const vector_float2 kQuadStrip[kQuadStripCount] = {
       {-1.f, -1.f},
@@ -421,7 +421,7 @@ MetalDeviceResources::MetalDeviceResources(id<MTLDevice> device, MTLPixelFormat 
       device_(device ? device : MTLCreateSystemDefaultDevice()) {
   queue_ = [device_ newCommandQueue];
 
-  lib_ = flux::detail::fluxLoadShaderLibrary(device_);
+  lib_ = lambda::detail::lambdaLoadShaderLibrary(device_);
 
   static const vector_float2 kQuadStrip[kQuadStripCount] = {
       {-1.f, -1.f},
@@ -630,4 +630,4 @@ void MetalDeviceResources::reserveDrawStateBuffers(std::uint32_t uniformCount, s
   ensureRoundedClipArenaCapacity(roundedClipCount);
 }
 
-} // namespace flux
+} // namespace lambda

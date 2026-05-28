@@ -1,19 +1,19 @@
-#include <Flux/UI/Views/Dialog.hpp>
+#include <Lambda/UI/Views/Dialog.hpp>
 
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/IconName.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Icon.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/IconName.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Icon.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScaleAroundCenter.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -176,4 +176,4 @@ Element Dialog::body() const {
   };
 }
 
-} // namespace flux
+} // namespace lambda

@@ -1,11 +1,11 @@
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Image.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/Image.hpp>
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -72,4 +72,4 @@ void Canvas::drawImage(Image const& image, Rect const& dst, ImageFillMode fillMo
   drawImage(image, src, dst, corners, opacity);
 }
 
-} // namespace flux
+} // namespace lambda

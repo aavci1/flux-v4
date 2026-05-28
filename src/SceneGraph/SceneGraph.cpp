@@ -1,8 +1,8 @@
-#include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
 
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
-#include <Flux/SceneGraph/Renderer.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/Renderer.hpp>
 
 #include "Debug/PerfCounters.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 namespace {
 
@@ -255,4 +255,4 @@ std::vector<std::pair<ComponentKey, Rect>> SceneGraph::snapshotGeometry() const 
     return out;
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

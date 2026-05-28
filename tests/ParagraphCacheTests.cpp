@@ -5,10 +5,10 @@
 #include "Graphics/CoreTextSystem.hpp"
 #include "Graphics/TextSystemPrivate.hpp"
 
-#include <Flux/Graphics/AttributedString.hpp>
-#include <Flux/Graphics/TextCacheStats.hpp>
-#include <Flux/Graphics/TextLayout.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Graphics/AttributedString.hpp>
+#include <Lambda/Graphics/TextCacheStats.hpp>
+#include <Lambda/Graphics/TextLayout.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
 
 #include <cmath>
 #include <cstdlib>
@@ -16,7 +16,7 @@
 #include <optional>
 #include <string>
 
-using namespace flux;
+using namespace lambda;
 
 namespace {
 
@@ -44,10 +44,10 @@ TEST_CASE("Paragraph cache: fast path matches slow path (env toggle)") {
     TextLayoutOptions opt {};
     opt.wrapping = TextWrapping::Wrap;
 
-    setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+    setenv("LAMBDA_DISABLE_PARAGRAPH_CACHE", "1", 1);
     CoreTextSystem sysSlow;
     auto const slow = sysSlow.layout(as, 420.f, opt);
-    unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+    unsetenv("LAMBDA_DISABLE_PARAGRAPH_CACHE");
 
     CoreTextSystem sysFast;
     auto const fast = sysFast.layout(as, 420.f, opt);
@@ -79,10 +79,10 @@ TEST_CASE("Paragraph cache: fast path matches slow path with run backgrounds") {
     TextLayoutOptions opt {};
     opt.wrapping = TextWrapping::Wrap;
 
-    setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+    setenv("LAMBDA_DISABLE_PARAGRAPH_CACHE", "1", 1);
     CoreTextSystem sysSlow;
     auto const slow = sysSlow.layout(as, 420.f, opt);
-    unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+    unsetenv("LAMBDA_DISABLE_PARAGRAPH_CACHE");
 
     CoreTextSystem sysFast;
     auto const fast = sysFast.layout(as, 420.f, opt);

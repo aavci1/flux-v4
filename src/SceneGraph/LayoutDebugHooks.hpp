@@ -1,8 +1,8 @@
 #pragma once
 
-namespace flux {
+namespace lambda {
 
 bool layoutDebugEnabled();
 void layoutDebugDumpAttached(char const* reason);
 
-} // namespace flux
+} // namespace lambda

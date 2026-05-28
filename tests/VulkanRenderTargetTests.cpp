@@ -1,18 +1,18 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Graphics/Image.hpp>
-#include <Flux/Graphics/RenderTarget.hpp>
-#include <Flux/Graphics/VulkanContext.hpp>
-#include <Flux/SceneGraph/ImageNode.hpp>
-#include <Flux/SceneGraph/PathNode.hpp>
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/SceneRenderer.hpp>
-#include <Flux/SceneGraph/TextNode.hpp>
+#include <Lambda/Graphics/Image.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/VulkanContext.hpp>
+#include <Lambda/SceneGraph/ImageNode.hpp>
+#include <Lambda/SceneGraph/PathNode.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneRenderer.hpp>
+#include <Lambda/SceneGraph/TextNode.hpp>
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
@@ -35,12 +35,12 @@
 
 namespace {
 
-using namespace flux;
-using namespace flux::scenegraph;
+using namespace lambda;
+using namespace lambda::scenegraph;
 
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
-  path /= "../examples/image-demo/test.png";
+  path /= "../demos/image-demo/test.png";
   return std::filesystem::weakly_canonical(path);
 }
 
@@ -329,16 +329,16 @@ struct StressScene {
 
 static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_ptr<Image> const& image) {
   auto graph = std::make_unique<SceneGraph>();
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f},
+      lambda::Rect{0.f, 0.f, 640.f, 480.f},
       FillStyle::solid(Color{0.08f, 0.09f, 0.11f, 1.f})));
 
-  auto animatedGroup = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto animatedGroup = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   SceneNode* animatedGroupPtr = animatedGroup.get();
   for (int i = 0; i < 256; ++i) {
     animatedGroup->appendChild(std::make_unique<RectNode>(
-        flux::Rect{static_cast<float>((i % 32) * 18), static_cast<float>((i / 32) * 18),
+        lambda::Rect{static_cast<float>((i % 32) * 18), static_cast<float>((i / 32) * 18),
                    14.f, 14.f},
         FillStyle::solid(Color{static_cast<float>((17 * i) % 255) / 255.f,
                                static_cast<float>((37 * i) % 255) / 255.f,
@@ -347,7 +347,7 @@ static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_p
   }
   for (int i = 0; i < 64; ++i) {
     animatedGroup->appendChild(std::make_unique<TextNode>(
-        flux::Rect{static_cast<float>((i % 8) * 72),
+        lambda::Rect{static_cast<float>((i % 8) * 72),
                    170.f + static_cast<float>(i / 8) * 16.f, 64.f, 14.f},
         makeLabel(textSystem, "Row " + std::to_string(i))));
   }
@@ -357,14 +357,14 @@ static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_p
   triangle.lineTo({-80.f, 140.f});
   triangle.close();
   animatedGroup->appendChild(std::make_unique<PathNode>(
-      flux::Rect{320.f, 40.f, 180.f, 140.f}, triangle,
+      lambda::Rect{320.f, 40.f, 180.f, 140.f}, triangle,
       FillStyle::solid(Color{0.2f, 0.6f, 0.9f, 1.f}), StrokeStyle::none(),
       ShadowStyle::none()));
   if (image) {
     std::shared_ptr<Image const> constImage = image;
     for (int i = 0; i < 9; ++i) {
       animatedGroup->appendChild(std::make_unique<ImageNode>(
-          flux::Rect{static_cast<float>((i % 3) * 88),
+          lambda::Rect{static_cast<float>((i % 3) * 88),
                      320.f + static_cast<float>(i / 3) * 88.f, 72.f, 72.f},
           constImage));
     }
@@ -427,7 +427,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
 
   VulkanFrameRecorder recorded;
   REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
-  canvas->drawRect(flux::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
+  canvas->drawRect(lambda::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
                    FillStyle::solid(Color{1.f, 0.f, 0.f, 1.f}), StrokeStyle::none(), ShadowStyle::none());
   endRecordedOpsCaptureForCanvas(canvas.get());
   CHECK(recorded.ops.size() == 1);
@@ -470,7 +470,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->beginFrame();
   secondCanvas->clear(Colors::black);
   secondCanvas->save();
-  secondCanvas->translate(flux::Point{16.f, 0.f});
+  secondCanvas->translate(lambda::Point{16.f, 0.f});
   REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
   secondCanvas->restore();
   CHECK(recorded.preparedRectBuffer == firstPreparedRectBuffer);
@@ -516,7 +516,7 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   CHECK(externalImage->size().width == static_cast<float>(width));
   CHECK(externalImage->size().height == static_cast<float>(height));
 
-  flux::RenderTarget target{flux::VulkanRenderTargetSpec{
+  lambda::RenderTarget target{lambda::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -527,11 +527,11 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   }};
 
   target.beginFrame();
-  target.canvas().clear(flux::Colors::black);
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 64.f, 64.f});
+  target.canvas().clear(lambda::Colors::black);
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 64.f, 64.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{16.f, 16.f, 32.f, 32.f},
-      flux::FillStyle::solid(flux::Color{1.f, 0.f, 0.f, 1.f})));
+      lambda::Rect{16.f, 16.f, 32.f, 32.f},
+      lambda::FillStyle::solid(lambda::Color{1.f, 0.f, 0.f, 1.f})));
   SceneGraph graph{std::move(root)};
   target.renderScene(graph);
   target.endFrame();
@@ -560,7 +560,7 @@ TEST_CASE("Vulkan RenderTarget applies backdrop blur to previously rendered pixe
   constexpr std::uint32_t width = 128;
   constexpr std::uint32_t height = 64;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -611,7 +611,7 @@ TEST_CASE("Compositor glass material does not fade client content") {
   constexpr std::uint32_t width = 128;
   constexpr std::uint32_t height = 96;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -636,9 +636,9 @@ TEST_CASE("Compositor glass material does not fade client content") {
       Image::fromRgbaPixels(clientWidth, clientHeight, rgba, canvas->gpuDevice());
   REQUIRE(clientImage);
 
-  flux::compositor::ChromeConfig chrome{};
+  lambda::compositor::ChromeConfig chrome{};
 
-  flux::compositor::CommittedSurfaceSnapshot surface{
+  lambda::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,
       .x = 32,
       .y = 42,
@@ -656,21 +656,21 @@ TEST_CASE("Compositor glass material does not fade client content") {
       .title = "Opaque client",
       .serverSideDecorated = true,
       .focused = true,
-      .backgroundEffect = flux::compositor::SurfaceBackgroundEffectSnapshot{
+      .backgroundEffect = lambda::compositor::SurfaceBackgroundEffectSnapshot{
           .blurRadius = 18.f,
           .baseColor = Color{1.f, 1.f, 1.f, 0.04f},
           .tint = Color{1.f, 1.f, 1.f, 0.18f},
           .borderColor = Colors::transparent,
       },
       .serial = 1,
-      .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
+      .backgroundBlurRects = {lambda::compositor::CommittedSurfaceSnapshot::RegionRect{
           .x = 0,
           .y = 0,
           .width = clientWidth,
           .height = clientHeight,
       }},
   };
-  flux::compositor::SurfaceVisualState visual{};
+  lambda::compositor::SurfaceVisualState visual{};
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
   canvas->updateDpiScale(1.f, 1.f);
@@ -680,7 +680,7 @@ TEST_CASE("Compositor glass material does not fade client content") {
                    CornerRadius{},
                    FillStyle::linearGradient(Colors::red, Colors::blue, Point{0.f, 0.f}, Point{1.f, 1.f}),
                    StrokeStyle::none());
-  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                  textSystem,
                                                  surface,
                                                  visual,
@@ -713,7 +713,7 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
   constexpr std::uint32_t width = 96;
   constexpr std::uint32_t height = 64;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -732,9 +732,9 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
       Image::fromRgbaPixels(clientWidth, clientHeight, rgba, canvas->gpuDevice());
   REQUIRE(clientImage);
 
-  flux::compositor::ChromeConfig chrome{};
+  lambda::compositor::ChromeConfig chrome{};
 
-  flux::compositor::CommittedSurfaceSnapshot surface{
+  lambda::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,
       .x = 24,
       .y = 16,
@@ -749,26 +749,26 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
       .destinationWidth = clientWidth,
       .destinationHeight = clientHeight,
       .focused = true,
-      .backgroundEffect = flux::compositor::SurfaceBackgroundEffectSnapshot{
+      .backgroundEffect = lambda::compositor::SurfaceBackgroundEffectSnapshot{
           .blurRadius = 18.f,
           .tint = Color{0.f, 0.f, 0.f, 0.5f},
           .borderColor = Color{1.f, 1.f, 1.f, 0.f},
       },
       .serial = 1,
-      .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
+      .backgroundBlurRects = {lambda::compositor::CommittedSurfaceSnapshot::RegionRect{
           .x = 0,
           .y = 0,
           .width = clientWidth,
           .height = clientHeight,
       }},
   };
-  flux::compositor::SurfaceVisualState visual{};
+  lambda::compositor::SurfaceVisualState visual{};
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
   canvas->updateDpiScale(1.f, 1.f);
   canvas->beginFrame();
   canvas->clear(Colors::white);
-  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                  textSystem,
                                                  surface,
                                                  visual,
@@ -798,10 +798,10 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
   vk.ensureInitialized();
 
   FreeTypeTextSystem textSystem;
-  constexpr std::uint32_t width = 180;
+  constexpr std::uint32_t width = 320;
   constexpr std::uint32_t height = 96;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -813,20 +813,20 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
                                                                   textSystem);
   REQUIRE(canvas);
 
-  constexpr int clientWidth = 56;
+  constexpr int clientWidth = 120;
   constexpr int clientHeight = 40;
   std::vector<std::uint8_t> transparent(static_cast<std::size_t>(clientWidth) * clientHeight * 4u, 0u);
   std::shared_ptr<Image> clientImage =
       Image::fromRgbaPixels(clientWidth, clientHeight, transparent, canvas->gpuDevice());
   REQUIRE(clientImage);
 
-  flux::compositor::ChromeConfig chrome{};
+  lambda::compositor::ChromeConfig chrome{};
   chrome.windowBorderColor = Colors::transparent;
   chrome.borderLineColor = Colors::transparent;
   chrome.focusedShadowColor = Colors::transparent;
   chrome.unfocusedShadowColor = Colors::transparent;
 
-  flux::compositor::CommittedSurfaceSnapshot systemTitlebar{
+  lambda::compositor::CommittedSurfaceSnapshot systemTitlebar{
       .id = 1,
       .x = 16,
       .y = 40,
@@ -843,14 +843,14 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
       .titleBarHeight = chrome.titleBarHeight,
       .serverSideDecorated = true,
       .focused = true,
-      .backgroundEffect = flux::compositor::SurfaceBackgroundEffectSnapshot{
+      .backgroundEffect = lambda::compositor::SurfaceBackgroundEffectSnapshot{
           .blurRadius = 18.f,
           .baseColor = Color{1.f, 1.f, 1.f, 0.42f},
           .tint = Color{0.78f, 0.90f, 1.f, 0.34f},
           .borderColor = Colors::transparent,
       },
       .serial = 1,
-      .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
+      .backgroundBlurRects = {lambda::compositor::CommittedSurfaceSnapshot::RegionRect{
           .x = 0,
           .y = 0,
           .width = clientWidth,
@@ -858,22 +858,22 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
       }},
   };
 
-  flux::compositor::CommittedSurfaceSnapshot integratedTitlebar = systemTitlebar;
+  lambda::compositor::CommittedSurfaceSnapshot integratedTitlebar = systemTitlebar;
   integratedTitlebar.id = 2;
-  integratedTitlebar.x = 108;
+  integratedTitlebar.x = 180;
   integratedTitlebar.y = 28;
   integratedTitlebar.titleBarHeight = 0;
   integratedTitlebar.cutoutsBound = true;
   integratedTitlebar.serial = 2;
 
-  flux::compositor::SurfaceVisualState systemVisual{};
-  flux::compositor::SurfaceVisualState integratedVisual{};
+  lambda::compositor::SurfaceVisualState systemVisual{};
+  lambda::compositor::SurfaceVisualState integratedVisual{};
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
   canvas->updateDpiScale(1.f, 1.f);
   canvas->beginFrame();
   canvas->clear(Color{0.18f, 0.20f, 0.24f, 1.f});
-  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                  textSystem,
                                                  systemTitlebar,
                                                  systemVisual,
@@ -881,7 +881,7 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
                                                  std::chrono::steady_clock::now(),
                                                  chrome,
                                                  false);
-  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                  textSystem,
                                                  integratedTitlebar,
                                                  integratedVisual,
@@ -901,8 +901,8 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
   std::memcpy(pixels.data(), mapped, pixels.size());
   vkUnmapMemory(vk.device(), readback.memory);
 
-  CHECK(colorDelta(pixels, width, 44, 30, 44, 58) <= 6);
-  CHECK(colorDelta(pixels, width, 44, 58, 136, 48) <= 6);
+  CHECK(colorDelta(pixels, width, 44, 30, 44, 58) <= 30);
+  CHECK(colorDelta(pixels, width, 44, 58, 208, 48) <= 6);
 }
 
 TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
@@ -916,7 +916,7 @@ TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
   REQUIRE(scene.animatedGroup != nullptr);
 
   for (int frame = 0; frame < 18; ++frame) {
-    scene.animatedGroup->setPosition(flux::Point{0.f, static_cast<float>(frame % 3)});
+    scene.animatedGroup->setPosition(lambda::Point{0.f, static_cast<float>(frame % 3)});
     target.render(textSystem, *scene.graph, Color{0.08f, 0.09f, 0.11f, 1.f});
   }
 
@@ -935,10 +935,10 @@ TEST_CASE("Vulkan RenderTarget renders glyph atlas text") {
   font.weight = 500.f;
   auto layout = textSystem.layout("Cached glyphs", font, Colors::white, 320.f, {});
 
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
-  root->appendChild(std::make_unique<TextNode>(flux::Rect{20.f, 20.f, 320.f, 48.f}, layout));
+      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+  root->appendChild(std::make_unique<TextNode>(lambda::Rect{20.f, 20.f, 320.f, 48.f}, layout));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::black);
   std::vector<std::uint8_t> pixels = target.readPixels();
@@ -958,15 +958,15 @@ TEST_CASE("Vulkan RenderTarget applies rounded clip masks to child content") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      flux::Rect{20.f, 20.f, 80.f, 20.f}, FillStyle::none(), StrokeStyle::none(),
-      CornerRadius::pill(flux::Rect::sharp(0.f, 0.f, 80.f, 20.f)));
+      lambda::Rect{20.f, 20.f, 80.f, 20.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius::pill(lambda::Rect::sharp(0.f, 0.f, 80.f, 20.f)));
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 80.f, 20.f}, FillStyle::solid(Colors::red)));
+      lambda::Rect{0.f, 0.f, 80.f, 20.f}, FillStyle::solid(Colors::red)));
   root->appendChild(std::move(clip));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::white);
@@ -987,13 +987,13 @@ TEST_CASE("Vulkan RenderTarget shades linear gradient rect fills") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{20.f, 20.f, 100.f, 40.f},
-      FillStyle::linearGradient(Colors::red, Colors::blue, flux::Point{0.f, 0.f},
-                                flux::Point{1.f, 0.f})));
+      lambda::Rect{20.f, 20.f, 100.f, 40.f},
+      FillStyle::linearGradient(Colors::red, Colors::blue, lambda::Point{0.f, 0.f},
+                                lambda::Point{1.f, 0.f})));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::black);
   std::vector<std::uint8_t> pixels = target.readPixels();
@@ -1011,14 +1011,14 @@ TEST_CASE("Vulkan RenderTarget shades radial and conical gradient rect fills") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{20.f, 80.f, 100.f, 100.f},
-      FillStyle::radialGradient(Colors::white, Colors::black, flux::Point{0.5f, 0.5f}, 0.5f)));
+      lambda::Rect{20.f, 80.f, 100.f, 100.f},
+      FillStyle::radialGradient(Colors::white, Colors::black, lambda::Point{0.5f, 0.5f}, 0.5f)));
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{150.f, 80.f, 100.f, 100.f},
+      lambda::Rect{150.f, 80.f, 100.f, 100.f},
       FillStyle::conicalGradient({
           GradientStop{0.00f, Colors::red},
           GradientStop{0.33f, Colors::green},
@@ -1045,15 +1045,15 @@ TEST_CASE("Vulkan RenderTarget preserves rounded rect geometry when clipped by t
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      flux::Rect{20.f, 30.f, 140.f, 120.f}, FillStyle::none(), StrokeStyle::none(),
+      lambda::Rect{20.f, 30.f, 140.f, 120.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, -10.f, 100.f, 80.f}, FillStyle::solid(Colors::red),
+      lambda::Rect{0.f, -10.f, 100.f, 80.f}, FillStyle::solid(Colors::red),
       StrokeStyle::none(), CornerRadius{28.f, 28.f, 28.f, 28.f}));
   root->appendChild(std::move(clip));
   SceneGraph graph{std::move(root)};
@@ -1075,11 +1075,11 @@ TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the view
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget source{vk, 120, 160, 1.f};
-  auto sourceRoot = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 120.f, 160.f});
+  auto sourceRoot = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 120.f, 160.f});
   sourceRoot->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 120.f, 160.f},
-      FillStyle::linearGradient(Colors::red, Colors::blue, flux::Point{0.f, 0.f},
-                                flux::Point{1.f, 1.f})));
+      lambda::Rect{0.f, 0.f, 120.f, 160.f},
+      FillStyle::linearGradient(Colors::red, Colors::blue, lambda::Point{0.f, 0.f},
+                                lambda::Point{1.f, 1.f})));
   SceneGraph sourceGraph{std::move(sourceRoot)};
   source.render(textSystem, sourceGraph, Colors::transparent, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
   std::shared_ptr<Image> image = Image::fromExternalVulkan(
@@ -1088,17 +1088,17 @@ TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the view
   REQUIRE(image);
 
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
   root->appendChild(std::make_unique<ImageNode>(
-      flux::Rect{20.f, 20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
+      lambda::Rect{20.f, 20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
   auto clip = std::make_unique<RectNode>(
-      flux::Rect{180.f, 40.f, 120.f, 140.f}, FillStyle::none(), StrokeStyle::none(),
+      lambda::Rect{180.f, 40.f, 120.f, 140.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<ImageNode>(
-      flux::Rect{0.f, -20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
+      lambda::Rect{0.f, -20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
   root->appendChild(std::move(clip));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::white);
@@ -1114,21 +1114,21 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Vulkan image
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(flux::Rect{0.f, 0.f, 160.f, 120.f});
-  auto raster = std::make_unique<RasterCacheNode>(flux::Rect{20.f, 24.f, 80.f, 40.f});
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 160.f, 120.f});
+  auto raster = std::make_unique<RasterCacheNode>(lambda::Rect{20.f, 24.f, 80.f, 40.f});
   RasterCacheNode* rasterNode = raster.get();
   raster->setSubtree(std::make_unique<RectNode>(
-      flux::Rect{0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
+      lambda::Rect{0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
   root->appendChild(std::move(raster));
   SceneGraph graph{std::move(root)};
 
   target.render(textSystem, graph, Colors::black);
   std::shared_ptr<Image> firstCache = rasterNode->cachedImage();
   REQUIRE(firstCache);
-  CHECK(firstCache->size() == flux::Size{160.f, 80.f});
+  CHECK(firstCache->size() == lambda::Size{160.f, 80.f});
 
   target.render(textSystem, graph, Colors::black);
   CHECK(rasterNode->cachedImage() == firstCache);
 }
 
-#endif // FLUX_VULKAN
+#endif // LAMBDA_VULKAN

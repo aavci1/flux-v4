@@ -1,9 +1,9 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
-#include <Flux/Debug/PerfCounters.hpp>
-#include <Flux/Graphics/Image.hpp>
-#include <Flux/Graphics/RenderTarget.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Debug/PerfCounters.hpp>
+#include <Lambda/Graphics/Image.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include "Graphics/PathFlattener.hpp"
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
@@ -61,7 +61,7 @@
 
 #include <unistd.h>
 
-namespace flux {
+namespace lambda {
 
 class VulkanCanvas;
 
@@ -79,7 +79,7 @@ constexpr std::uint32_t kDescriptorPoolImageSamplerSets = 8192;
 
 bool renderTargetFrameCacheDisabled() {
   static bool const disabled = [] {
-    char const* value = std::getenv("FLUX_RENDER_TARGET_DISABLE_FRAME_CACHE");
+    char const* value = std::getenv("LAMBDA_RENDER_TARGET_DISABLE_FRAME_CACHE");
     return debug::envNonZero(value);
   }();
   return disabled;
@@ -87,7 +87,7 @@ bool renderTargetFrameCacheDisabled() {
 
 bool vulkanPresentFencesDisabled() {
   static bool const disabled = [] {
-    char const* value = std::getenv("FLUX_VULKAN_PRESENT_FENCES");
+    char const* value = std::getenv("LAMBDA_VULKAN_PRESENT_FENCES");
     return value && (*value == '0' || std::strcmp(value, "false") == 0 || std::strcmp(value, "off") == 0);
   }();
   return disabled;
@@ -537,7 +537,7 @@ std::filesystem::path gPipelineCacheDir;
 void destroySharedVulkanResources(SharedVulkanCore &core);
 
 std::mutex gCanvasRegistryMutex;
-std::vector<::flux::VulkanCanvas *> gCanvases;
+std::vector<::lambda::VulkanCanvas *> gCanvases;
 
 bool containsExtension(std::vector<std::string> const &extensions, char const *name) {
   if (!name || !*name) {
@@ -591,7 +591,7 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   if (gVulkanCore.instance)
     return gVulkanCore.instance;
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-  app.pApplicationName = "Flux";
+  app.pApplicationName = "Lambda";
   app.apiVersion = VK_API_VERSION_1_3;
   std::vector<char const *> instanceExtensions = extensionNamePointers(gRequiredInstanceExtensions);
   if (!instanceExtensions.empty()) {
@@ -646,7 +646,7 @@ std::filesystem::path pipelineCachePath(VkPhysicalDevice physical) {
   std::filesystem::path cacheDir = gPipelineCacheDir.empty()
       ? std::filesystem::temp_directory_path()
       : gPipelineCacheDir;
-  return cacheDir / ("flux-vulkan-" + identity + ".cache");
+  return cacheDir / ("lambda-vulkan-" + identity + ".cache");
 }
 
 void createPipelineCache(SharedVulkanCore &core) {
@@ -828,7 +828,7 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           gVulkanCore.swapchainMaintenance1Extension =
               gVulkanCore.swapchainMaintenance1 ? swapchainMaintenanceExtension : "";
           if (needsPresent) {
-            std::fprintf(stderr, "Flux Vulkan: swapchain maintenance1 %s%s%s\n",
+            std::fprintf(stderr, "Lambda Vulkan: swapchain maintenance1 %s%s%s\n",
                          gVulkanCore.swapchainMaintenance1 ? "enabled" : "unavailable",
                          gVulkanCore.swapchainMaintenance1 ? " via " : "",
                          gVulkanCore.swapchainMaintenance1
@@ -1477,7 +1477,7 @@ public:
       }
     } catch (std::exception const &e) {
       recoverResetFrameFence();
-      std::fprintf(stderr, "Flux Vulkan: present failed: %s\n", e.what());
+      std::fprintf(stderr, "Lambda Vulkan: present failed: %s\n", e.what());
       swapchainDirty_ = true;
     }
   }
@@ -1634,7 +1634,7 @@ public:
         presentFenceRuntimeDisabled_ = true;
         presentFence = VK_NULL_HANDLE;
         std::fprintf(stderr,
-                     "Flux Vulkan: disabling present fences after timeout on window %u image %u\n",
+                     "Lambda Vulkan: disabling present fences after timeout on window %u image %u\n",
                      handle_, imageIndex);
       } else {
         vkCheck(waitResult, "vkWaitForFences(presentFence)");
@@ -1919,7 +1919,7 @@ public:
     } catch (std::exception const &e) {
       recoverResetFrameFence();
       renderTargetFrameCacheValid_ = false;
-      std::fprintf(stderr, "Flux Vulkan: render target present failed: %s\n", e.what());
+      std::fprintf(stderr, "Lambda Vulkan: render target present failed: %s\n", e.what());
     }
   }
 
@@ -2097,7 +2097,7 @@ public:
     try {
       ensureAtlasDescriptor();
     } catch (std::exception const &e) {
-      std::fprintf(stderr, "Flux Vulkan: glyph atlas descriptor setup failed: %s\n", e.what());
+      std::fprintf(stderr, "Lambda Vulkan: glyph atlas descriptor setup failed: %s\n", e.what());
       return;
     }
     RecordingTarget target = recordingTarget();
@@ -2109,7 +2109,7 @@ public:
         try {
           slot = glyphSlot(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
         } catch (std::exception const &e) {
-          std::fprintf(stderr, "Flux Vulkan: glyph atlas update failed: %s\n", e.what());
+          std::fprintf(stderr, "Lambda Vulkan: glyph atlas update failed: %s\n", e.what());
           continue;
         }
         if (!slot || slot->w == 0 || slot->h == 0)
@@ -2162,7 +2162,7 @@ public:
     try {
       texture = ensureImageTexture(*vi);
     } catch (std::exception const &e) {
-      std::fprintf(stderr, "Flux Vulkan: image texture upload failed: %s\n", e.what());
+      std::fprintf(stderr, "Lambda Vulkan: image texture upload failed: %s\n", e.what());
       return;
     }
     if (!texture)
@@ -3093,28 +3093,28 @@ private:
     res.imagePipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.backdropPipelineLayout = createPipelineLayout({res.quadDescriptorLayout, res.textureDescriptorLayout}, true);
     res.pathPipelineLayout = createPipelineLayout({}, true);
-    res.rectPipeline = createPipeline(res.rectPipelineLayout, flux_rect_vert_spv, flux_rect_vert_spv_len,
-                                      flux_rect_frag_spv, flux_rect_frag_spv_len, {});
+    res.rectPipeline = createPipeline(res.rectPipelineLayout, lambda_rect_vert_spv, lambda_rect_vert_spv_len,
+                                      lambda_rect_frag_spv, lambda_rect_frag_spv_len, {});
     res.calloutPipeline = createPipeline(res.calloutPipelineLayout,
-                                         flux_callout_vert_spv,
-                                         flux_callout_vert_spv_len,
-                                         flux_callout_frag_spv,
-                                         flux_callout_frag_spv_len,
+                                         lambda_callout_vert_spv,
+                                         lambda_callout_vert_spv_len,
+                                         lambda_callout_frag_spv,
+                                         lambda_callout_frag_spv_len,
                                          {});
-    res.imagePipeline = createPipeline(res.imagePipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
-                                       flux_image_frag_spv, flux_image_frag_spv_len, {});
+    res.imagePipeline = createPipeline(res.imagePipelineLayout, lambda_image_vert_spv, lambda_image_vert_spv_len,
+                                       lambda_image_frag_spv, lambda_image_frag_spv_len, {});
     res.imageUnpremultiplyPipeline =
         createPipeline(res.imagePipelineLayout,
-                       flux_image_vert_spv,
-                       flux_image_vert_spv_len,
-                       flux_image_unpremultiply_frag_spv,
-                       flux_image_unpremultiply_frag_spv_len,
+                       lambda_image_vert_spv,
+                       lambda_image_vert_spv_len,
+                       lambda_image_unpremultiply_frag_spv,
+                       lambda_image_unpremultiply_frag_spv_len,
                        {});
-    res.backdropPipeline = createPipeline(res.backdropPipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
-                                          flux_backdrop_frag_spv, flux_backdrop_frag_spv_len, {});
+    res.backdropPipeline = createPipeline(res.backdropPipelineLayout, lambda_image_vert_spv, lambda_image_vert_spv_len,
+                                          lambda_backdrop_frag_spv, lambda_backdrop_frag_spv_len, {});
     res.backdropBlurPipeline =
-        createPipeline(res.backdropPipelineLayout, flux_image_vert_spv, flux_image_vert_spv_len,
-                       flux_backdrop_blur_frag_spv, flux_backdrop_blur_frag_spv_len, {});
+        createPipeline(res.backdropPipelineLayout, lambda_image_vert_spv, lambda_image_vert_spv_len,
+                       lambda_backdrop_blur_frag_spv, lambda_backdrop_blur_frag_spv_len, {});
     std::array<VkVertexInputBindingDescription, 1> binding{};
     binding[0].binding = 0;
     binding[0].stride = sizeof(VulkanPathVertex);
@@ -3131,8 +3131,8 @@ private:
     attrs[8] = {8, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, stops)};
     attrs[9] = {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, gradient)};
     attrs[10] = {10, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, params)};
-    res.pathPipeline = createPipeline(res.pathPipelineLayout, flux_path_vert_spv, flux_path_vert_spv_len,
-                                      flux_path_frag_spv, flux_path_frag_spv_len,
+    res.pathPipeline = createPipeline(res.pathPipelineLayout, lambda_path_vert_spv, lambda_path_vert_spv_len,
+                                      lambda_path_frag_spv, lambda_path_frag_spv_len,
                                       {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});
   }
 
@@ -3278,7 +3278,7 @@ private:
       swapExtent_ = requestedExtent;
     }
     std::fprintf(stderr,
-                 "Flux Vulkan: swapchain extent window=%u framebuffer=%dx%d target=%dx%d "
+                 "Lambda Vulkan: swapchain extent window=%u framebuffer=%dx%d target=%dx%d "
                  "caps current=%ux%u min=%ux%u max=%ux%u requested=%ux%u chosen=%ux%u\n",
                  handle_,
                  framebufferWidth_,
@@ -3358,7 +3358,7 @@ private:
         if (waitResult == VK_TIMEOUT) {
           presentFenceRuntimeDisabled_ = true;
           std::fprintf(stderr,
-                       "Flux Vulkan: present fence did not signal before swapchain destroy on window %u\n",
+                       "Lambda Vulkan: present fence did not signal before swapchain destroy on window %u\n",
                        handle_);
         } else {
           vkCheck(waitResult, "vkWaitForFences(oldPresentFence)");
@@ -4981,7 +4981,7 @@ private:
   void writeDebugScreenshotIfRequested(VkCommandBuffer commandBuffer, VkImage source) {
     if (debugScreenshotWritten_)
       return;
-    static char const *const path = std::getenv("FLUX_DEBUG_SCREENSHOT_PATH");
+    static char const *const path = std::getenv("LAMBDA_DEBUG_SCREENSHOT_PATH");
     if (!path || !*path)
       return;
     Buffer staging{};
@@ -5212,7 +5212,7 @@ void evictImageTexturesFor(VulkanImage const *image) {
   if (!image)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::flux::VulkanCanvas *canvas : gCanvases) {
+  for (::lambda::VulkanCanvas *canvas : gCanvases) {
     if (canvas)
       canvas->evictImageTexture(image);
   }
@@ -5222,7 +5222,7 @@ void updateImageTexturesFor(VulkanImage const* image) {
   if (!image)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::flux::VulkanCanvas* canvas : gCanvases) {
+  for (::lambda::VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->updateImageTexture(image);
   }
@@ -5237,7 +5237,7 @@ void updateImageTextureRegionFor(VulkanImage const* image,
   if (!image || !pixels)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::flux::VulkanCanvas* canvas : gCanvases) {
+  for (::lambda::VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->updateImageTextureRegion(image, x, y, width, height, pixels);
   }
@@ -5629,4 +5629,4 @@ void vulkanContextEnsureInitialized() {
 
 } // namespace detail
 
-} // namespace flux
+} // namespace lambda

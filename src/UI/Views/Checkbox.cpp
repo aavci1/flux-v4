@@ -1,17 +1,17 @@
-#include <Flux/UI/Views/Checkbox.hpp>
+#include <Lambda/UI/Views/Checkbox.hpp>
 
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/Reactive/Transition.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Icon.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/Reactive/Transition.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Icon.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScaleAroundCenter.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 Checkbox::Style resolveStyle(Checkbox::Style const &style, Theme const &theme) {
     return Checkbox::Style {
@@ -110,7 +110,7 @@ Element Checkbox::body() const {
         .child = ZStack {
             .horizontalAlignment = Alignment::Center,
             .verticalAlignment = Alignment::Center,
-            .children = flux::children(
+            .children = lambda::children(
                 Rectangle {}
                     .fill([boxFillAnim] {
                         return boxFillAnim();
@@ -134,4 +134,4 @@ Element Checkbox::body() const {
     };
 }
 
-} // namespace flux
+} // namespace lambda

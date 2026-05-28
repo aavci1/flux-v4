@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 /// Per-frame CPU-side display list: primitive ops + accumulated path mesh vertices.
 struct MetalFrameRecorder {
@@ -40,4 +40,4 @@ struct MetalFrameRecorder {
   void clear();
 };
 
-} // namespace flux
+} // namespace lambda

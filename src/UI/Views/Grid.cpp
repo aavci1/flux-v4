@@ -1,9 +1,9 @@
-#include <Flux/UI/Views/Grid.hpp>
+#include <Lambda/UI/Views/Grid.hpp>
 
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
-#include <Flux/UI/Detail/MountPosition.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
+#include <Lambda/UI/Detail/MountPosition.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -431,4 +431,4 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   return group;
 }
 
-} // namespace flux
+} // namespace lambda

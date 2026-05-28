@@ -1,10 +1,10 @@
 #pragma once
 
-#include <Flux/Graphics/Image.hpp>
+#include <Lambda/Graphics/Image.hpp>
 
 #import <Metal/Metal.h>
 
-namespace flux {
+namespace lambda {
 
 /// Metal-backed `Image` (BGRA/RGBA texture from disk loader).
 class MetalImage final : public Image {
@@ -36,4 +36,4 @@ private:
 /// Returns null if `image` is not a `MetalImage`.
 MetalImage const* tryMetalImage(Image const& image);
 
-} // namespace flux
+} // namespace lambda

@@ -3,8 +3,8 @@
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
 
-#include <Flux/Platform/Linux/KmsOutput.hpp>
-#include <Flux/UI/Events.hpp>
+#include <Lambda/Platform/Linux/KmsOutput.hpp>
+#include <Lambda/UI/Events.hpp>
 
 #include <linux/vt.h>
 #include <termios.h>
@@ -24,7 +24,7 @@ struct libinput_device;
 struct udev;
 struct udev_monitor;
 
-namespace flux {
+namespace lambda {
 
 class KmsWindow;
 struct WindowConfig;
@@ -137,7 +137,7 @@ private:
   std::function<void(platform::KmsInputEvent const&)> rawInputHandler_;
   std::function<void()> terminateHandler_;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
-  std::string appName_ = "flux";
+  std::string appName_ = "lambda";
   Point pointerPos_{};
   std::uint8_t pressedButtons_ = 0;
   std::unordered_set<std::uint32_t> rawPressedButtons_;
@@ -165,9 +165,9 @@ public:
   KmsWindow(KmsApplication& app, KmsConnector connector, WindowConfig const& config);
   ~KmsWindow() override;
 
-  void setFluxWindow(::flux::Window* window) override;
+  void setLambdaWindow(::lambda::Window* window) override;
   void show() override;
-  std::unique_ptr<Canvas> createCanvas(::flux::Window& owner) override;
+  std::unique_ptr<Canvas> createCanvas(::lambda::Window& owner) override;
   void resize(Size const& newSize) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(std::string const& title) override;
@@ -213,7 +213,7 @@ private:
 
   KmsApplication& app_;
   KmsConnector connector_;
-  ::flux::Window* fluxWindow_ = nullptr;
+  ::lambda::Window* lambdaWindow_ = nullptr;
   Canvas* canvas_ = nullptr;
   unsigned int handle_ = 0;
   Size size_{};
@@ -229,4 +229,4 @@ private:
   bool cursorVisible_ = false;
 };
 
-} // namespace flux
+} // namespace lambda

@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Views/Popover.hpp>
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
+#include <Lambda/UI/Views/PopoverCalloutShape.hpp>
 
 #include "UI/ViewLayout/OverlayLayout.hpp"
 #include "UI/ViewLayout/ScrollLayout.hpp"
@@ -12,8 +12,8 @@
 
 namespace {
 
-using namespace flux;
-using namespace flux::layout;
+using namespace lambda;
+using namespace lambda::layout;
 
 TEST_CASE("StackLayout: grow distributes extra space by flex weight") {
   std::array<StackMainAxisChild, 2> children{{

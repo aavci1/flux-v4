@@ -1,8 +1,8 @@
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
+#include <Lambda/UI/Views/ScaleAroundCenter.hpp>
 
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/UI/MeasureContext.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
 
 #include "SceneGraph/SceneBounds.hpp"
 
@@ -11,7 +11,7 @@
 #include <memory>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -119,4 +119,4 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   return group;
 }
 
-} // namespace flux
+} // namespace lambda

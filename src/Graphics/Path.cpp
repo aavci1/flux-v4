@@ -1,11 +1,11 @@
-#include <Flux/Graphics/Path.hpp>
+#include <Lambda/Graphics/Path.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
 
-namespace flux {
+namespace lambda {
 
 Path::Path() = default;
 
@@ -288,4 +288,4 @@ Path::CommandView Path::command(size_t idx) const {
   return {c.type, c.winding, data_.data() + c.dataOffset, c.dataCount};
 }
 
-} // namespace flux
+} // namespace lambda

@@ -1,7 +1,7 @@
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 
-#include <Flux/Debug/PerfCounters.hpp>
-#include <Flux/Graphics/AttributedString.hpp>
+#include <Lambda/Debug/PerfCounters.hpp>
+#include <Lambda/Graphics/AttributedString.hpp>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -134,7 +134,7 @@ std::string findFontPath(std::string_view family, float weight, bool italic,
     std::string path = firstExisting({
         exeDir / "fonts/MaterialSymbolsRounded.ttf",
         exeDir / "../share" / appName / "fonts/MaterialSymbolsRounded.ttf",
-        exeDir / "../share/flux/fonts/MaterialSymbolsRounded.ttf",
+        exeDir / "../share/lambda/fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "resources/fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
         std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
@@ -297,8 +297,8 @@ std::uint32_t FreeTypeTextSystem::resolveFontId(std::string_view fontFamily, flo
   if (auto it = d->ids.find(key); it != d->ids.end()) {
     return it->second;
   }
-  std::string const appName = d->appNameProvider ? d->appNameProvider() : "flux";
-  std::string path = findFontPath(family, weight, italic, appName.empty() ? "flux" : appName);
+  std::string const appName = d->appNameProvider ? d->appNameProvider() : "lambda";
+  std::string path = findFontPath(family, weight, italic, appName.empty() ? "lambda" : appName);
   if (path.empty()) {
     throw std::runtime_error("No usable Linux font found");
   }
@@ -781,4 +781,4 @@ std::vector<std::uint8_t> FreeTypeTextSystem::rasterizeGlyph(std::uint32_t fontI
   return out;
 }
 
-} // namespace flux
+} // namespace lambda

@@ -10,7 +10,7 @@
 
 - Date: 2026-04-24
 - CPU method:
-  - Launch `build/examples/animation-demo`
+  - Launch `build/demos/animation-demo`
   - Wait 3 seconds
   - Sample `ps -p <pid> -o %cpu=` 10 times at 0.5 second intervals
   - Average the 10 samples
@@ -26,7 +26,7 @@
 
 - Original baseline before optimization work:
   - CPU: `36.07%`
-  - Primary hot path: `flux::Application::processReactiveUpdates()` and repeated `BuildOrchestrator` / `SceneBuilder` work.
+  - Primary hot path: `lambda::Application::processReactiveUpdates()` and repeated `BuildOrchestrator` / `SceneBuilder` work.
 - Current framework-only baseline after restoring `useAnimation` in `AmbientLoopLab`:
   - CPU: `32.47%`
   - Notes:
@@ -87,7 +87,7 @@
   - CPU: `34.64%`
   - Delta: `+2.17` percentage points
 - Outcome:
-  - The fresh stack trace still shows `flux::Application::processReactiveUpdates()` rebuilding the same `ScrollView` / `VStack` path on nearly every tick.
+  - The fresh stack trace still shows `lambda::Application::processReactiveUpdates()` rebuilding the same `ScrollView` / `VStack` path on nearly every tick.
   - Visibility gating did not suppress the dominant rebuild path in this demo, so it was reverted.
 
 ## Attempt 5
@@ -233,7 +233,7 @@
 - Type: framework
 - Status: Worked, kept.
 - Before:
-  - Prepared-op `prepare()` rate: `12.58/f` in a steady-state `FLUX_DEBUG_PERF=1` sample
+  - Prepared-op `prepare()` rate: `12.58/f` in a steady-state `LAMBDA_DEBUG_PERF=1` sample
   - Scene render time: `0.33 ms/f`
   - Display-link-to-present budget: `1.71 ms/f`
 - After:
@@ -288,7 +288,7 @@
 - Type: framework
 - Status: Worked, kept.
 - Before:
-  - Sample hotspot: `flux::(anonymous namespace)::ComponentKeyTable::intern(unsigned int, flux::LocalId)` at `1.07 G cycles` / `7.7%`
+  - Sample hotspot: `lambda::(anonymous namespace)::ComponentKeyTable::intern(unsigned int, lambda::LocalId)` at `1.07 G cycles` / `7.7%`
   - `ck append`: `28435 (238975id)` / `235/f` (run 1), `28200 (237000id)` / `235/f` (run 2)
   - `reactive`: `134.62 ms/s (1.11/f)` (run 1), `94.11 ms/s (0.78/f)` (run 2)
   - `incremental`: `133.56 ms/s (1.10/f)` (run 1), `93.06 ms/s (0.78/f)` (run 2)
@@ -344,7 +344,7 @@
 ## v5 Stage 5 Baseline
 
 - Date: 2026-04-26
-- Build: `build-stage5/examples/animation-demo`
+- Build: `build-stage5/demos/animation-demo`
 - CPU method:
   - Launch `animation-demo`.
   - Wait 3 seconds.
@@ -358,7 +358,7 @@
 ## v5 Stage 8 Example Idle CPU
 
 - Date: 2026-04-26
-- Build: `build-stage8/examples/*`
+- Build: `build-stage8/demos/*`
 - CPU method:
   - Launch each example.
   - Wait 2 seconds for startup work to settle.
@@ -375,11 +375,9 @@
   - `hello-world`: `0.00%`
   - `icon-demo`: `0.00%`
   - `image-demo`: `0.00%`
-  - `lambda-studio`: `0.00%`
   - `layout-demo`: `0.00%`
   - `markdown-formatter-demo`: `0.00%`
   - `popover-demo`: `0.00%`
-  - `reactive-demo`: `0.00%`
   - `scene-graph-demo`: `0.00%`
   - `scroll-demo`: `0.00%`
   - `segmented-demo`: `0.00%`

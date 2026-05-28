@@ -1,15 +1,15 @@
 #pragma once
 
-#include <Flux/Core/Geometry.hpp>
-#include <Flux/Graphics/Path.hpp>
-#include <Flux/Graphics/Styles.hpp>
+#include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Graphics/Path.hpp>
+#include <Lambda/Graphics/Styles.hpp>
 
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/PathFlattener.hpp"
 
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 /**
  * CPU path → tessellated triangles for the Metal path pipeline.
@@ -21,4 +21,4 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fill, StrokeSty
                               std::vector<MetalPathOp>& pathOps, std::vector<MetalOpRef>& opOrder,
                               BlendMode blendMode);
 
-} // namespace flux
+} // namespace lambda

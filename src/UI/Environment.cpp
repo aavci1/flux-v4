@@ -1,11 +1,11 @@
-#include <Flux/UI/Environment.hpp>
+#include <Lambda/UI/Environment.hpp>
 
 #include <cassert>
 #include <mutex>
 #include <typeindex>
 #include <unordered_map>
 
-namespace flux {
+namespace lambda {
 
 namespace detail {
 
@@ -37,4 +37,4 @@ std::uint16_t allocateEnvironmentSlot(std::type_info const& tag) {
 
 } // namespace detail
 
-} // namespace flux
+} // namespace lambda

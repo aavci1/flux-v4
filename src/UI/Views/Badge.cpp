@@ -1,8 +1,8 @@
-#include <Flux/UI/Views/Badge.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/Badge.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Views/Text.hpp>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -20,7 +20,7 @@ Badge::Style resolveStyle(Badge::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Badge::body() const {
-    Badge::Style const resolved = resolveStyle(style, flux::useEnvironment<ThemeKey>()());
+    Badge::Style const resolved = resolveStyle(style, lambda::useEnvironment<ThemeKey>()());
     return Text {
         .text = label,
         .font = resolved.font,
@@ -32,4 +32,4 @@ Element Badge::body() const {
         .cornerRadius(resolved.cornerRadius);
 }
 
-} // namespace flux
+} // namespace lambda

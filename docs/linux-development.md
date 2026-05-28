@@ -1,13 +1,13 @@
 # Linux Development
 
-This is the setup checklist for developing and testing Flux on Linux, with the Vulkan and KMS paths enabled.
+This is the setup checklist for developing and testing Lambda on Linux, with the Vulkan and KMS paths enabled.
 
 ## Target
 
 - Distro: Arch Linux.
 - Kernel: use a current Arch kernel; KMS work assumes modern DRM APIs and working modesetting.
 - GPU stack: Mesa for AMD/Intel, or the proprietary NVIDIA stack if that is the target hardware.
-- Vulkan: Vulkan 1.3 is required. Flux also requires `dynamicRendering` and `synchronization2`.
+- Vulkan: Vulkan 1.3 is required. Lambda also requires `dynamicRendering` and `synchronization2`.
 
 ## Packages
 
@@ -40,13 +40,13 @@ sudo pacman -S --needed vulkan-intel mesa-utils
 sudo pacman -S --needed nvidia nvidia-utils
 ```
 
-Verify Vulkan before building Flux:
+Verify Vulkan before building Lambda:
 
 ```sh
 vulkaninfo --summary
 ```
 
-The selected physical device must report Vulkan 1.3. If Flux rejects the device, the error should now say whether the problem is API version, `dynamicRendering`, `synchronization2`, a missing extension, or queue/present support.
+The selected physical device must report Vulkan 1.3. If Lambda rejects the device, the error should now say whether the problem is API version, `dynamicRendering`, `synchronization2`, a missing extension, or queue/present support.
 
 ## Configure
 
@@ -54,13 +54,13 @@ Default Linux build:
 
 ```sh
 cmake -S . -B build -G Ninja \
-  -DFLUX_BUILD_TESTS=ON \
-  -DFLUX_BUILD_EXAMPLES=ON
+  -DLAMBDA_BUILD_TESTS=ON \
+  -DLAMBDA_BUILD_EXAMPLES=ON
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-On Linux, `FLUX_PLATFORM=AUTO` selects the Wayland app backend for normal Flux
+On Linux, `LAMBDA_PLATFORM=AUTO` selects the Wayland app backend for normal Lambda
 apps. `lambda-window-manager` is a Linux-only KMS target and is built alongside
 that Wayland app backend by default, so day-to-day development should not need a
 separate KMS build directory.
@@ -69,21 +69,21 @@ Dedicated KMS platform build:
 
 ```sh
 cmake -S . -B build-linux-kms -G Ninja \
-  -DFLUX_PLATFORM=LINUX_KMS \
-  -DFLUX_BUILD_TESTS=ON \
-  -DFLUX_BUILD_EXAMPLES=OFF
+  -DLAMBDA_PLATFORM=LINUX_KMS \
+  -DLAMBDA_BUILD_TESTS=ON \
+  -DLAMBDA_BUILD_DEMOS=OFF
 cmake --build build-linux-kms
 ```
 
-## KMS Smoke
+## KMS Window Manager
 
-KMS needs DRM master. Run from a real TTY, not inside a desktop session that already owns DRM master. If needed, switch to a spare VT with `Ctrl+Alt+F3`, log in, then run:
+KMS needs DRM master. Run the window manager from a real TTY, not inside a desktop session that already owns DRM master. If needed, switch to a spare VT with `Ctrl+Alt+F3`, log in, then run:
 
 ```sh
-./build-linux-kms/kms-vulkan-smoke
+./build-linux-kms/apps/lambda-window-manager/lambda-window-manager
 ```
 
-Expected result: the selected output presents a solid blue frame briefly and the program exits. If this fails, fix the Linux graphics stack before debugging higher-level rendering.
+Expected result: the selected output starts the Lambda compositor. If this fails before clients launch, fix the Linux graphics stack before debugging higher-level rendering.
 
 Useful checks:
 
@@ -96,13 +96,13 @@ vulkaninfo --summary
 For KMS debugging:
 
 ```sh
-FLUX_DEBUG_KMS=1 ./build-linux-kms/kms-vulkan-smoke
+LAMBDA_DEBUG_KMS=1 ./build-linux-kms/apps/lambda-window-manager/lambda-window-manager
 ```
 
 ## Common Failures
 
 - `Missing required Vulkan instance extension: VK_KHR_display`: the ICD or driver does not expose direct display support.
 - `Vulkan 1.3 required`: update Mesa/driver or select a different GPU.
-- `missing Vulkan 1.3 feature(s): dynamicRendering, synchronization2`: the device or driver cannot run the Flux Vulkan backend.
+- `missing Vulkan 1.3 feature(s): dynamicRendering, synchronization2`: the device or driver cannot run the Lambda Vulkan backend.
 - `no graphics queue family can present to this surface`: the selected Vulkan device cannot present to the KMS/Wayland surface.
 - `drmModeGetResources failed` or no connectors: run from a real TTY, check permissions, and confirm another compositor is not holding DRM master.

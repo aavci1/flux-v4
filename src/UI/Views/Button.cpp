@@ -1,20 +1,20 @@
-#include <Flux/Reactive/Interpolatable.hpp>
-#include <Flux/Reactive/Transition.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Button.hpp>
-#include <Flux/UI/Views/Icon.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/Reactive/Interpolatable.hpp>
+#include <Lambda/Reactive/Transition.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Button.hpp>
+#include <Lambda/UI/Views/Icon.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScaleAroundCenter.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
-#include <Flux/UI/KeyCodes.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
 
 #include <cmath>
 #include <cstdint>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -329,4 +329,4 @@ Element IconButton::body() const {
         .onTap(std::function<void()> {handleTap});
 }
 
-} // namespace flux
+} // namespace lambda

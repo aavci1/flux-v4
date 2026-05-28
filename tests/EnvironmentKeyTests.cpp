@@ -2,10 +2,10 @@
 
 #include "EnvironmentKeyTestSupport.hpp"
 
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/UI/Detail/EnvironmentSlot.hpp>
-#include <Flux/UI/EnvironmentBinding.hpp>
-#include <Flux/UI/EnvironmentKeys.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/UI/Detail/EnvironmentSlot.hpp>
+#include <Lambda/UI/EnvironmentBinding.hpp>
+#include <Lambda/UI/EnvironmentKeys.hpp>
 
 #include <array>
 #include <cstdint>
@@ -14,18 +14,18 @@
 #include <typeinfo>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
-FLUX_DEFINE_ENVIRONMENT_KEY(FirstEnvironmentTestKey, int, 10);
-FLUX_DEFINE_ENVIRONMENT_KEY(SecondEnvironmentTestKey, int, 20);
-FLUX_DEFINE_ENVIRONMENT_KEY(StringEnvironmentTestKey, std::string, std::string{"fallback"});
+LAMBDA_DEFINE_ENVIRONMENT_KEY(FirstEnvironmentTestKey, int, 10);
+LAMBDA_DEFINE_ENVIRONMENT_KEY(SecondEnvironmentTestKey, int, 20);
+LAMBDA_DEFINE_ENVIRONMENT_KEY(StringEnvironmentTestKey, std::string, std::string{"fallback"});
 
 template<std::size_t>
 struct ManyEnvironmentSlotTag {};
 
-} // namespace flux
+} // namespace lambda
 
-namespace flux::tests {
+namespace lambda::tests {
 
 struct DestructionCounter {
   int* destroyed = nullptr;
@@ -41,31 +41,31 @@ struct DestructionCounter {
   }
 };
 
-} // namespace flux::tests
+} // namespace lambda::tests
 
 namespace {
 
 template<std::size_t... I>
 std::array<std::uint16_t, sizeof...(I)> allocateManyEnvironmentSlots(std::index_sequence<I...>) {
-  return {flux::detail::allocateEnvironmentSlot(typeid(flux::ManyEnvironmentSlotTag<I>))...};
+  return {lambda::detail::allocateEnvironmentSlot(typeid(lambda::ManyEnvironmentSlotTag<I>))...};
 }
 
 } // namespace
 
 TEST_CASE("environment keys allocate distinct stable slots") {
-  std::uint16_t const first = flux::EnvironmentKey<flux::FirstEnvironmentTestKey>::slot().index();
-  std::uint16_t const second = flux::EnvironmentKey<flux::SecondEnvironmentTestKey>::slot().index();
-  std::uint16_t const shared = flux::EnvironmentKey<flux::SharedEnvironmentTestKey>::slot().index();
+  std::uint16_t const first = lambda::EnvironmentKey<lambda::FirstEnvironmentTestKey>::slot().index();
+  std::uint16_t const second = lambda::EnvironmentKey<lambda::SecondEnvironmentTestKey>::slot().index();
+  std::uint16_t const shared = lambda::EnvironmentKey<lambda::SharedEnvironmentTestKey>::slot().index();
 
   CHECK(first != second);
-  CHECK(shared == flux::tests::sharedEnvironmentTestKeyIndexFromOtherTranslationUnit());
+  CHECK(shared == lambda::tests::sharedEnvironmentTestKeyIndexFromOtherTranslationUnit());
 }
 
 TEST_CASE("environment slot registry reuses existing assignments") {
   struct LocalSlotTag {};
 
-  std::uint16_t const first = flux::detail::allocateEnvironmentSlot(typeid(LocalSlotTag));
-  std::uint16_t const second = flux::detail::allocateEnvironmentSlot(typeid(LocalSlotTag));
+  std::uint16_t const first = lambda::detail::allocateEnvironmentSlot(typeid(LocalSlotTag));
+  std::uint16_t const second = lambda::detail::allocateEnvironmentSlot(typeid(LocalSlotTag));
   CHECK(first == second);
 }
 
@@ -79,10 +79,10 @@ TEST_CASE("environment slot registry assigns many distinct indices") {
 }
 
 TEST_CASE("environment entries store values and reject mismatched types") {
-  flux::detail::EnvironmentEntry entry;
+  lambda::detail::EnvironmentEntry entry;
   entry.setValue<int>(42);
 
-  REQUIRE(entry.kind() == flux::detail::EnvironmentEntryKind::Value);
+  REQUIRE(entry.kind() == lambda::detail::EnvironmentEntryKind::Value);
   REQUIRE(entry.asValue<int>() != nullptr);
   CHECK(*entry.asValue<int>() == 42);
   CHECK(entry.asValue<float>() == nullptr);
@@ -90,14 +90,14 @@ TEST_CASE("environment entries store values and reject mismatched types") {
 }
 
 TEST_CASE("environment entries store signal handles by identity") {
-  flux::detail::EnvironmentEntry lhs;
-  flux::detail::EnvironmentEntry rhs;
-  flux::detail::EnvironmentEntry different;
-  flux::Reactive::Signal<int> signal{3};
+  lambda::detail::EnvironmentEntry lhs;
+  lambda::detail::EnvironmentEntry rhs;
+  lambda::detail::EnvironmentEntry different;
+  lambda::Reactive::Signal<int> signal{3};
 
   lhs.setSignal<int>(signal);
   rhs.setSignal<int>(signal);
-  different.setSignal<int>(flux::Reactive::Signal<int>{3});
+  different.setSignal<int>(lambda::Reactive::Signal<int>{3});
 
   REQUIRE(lhs.asSignal<int>() != nullptr);
   CHECK(lhs.asSignal<int>()->peek() == 3);
@@ -108,82 +108,82 @@ TEST_CASE("environment entries store signal handles by identity") {
 TEST_CASE("environment entries copy, move, and destroy stored values") {
   int destroyed = 0;
   {
-    flux::detail::EnvironmentEntry entry;
-    entry.setValue(flux::tests::DestructionCounter{&destroyed});
-    flux::detail::EnvironmentEntry copy = entry;
-    CHECK(copy.asValue<flux::tests::DestructionCounter>() != nullptr);
+    lambda::detail::EnvironmentEntry entry;
+    entry.setValue(lambda::tests::DestructionCounter{&destroyed});
+    lambda::detail::EnvironmentEntry copy = entry;
+    CHECK(copy.asValue<lambda::tests::DestructionCounter>() != nullptr);
 
-    flux::detail::EnvironmentEntry moved = std::move(copy);
-    CHECK(moved.asValue<flux::tests::DestructionCounter>() != nullptr);
-    CHECK(copy.kind() == flux::detail::EnvironmentEntryKind::None);
+    lambda::detail::EnvironmentEntry moved = std::move(copy);
+    CHECK(moved.asValue<lambda::tests::DestructionCounter>() != nullptr);
+    CHECK(copy.kind() == lambda::detail::EnvironmentEntryKind::None);
   }
   CHECK(destroyed >= 3);
 }
 
 TEST_CASE("environment entry move is noexcept") {
-  static_assert(std::is_nothrow_move_constructible_v<flux::detail::EnvironmentEntry>);
-  static_assert(std::is_nothrow_move_assignable_v<flux::detail::EnvironmentEntry>);
+  static_assert(std::is_nothrow_move_constructible_v<lambda::detail::EnvironmentEntry>);
+  static_assert(std::is_nothrow_move_assignable_v<lambda::detail::EnvironmentEntry>);
 }
 
 TEST_CASE("environment binding resolves defaults, values, and signals") {
-  using namespace flux::tests;
+  using namespace lambda::tests;
 
-  flux::EnvironmentBinding binding;
-  CHECK(binding.value<flux::FirstEnvironmentTestKey>() == 10);
+  lambda::EnvironmentBinding binding;
+  CHECK(binding.value<lambda::FirstEnvironmentTestKey>() == 10);
 
-  auto darkBinding = binding.withValue<flux::ThemeKey>(flux::Theme::dark());
-  CHECK(darkBinding.value<flux::ThemeKey>() == flux::Theme::dark());
-  CHECK(binding.value<flux::ThemeKey>() == flux::Theme::light());
+  auto darkBinding = binding.withValue<lambda::ThemeKey>(lambda::Theme::dark());
+  CHECK(darkBinding.value<lambda::ThemeKey>() == lambda::Theme::dark());
+  CHECK(binding.value<lambda::ThemeKey>() == lambda::Theme::light());
 
-  flux::Reactive::Signal<flux::Theme> theme{flux::Theme::light()};
-  auto signalBinding = binding.withSignal<flux::ThemeKey>(theme);
-  auto signal = signalBinding.signal<flux::ThemeKey>();
+  lambda::Reactive::Signal<lambda::Theme> theme{lambda::Theme::light()};
+  auto signalBinding = binding.withSignal<lambda::ThemeKey>(theme);
+  auto signal = signalBinding.signal<lambda::ThemeKey>();
   REQUIRE(signal.has_value());
-  CHECK(signal->peek() == flux::Theme::light());
-  CHECK(signalBinding.value<flux::ThemeKey>() == flux::Theme::light());
+  CHECK(signal->peek() == lambda::Theme::light());
+  CHECK(signalBinding.value<lambda::ThemeKey>() == lambda::Theme::light());
 
-  theme = flux::Theme::dark();
-  CHECK(signalBinding.value<flux::ThemeKey>() == flux::Theme::dark());
+  theme = lambda::Theme::dark();
+  CHECK(signalBinding.value<lambda::ThemeKey>() == lambda::Theme::dark());
 }
 
 TEST_CASE("environment binding reuses entries when rebinding matching values") {
-  flux::EnvironmentBinding original =
-      flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
+  lambda::EnvironmentBinding original =
+      lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
 
-  flux::EnvironmentBinding rebound =
-      original.withValue<flux::ThemeKey>(flux::Theme::light());
+  lambda::EnvironmentBinding rebound =
+      original.withValue<lambda::ThemeKey>(lambda::Theme::light());
 
   CHECK(rebound.internalEntriesPointer() == original.internalEntriesPointer());
 }
 
 TEST_CASE("environment binding reuses entries when rebinding matching signals") {
-  flux::Reactive::Signal<flux::Theme> themeSignal{flux::Theme::light()};
-  flux::EnvironmentBinding original =
-      flux::EnvironmentBinding{}.withSignal<flux::ThemeKey>(themeSignal);
+  lambda::Reactive::Signal<lambda::Theme> themeSignal{lambda::Theme::light()};
+  lambda::EnvironmentBinding original =
+      lambda::EnvironmentBinding{}.withSignal<lambda::ThemeKey>(themeSignal);
 
-  flux::EnvironmentBinding rebound =
-      original.withSignal<flux::ThemeKey>(themeSignal);
+  lambda::EnvironmentBinding rebound =
+      original.withSignal<lambda::ThemeKey>(themeSignal);
 
   CHECK(rebound.internalEntriesPointer() == original.internalEntriesPointer());
 }
 
 TEST_CASE("signal-backed environment binding participates in reactive tracking") {
-  flux::Reactive::Signal<flux::Theme> theme{flux::Theme::light()};
-  flux::EnvironmentBinding binding =
-      flux::EnvironmentBinding{}.withSignal<flux::ThemeKey>(theme);
+  lambda::Reactive::Signal<lambda::Theme> theme{lambda::Theme::light()};
+  lambda::EnvironmentBinding binding =
+      lambda::EnvironmentBinding{}.withSignal<lambda::ThemeKey>(theme);
 
   int runs = 0;
-  flux::Color observed{};
-  flux::Reactive::Effect effect{[&] {
+  lambda::Color observed{};
+  lambda::Reactive::Effect effect{[&] {
     ++runs;
-    observed = binding.value<flux::ThemeKey>().labelColor;
+    observed = binding.value<lambda::ThemeKey>().labelColor;
   }};
 
   CHECK(runs == 1);
-  CHECK(observed == flux::Theme::light().labelColor);
+  CHECK(observed == lambda::Theme::light().labelColor);
 
-  theme = flux::Theme::dark();
+  theme = lambda::Theme::dark();
 
   CHECK(runs == 2);
-  CHECK(observed == flux::Theme::dark().labelColor);
+  CHECK(observed == lambda::Theme::dark().labelColor);
 }

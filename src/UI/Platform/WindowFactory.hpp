@@ -2,12 +2,12 @@
 
 #include <memory>
 
-#include <Flux/UI/Window.hpp>
+#include <Lambda/UI/Window.hpp>
 
 #include "Window.hpp"
 
-namespace flux::platform {
+namespace lambda::platform {
 
 std::unique_ptr<Window> createWindow(WindowConfig const& config);
 
-} // namespace flux::platform
+} // namespace lambda::platform

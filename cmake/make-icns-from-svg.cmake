@@ -28,7 +28,7 @@ if(NOT EXISTS "${_source_png}")
   list(GET _rendered_pngs 0 _source_png)
 endif()
 
-function(_flux_make_icon size filename)
+function(_lambda_make_icon size filename)
   execute_process(
     COMMAND "${SIPS}" -z "${size}" "${size}" "${_source_png}" --out "${ICONSET}/${filename}"
     RESULT_VARIABLE _sips_result
@@ -39,16 +39,16 @@ function(_flux_make_icon size filename)
   endif()
 endfunction()
 
-_flux_make_icon(16 "icon_16x16.png")
-_flux_make_icon(32 "icon_16x16@2x.png")
-_flux_make_icon(32 "icon_32x32.png")
-_flux_make_icon(64 "icon_32x32@2x.png")
-_flux_make_icon(128 "icon_128x128.png")
-_flux_make_icon(256 "icon_128x128@2x.png")
-_flux_make_icon(256 "icon_256x256.png")
-_flux_make_icon(512 "icon_256x256@2x.png")
-_flux_make_icon(512 "icon_512x512.png")
-_flux_make_icon(1024 "icon_512x512@2x.png")
+_lambda_make_icon(16 "icon_16x16.png")
+_lambda_make_icon(32 "icon_16x16@2x.png")
+_lambda_make_icon(32 "icon_32x32.png")
+_lambda_make_icon(64 "icon_32x32@2x.png")
+_lambda_make_icon(128 "icon_128x128.png")
+_lambda_make_icon(256 "icon_128x128@2x.png")
+_lambda_make_icon(256 "icon_256x256.png")
+_lambda_make_icon(512 "icon_256x256@2x.png")
+_lambda_make_icon(512 "icon_512x512.png")
+_lambda_make_icon(1024 "icon_512x512@2x.png")
 
 execute_process(
   COMMAND "${ICONUTIL}" -c icns -o "${OUTPUT}" "${ICONSET}"

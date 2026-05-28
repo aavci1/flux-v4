@@ -1,6 +1,6 @@
 # Declarative UI Body Style
 
-Use these conventions for `Element body() const` or `auto body() const` members that return Flux view trees.
+Use these conventions for `Element body() const` or `auto body() const` members that return Lambda view trees.
 
 ## Indentation
 
@@ -41,4 +41,4 @@ Use `Bindable<T>` overloads when a mounted scene-node property should update aft
 
 ## Includes
 
-Applications usually include `Flux.hpp`, `Flux/UI/UI.hpp`, and the specific view headers they use. Keep examples in the same order as nearby examples: umbrella/core headers, UI headers, view headers, then standard library headers.
+Applications usually include `Lambda.hpp`, `Lambda/UI/UI.hpp`, and the specific view headers they use. Keep examples in the same order as nearby examples: umbrella/core headers, UI headers, view headers, then standard library headers.

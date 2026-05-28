@@ -1,13 +1,13 @@
-#include <Flux/Reactive/Animation.hpp>
-#include <Flux/Reactive/Computed.hpp>
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/Reactive/Signal.hpp>
+#include <Lambda/Reactive/Animation.hpp>
+#include <Lambda/Reactive/Computed.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/Reactive/Signal.hpp>
 
 #include <doctest/doctest.h>
 
 #include <vector>
 
-using namespace flux::Reactive;
+using namespace lambda::Reactive;
 
 TEST_CASE("Reactive Effect runs once per source write") {
   Signal<int> source(1);
@@ -156,8 +156,8 @@ TEST_CASE("Reactive Effect flushes shallower graph dependencies first") {
 
 TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   Signal<int> trigger(0);
-  flux::Animated<float> readAnimation{0.f};
-  flux::Animated<float> writeAnimation{0.f};
+  lambda::Animated<float> readAnimation{0.f};
+  lambda::Animated<float> writeAnimation{0.f};
   int runs = 0;
   float observed = -1.f;
 
@@ -174,7 +174,7 @@ TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   CHECK_FALSE(writeAnimation.isRunning());
 
   {
-    flux::WithTransition transition{flux::Transition::linear(10.f)};
+    lambda::WithTransition transition{lambda::Transition::linear(10.f)};
     readAnimation = 1.f;
     CHECK(readAnimation.isRunning());
     CHECK(readAnimation.get() == doctest::Approx(0.f));
@@ -188,10 +188,10 @@ TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   CHECK(writeAnimation.get() == doctest::Approx(5.f));
 
   Signal<int> localTrigger(0);
-  flux::Animated<float> scopedWrite{0.f};
+  lambda::Animated<float> scopedWrite{0.f};
   Effect scopedEffect([&] {
     if (localTrigger.get() > 0) {
-      flux::WithTransition transition{flux::Transition::linear(10.f)};
+      lambda::WithTransition transition{lambda::Transition::linear(10.f)};
       scopedWrite = 8.f;
     }
   });

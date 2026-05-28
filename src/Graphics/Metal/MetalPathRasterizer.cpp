@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -236,4 +236,4 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle
   }
 }
 
-} // namespace flux
+} // namespace lambda

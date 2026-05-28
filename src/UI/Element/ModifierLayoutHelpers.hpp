@@ -1,11 +1,11 @@
 #pragma once
 
-#include <Flux/Layout/LayoutEngine.hpp>
+#include <Lambda/Layout/LayoutEngine.hpp>
 
 #include <cmath>
 #include <optional>
 
-namespace flux::detail {
+namespace lambda::detail {
 
 inline bool modifierAxisStretches(std::optional<Alignment> const& alignment) {
   return alignment.has_value() && *alignment == Alignment::Stretch;
@@ -65,4 +65,4 @@ inline bool hasResolvedModifierHeight(LayoutConstraints const& constraints,
   return modifierStackAssignedHeight(constraints, hints) > 0.f || hasExplicitHeight;
 }
 
-} // namespace flux::detail
+} // namespace lambda::detail

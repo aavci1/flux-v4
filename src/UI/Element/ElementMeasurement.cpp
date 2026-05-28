@@ -1,8 +1,8 @@
-#include <Flux/UI/Element.hpp>
+#include <Lambda/UI/Element.hpp>
 
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/UI/Detail/LayoutDebugDump.hpp>
-#include <Flux/UI/Environment.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/UI/Detail/LayoutDebugDump.hpp>
+#include <Lambda/UI/Environment.hpp>
 
 #include "UI/ViewLayout/ContainerScope.hpp"
 #include "UI/Element/ModifierLayoutHelpers.hpp"
@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -160,4 +160,4 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return sz;
 }
 
-} // namespace flux
+} // namespace lambda

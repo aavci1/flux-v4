@@ -1,11 +1,11 @@
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/Reactive/Scope.hpp>
-#include <Flux/Reactive/Signal.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/Reactive/Scope.hpp>
+#include <Lambda/Reactive/Signal.hpp>
 
 #include <doctest/doctest.h>
 #include <vector>
 
-using namespace flux::Reactive;
+using namespace lambda::Reactive;
 
 TEST_CASE("Reactive Scope owns effects and cleanup callbacks") {
   Signal<int> source(0);

@@ -1,10 +1,10 @@
-#include <Flux/UI/Detail/TraversalContext.hpp>
+#include <Lambda/UI/Detail/TraversalContext.hpp>
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 
-namespace flux::detail {
+namespace lambda::detail {
 
 TraversalContext::TraversalContext() {
   frames_.push_back(Frame{});
@@ -182,4 +182,4 @@ void TraversalContext::popCompositeKeyTail() {
   savedChildIndices_.pop_back();
 }
 
-} // namespace flux::detail
+} // namespace lambda::detail

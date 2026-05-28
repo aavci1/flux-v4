@@ -1,6 +1,6 @@
 #include "Platform/Linux/Common/XkbState.hpp"
 
-#include <Flux/UI/KeyCodes.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
 
 #include <sys/mman.h>
 #include <unistd.h>
@@ -8,7 +8,7 @@
 
 #include <cstring>
 
-namespace flux::linux_platform {
+namespace lambda::linux_platform {
 
 static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym);
 static std::string utf8FromXkbKeysym(xkb_keysym_t sym);
@@ -246,4 +246,4 @@ static std::string utf8FromXkbKeysym(xkb_keysym_t sym) {
   return std::string(buffer, static_cast<std::size_t>(n - 1));
 }
 
-} // namespace flux::linux_platform
+} // namespace lambda::linux_platform

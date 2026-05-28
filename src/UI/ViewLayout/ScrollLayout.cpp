@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace flux::layout {
+namespace lambda::layout {
 
 namespace {
 
@@ -224,4 +224,4 @@ ScrollIndicatorMetrics makeHorizontalIndicator(Point const& offset, Size const& 
   };
 }
 
-} // namespace flux::layout
+} // namespace lambda::layout

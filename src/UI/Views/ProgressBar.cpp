@@ -1,11 +1,11 @@
-#include <Flux/UI/Views/ProgressBar.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/Views/ProgressBar.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -22,7 +22,7 @@ ProgressBar::Style resolveStyle(ProgressBar::Style const &style, Theme const &th
 } // namespace
 
 Element ProgressBar::body() const {
-    ProgressBar::Style const resolved = resolveStyle(style, flux::useEnvironment<ThemeKey>()());
+    ProgressBar::Style const resolved = resolveStyle(style, lambda::useEnvironment<ThemeKey>()());
     float const clamped = std::clamp(progress, 0.f, 1.f);
     Rect const bounds = useBounds();
     float const componentWidth = bounds.width > 0.f ? bounds.width : kDefaultProgressBarWidth;
@@ -52,4 +52,4 @@ Element ProgressBar::body() const {
         .size(componentWidth, resolved.trackHeight);
 }
 
-} // namespace flux
+} // namespace lambda

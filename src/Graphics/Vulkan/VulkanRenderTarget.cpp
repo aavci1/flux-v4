@@ -1,5 +1,5 @@
-#include <Flux/Graphics/RenderTarget.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/RenderTarget.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Platform/RenderTarget.hpp"
@@ -8,7 +8,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace flux::platform {
+namespace lambda::platform {
 
 namespace {
 
@@ -40,4 +40,4 @@ std::unique_ptr<RenderTarget> createRenderTarget(VulkanRenderTargetSpec const& s
   return std::make_unique<VulkanRenderTarget>(spec);
 }
 
-} // namespace flux::platform
+} // namespace lambda::platform

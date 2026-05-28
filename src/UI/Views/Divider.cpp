@@ -1,10 +1,10 @@
-#include <Flux/UI/Views/Divider.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/Divider.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -20,7 +20,7 @@ Divider::Style resolveStyle(Divider::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Divider::body() const {
-    Divider::Style const resolved = resolveStyle(style, flux::useEnvironment<ThemeKey>()());
+    Divider::Style const resolved = resolveStyle(style, lambda::useEnvironment<ThemeKey>()());
     return Rectangle {}
         .size(orientation == Orientation::Horizontal ? 0.f : resolved.thickness,
               orientation == Orientation::Vertical ? 0.f : resolved.thickness)
@@ -28,4 +28,4 @@ Element Divider::body() const {
         .fill(FillStyle::solid(resolved.color));
 }
 
-} // namespace flux
+} // namespace lambda

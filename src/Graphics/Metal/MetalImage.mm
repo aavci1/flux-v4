@@ -3,7 +3,7 @@
 
 #include "Graphics/Metal/MetalImage.hpp"
 
-namespace flux {
+namespace lambda {
 
 MetalImage::MetalImage(id<MTLTexture> texture) : texture_(texture) {}
 
@@ -126,4 +126,4 @@ std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
   return std::make_shared<MetalImage>(tex);
 }
 
-} // namespace flux
+} // namespace lambda

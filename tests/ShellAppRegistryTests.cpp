@@ -1,6 +1,6 @@
 #include "Shell/ShellAppRegistry.hpp"
 
-#include <Flux/Graphics/Image.hpp>
+#include <Lambda/Graphics/Image.hpp>
 
 #include <doctest/doctest.h>
 
@@ -53,7 +53,7 @@ struct ScopedEnv {
 TEST_CASE("Shell app registry parses desktop entry fields") {
   auto entry = lambda_shell::parseDesktopEntry(R"(
 [Desktop Entry]
-Name=Flux Files
+Name=Lambda Files
 GenericName=File Manager
 Comment=Browse\sthe\nfilesystem
 Icon=lambda-files
@@ -69,7 +69,7 @@ StartupWMClass=lambda-files
                                                "lambda-files.desktop");
   REQUIRE(entry);
   CHECK(entry->id == "lambda-files.desktop");
-  CHECK(entry->name == "Flux Files");
+  CHECK(entry->name == "Lambda Files");
   CHECK(entry->genericName == "File Manager");
   CHECK(entry->comment == "Browse the\nfilesystem");
   CHECK(entry->icon == "lambda-files");
@@ -83,7 +83,7 @@ StartupWMClass=lambda-files
 
   auto app = lambda_shell::appEntryFromDesktopEntry(*entry);
   CHECK(app.appId == "lambda-files");
-  CHECK(app.name == "Flux Files");
+  CHECK(app.name == "Lambda Files");
   CHECK(app.command == "lambda-files --open %u");
 }
 
@@ -117,28 +117,35 @@ TEST_CASE("Shell app registry parses Exec field codes and quoting") {
 }
 
 TEST_CASE("Shell app registry matches app aliases") {
+  CHECK(lambda_shell::shellAppIdMatches("editor", "lambda-editor"));
   CHECK(lambda_shell::shellAppIdMatches("terminal", "lambda-terminal"));
   CHECK(lambda_shell::shellAppIdMatches("terminal", "foot"));
   CHECK(lambda_shell::shellAppIdMatches("files", "org.gnome.Nautilus"));
+  CHECK(lambda_shell::shellAppIdMatches("preview", "lambda-preview"));
   CHECK(lambda_shell::shellAppIdMatches("settings", "lambda-settings"));
   CHECK_FALSE(lambda_shell::shellAppIdMatches("settings", "lambda-files"));
 }
 
-TEST_CASE("Shell app registry prefers local example executables") {
+TEST_CASE("Shell app registry prefers local lambda app executables") {
   auto root = tempRoot("lambda-shell-local-apps-test");
+  auto appsDir = root / "apps";
+  std::filesystem::create_directories(appsDir / "lambda-files");
+  std::filesystem::create_directories(appsDir / "lambda-terminal");
+  std::filesystem::create_directories(appsDir / "lambda-settings");
   {
-    std::ofstream(root / "lambda-files") << "#!/bin/sh\n";
-    std::ofstream(root / "lambda-terminal") << "#!/bin/sh\n";
-    std::ofstream(root / "lambda-settings") << "#!/bin/sh\n";
+    std::ofstream(appsDir / "lambda-files" / "lambda-files") << "#!/bin/sh\n";
+    std::ofstream(appsDir / "lambda-terminal" / "lambda-terminal") << "#!/bin/sh\n";
+    std::ofstream(appsDir / "lambda-settings" / "lambda-settings") << "#!/bin/sh\n";
   }
-  makeExecutable(root / "lambda-files");
-  makeExecutable(root / "lambda-terminal");
+  makeExecutable(appsDir / "lambda-files" / "lambda-files");
+  makeExecutable(appsDir / "lambda-terminal" / "lambda-terminal");
 
-  auto local = lambda_shell::discoverLocalExampleApps(root, {"lambda-files", "lambda-terminal", "lambda-settings"});
+  auto local = lambda_shell::discoverLocalLambdaApps({appsDir}, {"lambda-files", "lambda-terminal", "lambda-settings"});
   REQUIRE(local.size() == 2);
   CHECK(local[0].appId == "lambda-files");
+  CHECK(local[0].name == "Files");
   CHECK(local[0].icon == "system-file-manager");
-  CHECK(local[0].command == (root / "lambda-files").string());
+  CHECK(local[0].command == (appsDir / "lambda-files" / "lambda-files").string());
   CHECK(local[0].local);
   CHECK(local[1].appId == "lambda-terminal");
   CHECK(local[1].icon == "utilities-terminal");
@@ -158,15 +165,17 @@ TEST_CASE("Shell app registry prefers local example executables") {
 
 TEST_CASE("Shell app registry resolves launch commands from shared registry") {
   auto root = tempRoot("lambda-shell-launch-registry-test");
+  auto appsDir = root / "apps";
+  std::filesystem::create_directories(appsDir / "lambda-terminal");
   {
-    std::ofstream(root / "lambda-terminal") << "#!/bin/sh\n";
+    std::ofstream(appsDir / "lambda-terminal" / "lambda-terminal") << "#!/bin/sh\n";
   }
-  makeExecutable(root / "lambda-terminal");
+  makeExecutable(appsDir / "lambda-terminal" / "lambda-terminal");
 
-  auto registry = lambda_shell::buildDefaultAppRegistry(root, {}, {});
+  auto registry = lambda_shell::buildDefaultAppRegistry({appsDir}, {}, {});
   auto terminal = lambda_shell::resolveAppLaunchCommand("terminal", registry);
   REQUIRE(terminal);
-  CHECK(*terminal == "'" + (root / "lambda-terminal").string() + "'");
+  CHECK(*terminal == "'" + (appsDir / "lambda-terminal" / "lambda-terminal").string() + "'");
 
   auto browser = lambda_shell::resolveAppLaunchCommand("browser", registry);
   REQUIRE(browser);
@@ -274,7 +283,7 @@ TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   std::filesystem::remove_all(root);
 }
 
-#if FLUX_VULKAN
+#if LAMBDA_VULKAN
 TEST_CASE("Image loader decodes SVG theme icons on Linux") {
   auto root = tempRoot("lambda-shell-svg-icon-test");
   auto icon = root / "icon.svg";
@@ -282,14 +291,14 @@ TEST_CASE("Image loader decodes SVG theme icons on Linux") {
 <rect width="4" height="4" fill="#336699"/>
 </svg>)";
 
-  auto decoded = flux::decodeImageRgbaFromFile(icon.string());
+  auto decoded = lambda::decodeImageRgbaFromFile(icon.string());
   REQUIRE(decoded);
   CHECK(decoded->width == 4);
   CHECK(decoded->height == 4);
   REQUIRE(decoded->pixels.size() == 64);
   CHECK(decoded->pixels[3] == 255);
 
-  auto scaled = flux::decodeImageRgbaFromFile(icon.string(), 24);
+  auto scaled = lambda::decodeImageRgbaFromFile(icon.string(), 24);
   REQUIRE(scaled);
   CHECK(scaled->width == 24);
   CHECK(scaled->height == 24);

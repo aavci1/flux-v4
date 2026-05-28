@@ -1,22 +1,22 @@
-#include <Flux/UI/Views/Alert.hpp>
+#include <Lambda/UI/Views/Alert.hpp>
 
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/UI/OverlaySurfaceHelpers.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Button.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/VStack.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/OverlaySurfaceHelpers.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Button.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Spacer.hpp>
+#include <Lambda/UI/Views/Text.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
 
 #include <algorithm>
 #include <utility>
 
 #include "UI/Views/AlertActionHelpers.hpp"
 
-namespace flux {
+namespace lambda {
 
 Element Alert::body() const {
   auto theme = useEnvironment<ThemeKey>();
@@ -131,4 +131,4 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
   return {std::move(show), std::move(hideOverlay), isPresented};
 }
 
-} // namespace flux
+} // namespace lambda

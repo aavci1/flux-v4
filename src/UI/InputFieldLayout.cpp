@@ -1,12 +1,12 @@
-#include <Flux/UI/InputFieldLayout.hpp>
+#include <Lambda/UI/InputFieldLayout.hpp>
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include <algorithm>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -27,4 +27,4 @@ float resolvedInputFieldHeight(Font const& font, Color textInkColor, float paddi
   return minBodyH;
 }
 
-} // namespace flux
+} // namespace lambda

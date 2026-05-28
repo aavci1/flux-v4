@@ -1,15 +1,15 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
 
 TEST_CASE("view modifiers infer bindables from mixed values and closures") {
-  flux::Reactive::Signal<float> opacity{0.5f};
+  lambda::Reactive::Signal<float> opacity{0.5f};
 
-  auto sized = flux::Rectangle{}.size(22.f, [] { return 18.f; });
-  auto filled = flux::Rectangle{}.fill(flux::Colors::red);
-  auto faded = flux::Rectangle{}.opacity([opacity] { return opacity.get(); });
+  auto sized = lambda::Rectangle{}.size(22.f, [] { return 18.f; });
+  auto filled = lambda::Rectangle{}.fill(lambda::Colors::red);
+  auto faded = lambda::Rectangle{}.opacity([opacity] { return opacity.get(); });
 
   CHECK(sized.modifiers() != nullptr);
   CHECK(filled.modifiers() != nullptr);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Graphics/Styles.hpp>
+#include <Lambda/Graphics/Styles.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,7 @@
 
 #include <simd/simd.h>
 
-namespace flux {
+namespace lambda {
 
 /// GPU instance payload for rect/line SDF shaders (matches `RectInstance` in `CanvasShaders.metal`).
 struct MetalRectInstance {
@@ -199,4 +199,4 @@ struct MetalScissorState {
   std::uint32_t scissorH = 0;
 };
 
-} // namespace flux
+} // namespace lambda

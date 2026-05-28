@@ -1,0 +1,11 @@
+add_subdirectory(lambda-editor)
+add_subdirectory(lambda-files)
+add_subdirectory(lambda-preview)
+add_subdirectory(lambda-settings)
+add_subdirectory(lambda-shell)
+add_subdirectory(lambda-terminal)
+add_subdirectory(solitaire-app)
+
+if(LAMBDA_BUILD_WINDOW_MANAGER)
+  add_subdirectory(lambda-window-manager)
+endif()

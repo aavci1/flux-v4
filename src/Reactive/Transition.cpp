@@ -1,8 +1,8 @@
-#include <Flux/Reactive/Transition.hpp>
+#include <Lambda/Reactive/Transition.hpp>
 
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 Transition Transition::instant() {
   Transition t{};
@@ -82,4 +82,4 @@ TransitionScopeSuspension::~TransitionScopeSuspension() {
 
 } // namespace detail
 
-} // namespace flux
+} // namespace lambda

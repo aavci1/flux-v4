@@ -1,27 +1,27 @@
-#include <Flux/UI/Views/TextInput.hpp>
+#include <Lambda/UI/Views/TextInput.hpp>
 
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Animation.hpp>
-#include <Flux/Reactive/Effect.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/SceneGraph/RenderNode.hpp>
-#include <Flux/SceneGraph/TextNode.hpp>
-#include <Flux/UI/InputFieldChrome.hpp>
-#include <Flux/UI/InputFieldLayout.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/TextEditUtils.hpp>
-#include <Flux/UI/Views/Text.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Reactive/Animation.hpp>
+#include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/RenderNode.hpp>
+#include <Lambda/SceneGraph/TextNode.hpp>
+#include <Lambda/UI/InputFieldChrome.hpp>
+#include <Lambda/UI/InputFieldLayout.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/TextEditUtils.hpp>
+#include <Lambda/UI/Views/Text.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -511,4 +511,4 @@ Element TextInput::body() const {
   };
 }
 
-} // namespace flux
+} // namespace lambda

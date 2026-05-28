@@ -1,8 +1,8 @@
 #include "UI/MenuRoleDefaults.hpp"
 
-#include <Flux/UI/KeyCodes.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
 
-namespace flux::detail {
+namespace lambda::detail {
 
 std::string standardRoleActionName(MenuRole role) {
   switch (role) {
@@ -33,4 +33,4 @@ Shortcut standardRoleShortcut(MenuRole role) {
   }
 }
 
-} // namespace flux::detail
+} // namespace lambda::detail

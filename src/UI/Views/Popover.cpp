@@ -1,15 +1,15 @@
-#include <Flux/UI/Views/Popover.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
 
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/UI/OverlaySurfaceHelpers.hpp>
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/UI/OverlaySurfaceHelpers.hpp>
+#include <Lambda/UI/Views/PopoverCalloutShape.hpp>
 
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -30,7 +30,7 @@ float availableEnd(Rect const& anchor, Size window) {
 }
 
 bool nativePopoversEnabled() {
-  char const* disabled = std::getenv("FLUX_DISABLE_NATIVE_POPOVERS");
+  char const* disabled = std::getenv("LAMBDA_DISABLE_NATIVE_POPOVERS");
   return !disabled || !*disabled || *disabled == '0';
 }
 
@@ -293,4 +293,4 @@ OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement placement)
   return OverlayConfig::Placement::Below;
 }
 
-} // namespace flux
+} // namespace lambda

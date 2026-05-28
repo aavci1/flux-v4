@@ -1,11 +1,11 @@
 #pragma once
 
-#include <Flux/Graphics/TextCacheStats.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/TextCacheStats.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include <memory>
 
-namespace flux {
+namespace lambda {
 
 class CoreTextSystem;
 
@@ -68,4 +68,4 @@ private:
                                                   std::uint64_t preLo);
 };
 
-} // namespace flux
+} // namespace lambda

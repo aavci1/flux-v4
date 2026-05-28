@@ -1,8 +1,8 @@
-#include <Flux/UI/Element.hpp>
+#include <Lambda/UI/Element.hpp>
 
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -460,4 +460,4 @@ Element Element::windowResizeRegion(WindowResizeEdge edge) && {
   return std::move(*this);
 }
 
-} // namespace flux
+} // namespace lambda

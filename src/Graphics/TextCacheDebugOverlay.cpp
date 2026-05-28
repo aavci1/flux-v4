@@ -1,16 +1,16 @@
-#include <Flux/Graphics/TextCacheDebugOverlay.hpp>
+#include <Lambda/Graphics/TextCacheDebugOverlay.hpp>
 
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Font.hpp>
-#include <Flux/Graphics/Styles.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/Font.hpp>
+#include <Lambda/Graphics/Styles.hpp>
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include <cstdint>
 #include <sstream>
 #include <string>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -112,4 +112,4 @@ void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuf
   canvas.restore();
 }
 
-} // namespace flux
+} // namespace lambda

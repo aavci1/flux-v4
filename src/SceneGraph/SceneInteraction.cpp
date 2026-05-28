@@ -1,14 +1,14 @@
-#include <Flux/SceneGraph/SceneInteraction.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
 
-#include <Flux/SceneGraph/SceneGraph.hpp>
-#include <Flux/SceneGraph/SceneNode.hpp>
-#include <Flux/SceneGraph/SceneTraversal.hpp>
+#include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
+#include <Lambda/SceneGraph/SceneTraversal.hpp>
 
 #include "Debug/PerfCounters.hpp"
 
 #include <cstddef>
 
-namespace flux::scenegraph {
+namespace lambda::scenegraph {
 
 std::pair<SceneNode const*, Interaction const*> findInteractionByKey(SceneGraph const& graph,
                                                                      ComponentKey const& key) {
@@ -62,4 +62,4 @@ std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph) {
     return out;
 }
 
-} // namespace flux::scenegraph
+} // namespace lambda::scenegraph

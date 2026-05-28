@@ -1,13 +1,13 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Views/TextEditUtils.hpp>
+#include <Lambda/UI/Views/TextEditUtils.hpp>
 
-#include <Flux/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/TextSystem.hpp>
 
 #include <string>
 
-using namespace flux;
-using namespace flux::detail;
+using namespace lambda;
+using namespace lambda::detail;
 
 TEST_CASE("TextEditUtils: utf8 navigation") {
     std::string s = "a";

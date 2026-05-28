@@ -1,8 +1,8 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
-#include <Flux/Debug/DebugFlags.hpp>
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/EventQueue.hpp>
+#include <Lambda/Debug/DebugFlags.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
 
 #include "Platform/Linux/Common/XkbState.hpp"
 
@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace flux {
+namespace lambda {
 namespace {
 
 linux_platform::XkbState& xkbState() {
@@ -44,7 +44,7 @@ std::uint8_t buttonMaskBit(std::uint32_t button) {
 }
 
 bool debugKmsInput() {
-  static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_KMS"));
+  static bool const enabled = debug::envNonZero(std::getenv("LAMBDA_DEBUG_KMS"));
   return enabled;
 }
 
@@ -63,7 +63,7 @@ void KmsApplication::handleInputDeviceAdded(libinput_device* device) {
     libinput_device_config_tap_set_enabled(device, LIBINPUT_CONFIG_TAP_ENABLED);
   }
   if (debugKmsInput()) {
-    std::fprintf(stderr, "[flux:kms:input] device added: %s [keyboard=%d pointer=%d touch=%d tap_fingers=%d]\n",
+    std::fprintf(stderr, "[lambda:kms:input] device added: %s [keyboard=%d pointer=%d touch=%d tap_fingers=%d]\n",
                  libinput_device_get_name(device),
                  libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD),
                  libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER),
@@ -99,13 +99,13 @@ void KmsApplication::routePointer(Point position, InputEvent::Kind kind, MouseBu
                            kind == InputEvent::Kind::PointerDown ? "down" :
                            kind == InputEvent::Kind::PointerUp ? "up" :
                            kind == InputEvent::Kind::Scroll ? "scroll" : "pointer";
-    std::fprintf(stderr, "[flux:kms:input] pointer %s on %s at %.1f,%.1f global %.1f,%.1f button=%u mask=%u\n",
+    std::fprintf(stderr, "[lambda:kms:input] pointer %s on %s at %.1f,%.1f global %.1f,%.1f button=%u mask=%u\n",
                  kindName, window->outputName().c_str(), localPosition.x, localPosition.y,
                  pointerPos_.x, pointerPos_.y, static_cast<unsigned int>(button),
                  static_cast<unsigned int>(pressedButtons_));
     std::fflush(stderr);
   }
-  ::flux::Application::instance().eventQueue().post(InputEvent{.kind = kind,
+  ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = kind,
                                                                .handle = window->handle(),
                                                                .position = localPosition,
                                                                .scrollDelta = scrollDelta,
@@ -121,7 +121,7 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   xkb.updateKey(evdevKey, pressed);
   KeyCode const key = xkb.keyCodeForEvdevKey(evdevKey);
   Modifiers const modifiers = xkb.modifiers();
-  ::flux::Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
+  ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
                                                                                 : InputEvent::Kind::KeyUp,
                                                                .handle = window->handle(),
                                                                .key = key,
@@ -129,7 +129,7 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   if (pressed) {
     std::string text = xkb.utf8ForEvdevKey(evdevKey);
     if (!text.empty()) {
-      ::flux::Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
+      ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
                                                                    .handle = window->handle(),
                                                                    .text = std::move(text)});
     }
@@ -176,7 +176,7 @@ void KmsApplication::discardPendingInputEvents(bool handleDeviceEvents) {
     int const dispatchResult = libinput_dispatch(input_);
     if (dispatchResult != 0) {
       if (debugKmsInput()) {
-        std::fprintf(stderr, "[flux:kms:input] libinput_dispatch while draining returned %d\n",
+        std::fprintf(stderr, "[lambda:kms:input] libinput_dispatch while draining returned %d\n",
                      dispatchResult);
       }
       break;
@@ -190,10 +190,10 @@ void KmsApplication::discardPendingInputEvents(bool handleDeviceEvents) {
         handleInputDeviceAdded(libinput_event_get_device(event));
       } else if (handleDeviceEvents && type == LIBINPUT_EVENT_DEVICE_REMOVED && debugKmsInput()) {
         libinput_device* device = libinput_event_get_device(event);
-        std::fprintf(stderr, "[flux:kms:input] device removed while draining: %s\n",
+        std::fprintf(stderr, "[lambda:kms:input] device removed while draining: %s\n",
                      device ? libinput_device_get_name(device) : "(unknown)");
       } else if (debugKmsInput()) {
-        std::fprintf(stderr, "[flux:kms:input] discarded libinput event type %d during VT transition\n",
+        std::fprintf(stderr, "[lambda:kms:input] discarded libinput event type %d during VT transition\n",
                      static_cast<int>(type));
       }
       libinput_event_destroy(event);
@@ -210,7 +210,7 @@ void KmsApplication::suspendInputForVtSwitch() {
   libinput_suspend(input_);
   inputSuspendedForVt_ = true;
   if (debugKmsInput()) {
-    std::fprintf(stderr, "[flux:kms:input] suspended libinput for inactive VT\n");
+    std::fprintf(stderr, "[lambda:kms:input] suspended libinput for inactive VT\n");
   }
 }
 
@@ -218,13 +218,13 @@ void KmsApplication::resumeInputAfterVtSwitch() {
   if (!input_ || !inputSuspendedForVt_) return;
   int const resumeResult = libinput_resume(input_);
   if (resumeResult != 0 && debugKmsInput()) {
-    std::fprintf(stderr, "[flux:kms:input] libinput_resume returned %d\n", resumeResult);
+    std::fprintf(stderr, "[lambda:kms:input] libinput_resume returned %d\n", resumeResult);
   }
   inputSuspendedForVt_ = false;
   releaseRawInputState(inputEventTimeMs());
   discardPendingInputEvents(true);
   if (debugKmsInput()) {
-    std::fprintf(stderr, "[flux:kms:input] resumed libinput for active VT\n");
+    std::fprintf(stderr, "[lambda:kms:input] resumed libinput for active VT\n");
   }
 }
 
@@ -236,7 +236,7 @@ void KmsApplication::dispatchPendingInput() {
   if (!input_) return;
   int const dispatchResult = libinput_dispatch(input_);
   if (dispatchResult != 0 && debugKmsInput()) {
-    std::fprintf(stderr, "[flux:kms:input] libinput_dispatch returned %d\n", dispatchResult);
+    std::fprintf(stderr, "[lambda:kms:input] libinput_dispatch returned %d\n", dispatchResult);
   }
   while (libinput_event* event = libinput_get_event(input_)) {
     switch (libinput_event_get_type(event)) {
@@ -246,7 +246,7 @@ void KmsApplication::dispatchPendingInput() {
     case LIBINPUT_EVENT_DEVICE_REMOVED:
       if (debugKmsInput()) {
         libinput_device* device = libinput_event_get_device(event);
-        std::fprintf(stderr, "[flux:kms:input] device removed: %s\n",
+        std::fprintf(stderr, "[lambda:kms:input] device removed: %s\n",
                      device ? libinput_device_get_name(device) : "(unknown)");
       }
       break;
@@ -255,7 +255,7 @@ void KmsApplication::dispatchPendingInput() {
       double const dx = libinput_event_pointer_get_dx(pointer);
       double const dy = libinput_event_pointer_get_dy(pointer);
       if (debugKmsInput()) {
-        std::fprintf(stderr, "[flux:kms:input] raw pointer motion dx=%.2f dy=%.2f\n", dx, dy);
+        std::fprintf(stderr, "[lambda:kms:input] raw pointer motion dx=%.2f dy=%.2f\n", dx, dy);
         std::fflush(stderr);
       }
       emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerMotion,
@@ -280,7 +280,7 @@ void KmsApplication::dispatchPendingInput() {
       double const y = libinput_event_pointer_get_absolute_y_transformed(
           pointer, static_cast<std::uint32_t>(rawSize.height));
       if (debugKmsInput()) {
-        std::fprintf(stderr, "[flux:kms:input] raw pointer absolute x=%.1f y=%.1f\n", x, y);
+        std::fprintf(stderr, "[lambda:kms:input] raw pointer absolute x=%.1f y=%.1f\n", x, y);
         std::fflush(stderr);
       }
       emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerPosition,
@@ -412,7 +412,7 @@ void KmsApplication::dispatchPendingInput() {
     }
     default:
       if (debugKmsInput()) {
-        std::fprintf(stderr, "[flux:kms:input] ignored libinput event type %d\n",
+        std::fprintf(stderr, "[lambda:kms:input] ignored libinput event type %d\n",
                      static_cast<int>(libinput_event_get_type(event)));
       }
       break;
@@ -421,4 +421,4 @@ void KmsApplication::dispatchPendingInput() {
   }
 }
 
-} // namespace flux
+} // namespace lambda

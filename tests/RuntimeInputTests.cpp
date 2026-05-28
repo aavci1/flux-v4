@@ -1,26 +1,26 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Application.hpp>
-#include <Flux/UI/Events.hpp>
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/UI/Shortcut.hpp>
-#include <Flux/UI/Window.hpp>
-#include <Flux/UI/Detail/RootHolder.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/UI/InteractionData.hpp>
-#include <Flux/SceneGraph/RectNode.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Popover.hpp>
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScrollView.hpp>
-#include <Flux/UI/Views/Select.hpp>
-#include <Flux/UI/Views/Show.hpp>
-#include <Flux/UI/Views/TextInput.hpp>
-#include <Flux/UI/Views/VStack.hpp>
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/Events.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/Shortcut.hpp>
+#include <Lambda/UI/Window.hpp>
+#include <Lambda/UI/Detail/RootHolder.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
+#include <Lambda/Reactive/Signal.hpp>
+#include <Lambda/UI/InteractionData.hpp>
+#include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/Views/HStack.hpp>
+#include <Lambda/UI/Views/Popover.hpp>
+#include <Lambda/UI/Views/PopoverCalloutShape.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScrollView.hpp>
+#include <Lambda/UI/Views/Select.hpp>
+#include <Lambda/UI/Views/Show.hpp>
+#include <Lambda/UI/Views/TextInput.hpp>
+#include <Lambda/UI/Views/VStack.hpp>
 
 #include <cstdlib>
 #include <cstdint>
@@ -55,16 +55,16 @@ struct ScopedEnvOverride {
 
 struct RuntimeHarness {
   ScopedEnvOverride disableNativePopovers;
-  flux::Application app;
-  flux::Window& window;
-  flux::Runtime runtime;
+  lambda::Application app;
+  lambda::Window& window;
+  lambda::Runtime runtime;
 
   RuntimeHarness()
-      : disableNativePopovers("FLUX_DISABLE_NATIVE_POPOVERS", "1")
+      : disableNativePopovers("LAMBDA_DISABLE_NATIVE_POPOVERS", "1")
       , app()
-      , window(app.createWindow(flux::WindowConfig{
+      , window(app.createWindow(lambda::WindowConfig{
             .size = {240.f, 140.f},
-            .title = "Flux Runtime Input Tests",
+            .title = "Lambda Runtime Input Tests",
             .fullscreen = false,
             .resizable = false,
         }))
@@ -76,25 +76,25 @@ struct RuntimeHarness {
 
   template<typename Root>
   void setRoot(Root root) {
-    runtime.setRoot(std::make_unique<flux::TypedRootHolder<Root>>(
+    runtime.setRoot(std::make_unique<lambda::TypedRootHolder<Root>>(
         std::in_place, std::move(root)));
   }
 
-  void pointerMove(flux::Point point) {
-    dispatchPointer(flux::InputEvent::Kind::PointerMove, point);
+  void pointerMove(lambda::Point point) {
+    dispatchPointer(lambda::InputEvent::Kind::PointerMove, point);
   }
 
-  void pointerDown(flux::Point point, flux::Modifiers modifiers = flux::Modifiers::None) {
-    dispatchPointer(flux::InputEvent::Kind::PointerDown, point, modifiers);
+  void pointerDown(lambda::Point point, lambda::Modifiers modifiers = lambda::Modifiers::None) {
+    dispatchPointer(lambda::InputEvent::Kind::PointerDown, point, modifiers);
   }
 
-  void pointerUp(flux::Point point, flux::Modifiers modifiers = flux::Modifiers::None) {
-    dispatchPointer(flux::InputEvent::Kind::PointerUp, point, modifiers);
+  void pointerUp(lambda::Point point, lambda::Modifiers modifiers = lambda::Modifiers::None) {
+    dispatchPointer(lambda::InputEvent::Kind::PointerUp, point, modifiers);
   }
 
-  void keyDown(flux::KeyCode key, flux::Modifiers modifiers = flux::Modifiers::None) {
-    flux::InputEvent event{};
-    event.kind = flux::InputEvent::Kind::KeyDown;
+  void keyDown(lambda::KeyCode key, lambda::Modifiers modifiers = lambda::Modifiers::None) {
+    lambda::InputEvent event{};
+    event.kind = lambda::InputEvent::Kind::KeyDown;
     event.handle = window.handle();
     event.key = key;
     event.modifiers = modifiers;
@@ -102,23 +102,23 @@ struct RuntimeHarness {
   }
 
   void textInput(std::string text) {
-    flux::InputEvent event{};
-    event.kind = flux::InputEvent::Kind::TextInput;
+    lambda::InputEvent event{};
+    event.kind = lambda::InputEvent::Kind::TextInput;
     event.handle = window.handle();
     event.text = std::move(text);
     runtime.handleInput(event);
   }
 
-  void windowEvent(flux::WindowEvent::Kind kind) {
-    flux::WindowEvent event{};
+  void windowEvent(lambda::WindowEvent::Kind kind) {
+    lambda::WindowEvent event{};
     event.kind = kind;
     event.handle = window.handle();
     runtime.handleWindowEvent(event);
   }
 
-  void scroll(flux::Point point, flux::Vec2 delta, bool precise = true) {
-    flux::InputEvent event{};
-    event.kind = flux::InputEvent::Kind::Scroll;
+  void scroll(lambda::Point point, lambda::Vec2 delta, bool precise = true) {
+    lambda::InputEvent event{};
+    event.kind = lambda::InputEvent::Kind::Scroll;
     event.handle = window.handle();
     event.position = {point.x, point.y};
     event.scrollDelta = delta;
@@ -127,40 +127,40 @@ struct RuntimeHarness {
   }
 
 private:
-  void dispatchPointer(flux::InputEvent::Kind kind, flux::Point point,
-                       flux::Modifiers modifiers = flux::Modifiers::None) {
-    flux::InputEvent event{};
+  void dispatchPointer(lambda::InputEvent::Kind kind, lambda::Point point,
+                       lambda::Modifiers modifiers = lambda::Modifiers::None) {
+    lambda::InputEvent event{};
     event.kind = kind;
     event.handle = window.handle();
     event.position = {point.x, point.y};
-    event.button = flux::MouseButton::Left;
+    event.button = lambda::MouseButton::Left;
     event.modifiers = modifiers;
     event.pressedButtons =
-        kind == flux::InputEvent::Kind::PointerUp ? 0u : static_cast<std::uint8_t>(1u);
+        kind == lambda::InputEvent::Kind::PointerUp ? 0u : static_cast<std::uint8_t>(1u);
     runtime.handleInput(event);
   }
 };
 
 struct ProbeView {
-  flux::Reactive::Signal<bool>* hover = nullptr;
-  flux::Reactive::Signal<bool>* press = nullptr;
-  flux::Reactive::Signal<bool>* focus = nullptr;
-  flux::Reactive::Signal<bool>* keyboardFocus = nullptr;
+  lambda::Reactive::Signal<bool>* hover = nullptr;
+  lambda::Reactive::Signal<bool>* press = nullptr;
+  lambda::Reactive::Signal<bool>* focus = nullptr;
+  lambda::Reactive::Signal<bool>* keyboardFocus = nullptr;
 
-  flux::Element body() const {
+  lambda::Element body() const {
     if (hover) {
-      *hover = flux::useHover();
+      *hover = lambda::useHover();
     }
     if (press) {
-      *press = flux::usePress();
+      *press = lambda::usePress();
     }
     if (focus) {
-      *focus = flux::useFocus();
+      *focus = lambda::useFocus();
     }
     if (keyboardFocus) {
-      *keyboardFocus = flux::useKeyboardFocus();
+      *keyboardFocus = lambda::useKeyboardFocus();
     }
-    return flux::Element{flux::Rectangle{}}
+    return lambda::Element{lambda::Rectangle{}}
         .size(20.f, 20.f)
         .focusable(true)
         .onTap([] {});
@@ -168,29 +168,29 @@ struct ProbeView {
 };
 
 struct SingleProbeRoot {
-  flux::Reactive::Signal<bool>* hover = nullptr;
-  flux::Reactive::Signal<bool>* press = nullptr;
-  flux::Reactive::Signal<bool>* focus = nullptr;
-  flux::Reactive::Signal<bool>* keyboardFocus = nullptr;
+  lambda::Reactive::Signal<bool>* hover = nullptr;
+  lambda::Reactive::Signal<bool>* press = nullptr;
+  lambda::Reactive::Signal<bool>* focus = nullptr;
+  lambda::Reactive::Signal<bool>* keyboardFocus = nullptr;
 
-  flux::Element body() const {
+  lambda::Element body() const {
     return ProbeView{hover, press, focus, keyboardFocus};
   }
 };
 
 struct TextInputFocusRoot {
-  flux::Reactive::Signal<std::string>* first = nullptr;
-  flux::Reactive::Signal<std::string>* second = nullptr;
+  lambda::Reactive::Signal<std::string>* first = nullptr;
+  lambda::Reactive::Signal<std::string>* second = nullptr;
 
-  flux::Element body() const {
-    return flux::VStack{
+  lambda::Element body() const {
+    return lambda::VStack{
         .spacing = 8.f,
-        .children = flux::children(
-            flux::TextInput{
+        .children = lambda::children(
+            lambda::TextInput{
                 .value = *first,
                 .placeholder = "First",
             },
-            flux::TextInput{
+            lambda::TextInput{
                 .value = *second,
                 .placeholder = "Second",
             }),
@@ -201,16 +201,16 @@ struct TextInputFocusRoot {
 struct StatefulOverlayProbe {
   int* bodyCalls = nullptr;
   int* cleanups = nullptr;
-  flux::Reactive::Signal<int>* state = nullptr;
+  lambda::Reactive::Signal<int>* state = nullptr;
 
-  flux::Element body() const {
+  lambda::Element body() const {
     ++*bodyCalls;
-    auto localState = flux::useState(1);
+    auto localState = lambda::useState(1);
     *state = localState;
-    flux::Reactive::onCleanup([cleanups = cleanups] {
+    lambda::Reactive::onCleanup([cleanups = cleanups] {
       ++*cleanups;
     });
-    return flux::Element{flux::Rectangle{}}
+    return lambda::Element{lambda::Rectangle{}}
         .size([localState] {
           return 20.f + static_cast<float>(localState.get());
         }, 12.f);
@@ -218,13 +218,13 @@ struct StatefulOverlayProbe {
 };
 
 struct TwoProbeRoot {
-  flux::Reactive::Signal<bool>* firstFocus = nullptr;
-  flux::Reactive::Signal<bool>* secondFocus = nullptr;
+  lambda::Reactive::Signal<bool>* firstFocus = nullptr;
+  lambda::Reactive::Signal<bool>* secondFocus = nullptr;
 
-  flux::Element body() const {
-    return flux::HStack{
+  lambda::Element body() const {
+    return lambda::HStack{
         .spacing = 8.f,
-        .children = flux::children(
+        .children = lambda::children(
             ProbeView{nullptr, nullptr, firstFocus, nullptr},
             ProbeView{nullptr, nullptr, secondFocus, nullptr}),
     };
@@ -234,12 +234,12 @@ struct TwoProbeRoot {
 struct ActionProbeView {
   int* fired = nullptr;
 
-  flux::Element body() const {
-    flux::useFocus();
-    flux::useViewAction("demo.save", [fired = fired] {
+  lambda::Element body() const {
+    lambda::useFocus();
+    lambda::useViewAction("demo.save", [fired = fired] {
       ++*fired;
     });
-    return flux::Element{flux::Rectangle{}}
+    return lambda::Element{lambda::Rectangle{}}
         .size(20.f, 20.f)
         .focusable(true)
         .onTap([] {});
@@ -250,10 +250,10 @@ struct TwoActionRoot {
   int* firstFired = nullptr;
   int* secondFired = nullptr;
 
-  flux::Element body() const {
-    return flux::HStack{
+  lambda::Element body() const {
+    return lambda::HStack{
         .spacing = 8.f,
-        .children = flux::children(
+        .children = lambda::children(
             ActionProbeView{firstFired},
             ActionProbeView{secondFired}),
     };
@@ -261,82 +261,82 @@ struct TwoActionRoot {
 };
 
 struct ConditionalActionRoot {
-  flux::Reactive::Signal<bool> visible;
+  lambda::Reactive::Signal<bool> visible;
   int* fired = nullptr;
 
-  flux::Element body() const {
-    return flux::Show(visible, [fired = fired] {
-      return flux::Element{ActionProbeView{fired}};
+  lambda::Element body() const {
+    return lambda::Show(visible, [fired = fired] {
+      return lambda::Element{ActionProbeView{fired}};
     });
   }
 };
 
 struct ConditionalHoverRoot {
-  flux::Reactive::Signal<bool> visible;
-  flux::Reactive::Signal<bool>* hover = nullptr;
+  lambda::Reactive::Signal<bool> visible;
+  lambda::Reactive::Signal<bool>* hover = nullptr;
 
-  flux::Element body() const {
-    return flux::Show(visible, [hover = hover] {
-      return flux::Element{ProbeView{hover, nullptr, nullptr, nullptr}};
+  lambda::Element body() const {
+    return lambda::Show(visible, [hover = hover] {
+      return lambda::Element{ProbeView{hover, nullptr, nullptr, nullptr}};
     });
   }
 };
 
 struct ScrollProbeRoot {
-  flux::Reactive::Signal<flux::Point> offset;
+  lambda::Reactive::Signal<lambda::Point> offset;
 
-  flux::Element body() const {
-    return flux::ScrollView{
-        .axis = flux::ScrollAxis::Vertical,
+  lambda::Element body() const {
+    return lambda::ScrollView{
+        .axis = lambda::ScrollAxis::Vertical,
         .scrollOffset = offset,
-        .children = flux::children(
-            flux::Rectangle{}.size(100.f, 100.f),
-            flux::Rectangle{}.size(100.f, 100.f)),
+        .children = lambda::children(
+            lambda::Rectangle{}.size(100.f, 100.f),
+            lambda::Rectangle{}.size(100.f, 100.f)),
     };
   }
 };
 
 struct ScrollAnchoredProbeRoot {
-  flux::Reactive::Signal<flux::Point> offset;
+  lambda::Reactive::Signal<lambda::Point> offset;
 
-  flux::Element body() const {
-    return flux::ScrollView{
-        .axis = flux::ScrollAxis::Vertical,
+  lambda::Element body() const {
+    return lambda::ScrollView{
+        .axis = lambda::ScrollAxis::Vertical,
         .scrollOffset = offset,
-        .children = flux::children(
-            flux::Rectangle{}.size(100.f, 80.f),
+        .children = lambda::children(
+            lambda::Rectangle{}.size(100.f, 80.f),
             ProbeView{},
-            flux::Rectangle{}.size(100.f, 100.f)),
+            lambda::Rectangle{}.size(100.f, 100.f)),
     };
   }
 };
 
 struct SelectKeyboardProbeRoot {
-  flux::Element body() const {
-    return flux::Element{flux::Select{
+  lambda::Element body() const {
+    return lambda::Element{lambda::Select{
         .options = {
-            flux::SelectOption{.label = "First"},
-            flux::SelectOption{.label = "Second"},
+            lambda::SelectOption{.label = "First"},
+            lambda::SelectOption{.label = "Second"},
         },
     }}.width(120.f);
   }
 };
 
 struct SelectCommitProbeRoot {
-  flux::Reactive::Signal<int> selected;
-  flux::Reactive::Signal<bool>* nextFocus = nullptr;
+  lambda::Reactive::Signal<int> selected;
+  lambda::Reactive::Signal<bool>* nextFocus = nullptr;
   int* changeCount = nullptr;
 
-  flux::Element body() const {
-    return flux::VStack{
+  lambda::Element body() const {
+    return lambda::VStack{
         .spacing = 8.f,
-        .alignment = flux::Alignment::Stretch,
-        .children = flux::children(
-            flux::Element{flux::Select{
+        .alignment = lambda::Alignment::Stretch,
+        .children = lambda::children(
+            lambda::Element{lambda::Select{
                 .selectedIndex = selected,
                 .options = {
-                    flux::SelectOption{.label = "First"},
-                    flux::SelectOption{.label = "Second"},
+                    lambda::SelectOption{.label = "First"},
+                    lambda::SelectOption{.label = "Second"},
                 },
                 .onChange = [changeCount = changeCount](int) {
                   if (changeCount) {
@@ -350,40 +350,40 @@ struct SelectCommitProbeRoot {
 };
 
 struct LongSelectProbeRoot {
-  flux::Element body() const {
-    return flux::Element{flux::Select{
+  lambda::Element body() const {
+    return lambda::Element{lambda::Select{
         .options = {
-            flux::SelectOption{.label = "Option 1"},
-            flux::SelectOption{.label = "Option 2"},
-            flux::SelectOption{.label = "Option 3"},
-            flux::SelectOption{.label = "Option 4"},
-            flux::SelectOption{.label = "Option 5"},
-            flux::SelectOption{.label = "Option 6"},
-            flux::SelectOption{.label = "Option 7"},
-            flux::SelectOption{.label = "Option 8"},
-            flux::SelectOption{.label = "Option 9"},
-            flux::SelectOption{.label = "Option 10"},
-            flux::SelectOption{.label = "Option 11"},
-            flux::SelectOption{.label = "Option 12"},
+            lambda::SelectOption{.label = "Option 1"},
+            lambda::SelectOption{.label = "Option 2"},
+            lambda::SelectOption{.label = "Option 3"},
+            lambda::SelectOption{.label = "Option 4"},
+            lambda::SelectOption{.label = "Option 5"},
+            lambda::SelectOption{.label = "Option 6"},
+            lambda::SelectOption{.label = "Option 7"},
+            lambda::SelectOption{.label = "Option 8"},
+            lambda::SelectOption{.label = "Option 9"},
+            lambda::SelectOption{.label = "Option 10"},
+            lambda::SelectOption{.label = "Option 11"},
+            lambda::SelectOption{.label = "Option 12"},
         },
     }}.width(160.f);
   }
 };
 
 struct HoverPopoverProbeRoot {
-  flux::Element body() const {
-    auto [showPopover, hidePopover, presented] = flux::usePopover();
+  lambda::Element body() const {
+    auto [showPopover, hidePopover, presented] = lambda::usePopover();
     (void)presented;
-    return flux::Element{flux::Rectangle{}}
+    return lambda::Element{lambda::Rectangle{}}
         .size(20.f, 20.f)
         .onPointerEnter([showPopover] {
-          showPopover(flux::Popover{
-              .content = flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
-              .placement = flux::PopoverPlacement::Below,
+          showPopover(lambda::Popover{
+              .content = lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
+              .placement = lambda::PopoverPlacement::Below,
               .gap = 0.f,
               .arrow = false,
               .contentPadding = 0.f,
-              .backdropColor = flux::Colors::transparent,
+              .backdropColor = lambda::Colors::transparent,
               .dismissOnOutsideTap = false,
               .useTapAnchor = false,
               .useHoverLeafAnchor = true,
@@ -396,54 +396,54 @@ struct HoverPopoverProbeRoot {
 };
 
 struct WrappedScrollProbeRoot {
-  flux::Reactive::Signal<flux::Point> offset;
-  flux::Reactive::Signal<flux::Size> viewport;
-  flux::Reactive::Signal<flux::Size> content;
+  lambda::Reactive::Signal<lambda::Point> offset;
+  lambda::Reactive::Signal<lambda::Size> viewport;
+  lambda::Reactive::Signal<lambda::Size> content;
 
-  flux::Element body() const {
-    return flux::VStack{
+  lambda::Element body() const {
+    return lambda::VStack{
         .spacing = 0.f,
-        .alignment = flux::Alignment::Stretch,
-        .children = flux::children(
-            flux::Rectangle{}.height(20.f),
-            flux::ScrollView{
-                .axis = flux::ScrollAxis::Vertical,
+        .alignment = lambda::Alignment::Stretch,
+        .children = lambda::children(
+            lambda::Rectangle{}.height(20.f),
+            lambda::ScrollView{
+                .axis = lambda::ScrollAxis::Vertical,
                 .scrollOffset = offset,
                 .viewportSize = viewport,
                 .contentSize = content,
-                .children = flux::children(
-                    flux::Rectangle{}.size(100.f, 100.f),
-                    flux::Rectangle{}.size(100.f, 100.f)),
+                .children = lambda::children(
+                    lambda::Rectangle{}.size(100.f, 100.f),
+                    lambda::Rectangle{}.size(100.f, 100.f)),
             }
                 .flex(1.f, 1.f, 0.f)
-                .fill(flux::Color::windowBackground())),
+                .fill(lambda::Color::windowBackground())),
     };
   }
 };
 
-void checkSameColor(flux::Color actual, flux::Color expected) {
+void checkSameColor(lambda::Color actual, lambda::Color expected) {
   CHECK(actual.r == doctest::Approx(expected.r));
   CHECK(actual.g == doctest::Approx(expected.g));
   CHECK(actual.b == doctest::Approx(expected.b));
   CHECK(actual.a == doctest::Approx(expected.a));
 }
 
-flux::Color solidWindowBackground(flux::Window const& window) {
-  flux::Color color{};
-  REQUIRE(window.background().kind == flux::WindowBackgroundKind::Fill);
+lambda::Color solidWindowBackground(lambda::Window const& window) {
+  lambda::Color color{};
+  REQUIRE(window.background().kind == lambda::WindowBackgroundKind::Fill);
   REQUIRE(window.background().fill.solidColor(&color));
   return color;
 }
 
-void registerSaveAction(flux::Window& window) {
-  window.registerAction("demo.save", flux::ActionDescriptor{
+void registerSaveAction(lambda::Window& window) {
+  window.registerAction("demo.save", lambda::ActionDescriptor{
       .label = "Save",
-      .shortcut = flux::shortcuts::Save,
+      .shortcut = lambda::shortcuts::Save,
   });
 }
 
-flux::scenegraph::SceneNode const* findScrollViewport(flux::scenegraph::SceneNode const& node) {
-  auto const* interaction = flux::interactionData(node);
+lambda::scenegraph::SceneNode const* findScrollViewport(lambda::scenegraph::SceneNode const& node) {
+  auto const* interaction = lambda::interactionData(node);
   if (interaction && interaction->onScroll && node.children().size() >= 2) {
     return &node;
   }
@@ -457,12 +457,12 @@ flux::scenegraph::SceneNode const* findScrollViewport(flux::scenegraph::SceneNod
   return nullptr;
 }
 
-void collectTapRects(flux::scenegraph::SceneNode const& node,
-                     std::vector<flux::scenegraph::RectNode const*>& out) {
-  auto const* interaction = flux::interactionData(node);
-  if (node.kind() == flux::scenegraph::SceneNodeKind::Rect &&
+void collectTapRects(lambda::scenegraph::SceneNode const& node,
+                     std::vector<lambda::scenegraph::RectNode const*>& out) {
+  auto const* interaction = lambda::interactionData(node);
+  if (node.kind() == lambda::scenegraph::SceneNodeKind::Rect &&
       interaction && interaction->onTap) {
-    out.push_back(static_cast<flux::scenegraph::RectNode const*>(&node));
+    out.push_back(static_cast<lambda::scenegraph::RectNode const*>(&node));
   }
   for (auto const& child : node.children()) {
     if (child) {
@@ -471,30 +471,30 @@ void collectTapRects(flux::scenegraph::SceneNode const& node,
   }
 }
 
-flux::Point windowPointInside(flux::OverlayEntry const& entry,
-                              flux::scenegraph::SceneNode const& node) {
-  flux::Point origin{entry.resolvedFrame.x, entry.resolvedFrame.y};
-  flux::scenegraph::SceneNode const* current = &node;
+lambda::Point windowPointInside(lambda::OverlayEntry const& entry,
+                              lambda::scenegraph::SceneNode const& node) {
+  lambda::Point origin{entry.resolvedFrame.x, entry.resolvedFrame.y};
+  lambda::scenegraph::SceneNode const* current = &node;
   while (current) {
     origin.x += current->position().x;
     origin.y += current->position().y;
     current = current->parent();
   }
-  flux::Size const size = node.size();
-  return flux::Point{origin.x + std::min(12.f, std::max(1.f, size.width * 0.5f)),
+  lambda::Size const size = node.size();
+  return lambda::Point{origin.x + std::min(12.f, std::max(1.f, size.width * 0.5f)),
                      origin.y + std::min(12.f, std::max(1.f, size.height * 0.5f))};
 }
 
-float solidFillAlpha(flux::scenegraph::RectNode const& node) {
-  flux::Color color{};
+float solidFillAlpha(lambda::scenegraph::RectNode const& node) {
+  lambda::Color color{};
   if (node.fill().solidColor(&color)) {
     return color.a;
   }
   return 0.f;
 }
 
-flux::Color solidFillColor(flux::scenegraph::RectNode const& node) {
-  flux::Color color{};
+lambda::Color solidFillColor(lambda::scenegraph::RectNode const& node) {
+  lambda::Color color{};
   if (node.fill().solidColor(&color)) {
     return color;
   }
@@ -505,7 +505,7 @@ flux::Color solidFillColor(flux::scenegraph::RectNode const& node) {
 
 TEST_CASE("pointer move into element flips hover signal") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> hover;
+  lambda::Reactive::Signal<bool> hover;
   harness.setRoot(SingleProbeRoot{.hover = &hover});
 
   harness.pointerMove({10.f, 10.f});
@@ -517,7 +517,7 @@ TEST_CASE("pointer move into element flips hover signal") {
 
 TEST_CASE("pointer down and up flip press signal") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> press;
+  lambda::Reactive::Signal<bool> press;
   harness.setRoot(SingleProbeRoot{.press = &press});
 
   harness.pointerDown({10.f, 10.f});
@@ -529,7 +529,7 @@ TEST_CASE("pointer down and up flip press signal") {
 
 TEST_CASE("pointer down then drag out keeps press until release") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> press;
+  lambda::Reactive::Signal<bool> press;
   harness.setRoot(SingleProbeRoot{.press = &press});
 
   harness.pointerDown({10.f, 10.f});
@@ -544,23 +544,23 @@ TEST_CASE("pointer down then drag out keeps press until release") {
 
 TEST_CASE("focus moves between elements") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> firstFocus;
-  flux::Reactive::Signal<bool> secondFocus;
+  lambda::Reactive::Signal<bool> firstFocus;
+  lambda::Reactive::Signal<bool> secondFocus;
   harness.setRoot(TwoProbeRoot{.firstFocus = &firstFocus, .secondFocus = &secondFocus});
 
-  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
   CHECK(firstFocus.get());
   CHECK_FALSE(secondFocus.get());
 
-  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
   CHECK_FALSE(firstFocus.get());
   CHECK(secondFocus.get());
 }
 
 TEST_CASE("keyboard focus signal differs from pointer focus") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> focus;
-  flux::Reactive::Signal<bool> keyboardFocus;
+  lambda::Reactive::Signal<bool> focus;
+  lambda::Reactive::Signal<bool> keyboardFocus;
   harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
 
   harness.pointerDown({10.f, 10.f});
@@ -570,15 +570,15 @@ TEST_CASE("keyboard focus signal differs from pointer focus") {
   harness.pointerDown({100.f, 100.f});
   REQUIRE_FALSE(focus.get());
 
-  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
   CHECK(focus.get());
   CHECK(keyboardFocus.get());
 }
 
 TEST_CASE("root mount selects the only focusable target") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> focus;
-  flux::Reactive::Signal<bool> keyboardFocus;
+  lambda::Reactive::Signal<bool> focus;
+  lambda::Reactive::Signal<bool> keyboardFocus;
   harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
 
   CHECK(focus.get());
@@ -587,15 +587,15 @@ TEST_CASE("root mount selects the only focusable target") {
 
 TEST_CASE("window focus reselects the only focusable target") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> focus;
-  flux::Reactive::Signal<bool> keyboardFocus;
+  lambda::Reactive::Signal<bool> focus;
+  lambda::Reactive::Signal<bool> keyboardFocus;
   harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
 
-  harness.windowEvent(flux::WindowEvent::Kind::FocusLost);
+  harness.windowEvent(lambda::WindowEvent::Kind::FocusLost);
   REQUIRE_FALSE(focus.get());
   REQUIRE_FALSE(keyboardFocus.get());
 
-  harness.windowEvent(flux::WindowEvent::Kind::FocusGained);
+  harness.windowEvent(lambda::WindowEvent::Kind::FocusGained);
 
   CHECK(focus.get());
   CHECK(keyboardFocus.get());
@@ -603,8 +603,8 @@ TEST_CASE("window focus reselects the only focusable target") {
 
 TEST_CASE("root mount does not select among multiple focusable targets") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> firstFocus;
-  flux::Reactive::Signal<bool> secondFocus;
+  lambda::Reactive::Signal<bool> firstFocus;
+  lambda::Reactive::Signal<bool> secondFocus;
   harness.setRoot(TwoProbeRoot{.firstFocus = &firstFocus, .secondFocus = &secondFocus});
 
   CHECK_FALSE(firstFocus.get());
@@ -613,15 +613,15 @@ TEST_CASE("root mount does not select among multiple focusable targets") {
 
 TEST_CASE("text input participates in keyboard focus traversal") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<std::string> first{""};
-  flux::Reactive::Signal<std::string> second{""};
+  lambda::Reactive::Signal<std::string> first{""};
+  lambda::Reactive::Signal<std::string> second{""};
   harness.setRoot(TextInputFocusRoot{.first = &first, .second = &second});
 
-  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
   CHECK(harness.runtime.focusTargetKey().has_value());
   harness.textInput("A");
 
-  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
   harness.textInput("B");
 
   CHECK(first.get() == "A");
@@ -635,13 +635,13 @@ TEST_CASE("view action fires only for the focused view") {
   int secondFired = 0;
   harness.setRoot(TwoActionRoot{.firstFired = &firstFired, .secondFired = &secondFired});
 
-  harness.keyDown(flux::keys::Tab);
-  harness.keyDown(flux::keys::S, flux::Modifiers::Meta);
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
   CHECK(firstFired == 1);
   CHECK(secondFired == 0);
 
-  harness.keyDown(flux::keys::Tab);
-  harness.keyDown(flux::keys::S, flux::Modifiers::Meta);
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
   CHECK(firstFired == 1);
   CHECK(secondFired == 1);
 }
@@ -649,23 +649,23 @@ TEST_CASE("view action fires only for the focused view") {
 TEST_CASE("view action deregisters on view unmount") {
   RuntimeHarness harness;
   registerSaveAction(harness.window);
-  flux::Reactive::Signal<bool> visible{true};
+  lambda::Reactive::Signal<bool> visible{true};
   int fired = 0;
   harness.setRoot(ConditionalActionRoot{.visible = visible, .fired = &fired});
 
   harness.pointerDown({10.f, 10.f});
-  harness.keyDown(flux::keys::S, flux::Modifiers::Meta);
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
   REQUIRE(fired == 1);
 
   visible.set(false);
-  harness.keyDown(flux::keys::S, flux::Modifiers::Meta);
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
   CHECK(fired == 1);
 }
 
 TEST_CASE("hover chain disposes signals on subtree unmount") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<bool> visible{true};
-  flux::Reactive::Signal<bool> hover;
+  lambda::Reactive::Signal<bool> visible{true};
+  lambda::Reactive::Signal<bool> hover;
   harness.setRoot(ConditionalHoverRoot{.visible = visible, .hover = &hover});
 
   harness.pointerMove({10.f, 10.f});
@@ -680,7 +680,7 @@ TEST_CASE("hover chain disposes signals on subtree unmount") {
 
 TEST_CASE("runtime scroll dispatch reaches scroll view") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
   harness.setRoot(ScrollProbeRoot{.offset = offset});
 
   harness.scroll({10.f, 10.f}, {0.f, -12.f});
@@ -691,9 +691,9 @@ TEST_CASE("runtime scroll dispatch reaches scroll view") {
 
 TEST_CASE("scroll view measurement does not overwrite mounted scroll range") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
-  flux::Reactive::Signal<flux::Size> viewport{flux::Size{0.f, 0.f}};
-  flux::Reactive::Signal<flux::Size> content{flux::Size{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Size> viewport{lambda::Size{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Size> content{lambda::Size{0.f, 0.f}};
   harness.setRoot(WrappedScrollProbeRoot{
       .offset = offset,
       .viewport = viewport,
@@ -713,7 +713,7 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   harness.setRoot(SingleProbeRoot{});
 
   harness.pointerMove({10.f, 10.f});
-  std::optional<flux::Rect> hoverAnchor = harness.runtime.hoverAnchor();
+  std::optional<lambda::Rect> hoverAnchor = harness.runtime.hoverAnchor();
   REQUIRE(hoverAnchor.has_value());
   CHECK(harness.runtime.hoverTargetKey().has_value());
   CHECK(hoverAnchor->x == doctest::Approx(0.f));
@@ -722,7 +722,7 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   CHECK(hoverAnchor->height == doctest::Approx(20.f));
 
   harness.pointerDown({10.f, 10.f});
-  std::optional<flux::Rect> tapAnchor = harness.runtime.lastTapAnchor();
+  std::optional<lambda::Rect> tapAnchor = harness.runtime.lastTapAnchor();
   REQUIRE(tapAnchor.has_value());
   CHECK(harness.runtime.lastTapTargetKey().has_value());
   CHECK(tapAnchor->x == doctest::Approx(0.f));
@@ -730,8 +730,8 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   CHECK(tapAnchor->width == doctest::Approx(20.f));
   CHECK(tapAnchor->height == doctest::Approx(20.f));
 
-  harness.keyDown(flux::keys::Tab);
-  std::optional<flux::Rect> focusAnchor = harness.runtime.focusAnchor();
+  harness.keyDown(lambda::keys::Tab);
+  std::optional<lambda::Rect> focusAnchor = harness.runtime.focusAnchor();
   REQUIRE(focusAnchor.has_value());
   CHECK(harness.runtime.focusTargetKey().has_value());
   CHECK(focusAnchor->x == doctest::Approx(0.f));
@@ -746,7 +746,7 @@ TEST_CASE("hover popovers keep the exact hover anchor instead of tracking compon
 
   harness.pointerMove({10.f, 10.f});
 
-  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   REQUIRE(entry->config.anchor.has_value());
   CHECK(entry->config.anchor->x == doctest::Approx(0.f));
@@ -758,22 +758,22 @@ TEST_CASE("hover popovers keep the exact hover anchor instead of tracking compon
 
 TEST_CASE("tracked overlay anchors follow moved trigger nodes") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
   harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
 
   harness.pointerDown({10.f, 90.f});
-  std::optional<flux::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  std::optional<lambda::ComponentKey> key = harness.runtime.lastTapTargetKey();
   REQUIRE(key.has_value());
 
-  flux::OverlayConfig config{};
+  lambda::OverlayConfig config{};
   config.anchor = harness.runtime.lastTapAnchor();
   config.anchorTrackComponentKey = key;
-  config.placement = flux::OverlayConfig::Placement::Below;
-  flux::OverlayId const id = harness.window.overlayManager().push(
-      flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+  config.placement = lambda::OverlayConfig::Placement::Below;
+  lambda::OverlayId const id = harness.window.overlayManager().push(
+      lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
       std::move(config), &harness.runtime);
 
-  flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
   CHECK(entry->resolvedFrame.y == doctest::Approx(100.f));
 
@@ -787,25 +787,25 @@ TEST_CASE("tracked overlay anchors follow moved trigger nodes") {
 
 TEST_CASE("tracked overlay placement flips after scroll changes available space") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
   harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
 
   harness.pointerDown({10.f, 90.f});
-  std::optional<flux::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  std::optional<lambda::ComponentKey> key = harness.runtime.lastTapTargetKey();
   REQUIRE(key.has_value());
 
-  flux::OverlayConfig config{};
+  lambda::OverlayConfig config{};
   config.anchor = harness.runtime.lastTapAnchor();
   config.anchorTrackComponentKey = key;
-  config.placement = flux::OverlayConfig::Placement::Below;
-  config.autoFlipPreferredPlacement = flux::OverlayConfig::Placement::Below;
-  flux::OverlayId const id = harness.window.overlayManager().push(
-      flux::Element{flux::Rectangle{}}.size(30.f, 50.f),
+  config.placement = lambda::OverlayConfig::Placement::Below;
+  config.autoFlipPreferredPlacement = lambda::OverlayConfig::Placement::Below;
+  lambda::OverlayId const id = harness.window.overlayManager().push(
+      lambda::Element{lambda::Rectangle{}}.size(30.f, 50.f),
       std::move(config), &harness.runtime);
 
-  flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Above);
+  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Above);
   CHECK(entry->resolvedFrame.y == doctest::Approx(30.f));
 
   harness.scroll({10.f, 90.f}, {0.f, -60.f});
@@ -813,56 +813,56 @@ TEST_CASE("tracked overlay placement flips after scroll changes available space"
 
   entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Below);
+  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Below);
   CHECK(entry->resolvedFrame.y == doctest::Approx(40.f));
 }
 
 TEST_CASE("tracked popover callout arrow follows flipped overlay placement") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 60.f}};
+  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 60.f}};
   harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
 
   harness.pointerDown({10.f, 30.f});
-  std::optional<flux::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  std::optional<lambda::ComponentKey> key = harness.runtime.lastTapTargetKey();
   REQUIRE(key.has_value());
 
-  flux::OverlayConfig config{};
+  lambda::OverlayConfig config{};
   config.anchor = harness.runtime.lastTapAnchor();
   config.anchorTrackComponentKey = key;
-  config.placement = flux::OverlayConfig::Placement::Below;
-  config.autoFlipPreferredPlacement = flux::OverlayConfig::Placement::Below;
+  config.placement = lambda::OverlayConfig::Placement::Below;
+  config.autoFlipPreferredPlacement = lambda::OverlayConfig::Placement::Below;
 
-  flux::Theme const theme = flux::Theme::light();
-  flux::OverlayId const id = harness.window.overlayManager().push(
-      flux::Popover{
-          .content = flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
-          .placement = flux::PopoverPlacement::Below,
+  lambda::Theme const theme = lambda::Theme::light();
+  lambda::OverlayId const id = harness.window.overlayManager().push(
+      lambda::Popover{
+          .content = lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
+          .placement = lambda::PopoverPlacement::Below,
           .arrow = true,
       },
       std::move(config), &harness.runtime);
 
   auto calloutContentY = [&]() {
-    flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+    lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
     REQUIRE(entry != nullptr);
     REQUIRE(entry->sceneGraph.root().children().size() >= 1);
-    flux::scenegraph::SceneNode const* callout =
+    lambda::scenegraph::SceneNode const* callout =
         entry->sceneGraph.root().children().back().get();
     REQUIRE(callout != nullptr);
     REQUIRE(callout->children().size() == 2);
     return callout->children()[1]->position().y;
   };
 
-  flux::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Below);
-  CHECK(calloutContentY() == doctest::Approx(theme.space3 + flux::PopoverCalloutShape::kArrowH));
+  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Below);
+  CHECK(calloutContentY() == doctest::Approx(theme.space3 + lambda::PopoverCalloutShape::kArrowH));
 
-  offset = flux::Point{0.f, 0.f};
+  offset = lambda::Point{0.f, 0.f};
   harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
 
   entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == flux::OverlayConfig::Placement::Above);
+  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Above);
   CHECK(calloutContentY() == doctest::Approx(theme.space3));
 }
 
@@ -870,11 +870,11 @@ TEST_CASE("transparent overlay backdrop still dismisses on outside tap") {
   RuntimeHarness harness;
   harness.setRoot(SingleProbeRoot{});
 
-  flux::OverlayConfig config{};
-  config.backdropColor = flux::Colors::transparent;
+  lambda::OverlayConfig config{};
+  config.backdropColor = lambda::Colors::transparent;
   config.dismissOnOutsideTap = true;
-  flux::OverlayId const id = harness.window.overlayManager().push(
-      flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+  lambda::OverlayId const id = harness.window.overlayManager().push(
+      lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
       std::move(config), &harness.runtime);
 
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
@@ -889,11 +889,11 @@ TEST_CASE("transparent overlay backdrop ignores outside tap when dismissal is di
   RuntimeHarness harness;
   harness.setRoot(SingleProbeRoot{});
 
-  flux::OverlayConfig config{};
-  config.backdropColor = flux::Colors::transparent;
+  lambda::OverlayConfig config{};
+  config.backdropColor = lambda::Colors::transparent;
   config.dismissOnOutsideTap = false;
-  flux::OverlayId const id = harness.window.overlayManager().push(
-      flux::Element{flux::Rectangle{}}.size(30.f, 10.f),
+  lambda::OverlayId const id = harness.window.overlayManager().push(
+      lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
       std::move(config), &harness.runtime);
 
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
@@ -908,15 +908,15 @@ TEST_CASE("select popover anchors to focused trigger when opened from keyboard")
   RuntimeHarness harness;
   harness.setRoot(SelectKeyboardProbeRoot{});
 
-  harness.keyDown(flux::keys::Tab);
-  std::optional<flux::Rect> focusAnchor = harness.runtime.focusAnchor();
+  harness.keyDown(lambda::keys::Tab);
+  std::optional<lambda::Rect> focusAnchor = harness.runtime.focusAnchor();
   REQUIRE(focusAnchor.has_value());
-  std::optional<flux::ComponentKey> focusKey = harness.runtime.focusTargetKey();
+  std::optional<lambda::ComponentKey> focusKey = harness.runtime.focusTargetKey();
   REQUIRE(focusKey.has_value());
 
-  harness.keyDown(flux::keys::Return);
+  harness.keyDown(lambda::keys::Return);
 
-  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   REQUIRE(entry->config.anchor.has_value());
   CHECK(entry->config.anchor->x == doctest::Approx(focusAnchor->x));
@@ -929,21 +929,21 @@ TEST_CASE("select popover anchors to focused trigger when opened from keyboard")
 
 TEST_CASE("select option Enter commits and closes keyboard-opened popover") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<int> selected{-1};
+  lambda::Reactive::Signal<int> selected{-1};
   int changes = 0;
   harness.setRoot(SelectCommitProbeRoot{
       .selected = selected,
       .changeCount = &changes,
   });
 
-  harness.keyDown(flux::keys::Tab);
-  harness.keyDown(flux::keys::Return);
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::Return);
   REQUIRE(harness.window.overlayManager().top() != nullptr);
 
-  harness.keyDown(flux::keys::DownArrow);
+  harness.keyDown(lambda::keys::DownArrow);
   CHECK(selected.get() == -1);
 
-  harness.keyDown(flux::keys::Return);
+  harness.keyDown(lambda::keys::Return);
 
   CHECK(harness.window.overlayManager().top() == nullptr);
   CHECK(selected.get() == 1);
@@ -952,8 +952,8 @@ TEST_CASE("select option Enter commits and closes keyboard-opened popover") {
 
 TEST_CASE("select option Tab commits closes popover and advances focus past trigger") {
   RuntimeHarness harness;
-  flux::Reactive::Signal<int> selected{-1};
-  flux::Reactive::Signal<bool> nextFocus;
+  lambda::Reactive::Signal<int> selected{-1};
+  lambda::Reactive::Signal<bool> nextFocus;
   int changes = 0;
   harness.setRoot(SelectCommitProbeRoot{
       .selected = selected,
@@ -961,15 +961,15 @@ TEST_CASE("select option Tab commits closes popover and advances focus past trig
       .changeCount = &changes,
   });
 
-  harness.keyDown(flux::keys::Tab);
-  harness.keyDown(flux::keys::Return);
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::Return);
   REQUIRE(harness.window.overlayManager().top() != nullptr);
 
-  harness.keyDown(flux::keys::DownArrow);
+  harness.keyDown(lambda::keys::DownArrow);
   CHECK(selected.get() == -1);
   CHECK_FALSE(nextFocus.get());
 
-  harness.keyDown(flux::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
 
   CHECK(harness.window.overlayManager().top() == nullptr);
   CHECK(selected.get() == 1);
@@ -983,14 +983,14 @@ TEST_CASE("select popover scroll moves menu content") {
 
   harness.pointerDown({20.f, 20.f});
   harness.pointerUp({20.f, 20.f});
-  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
 
-  flux::scenegraph::SceneNode const* viewport = findScrollViewport(entry->sceneGraph.root());
+  lambda::scenegraph::SceneNode const* viewport = findScrollViewport(entry->sceneGraph.root());
   REQUIRE(viewport != nullptr);
   REQUIRE(viewport->children().size() >= 1);
-  flux::scenegraph::SceneNode const* content = viewport->children()[0].get();
+  lambda::scenegraph::SceneNode const* content = viewport->children()[0].get();
   REQUIRE(content != nullptr);
   CHECK(content->position().y == doctest::Approx(0.f));
 
@@ -1018,21 +1018,21 @@ TEST_CASE("select popover scroll moves menu content") {
 
 TEST_CASE("select mouse hover drives stable active option highlight") {
   RuntimeHarness harness;
-  flux::Theme theme = flux::Theme::light();
+  lambda::Theme theme = lambda::Theme::light();
   theme.durationFast = 0.f;
   harness.window.setTheme(theme);
   harness.setRoot(LongSelectProbeRoot{});
 
   harness.pointerDown({20.f, 20.f});
   harness.pointerUp({20.f, 20.f});
-  flux::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
 
-  std::vector<flux::scenegraph::RectNode const*> rows;
+  std::vector<lambda::scenegraph::RectNode const*> rows;
   collectTapRects(entry->sceneGraph.root(), rows);
   REQUIRE(rows.size() >= 2);
-  flux::Color idleFill = solidFillColor(*rows[1]);
+  lambda::Color idleFill = solidFillColor(*rows[1]);
   CHECK(idleFill.r == doctest::Approx(theme.rowHoverBackgroundColor.r));
   CHECK(idleFill.g == doctest::Approx(theme.rowHoverBackgroundColor.g));
   CHECK(idleFill.b == doctest::Approx(theme.rowHoverBackgroundColor.b));
@@ -1065,11 +1065,11 @@ TEST_CASE("overlay rebuild relayouts mounted content without remounting state") 
   RuntimeHarness harness;
   int bodyCalls = 0;
   int cleanups = 0;
-  flux::Reactive::Signal<int> state;
+  lambda::Reactive::Signal<int> state;
 
-  flux::OverlayId const id = harness.window.overlayManager().push(
+  lambda::OverlayId const id = harness.window.overlayManager().push(
       StatefulOverlayProbe{.bodyCalls = &bodyCalls, .cleanups = &cleanups, .state = &state},
-      flux::OverlayConfig{}, &harness.runtime);
+      lambda::OverlayConfig{}, &harness.runtime);
 
   REQUIRE(id.isValid());
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
@@ -1086,13 +1086,13 @@ TEST_CASE("overlay rebuild relayouts mounted content without remounting state") 
 
 TEST_CASE("window background follows theme unless overridden") {
   RuntimeHarness harness;
-  checkSameColor(solidWindowBackground(harness.window), flux::Theme::light().windowBackgroundColor);
+  checkSameColor(solidWindowBackground(harness.window), lambda::Theme::light().windowBackgroundColor);
 
-  harness.window.setTheme(flux::Theme::dark());
-  checkSameColor(solidWindowBackground(harness.window), flux::Theme::dark().windowBackgroundColor);
+  harness.window.setTheme(lambda::Theme::dark());
+  checkSameColor(solidWindowBackground(harness.window), lambda::Theme::dark().windowBackgroundColor);
 
-  flux::Color const custom = flux::Color::hex(0x123456);
-  harness.window.setBackground(flux::WindowBackground::solid(custom));
-  harness.window.setTheme(flux::Theme::light());
+  lambda::Color const custom = lambda::Color::hex(0x123456);
+  harness.window.setBackground(lambda::WindowBackground::solid(custom));
+  harness.window.setTheme(lambda::Theme::light());
   checkSameColor(solidWindowBackground(harness.window), custom);
 }

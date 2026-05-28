@@ -1,11 +1,11 @@
-#include <Flux/UI/Views/Svg.hpp>
+#include <Lambda/UI/Views/Svg.hpp>
 
-#include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/SvgPath.hpp>
-#include <Flux/SceneGraph/RasterCacheNode.hpp>
-#include <Flux/SceneGraph/RenderNode.hpp>
-#include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/MountContext.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
+#include <Lambda/Graphics/SvgPath.hpp>
+#include <Lambda/SceneGraph/RasterCacheNode.hpp>
+#include <Lambda/SceneGraph/RenderNode.hpp>
+#include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +16,7 @@
 #include <utility>
 #include <variant>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -424,4 +424,4 @@ std::unique_ptr<scenegraph::SceneNode> Svg::mount(MountContext& ctx) const {
   return rasterNode;
 }
 
-} // namespace flux
+} // namespace lambda

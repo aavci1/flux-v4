@@ -1,18 +1,18 @@
-#include <Flux/UI/Views/Slider.hpp>
+#include <Lambda/UI/Views/Slider.hpp>
 
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/Reactive/Interpolatable.hpp>
-#include <Flux/Reactive/Transition.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/Reactive/Interpolatable.hpp>
+#include <Lambda/Reactive/Transition.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-namespace flux {
+namespace lambda {
 
 namespace {
 
@@ -154,7 +154,7 @@ Element Slider::body() const {
     return ZStack {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
-        .children = flux::children(
+        .children = lambda::children(
             Rectangle {}
                 .size(componentWidth, componentHeight),
             Rectangle {}
@@ -191,4 +191,4 @@ Element Slider::body() const {
         .onPointerMove(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleMove});
 }
 
-} // namespace flux
+} // namespace lambda

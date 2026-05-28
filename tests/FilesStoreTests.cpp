@@ -80,7 +80,7 @@ TEST_CASE("FilesStore breadcrumbs handle home root and outside home") {
   ScopedEnv homeEnv("HOME");
   auto root = tempRoot("lambda-files-breadcrumb-test");
   auto home = root / "home";
-  auto nested = home / "Projects" / "Flux";
+  auto nested = home / "Projects" / "Lambda";
   auto outside = root / "outside" / "Folder";
   std::filesystem::create_directories(nested);
   std::filesystem::create_directories(outside);
@@ -461,22 +461,22 @@ TEST_CASE("FilesStore pointer selection supports activate toggle and range") {
       {.name = "d", .path = "/tmp/d"},
   };
 
-  auto result = lambda_files::selectionForPointerTap({}, entries, 1, flux::Modifiers::None);
+  auto result = lambda_files::selectionForPointerTap({}, entries, 1, lambda::Modifiers::None);
   CHECK(result.activate);
   CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/b"});
   CHECK(result.selection.anchorIndex == 1);
 
-  result = lambda_files::selectionForPointerTap(result.selection, entries, 3, flux::Modifiers::Ctrl);
+  result = lambda_files::selectionForPointerTap(result.selection, entries, 3, lambda::Modifiers::Ctrl);
   CHECK_FALSE(result.activate);
   CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/b", "/tmp/d"});
   CHECK(result.selection.anchorIndex == 3);
 
-  result = lambda_files::selectionForPointerTap(result.selection, entries, 0, flux::Modifiers::Shift);
+  result = lambda_files::selectionForPointerTap(result.selection, entries, 0, lambda::Modifiers::Shift);
   CHECK_FALSE(result.activate);
   CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/a", "/tmp/b", "/tmp/c", "/tmp/d"});
   CHECK(result.selection.anchorIndex == 3);
 
-  auto invalid = lambda_files::selectionForPointerTap(result.selection, entries, 42, flux::Modifiers::None);
+  auto invalid = lambda_files::selectionForPointerTap(result.selection, entries, 42, lambda::Modifiers::None);
   CHECK_FALSE(invalid.activate);
   CHECK(invalid.selection == result.selection);
 }

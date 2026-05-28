@@ -1,18 +1,18 @@
-#include <Flux/UI/Views/Toggle.hpp>
+#include <Lambda/UI/Views/Toggle.hpp>
 
-#include <Flux/UI/KeyCodes.hpp>
-#include <Flux/Reactive/Interpolatable.hpp>
-#include <Flux/Reactive/Transition.hpp>
-#include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/Reactive/Interpolatable.hpp>
+#include <Lambda/Reactive/Transition.hpp>
+#include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/Rectangle.hpp>
+#include <Lambda/UI/Views/ScaleAroundCenter.hpp>
+#include <Lambda/UI/Views/ZStack.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace flux {
+namespace lambda {
 
 Toggle::Style resolveStyle(Toggle::Style const &style, Theme const &theme) {
     return Toggle::Style {
@@ -104,7 +104,7 @@ Element Toggle::body() const {
         .child = ZStack {
             .horizontalAlignment = Alignment::Start,
             .verticalAlignment = Alignment::Start,
-            .children = flux::children(
+            .children = lambda::children(
                 Rectangle {}
                     .fill([trackFillAnim] {
                         return trackFillAnim();
@@ -133,4 +133,4 @@ Element Toggle::body() const {
     };
 }
 
-} // namespace flux
+} // namespace lambda
