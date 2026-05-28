@@ -7,12 +7,17 @@
 #include <csignal>
 #include <cstring>
 #include <fcntl.h>
-#include <pty.h>
 #include <string>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+
+#if defined(__APPLE__)
+#include <util.h>
+#else
+#include <pty.h>
+#endif
 
 namespace {
 

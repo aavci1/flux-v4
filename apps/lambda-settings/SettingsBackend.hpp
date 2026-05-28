@@ -42,6 +42,8 @@ struct SettingSchema {
 struct SettingsDocument {
   std::string originalToml;
   std::map<std::string, std::string> values;
+
+  bool operator==(SettingsDocument const&) const = default;
 };
 
 struct SettingsFileLoadResult {

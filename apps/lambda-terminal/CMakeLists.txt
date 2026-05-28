@@ -43,6 +43,9 @@ add_dependencies(libvterm_static libvterm_generated_headers)
 target_include_directories(libvterm_static PUBLIC "${libvterm_SOURCE_DIR}/include")
 target_compile_features(libvterm_static PRIVATE c_std_99)
 target_compile_options(libvterm_static PRIVATE -Wall -Wpedantic)
+if(APPLE)
+  set_target_properties(libvterm_static PROPERTIES OSX_ARCHITECTURES "arm64;x86_64")
+endif()
 
 lambda_add_app(lambda-terminal
   APP_NAME "Lambda Terminal"

@@ -41,6 +41,15 @@ std::filesystem::path tempRoot(char const* name) {
   return path;
 }
 
+std::filesystem::path canonicalPath(std::filesystem::path const& path) {
+  std::error_code ec;
+  std::filesystem::path canonical = std::filesystem::weakly_canonical(path, ec);
+  if (!ec && !canonical.empty()) {
+    return canonical;
+  }
+  return path;
+}
+
 bool hasStagingCopyPath(std::filesystem::path const& root) {
   std::error_code ec;
   for (auto const& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
@@ -79,12 +88,15 @@ TEST_CASE("FilesStore home directory falls back when HOME is unusable") {
 TEST_CASE("FilesStore breadcrumbs handle home root and outside home") {
   ScopedEnv homeEnv("HOME");
   auto root = tempRoot("lambda-files-breadcrumb-test");
-  auto home = root / "home";
-  auto nested = home / "Projects" / "Lambda";
-  auto outside = root / "outside" / "Folder";
-  std::filesystem::create_directories(nested);
-  std::filesystem::create_directories(outside);
-  setenv("HOME", home.c_str(), 1);
+  auto homeForEnv = root / "home";
+  auto nestedForCreate = homeForEnv / "Projects" / "Lambda";
+  auto outsideForCreate = root / "outside" / "Folder";
+  std::filesystem::create_directories(nestedForCreate);
+  std::filesystem::create_directories(outsideForCreate);
+  setenv("HOME", homeForEnv.c_str(), 1);
+  auto home = canonicalPath(homeForEnv);
+  auto nested = canonicalPath(nestedForCreate);
+  auto outside = canonicalPath(outsideForCreate);
 
   auto homeCrumbs = lambda_files::breadcrumbCrumbs(home);
   REQUIRE(homeCrumbs.size() == 1);
@@ -148,11 +160,12 @@ TEST_CASE("FilesStore normalizes paths and keeps deterministic navigation histor
   std::filesystem::create_directories(beta);
   std::filesystem::create_directories(gamma);
 
-  CHECK(lambda_files::normalizeDirectoryPath(beta / "..") == alpha.string());
+  CHECK(lambda_files::normalizeDirectoryPath(beta / "..") == lambda_files::normalizeDirectoryPath(alpha));
   std::error_code ec;
   std::filesystem::create_directory_symlink(alpha, root / "alpha-link", ec);
   if (!ec) {
-    CHECK(lambda_files::normalizeDirectoryPath(root / "alpha-link" / "beta" / "..") == alpha.string());
+    CHECK(lambda_files::normalizeDirectoryPath(root / "alpha-link" / "beta" / "..") ==
+          lambda_files::normalizeDirectoryPath(alpha));
   }
 
   lambda_files::NavigationHistory history{.current = lambda_files::normalizeDirectoryPath(alpha)};
@@ -234,7 +247,9 @@ TEST_CASE("FilesStore directory listing records modified time and keeps folder-f
   CHECK(visible.entries[0].name == "alpha");
   CHECK(visible.entries[1].name == "Beta");
   CHECK(visible.entries[2].name == "zeta.txt");
-  CHECK(visible.entries[2].modifiedAt != std::filesystem::file_time_type{});
+  bool const hasModifiedTime =
+      visible.entries[2].modifiedAt != std::filesystem::file_time_type{};
+  CHECK(hasModifiedTime);
 
   auto hidden = lambda_files::listDirectory(root, true);
   CHECK(hidden.entries.size() == 4);

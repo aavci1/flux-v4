@@ -1,6 +1,6 @@
 target_compile_definitions(lambda PRIVATE LAMBDA_TESTING=1)
 
-set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.10 CACHE STRING "" FORCE)
 if(POLICY CMP0127)
   cmake_policy(SET CMP0127 NEW)
 endif()
@@ -115,6 +115,12 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
   if(DEFINED LAMBDA_WAYLAND_PROTOCOL_DIR)
     target_include_directories(lambda_tests PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   endif()
+endif()
+
+if(LAMBDA_PLATFORM_MACOS)
+  target_link_libraries(lambda_tests PRIVATE
+    "-framework Foundation"
+    "-framework Metal")
 endif()
 
 target_compile_definitions(lambda_tests PRIVATE LAMBDA_TESTING=1)

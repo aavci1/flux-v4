@@ -36,6 +36,8 @@ struct AppRegistryEntry {
   std::vector<std::string> keywords;
   std::vector<std::string> mimeTypes;
   std::string startupWmClass;
+
+  bool operator==(AppRegistryEntry const&) const = default;
 };
 
 using TryExecResolver = std::function<bool(std::string const& executable)>;
