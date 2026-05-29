@@ -12,6 +12,8 @@
 #include <Lambda/UI/Views/Icon.hpp>
 #include <Lambda/UI/Views/Rectangle.hpp>
 #include <Lambda/UI/Views/ScrollView.hpp>
+#include <Lambda/UI/Views/SegmentedControl.hpp>
+#include <Lambda/UI/Views/Select.hpp>
 #include <Lambda/UI/Views/Show.hpp>
 #include <Lambda/UI/Views/Slider.hpp>
 #include <Lambda/UI/Views/Spacer.hpp>
@@ -24,8 +26,10 @@
 
 #include <array>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <optional>
@@ -64,6 +68,13 @@ struct SidebarItem {
 struct SettingsRowValue {
   std::string label;
   std::string value;
+};
+
+struct NumericControlSpec {
+  float min = 0.f;
+  float max = 1.f;
+  float step = 1.f;
+  bool slider = false;
 };
 
 ChromeInsets chromeInsets(WindowChromeMetrics const& chrome) {
@@ -129,6 +140,93 @@ std::string radiusLabel(float value) {
     return "Medium";
   }
   return "Large";
+}
+
+bool settingBoolValue(std::string const& value) {
+  std::string normalized;
+  normalized.reserve(value.size());
+  for (unsigned char ch : value) {
+    normalized.push_back(static_cast<char>(std::tolower(ch)));
+  }
+  return normalized == "true" || normalized == "1" || normalized == "yes" || normalized == "on";
+}
+
+std::optional<float> parseSettingFloat(std::string const& value) {
+  char* end = nullptr;
+  float const parsed = std::strtof(value.c_str(), &end);
+  if (end == value.c_str() || *end != '\0' || !std::isfinite(parsed)) return std::nullopt;
+  return parsed;
+}
+
+std::string formatSettingNumber(float value, bool integer) {
+  char buffer[48];
+  if (integer) {
+    std::snprintf(buffer, sizeof(buffer), "%ld", static_cast<long>(std::lround(value)));
+    return buffer;
+  }
+  std::snprintf(buffer, sizeof(buffer), "%.2f", value);
+  std::string out = buffer;
+  while (out.size() > 1 && out.back() == '0') out.pop_back();
+  if (!out.empty() && out.back() == '.') out.pop_back();
+  return out;
+}
+
+std::string enumLabel(std::string const& value) {
+  std::string out;
+  bool capitalizeNext = true;
+  out.reserve(value.size());
+  for (unsigned char ch : value) {
+    if (ch == '_' || ch == '-') {
+      out.push_back(' ');
+      capitalizeNext = true;
+      continue;
+    }
+    out.push_back(capitalizeNext ? static_cast<char>(std::toupper(ch)) : static_cast<char>(ch));
+    capitalizeNext = false;
+  }
+  return out;
+}
+
+int enumIndexForValue(std::vector<std::string> const& values, std::string const& value) {
+  auto found = std::find(values.begin(), values.end(), value);
+  return found == values.end() ? -1 : static_cast<int>(std::distance(values.begin(), found));
+}
+
+std::optional<NumericControlSpec> numericSpecForSetting(SettingSchema const& schema) {
+  if (schema.id == "scale") return NumericControlSpec{.min = 1.f, .max = 3.f, .step = 0.25f, .slider = true};
+  if (schema.id == "cursor_size") return NumericControlSpec{.min = 16.f, .max = 64.f, .step = 1.f, .slider = true};
+  if (schema.id == "appearance.icon_size") return NumericControlSpec{.min = 16.f, .max = 96.f, .step = 1.f, .slider = true};
+  if (schema.id == "input.keyboard.repeat_rate") return NumericControlSpec{.min = 10.f, .max = 80.f, .step = 1.f, .slider = true};
+  if (schema.id == "input.keyboard.repeat_delay_ms") {
+    return NumericControlSpec{.min = 150.f, .max = 1000.f, .step = 50.f, .slider = true};
+  }
+  if (schema.id == "idle_blank_timeout_seconds") {
+    return NumericControlSpec{.min = 0.f, .max = 3600.f, .step = 60.f, .slider = true};
+  }
+  if (schema.id == "notifications.banner_timeout_seconds") {
+    return NumericControlSpec{.min = 1.f, .max = 30.f, .step = 1.f, .slider = true};
+  }
+  if (schema.id == "notifications.history_limit" || schema.id == "clipboard_history.max_entries") {
+    return NumericControlSpec{.min = 10.f, .max = 1000.f, .step = 10.f, .slider = true};
+  }
+  if (schema.id == "clipboard_history.max_text_bytes") {
+    return NumericControlSpec{.min = 1024.f, .max = 4.f * 1024.f * 1024.f, .step = 1024.f, .slider = true};
+  }
+  if (schema.id == "launcher.max_results") return NumericControlSpec{.min = 4.f, .max = 32.f, .step = 1.f, .slider = true};
+  return std::nullopt;
+}
+
+std::optional<Color> parseHexColor(std::string const& value) {
+  if (!validateSettingValue(SettingSchema{.type = SettingType::Color}, value)) return std::nullopt;
+  unsigned int rgb = 0;
+  for (std::size_t i = 1; i < 7; ++i) {
+    unsigned char const ch = static_cast<unsigned char>(value[i]);
+    rgb <<= 4u;
+    if (ch >= '0' && ch <= '9') rgb += ch - '0';
+    else if (ch >= 'a' && ch <= 'f') rgb += ch - 'a' + 10u;
+    else if (ch >= 'A' && ch <= 'F') rgb += ch - 'A' + 10u;
+  }
+  return Color::hex(rgb);
 }
 
 ShadowStyle subtleShadow() {
@@ -271,6 +369,7 @@ Element valueText(std::string value) {
 
 Element settingsRow(std::string label, std::string sublabel, Element control);
 Element rowsList(std::vector<Element> rows);
+Element sectionBlock(std::string heading, Element content);
 
 enum class SettingsSource {
   WindowManager,
@@ -280,6 +379,11 @@ enum class SettingsSource {
 struct BoundSetting {
   SettingsSource source = SettingsSource::WindowManager;
   SettingSchema schema;
+};
+
+struct SettingsGroup {
+  std::string heading;
+  std::vector<BoundSetting> settings;
 };
 
 std::string applyModeText(ApplyMode mode) {
@@ -344,6 +448,226 @@ void setSettingValue(Reactive::Signal<std::map<std::string, std::string>> values
   values.set(std::move(next));
 }
 
+TextInput::Style settingsTextInputStyle() {
+  TextInput::Style inputStyle;
+  inputStyle.font = Font{.size = 12.f, .weight = 450.f};
+  inputStyle.textColor = SettingsTheme::text;
+  inputStyle.placeholderColor = SettingsTheme::text3;
+  inputStyle.backgroundColor = SettingsTheme::glassSoft;
+  inputStyle.borderColor = SettingsTheme::line;
+  inputStyle.borderFocusColor = SettingsTheme::accent;
+  inputStyle.caretColor = SettingsTheme::accent;
+  inputStyle.selectionColor = SettingsTheme::selectFill;
+  inputStyle.cornerRadius = 7.f;
+  inputStyle.paddingH = 10.f;
+  inputStyle.paddingV = 5.f;
+  inputStyle.height = 32.f;
+  return inputStyle;
+}
+
+Toggle::Style settingsToggleStyle() {
+  return Toggle::Style{
+      .trackWidth = 42.f,
+      .trackHeight = 24.f,
+      .thumbInset = 3.f,
+      .borderWidth = 1.f,
+      .thumbBorderWidth = 1.f,
+      .onColor = SettingsTheme::accent,
+      .offColor = SettingsTheme::line,
+      .thumbColor = Colors::white,
+      .thumbBorderColor = Color{0.f, 0.f, 0.f, 0.08f},
+      .borderColor = SettingsTheme::line,
+  };
+}
+
+Slider::Style settingsSliderStyle() {
+  return Slider::Style{
+      .activeColor = SettingsTheme::accent,
+      .inactiveColor = SettingsTheme::line,
+      .thumbColor = Colors::white,
+      .thumbBorderColor = Color{0.f, 0.f, 0.f, 0.08f},
+      .trackHeight = 3.f,
+      .thumbSize = 16.f,
+  };
+}
+
+SegmentedControl::Style settingsSegmentStyle() {
+  return SegmentedControl::Style{
+      .font = Font{.size = 12.f, .weight = 600.f},
+      .paddingH = 10.f,
+      .paddingV = 5.f,
+      .cornerRadius = 7.f,
+      .accentColor = SettingsTheme::accent,
+      .trackColor = SettingsTheme::glassSoft,
+      .borderColor = SettingsTheme::line,
+  };
+}
+
+Select::Style settingsSelectStyle() {
+  Select::Style style;
+  style.labelFont = Font{.size = 12.f, .weight = 500.f};
+  style.detailFont = Font{.size = 11.f, .weight = 400.f};
+  style.cornerRadius = 7.f;
+  style.menuCornerRadius = 8.f;
+  style.menuMaxHeight = 260.f;
+  style.minMenuWidth = 180.f;
+  style.accentColor = SettingsTheme::accent;
+  style.fieldColor = SettingsTheme::glassSoft;
+  style.fieldHoverColor = SettingsTheme::hoverFill;
+  style.borderColor = SettingsTheme::line;
+  style.rowHoverColor = SettingsTheme::hoverFill;
+  return style;
+}
+
+Element settingTextField(SettingSchema schema,
+                         Reactive::Signal<std::string> localValue,
+                         SettingsSource source,
+                         std::function<void(SettingsSource, std::string, std::string)> setValue,
+                         float width = 240.f) {
+  return TextInput{
+      .value = localValue,
+      .placeholder = schema.defaultValue,
+      .validationColor = [schema](std::string_view text) {
+        return validateSettingValue(schema, std::string{text}) ? SettingsTheme::accent : Color::warning();
+      },
+      .style = settingsTextInputStyle(),
+      .onChange = [localValue, schema = std::move(schema), source, set = std::move(setValue)](
+                      std::string const& next) {
+        localValue.set(next);
+        if (set) {
+          set(source, schema.id, next);
+        }
+      },
+  }.width(width);
+}
+
+Element settingColorControl(SettingSchema schema,
+                            Reactive::Signal<std::string> localValue,
+                            SettingsSource source,
+                            std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  Reactive::Bindable<Color> const swatchFill{[localValue] {
+    return parseHexColor(localValue()).value_or(SettingsTheme::glassSoft);
+  }};
+  return HStack{
+             .spacing = 8.f,
+             .alignment = Alignment::Center,
+             .children = children(Rectangle{}
+                                      .size(30.f, 30.f)
+                                      .fill(swatchFill)
+                                      .stroke(StrokeStyle::solid(SettingsTheme::line, 1.f))
+                                      .cornerRadius(7.f),
+                                  settingTextField(std::move(schema), localValue, source, std::move(setValue), 144.f))}
+      .width(184.f);
+}
+
+Element settingBooleanControl(SettingSchema schema,
+                              Reactive::Signal<std::string> localValue,
+                              Reactive::Signal<bool> localBool,
+                              SettingsSource source,
+                              std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  Reactive::Bindable<std::string> const label{[localBool] {
+    return localBool() ? std::string{"On"} : std::string{"Off"};
+  }};
+  return HStack{
+             .spacing = 8.f,
+             .alignment = Alignment::Center,
+             .children = children(Text{
+                                      .text = label,
+                                      .font = Font{.size = 12.f, .weight = 500.f},
+                                      .color = SettingsTheme::text2,
+                                      .horizontalAlignment = HorizontalAlignment::Trailing,
+                                  }.width(28.f),
+                                  Toggle{
+                                      .value = localBool,
+                                      .style = settingsToggleStyle(),
+                                      .onChange = [localValue, localBool, schema = std::move(schema), source,
+                                                   set = std::move(setValue)](bool next) {
+                                        localBool.set(next);
+                                        std::string const stored = next ? "true" : "false";
+                                        localValue.set(stored);
+                                        if (set) set(source, schema.id, stored);
+                                      },
+                                  })}
+      .width(82.f);
+}
+
+Element settingEnumControl(SettingSchema schema,
+                           Reactive::Signal<std::string> localValue,
+                           Reactive::Signal<int> localIndex,
+                           SettingsSource source,
+                           std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  std::vector<SegmentedControlOption> segments;
+  std::vector<SelectOption> options;
+  segments.reserve(schema.enumValues.size());
+  options.reserve(schema.enumValues.size());
+  for (std::string const& value : schema.enumValues) {
+    std::string label = enumLabel(value);
+    segments.push_back(SegmentedControlOption{.label = label});
+    options.push_back(SelectOption{.label = std::move(label), .detail = value});
+  }
+  auto commitIndex = [localValue, localIndex, schema, source, set = std::move(setValue)](int index) {
+    if (index < 0 || index >= static_cast<int>(schema.enumValues.size())) return;
+    std::string const stored = schema.enumValues[static_cast<std::size_t>(index)];
+    localIndex.set(index);
+    localValue.set(stored);
+    if (set) set(source, schema.id, stored);
+  };
+  if (schema.enumValues.size() <= 3u) {
+    return SegmentedControl{
+        .selectedIndex = localIndex,
+        .options = std::move(segments),
+        .style = settingsSegmentStyle(),
+        .onChange = commitIndex,
+    }.width(220.f);
+  }
+  return Select{
+      .selectedIndex = localIndex,
+      .options = std::move(options),
+      .placeholder = "Select",
+      .style = settingsSelectStyle(),
+      .onChange = commitIndex,
+  }.width(220.f);
+}
+
+Element settingNumericControl(SettingSchema schema,
+                              Reactive::Signal<std::string> localValue,
+                              Reactive::Signal<float> localNumber,
+                              SettingsSource source,
+                              std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  bool const integer = schema.type == SettingType::Integer;
+  std::optional<NumericControlSpec> spec = numericSpecForSetting(schema);
+  if (!spec || !spec->slider) {
+    return settingTextField(std::move(schema), localValue, source, std::move(setValue), 144.f);
+  }
+  Reactive::Bindable<std::string> const valueLabel{[localNumber, integer] {
+    return formatSettingNumber(localNumber(), integer);
+  }};
+  return HStack{
+             .spacing = 10.f,
+             .alignment = Alignment::Center,
+             .children = children(Slider{
+                                      .value = localNumber,
+                                      .min = spec->min,
+                                      .max = spec->max,
+                                      .step = spec->step,
+                                      .style = settingsSliderStyle(),
+                                      .onChange = [localValue, localNumber, schema, source, set = std::move(setValue),
+                                                   integer](float next) {
+                                        std::string const stored = formatSettingNumber(next, integer);
+                                        localNumber.set(next);
+                                        localValue.set(stored);
+                                        if (set) set(source, schema.id, stored);
+                                      },
+                                  }.width(180.f),
+                                  Text{
+                                      .text = valueLabel,
+                                      .font = Font{.size = 12.f, .weight = 500.f},
+                                      .color = SettingsTheme::text2,
+                                      .horizontalAlignment = HorizontalAlignment::Trailing,
+                                  }.width(58.f))}
+      .width(248.f);
+}
+
 struct SettingEditorRow {
   BoundSetting setting;
   Reactive::Signal<std::map<std::string, std::string>> wmValues;
@@ -354,55 +678,71 @@ struct SettingEditorRow {
     Reactive::Signal<std::map<std::string, std::string>> const valuesSignal =
         setting.source == SettingsSource::WindowManager ? wmValues : shellValues;
     SettingSchema const schema = setting.schema;
-    auto localValue = useState(settingValue(valuesSignal.peek(), schema));
+    std::string const initialValue = settingValue(valuesSignal.peek(), schema);
+    auto localValue = useState(initialValue);
+    auto localBool = useState(settingBoolValue(initialValue));
+    auto localNumber = useState(parseSettingFloat(initialValue).value_or(0.f));
+    auto localIndex = useState(enumIndexForValue(schema.enumValues, initialValue));
     Reactive::Effect([valuesSignal, localValue, schema] {
       std::string const next = settingValue(valuesSignal(), schema);
       if (localValue.peek() != next) {
         localValue.set(next);
       }
     });
+    Reactive::Effect([localValue, localBool, localNumber, localIndex, schema] {
+      std::string const current = localValue();
+      bool const nextBool = settingBoolValue(current);
+      if (localBool.peek() != nextBool) localBool.set(nextBool);
+      if (auto parsed = parseSettingFloat(current); parsed && localNumber.peek() != *parsed) {
+        localNumber.set(*parsed);
+      }
+      int const nextIndex = enumIndexForValue(schema.enumValues, current);
+      if (localIndex.peek() != nextIndex) localIndex.set(nextIndex);
+    });
 
-    TextInput::Style inputStyle;
-    inputStyle.font = Font{.size = 12.f, .weight = 450.f};
-    inputStyle.textColor = SettingsTheme::text;
-    inputStyle.placeholderColor = SettingsTheme::text3;
-    inputStyle.backgroundColor = SettingsTheme::glassSoft;
-    inputStyle.borderColor = SettingsTheme::line;
-    inputStyle.borderFocusColor = SettingsTheme::accent;
-    inputStyle.caretColor = SettingsTheme::accent;
-    inputStyle.selectionColor = SettingsTheme::selectFill;
-    inputStyle.cornerRadius = 7.f;
-    inputStyle.paddingH = 10.f;
-    inputStyle.paddingV = 5.f;
-    inputStyle.height = 32.f;
+    Element control = [&]() -> Element {
+      switch (schema.type) {
+      case SettingType::Boolean:
+        return settingBooleanControl(schema, localValue, localBool, setting.source, setValue);
+      case SettingType::Enum:
+        return settingEnumControl(schema, localValue, localIndex, setting.source, setValue);
+      case SettingType::Integer:
+      case SettingType::Float:
+        return settingNumericControl(schema, localValue, localNumber, setting.source, setValue);
+      case SettingType::Color:
+        return settingColorControl(schema, localValue, setting.source, setValue);
+      case SettingType::Path:
+        return HStack{
+                   .spacing = 8.f,
+                   .alignment = Alignment::Center,
+                   .children = children(Icon{.name = IconName::FolderOpen,
+                                             .size = 17.f,
+                                             .color = SettingsTheme::text3},
+                                        settingTextField(schema, localValue, setting.source, setValue, 260.f))}
+            .width(288.f);
+      case SettingType::Shortcut:
+        return HStack{
+                   .spacing = 8.f,
+                   .alignment = Alignment::Center,
+                   .children = children(Icon{.name = IconName::Keyboard,
+                                             .size = 17.f,
+                                             .color = SettingsTheme::text3},
+                                        settingTextField(schema, localValue, setting.source, setValue, 190.f))}
+            .width(218.f);
+      case SettingType::String:
+      default:
+        return settingTextField(schema, localValue, setting.source, setValue, 260.f);
+      }
+    }();
 
-    return settingsRow(
-        schema.label,
-        applyModeText(schema.applyMode),
-        TextInput{
-            .value = localValue,
-            .placeholder = schema.defaultValue,
-            .validationColor = [schema](std::string_view text) {
-              return validateSettingValue(schema, std::string{text}) ? SettingsTheme::accent
-                                                                     : Color::warning();
-            },
-            .style = inputStyle,
-            .onChange = [localValue, schema, source = setting.source, set = setValue](
-                            std::string const& next) {
-              localValue.set(next);
-              if (set) {
-                set(source, schema.id, next);
-              }
-            },
-        }.width(240.f));
+    return settingsRow(schema.label, applyModeText(schema.applyMode), std::move(control));
   }
 };
 
-Element settingsPage(std::string title,
-                     std::vector<BoundSetting> settings,
-                     Reactive::Signal<std::map<std::string, std::string>> wmValues,
-                     Reactive::Signal<std::map<std::string, std::string>> shellValues,
-                     std::function<void(SettingsSource, std::string, std::string)> setValue) {
+std::vector<Element> buildSettingRows(std::vector<BoundSetting> settings,
+                                      Reactive::Signal<std::map<std::string, std::string>> wmValues,
+                                      Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                                      std::function<void(SettingsSource, std::string, std::string)> setValue) {
   std::vector<Element> rows;
   rows.reserve(settings.size());
   for (BoundSetting setting : settings) {
@@ -413,10 +753,26 @@ Element settingsPage(std::string title,
         .setValue = setValue,
     }});
   }
+  return rows;
+}
+
+Element settingsPage(std::string title,
+                     std::vector<SettingsGroup> groups,
+                     Reactive::Signal<std::map<std::string, std::string>> wmValues,
+                     Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                     std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  std::vector<Element> blocks;
+  blocks.reserve(groups.size() + 1u);
+  blocks.push_back(sectionTitle(std::move(title)));
+  for (SettingsGroup group : groups) {
+    blocks.push_back(sectionBlock(
+        std::move(group.heading),
+        rowsList(buildSettingRows(std::move(group.settings), wmValues, shellValues, setValue))));
+  }
   return VStack{
-      .spacing = 16.f,
+      .spacing = 18.f,
       .alignment = Alignment::Stretch,
-      .children = children(sectionTitle(std::move(title)), rowsList(std::move(rows))),
+      .children = std::move(blocks),
   };
 }
 
@@ -435,6 +791,9 @@ Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> w
     if (!statusText().empty()) return statusText();
     return dirty.evaluate() ? std::string{"Unsaved changes"} : std::string{"Saved"};
   }};
+  Reactive::Bindable<Color> const barFill{[dirty] {
+    return dirty.evaluate() ? Color{1.f, 1.f, 1.f, 0.20f} : Color{1.f, 1.f, 1.f, 0.08f};
+  }};
 
   Button::Style buttonStyle;
   buttonStyle.font = Font{.size = 12.f, .weight = 650.f};
@@ -447,60 +806,84 @@ Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> w
              .spacing = 8.f,
              .alignment = Alignment::Center,
              .children = children(
-                 Text{
-                     .text = status,
-                     .font = Font{.size = 12.f, .weight = 500.f},
-                     .color = SettingsTheme::text2,
-                     .verticalAlignment = VerticalAlignment::Center,
-                 }.flex(1.f, 1.f, 0.f),
-                 Button{.label = std::string{"Reset"},
-                        .variant = ButtonVariant::Secondary,
+                 Button{.label = std::string{"Reset Defaults"},
+                        .variant = ButtonVariant::Ghost,
                         .style = buttonStyle,
                         .onTap = std::move(reset)},
+                 Text{
+                     .text = status,
+	                     .font = Font{.size = 12.f, .weight = 500.f},
+	                     .color = SettingsTheme::text2,
+	                     .horizontalAlignment = HorizontalAlignment::Trailing,
+	                     .verticalAlignment = VerticalAlignment::Center,
+	                 }.flex(1.f, 1.f, 0.f),
                  Button{.label = std::string{"Revert"},
                         .variant = ButtonVariant::Secondary,
                         .disabled = [dirty] { return !dirty.evaluate(); },
                         .style = buttonStyle,
                         .onTap = std::move(revert)},
-                 Button{.label = std::string{"Save"},
+                 Button{.label = std::string{"Save Changes"},
                         .variant = ButtonVariant::Primary,
                         .disabled = [dirty] { return !dirty.evaluate(); },
                         .style = buttonStyle,
                         .onTap = std::move(save)})}
       .padding(8.f, SettingsTheme::kMainPadH, 8.f, SettingsTheme::kMainPadH)
-      .fill(Color{1.f, 1.f, 1.f, 0.18f})
+      .fill(barFill)
       .stroke(StrokeStyle::solid(SettingsTheme::line, 1.f));
 }
 
-Element settingsRow(std::string label, std::string sublabel, Element control) {
-  std::vector<Element> labelChildren;
-  labelChildren.push_back(Text{
-      .text = std::move(label),
-      .font = Font{.size = 13.f, .weight = 500.f},
-      .color = SettingsTheme::text,
-      .horizontalAlignment = HorizontalAlignment::Leading,
-  });
-  if (!sublabel.empty()) {
+struct SettingsRowView {
+  std::string label;
+  std::string sublabel;
+  Element control;
+
+  Element labelBlock() const {
+    std::vector<Element> labelChildren;
     labelChildren.push_back(Text{
-        .text = std::move(sublabel),
-        .font = Font{.size = 11.5f, .weight = 400.f},
-        .color = SettingsTheme::text3,
+        .text = label,
+        .font = Font{.size = 13.f, .weight = 500.f},
+        .color = SettingsTheme::text,
         .horizontalAlignment = HorizontalAlignment::Leading,
-        .wrapping = TextWrapping::Wrap,
     });
+    if (!sublabel.empty()) {
+      labelChildren.push_back(Text{
+          .text = sublabel,
+          .font = Font{.size = 11.5f, .weight = 400.f},
+          .color = SettingsTheme::text3,
+          .horizontalAlignment = HorizontalAlignment::Leading,
+          .wrapping = TextWrapping::Wrap,
+      });
+    }
+    return VStack{
+        .spacing = 2.f,
+        .alignment = Alignment::Stretch,
+        .children = std::move(labelChildren)};
   }
 
-  return HStack{
-             .spacing = 18.f,
-             .alignment = Alignment::Center,
-             .children = children(
-                 VStack{
-                     .spacing = 2.f,
-                     .alignment = Alignment::Stretch,
-                     .children = std::move(labelChildren)}
-                     .flex(1.f, 1.f, 0.f),
-                 std::move(control))}
-      .padding(8.f, 0.f, 8.f, 0.f);
+  Element body() const {
+    Rect const bounds = useBounds();
+    bool const compact = bounds.width > 0.f && bounds.width < 560.f;
+    if (compact) {
+      return VStack{
+                 .spacing = 8.f,
+                 .alignment = Alignment::Stretch,
+                 .children = children(labelBlock(), control)}
+          .padding(9.f, 0.f, 9.f, 0.f);
+    }
+    return HStack{
+               .spacing = 18.f,
+               .alignment = Alignment::Center,
+               .children = children(labelBlock().flex(1.f, 1.f, 0.f), control)}
+        .padding(8.f, 0.f, 8.f, 0.f);
+  }
+};
+
+Element settingsRow(std::string label, std::string sublabel, Element control) {
+  return Element{SettingsRowView{
+      .label = std::move(label),
+      .sublabel = std::move(sublabel),
+      .control = std::move(control),
+  }};
 }
 
 Element rowDivider() {
@@ -950,71 +1333,85 @@ Element contentForSection(SettingsSection section,
                                    {"Unknown keys", "Preserved where practical"}});
   case SettingsSection::Appearance:
     return settingsPage("Appearance",
-                        {wm("background"),
-                         wm("wallpaper"),
-                         wm("wallpaper_mode"),
-                         shell("appearance.icon_theme"),
-                         shell("appearance.symbolic_icon_theme"),
-                         shell("appearance.icon_size"),
-                         shell("appearance.reduced_motion")},
+                        {SettingsGroup{.heading = "Desktop",
+                                       .settings = {wm("background"),
+                                                    wm("wallpaper"),
+                                                    wm("wallpaper_mode")}},
+                         SettingsGroup{.heading = "Icons",
+                                       .settings = {shell("appearance.icon_theme"),
+                                                    shell("appearance.symbolic_icon_theme"),
+                                                    shell("appearance.icon_size")}},
+                         SettingsGroup{.heading = "Motion",
+                                       .settings = {shell("appearance.reduced_motion")}}},
                         wmValues,
                         shellValues,
                         setValue);
   case SettingsSection::Display:
     return settingsPage("Display",
-                        {wm("output"),
-                         wm("scale")},
+                        {SettingsGroup{.heading = "Output",
+                                       .settings = {wm("output"),
+                                                    wm("scale")}}},
                         wmValues,
                         shellValues,
                         setValue);
   case SettingsSection::Keyboard:
     return settingsPage("Keyboard",
-                        {wm("input.keyboard.layout"),
-                         wm("input.keyboard.repeat_rate"),
-                         wm("input.keyboard.repeat_delay_ms"),
-                         wm("keybindings.close")},
+                        {SettingsGroup{.heading = "Input",
+                                       .settings = {wm("input.keyboard.layout"),
+                                                    wm("input.keyboard.repeat_rate"),
+                                                    wm("input.keyboard.repeat_delay_ms")}},
+                         SettingsGroup{.heading = "Shortcuts",
+                                       .settings = {wm("keybindings.close")}}},
                         wmValues,
                         shellValues,
                         setValue);
   case SettingsSection::Desktop:
     return settingsPage("Desktop",
-                        {wm("animations"),
-                         wm("hardware_cursor"),
-                         wm("cursor_theme"),
-                         wm("cursor_size"),
-                         wm("idle_blank_timeout_seconds"),
-                         wm("keybindings.screenshot"),
-                         wm("keybindings.screenshot_region"),
-                         wm("keybindings.screenshot_active_window")},
+                        {SettingsGroup{.heading = "Windows",
+                                       .settings = {wm("animations"),
+                                                    wm("idle_blank_timeout_seconds")}},
+                         SettingsGroup{.heading = "Cursor",
+                                       .settings = {wm("hardware_cursor"),
+                                                    wm("cursor_theme"),
+                                                    wm("cursor_size")}},
+                         SettingsGroup{.heading = "Screenshots",
+                                       .settings = {wm("keybindings.screenshot"),
+                                                    wm("keybindings.screenshot_region"),
+                                                    wm("keybindings.screenshot_active_window")}}},
                         wmValues,
                         shellValues,
                         setValue);
   case SettingsSection::DockPanel:
     return settingsPage("Dock & Panel",
-                        {shell("dock.position"),
-                         shell("dock.auto_hide"),
-                         shell("dock.show_running_unpinned"),
-                         shell("dock.show_tooltips"),
-                         shell("dock.pinned"),
-                         shell("top_bar.clock_format"),
-                         shell("top_bar.show_active_title"),
-                         shell("top_bar.modules"),
-                         shell("quick_settings.modules")},
+                        {SettingsGroup{.heading = "Dock",
+                                       .settings = {shell("dock.position"),
+                                                    shell("dock.auto_hide"),
+                                                    shell("dock.show_running_unpinned"),
+                                                    shell("dock.show_tooltips"),
+                                                    shell("dock.pinned")}},
+                         SettingsGroup{.heading = "Top Bar",
+                                       .settings = {shell("top_bar.clock_format"),
+                                                    shell("top_bar.show_active_title"),
+                                                    shell("top_bar.modules")}},
+                         SettingsGroup{.heading = "Quick Settings",
+                                       .settings = {shell("quick_settings.modules")}}},
                         wmValues,
                         shellValues,
                         setValue);
   case SettingsSection::Notifications:
     return settingsPage("Notifications",
-                        {shell("notifications.enabled"),
-                         shell("notifications.do_not_disturb"),
-                         shell("notifications.banner_timeout_seconds"),
-                         shell("notifications.history_limit"),
-                         shell("notifications.show_previews"),
-                         shell("clipboard_history.enabled"),
-                         shell("clipboard_history.persist"),
-                         shell("clipboard_history.max_entries"),
-                         shell("clipboard_history.max_text_bytes"),
-                         shell("clipboard_history.record_primary_selection")},
+                        {SettingsGroup{.heading = "Notifications",
+                                       .settings = {shell("notifications.enabled"),
+                                                    shell("notifications.do_not_disturb"),
+                                                    shell("notifications.banner_timeout_seconds"),
+                                                    shell("notifications.history_limit"),
+                                                    shell("notifications.show_previews")}},
+                         SettingsGroup{.heading = "Clipboard",
+                                       .settings = {shell("clipboard_history.enabled"),
+                                                    shell("clipboard_history.persist"),
+                                                    shell("clipboard_history.max_entries"),
+                                                    shell("clipboard_history.max_text_bytes"),
+                                                    shell("clipboard_history.record_primary_selection")}}},
                         wmValues,
                         shellValues,
                         setValue);
@@ -1094,15 +1491,13 @@ struct SettingsAppRoot {
                        .children = children(
                            sidebar(activeSection, metrics),
                            Rectangle{}.width(1.f).fill(SettingsTheme::line),
-                           VStack{
-                               .spacing = 0.f,
-                               .alignment = Alignment::Stretch,
-                               .children = children(
-                                   settingsActionBar(wmValues, shellValues, savedWmValues, savedShellValues,
-                                                     statusText, save, revert, reset),
-                                   ScrollView{
-                                       .axis = ScrollAxis::Vertical,
-                                       .dragScrollEnabled = true,
+	                           VStack{
+	                               .spacing = 0.f,
+	                               .alignment = Alignment::Stretch,
+	                               .children = children(
+	                                   ScrollView{
+	                                       .axis = ScrollAxis::Vertical,
+	                                       .dragScrollEnabled = true,
                                        .children = children(Element{Switch(
                                            [activeSection] { return activeSection(); },
                                            {
@@ -1135,11 +1530,13 @@ struct SettingsAppRoot {
                                                                           wmValues, shellValues, setValue);
                                                }),
                                                Case(SettingsSection::About, [] { return aboutPage(); }),
-                                           })}.padding(SettingsTheme::kMainPadV, SettingsTheme::kMainPadH,
-                                                       SettingsTheme::kMainPadV, SettingsTheme::kMainPadH))}
-                                       .flex(1.f, 1.f, 0.f))}
-                               .flex(1.f, 1.f, 0.f))}
-                       .flex(1.f, 1.f, 0.f))};
+	                                           })}.padding(SettingsTheme::kMainPadV, SettingsTheme::kMainPadH,
+	                                                       SettingsTheme::kMainPadV, SettingsTheme::kMainPadH))}
+	                                       .flex(1.f, 1.f, 0.f),
+	                                   settingsActionBar(wmValues, shellValues, savedWmValues, savedShellValues,
+	                                                     statusText, save, revert, reset))}
+	                               .flex(1.f, 1.f, 0.f))}
+	                       .flex(1.f, 1.f, 0.f))};
   }
 };
 
