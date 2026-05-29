@@ -71,6 +71,7 @@ public:
   void setRetainedDmabufBufferIds(std::vector<std::uint64_t> bufferIds);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
+  [[nodiscard]] bool hasActiveResizePacing() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void sendFrameCallbacksOnly(std::uint32_t timeMs);
   void sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing);

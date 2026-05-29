@@ -435,6 +435,19 @@ bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
       surface->server->flushClients();
     }
   }
+  lambda::detail::resizeTrace("compositor",
+                              "resize-configure-commit surface=%llu committed=%d,%d %dx%d "
+                              "pending=%d %d,%d %dx%d\n",
+                              static_cast<unsigned long long>(surface->id),
+                              committedX,
+                              committedY,
+                              committedWidth,
+                              committedHeight,
+                              hasPending ? 1 : 0,
+                              pendingX,
+                              pendingY,
+                              pendingWidth,
+                              pendingHeight);
   return true;
 }
 
@@ -1134,7 +1147,7 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
       "compositor",
       "%s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d awaiting=%d %dx%d buffer=%dx%d scale=%d "
       "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu configureSerial=%u configure=%dx%d "
-      "snapped=%d maximized=%d anim=%d\n",
+      "inFlight=%d acked=%d pending=%d %d,%d %dx%d target=%d,%d %dx%d snapped=%d maximized=%d anim=%d\n",
       event,
       static_cast<unsigned long long>(surface->id),
       surface->windowX,
@@ -1162,6 +1175,17 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
       surface->lastConfigureSerial,
       surface->lastConfigureWidth,
       surface->lastConfigureHeight,
+      surface->resizeConfigureInFlight ? 1 : 0,
+      surface->resizeConfigureAcked ? 1 : 0,
+      surface->pendingResizeConfigure ? 1 : 0,
+      surface->pendingResizeConfigureX,
+      surface->pendingResizeConfigureY,
+      surface->pendingResizeConfigureWidth,
+      surface->pendingResizeConfigureHeight,
+      surface->geometryAnimationTargetX,
+      surface->geometryAnimationTargetY,
+      surface->geometryAnimationTargetWidth,
+      surface->geometryAnimationTargetHeight,
       surface->snapped ? 1 : 0,
       surface->maximized ? 1 : 0,
       surface->geometryAnimationActive ? 1 : 0);

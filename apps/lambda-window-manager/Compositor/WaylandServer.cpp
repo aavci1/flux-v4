@@ -134,6 +134,10 @@ bool WaylandServer::hasActiveAnimations() const noexcept {
   return impl_->hasActiveAnimations();
 }
 
+bool WaylandServer::hasActiveResizePacing() const noexcept {
+  return impl_->hasActiveResizePacing();
+}
+
 bool WaylandServer::hasIdleInhibitors() const noexcept {
   return impl_->hasIdleInhibitors();
 }

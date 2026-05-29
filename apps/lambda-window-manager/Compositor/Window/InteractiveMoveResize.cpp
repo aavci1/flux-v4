@@ -240,6 +240,17 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
   surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
   surface->geometryAnimationActive = true;
+  lambda::detail::resizeTrace("compositor",
+                              "animation-start surface=%llu start=%d,%d %dx%d target=%d,%d %dx%d\n",
+                              static_cast<unsigned long long>(surface->id),
+                              surface->geometryAnimationStartX,
+                              surface->geometryAnimationStartY,
+                              surface->geometryAnimationStartWidth,
+                              surface->geometryAnimationStartHeight,
+                              targetX,
+                              targetY,
+                              targetWidth,
+                              targetHeight);
   if (surface->geometryAnimationStartX == targetX && surface->geometryAnimationStartY == targetY &&
       surface->geometryAnimationStartWidth == targetWidth &&
       surface->geometryAnimationStartHeight == targetHeight) {

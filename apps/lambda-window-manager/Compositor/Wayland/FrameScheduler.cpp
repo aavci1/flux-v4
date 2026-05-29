@@ -158,9 +158,30 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
             ? surface->geometryAnimationTargetHeight
             : std::max(kMinWindowHeight,
                        lerpInt(surface->geometryAnimationStartHeight, surface->geometryAnimationTargetHeight, progress));
-    traceResizeSurface("animation-frame", surface.get());
 
-    if (requestToplevelResizeConfigure(this, surface.get(), nextX, nextY, nextWidth, nextHeight)) {
+    bool const configureSent =
+        requestToplevelResizeConfigure(this, surface.get(), nextX, nextY, nextWidth, nextHeight);
+    lambda::detail::resizeTrace("compositor",
+                                "animation-frame surface=%llu linear=%.3f eased=%.3f desired=%d,%d %dx%d "
+                                "sent=%d inFlight=%d acked=%d pending=%d %d,%d %dx%d\n",
+                                static_cast<unsigned long long>(surface->id),
+                                linearProgress,
+                                progress,
+                                nextX,
+                                nextY,
+                                nextWidth,
+                                nextHeight,
+                                configureSent ? 1 : 0,
+                                surface->resizeConfigureInFlight ? 1 : 0,
+                                surface->resizeConfigureAcked ? 1 : 0,
+                                surface->pendingResizeConfigure ? 1 : 0,
+                                surface->pendingResizeConfigureX,
+                                surface->pendingResizeConfigureY,
+                                surface->pendingResizeConfigureWidth,
+                                surface->pendingResizeConfigureHeight);
+    traceResizeSurface("animation-surface", surface.get());
+
+    if (configureSent) {
       sentConfigure = true;
     }
 
@@ -174,6 +195,13 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
 bool WaylandServer::Impl::hasActiveAnimations() const noexcept {
   return shellPanelHideAnimationActive_ || std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
     return surface && surface->geometryAnimationActive;
+  });
+}
+
+bool WaylandServer::Impl::hasActiveResizePacing() const noexcept {
+  return resizeSurface_ != nullptr || std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
+    return surface && (surface->geometryAnimationActive || surface->resizeConfigureInFlight ||
+                       surface->pendingResizeConfigure);
   });
 }
 
