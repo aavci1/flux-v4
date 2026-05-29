@@ -396,34 +396,46 @@ std::int32_t committedWindowDisplayHeight(WaylandServer::Impl::Surface const* su
 }
 
 bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
-  if (!surface || !surface->awaitingConfigureCommit) return false;
-  if (committedWindowDisplayWidth(surface) != surface->awaitingConfigureWidth ||
-      committedWindowDisplayHeight(surface) != surface->awaitingConfigureHeight) {
+  if (!surface || !surface->resizeConfigureInFlight || !surface->resizeConfigureAcked) return false;
+  if (committedWindowDisplayWidth(surface) != surface->resizeConfigureWidth ||
+      committedWindowDisplayHeight(surface) != surface->resizeConfigureHeight) {
     return false;
   }
+  bool const hasPending = surface->pendingResizeConfigure;
+  std::int32_t const pendingX = surface->pendingResizeConfigureX;
+  std::int32_t const pendingY = surface->pendingResizeConfigureY;
+  std::int32_t const pendingWidth = surface->pendingResizeConfigureWidth;
+  std::int32_t const pendingHeight = surface->pendingResizeConfigureHeight;
+  std::int32_t const committedX = surface->resizeConfigureX;
+  std::int32_t const committedY = surface->resizeConfigureY;
+  std::int32_t const committedWidth = surface->resizeConfigureWidth;
+  std::int32_t const committedHeight = surface->resizeConfigureHeight;
+  surface->windowX = committedX;
+  surface->windowY = committedY;
+  setConfiguredFrameSize(surface, committedWidth, committedHeight);
+  surface->resizeConfigureInFlight = false;
+  surface->resizeConfigureAcked = false;
+  surface->resizeConfigureSerial = 0;
+  surface->resizeConfigureX = 0;
+  surface->resizeConfigureY = 0;
+  surface->resizeConfigureWidth = 0;
+  surface->resizeConfigureHeight = 0;
   surface->awaitingConfigureCommit = false;
   surface->awaitingConfigureWidth = 0;
   surface->awaitingConfigureHeight = 0;
+  surface->pendingResizeConfigure = false;
+  surface->pendingResizeConfigureX = 0;
+  surface->pendingResizeConfigureY = 0;
+  surface->pendingResizeConfigureWidth = 0;
+  surface->pendingResizeConfigureHeight = 0;
+  if (hasPending && pendingWidth > 0 && pendingHeight > 0 &&
+      (pendingX != committedX || pendingY != committedY ||
+       pendingWidth != committedWidth || pendingHeight != committedHeight)) {
+    if (requestToplevelResizeConfigure(surface->server, surface, pendingX, pendingY, pendingWidth, pendingHeight)) {
+      surface->server->flushClients();
+    }
+  }
   return true;
-}
-
-void sendPendingResizeConfigureIfNeeded(WaylandServer::Impl::Surface* surface) {
-  if (!surface || !surface->server || surface->server->resizeSurface_ != surface) {
-    return;
-  }
-  if (surface->awaitingConfigureCommit) {
-    return;
-  }
-  std::int32_t const width = surface->server->resizeLastWidth_;
-  std::int32_t const height = surface->server->resizeLastHeight_;
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-  if (width == surface->lastConfigureWidth && height == surface->lastConfigureHeight) {
-    return;
-  }
-  sendToplevelConfigure(surface->server, toplevelForSurface(surface->server, surface), width, height);
-  surface->server->flushClients();
 }
 
 void traceConfigureCommitLag(char const* event, WaylandServer::Impl::Surface const* surface) {
@@ -494,12 +506,14 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     }
   }
 
-  bool const interactiveSizing = surface->server->resizeSurface_ == surface;
-  bool const animationSizing = surface->geometryAnimationActive;
+  bool const activeResizeSizing = surface->server->resizeSurface_ == surface ||
+                                  surface->geometryAnimationActive ||
+                                  surface->resizeConfigureInFlight ||
+                                  surface->pendingResizeConfigure;
   bool const matchedConfigure = surface->awaitingConfigureCommit &&
                                 committedWindowDisplayWidth(surface) == surface->awaitingConfigureWidth &&
                                 committedWindowDisplayHeight(surface) == surface->awaitingConfigureHeight;
-  if (interactiveSizing || (matchedConfigure && !animationSizing)) {
+  if (!activeResizeSizing && matchedConfigure) {
     std::int32_t const committedWidth = committedWindowDisplayWidth(surface);
     std::int32_t const committedHeight = committedWindowDisplayHeight(surface);
     if (committedWidth > 0 && committedHeight > 0) {
@@ -507,7 +521,7 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     }
     return true;
   }
-  if (animationSizing) {
+  if (activeResizeSizing) {
     if (surface->frameWidth <= 0 || surface->frameHeight <= 0) {
       if (surface->geometryAnimationTargetWidth > 0 &&
           surface->geometryAnimationTargetHeight > 0) {
@@ -522,6 +536,18 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     surface->awaitingConfigureCommit = false;
     surface->awaitingConfigureWidth = 0;
     surface->awaitingConfigureHeight = 0;
+    surface->resizeConfigureInFlight = false;
+    surface->resizeConfigureAcked = false;
+    surface->resizeConfigureSerial = 0;
+    surface->resizeConfigureX = 0;
+    surface->resizeConfigureY = 0;
+    surface->resizeConfigureWidth = 0;
+    surface->resizeConfigureHeight = 0;
+    surface->pendingResizeConfigure = false;
+    surface->pendingResizeConfigureX = 0;
+    surface->pendingResizeConfigureY = 0;
+    surface->pendingResizeConfigureWidth = 0;
+    surface->pendingResizeConfigureHeight = 0;
   }
   if ((surface->snapped || surface->maximized) &&
       surface->frameWidth > 0 &&
@@ -958,7 +984,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         }
         if (!applyViewportState(surface)) return;
         traceConfigureCommitLag("commit-match-shm", surface);
-        bool const matchedConfigureCommit = clearMatchedConfigureCommit(surface);
+        clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = nullptr;
@@ -966,9 +992,6 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = lambda::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-shm", surface);
-        if (matchedConfigureCommit) {
-          sendPendingResizeConfigureIfNeeded(surface);
-        }
         traceCrashSurfaceCommit(surface, "shm", 1u, static_cast<std::uint32_t>(shmBuffer->format));
         releaseCurrentBufferImmediately = surface->shmPixels == nullptr;
       }
@@ -989,7 +1012,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         }
         if (!applyViewportState(surface)) return;
         traceConfigureCommitLag("commit-match-dmabuf", surface);
-        bool const matchedConfigureCommit = clearMatchedConfigureCommit(surface);
+        clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = dmabufBuffer;
@@ -997,9 +1020,6 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = lambda::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-dmabuf", surface);
-        if (matchedConfigureCommit) {
-          sendPendingResizeConfigureIfNeeded(surface);
-        }
         traceCrashSurfaceCommit(surface, "dmabuf", 2u, dmabufBuffer->format);
       }
     } else {
@@ -1018,6 +1038,18 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->awaitingConfigureCommit = false;
     surface->awaitingConfigureWidth = 0;
     surface->awaitingConfigureHeight = 0;
+    surface->resizeConfigureInFlight = false;
+    surface->resizeConfigureAcked = false;
+    surface->resizeConfigureSerial = 0;
+    surface->resizeConfigureX = 0;
+    surface->resizeConfigureY = 0;
+    surface->resizeConfigureWidth = 0;
+    surface->resizeConfigureHeight = 0;
+    surface->pendingResizeConfigure = false;
+    surface->pendingResizeConfigureX = 0;
+    surface->pendingResizeConfigureY = 0;
+    surface->pendingResizeConfigureWidth = 0;
+    surface->pendingResizeConfigureHeight = 0;
     surface->dmabufBuffer = nullptr;
     surface->committedBufferDamageRects.clear();
     bumpSurfaceSerial(surface);

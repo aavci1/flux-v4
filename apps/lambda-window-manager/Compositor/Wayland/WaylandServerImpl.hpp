@@ -278,6 +278,8 @@ struct WaylandServer::Impl {
   std::int32_t resizeStartWindowY_ = 0;
   std::int32_t resizeStartWidth_ = 0;
   std::int32_t resizeStartHeight_ = 0;
+  std::int32_t resizeLastX_ = 0;
+  std::int32_t resizeLastY_ = 0;
   std::int32_t resizeLastWidth_ = 0;
   std::int32_t resizeLastHeight_ = 0;
   std::uint32_t resizeEdges_ = 0;
@@ -398,10 +400,21 @@ struct WaylandServer::Impl::Surface {
   std::int32_t geometryAnimationTargetY = 0;
   std::int32_t geometryAnimationTargetWidth = 0;
   std::int32_t geometryAnimationTargetHeight = 0;
-  bool geometryAnimationConfigureSent = false;
   bool awaitingConfigureCommit = false;
   std::int32_t awaitingConfigureWidth = 0;
   std::int32_t awaitingConfigureHeight = 0;
+  bool resizeConfigureInFlight = false;
+  bool resizeConfigureAcked = false;
+  std::uint32_t resizeConfigureSerial = 0;
+  std::int32_t resizeConfigureX = 0;
+  std::int32_t resizeConfigureY = 0;
+  std::int32_t resizeConfigureWidth = 0;
+  std::int32_t resizeConfigureHeight = 0;
+  bool pendingResizeConfigure = false;
+  std::int32_t pendingResizeConfigureX = 0;
+  std::int32_t pendingResizeConfigureY = 0;
+  std::int32_t pendingResizeConfigureWidth = 0;
+  std::int32_t pendingResizeConfigureHeight = 0;
   std::uint32_t lastConfigureSerial = 0;
   std::uint64_t lastConfigureSentNsec = 0;
   std::uint64_t lastConfigureAckNsec = 0;
@@ -660,6 +673,12 @@ void sendToplevelConfigure(WaylandServer::Impl* server,
                            WaylandServer::Impl::XdgToplevel* toplevel,
                            std::int32_t width,
                            std::int32_t height);
+bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
+                                     WaylandServer::Impl::Surface* surface,
+                                     std::int32_t x,
+                                     std::int32_t y,
+                                     std::int32_t width,
+                                     std::int32_t height);
 void sendToplevelStateConfigure(WaylandServer::Impl* server,
                                 WaylandServer::Impl::XdgToplevel* toplevel);
 bool toplevelServerSideDecorated(WaylandServer::Impl* server,

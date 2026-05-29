@@ -523,6 +523,9 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
       surface.windowClipTop <= 0 &&
       surface.windowClipBottom <= 0 &&
       surface.backgroundEffect.shape != BackgroundEffectShape::Callout &&
+      !surface.activeSizing &&
+      !surface.pacingSizing &&
+      !surface.geometryAnimationGrowing &&
       !hasTransientChromeState(surface) &&
       surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
   std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(surface, cached, *cached.image, chrome) : 0;

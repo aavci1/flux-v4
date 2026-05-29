@@ -237,12 +237,8 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationTargetY = targetY;
   surface->geometryAnimationTargetWidth = targetWidth;
   surface->geometryAnimationTargetHeight = targetHeight;
-  surface->geometryAnimationConfigureSent = false;
   surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
   surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
-  surface->awaitingConfigureCommit = false;
-  surface->awaitingConfigureWidth = 0;
-  surface->awaitingConfigureHeight = 0;
   surface->geometryAnimationActive = true;
   if (surface->geometryAnimationStartX == targetX && surface->geometryAnimationStartY == targetY &&
       surface->geometryAnimationStartWidth == targetWidth &&
@@ -250,23 +246,6 @@ void startGeometryAnimation(WaylandServer::Impl* server,
     surface->geometryAnimationActive = false;
     return;
   }
-  bool const grows = targetWidth > surface->geometryAnimationStartWidth ||
-                     targetHeight > surface->geometryAnimationStartHeight;
-  if (grows) {
-    sendToplevelConfigure(server, toplevelForSurface(server, surface), targetWidth, targetHeight);
-    surface->geometryAnimationConfigureSent = true;
-  }
-  ++server->contentSerial_;
-  server->flushClients();
-}
-
-void ensureAnimationConfigureSent(WaylandServer::Impl* server,
-                                  WaylandServer::Impl::Surface* surface,
-                                  std::int32_t width,
-                                  std::int32_t height) {
-  if (!server || !surface || surface->geometryAnimationConfigureSent) return;
-  sendToplevelConfigure(server, toplevelForSurface(server, surface), width, height);
-  surface->geometryAnimationConfigureSent = true;
   ++server->contentSerial_;
   server->flushClients();
 }
@@ -323,7 +302,6 @@ using wm::isManagedToplevel;
 using wm::kMinWindowHeight;
 using wm::kMinWindowWidth;
 using wm::clearPreFullscreenState;
-using wm::ensureAnimationConfigureSent;
 using wm::snapOutputGeometryFor;
 using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
@@ -341,7 +319,6 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
     surface->snapped = false;
     clearPreFullscreenState(surface);
     startGeometryAnimation(server, surface, target.x, target.y, target.width, target.height);
-    ensureAnimationConfigureSent(server, surface, target.width, target.height);
     return true;
   }
   if (restoreSnapped) {
@@ -363,7 +340,6 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
     surface->snapped = true;
     clearPreFullscreenState(surface);
     startGeometryAnimation(server, surface, targetX, targetY, targetWidth, targetHeight);
-    ensureAnimationConfigureSent(server, surface, targetWidth, targetHeight);
     return true;
   }
   std::int32_t const restoreWidth =
@@ -382,7 +358,6 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
   surface->fullscreen = false;
   if (wasFullscreen) clearPreFullscreenState(surface);
   startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
-  if (wasFullscreen) ensureAnimationConfigureSent(server, surface, restoreWidth, restoreHeight);
   return true;
 }
 
@@ -392,7 +367,6 @@ namespace lambda::compositor {
 
 using wm::isManagedToplevel;
 using wm::clearPreFullscreenState;
-using wm::ensureAnimationConfigureSent;
 using wm::snapOutputGeometryFor;
 using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
@@ -465,7 +439,6 @@ void fullscreenToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surfac
   surface->minimized = false;
   raiseSurface(server, surface);
   startGeometryAnimation(server, surface, 0, 0, targetWidth, targetHeight);
-  ensureAnimationConfigureSent(server, surface, targetWidth, targetHeight);
 }
 
 } // namespace lambda::compositor::wm
@@ -499,7 +472,9 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
   clearSnapPreview(server);
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
   server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
-  sendToplevelConfigure(server, toplevelForSurface(server, surface), restored.width, restored.height);
+  if (requestToplevelResizeConfigure(server, surface, restored.x, restored.y, restored.width, restored.height)) {
+    server->flushClients();
+  }
 }
 
 } // namespace lambda::compositor::wm
@@ -549,11 +524,6 @@ void updateResize(WaylandServer::Impl* server) {
   WaylandServer::Impl::Surface* surface = server->resizeSurface_;
   if (!surface) return;
   surface->geometryAnimationActive = false;
-  std::int32_t const oldX = surface->windowX;
-  std::int32_t const oldY = surface->windowY;
-  std::int32_t const oldWidth = displayWidth(surface);
-  std::int32_t const oldHeight = displayHeight(surface);
-
   float const dx = server->pointerX_ - server->resizeStartX_;
   float const dy = server->pointerY_ - server->resizeStartY_;
   ResizeEdge const edges = resizeEdgesFromXdg(server->resizeEdges_);
@@ -576,44 +546,34 @@ void updateResize(WaylandServer::Impl* server) {
   });
   next = clampToplevelGeometryToSizeHints(next, committedSizeHints(toplevelForSurface(server, surface)), edges);
 
-  if (left) surface->windowX = next.x;
-  if (top) surface->windowY = next.y;
-  if (next.width == server->resizeLastWidth_ && next.height == server->resizeLastHeight_) {
-    if (surface->windowX != oldX || surface->windowY != oldY) {
-      ++server->contentSerial_;
-    }
+  std::int32_t const nextX = left ? next.x : surface->windowX;
+  std::int32_t const nextY = top ? next.y : surface->windowY;
+  if (nextX == server->resizeLastX_ &&
+      nextY == server->resizeLastY_ &&
+      next.width == server->resizeLastWidth_ &&
+      next.height == server->resizeLastHeight_) {
     return;
   }
   surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  server->resizeLastX_ = nextX;
+  server->resizeLastY_ = nextY;
   server->resizeLastWidth_ = next.width;
   server->resizeLastHeight_ = next.height;
-  if (surface->windowX != oldX || surface->windowY != oldY ||
-      displayWidth(surface) != oldWidth || displayHeight(surface) != oldHeight) {
-    ++server->contentSerial_;
-  }
   lambda::detail::resizeTrace("compositor",
                             "update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
                             "delta=%.1f,%.1f edges=%u\n",
                             static_cast<unsigned long long>(surface->id),
                             server->pointerX_,
                             server->pointerY_,
-                            surface->windowX,
-                            surface->windowY,
+                            nextX,
+                            nextY,
                             next.width,
                             next.height,
                             dx,
                             dy,
                             server->resizeEdges_);
-  if (!surface->awaitingConfigureCommit) {
-    sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
-  } else {
-    lambda::detail::resizeTrace("compositor",
-                              "coalesce-resize-configure surface=%llu pending=%dx%d awaiting=%dx%d\n",
-                              static_cast<unsigned long long>(surface->id),
-                              next.width,
-                              next.height,
-                              surface->awaitingConfigureWidth,
-                              surface->awaitingConfigureHeight);
+  if (requestToplevelResizeConfigure(server, surface, nextX, nextY, next.width, next.height)) {
+    server->flushClients();
   }
 }
 

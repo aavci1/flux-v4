@@ -53,12 +53,12 @@ void sendToplevelWmCapabilities(WaylandServer::Impl::XdgToplevel* toplevel) {
   wl_array_release(&capabilities);
 }
 
-void sendToplevelConfigureInternal(WaylandServer::Impl* server,
-                                   WaylandServer::Impl::XdgToplevel* toplevel,
-                                   std::int32_t width,
-                                   std::int32_t height,
-                                   bool awaitSizedCommit) {
-  if (!toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return;
+std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
+                                            WaylandServer::Impl::XdgToplevel* toplevel,
+                                            std::int32_t width,
+                                            std::int32_t height,
+                                            bool awaitSizedCommit) {
+  if (!server || !toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return 0;
   if (awaitSizedCommit) {
     if (auto* surface = toplevel->xdgSurface->surface; surface && width > 0 && height > 0) {
       surface->awaitingConfigureCommit = true;
@@ -96,6 +96,7 @@ void sendToplevelConfigureInternal(WaylandServer::Impl* server,
                             serial,
                             awaitSizedCommit ? 1 : 0);
   xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
+  return serial;
 }
 
 } // namespace
@@ -139,6 +140,81 @@ void sendToplevelConfigure(WaylandServer::Impl* server,
                            std::int32_t width,
                            std::int32_t height) {
   sendToplevelConfigureInternal(server, toplevel, width, height, true);
+}
+
+bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
+                                     WaylandServer::Impl::Surface* surface,
+                                     std::int32_t x,
+                                     std::int32_t y,
+                                     std::int32_t width,
+                                     std::int32_t height) {
+  if (!server || !surface || width <= 0 || height <= 0) return false;
+  auto* toplevel = toplevelForSurface(server, surface);
+  if (!toplevel) return false;
+
+  if (surface->resizeConfigureInFlight) {
+    bool const sameAsInFlight =
+        x == surface->resizeConfigureX && y == surface->resizeConfigureY &&
+        width == surface->resizeConfigureWidth && height == surface->resizeConfigureHeight;
+    surface->pendingResizeConfigure = !sameAsInFlight;
+    surface->pendingResizeConfigureX = sameAsInFlight ? 0 : x;
+    surface->pendingResizeConfigureY = sameAsInFlight ? 0 : y;
+    surface->pendingResizeConfigureWidth = sameAsInFlight ? 0 : width;
+    surface->pendingResizeConfigureHeight = sameAsInFlight ? 0 : height;
+    if (!sameAsInFlight) {
+      lambda::detail::resizeTrace("compositor",
+                                  "resize-configure-defer surface=%llu desired=%d,%d %dx%d inFlight=%u %d,%d %dx%d "
+                                  "acked=%d\n",
+                                  static_cast<unsigned long long>(surface->id),
+                                  x,
+                                  y,
+                                  width,
+                                  height,
+                                  surface->resizeConfigureSerial,
+                                  surface->resizeConfigureX,
+                                  surface->resizeConfigureY,
+                                  surface->resizeConfigureWidth,
+                                  surface->resizeConfigureHeight,
+                                  surface->resizeConfigureAcked ? 1 : 0);
+    }
+    return false;
+  }
+
+  if (!surface->awaitingConfigureCommit &&
+      width == displayWidth(surface) &&
+      height == displayHeight(surface)) {
+    if (x != surface->windowX || y != surface->windowY) {
+      surface->windowX = x;
+      surface->windowY = y;
+      ++server->contentSerial_;
+    }
+    return false;
+  }
+
+  if (x == surface->windowX && y == surface->windowY &&
+      width == surface->lastConfigureWidth && height == surface->lastConfigureHeight &&
+      !surface->pendingResizeConfigure && !surface->awaitingConfigureCommit) {
+    return false;
+  }
+
+  std::uint32_t const serial = sendToplevelConfigureInternal(server, toplevel, width, height, false);
+  if (serial == 0) return false;
+  surface->resizeConfigureInFlight = true;
+  surface->resizeConfigureAcked = false;
+  surface->resizeConfigureSerial = serial;
+  surface->resizeConfigureX = x;
+  surface->resizeConfigureY = y;
+  surface->resizeConfigureWidth = width;
+  surface->resizeConfigureHeight = height;
+  surface->awaitingConfigureCommit = true;
+  surface->awaitingConfigureWidth = width;
+  surface->awaitingConfigureHeight = height;
+  surface->pendingResizeConfigure = false;
+  surface->pendingResizeConfigureX = 0;
+  surface->pendingResizeConfigureY = 0;
+  surface->pendingResizeConfigureWidth = 0;
+  surface->pendingResizeConfigureHeight = 0;
+  return true;
 }
 
 void sendToplevelStateConfigure(WaylandServer::Impl* server,
@@ -690,6 +766,9 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
   if (auto* surface = xdgSurface->surface) {
     std::uint64_t const now = lambda::detail::resizeTraceTimestampNanoseconds();
     if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
+    if (surface->resizeConfigureInFlight && serial == surface->resizeConfigureSerial) {
+      surface->resizeConfigureAcked = true;
+    }
     double const configureToAckMs =
         surface->lastConfigureSentNsec > 0 && now >= surface->lastConfigureSentNsec
             ? static_cast<double>(now - surface->lastConfigureSentNsec) / 1'000'000.0
@@ -717,7 +796,14 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
         std::max(kCompositorMinWindowHeight,
                  displayHeight(xdgSurface->surface) - xdgSurface->server->chromeConfig_.titleBarHeight);
     setConfiguredFrameSize(xdgSurface->surface, nextWidth, nextHeight);
-    sendToplevelConfigure(xdgSurface->server, toplevel, nextWidth, nextHeight);
+    if (requestToplevelResizeConfigure(xdgSurface->server,
+                                       xdgSurface->surface,
+                                       xdgSurface->surface->windowX,
+                                       xdgSurface->surface->windowY,
+                                       nextWidth,
+                                       nextHeight)) {
+      xdgSurface->server->flushClients();
+    }
   }
 }
 

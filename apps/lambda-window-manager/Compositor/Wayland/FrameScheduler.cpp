@@ -135,51 +135,37 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
   bool sentConfigure = false;
   for (auto const& surface : surfaces_) {
     if (!surface->geometryAnimationActive) continue;
-    std::int32_t const oldX = surface->windowX;
-    std::int32_t const oldY = surface->windowY;
-    std::int32_t const oldWidth = displayWidth(surface.get());
-    std::int32_t const oldHeight = displayHeight(surface.get());
-
     float const linearProgress =
         animationsEnabled
             ? static_cast<float>(timeMs - surface->geometryAnimationStartedAtMs) /
                   static_cast<float>(kGeometryAnimationMs)
             : 1.f;
     float const progress = easeInOutCubic(linearProgress);
-    std::int32_t const nextX = lerpInt(surface->geometryAnimationStartX, surface->geometryAnimationTargetX, progress);
-    std::int32_t const nextY = lerpInt(surface->geometryAnimationStartY, surface->geometryAnimationTargetY, progress);
+    bool const finished = linearProgress >= 1.f;
+    std::int32_t const nextX = finished
+                                   ? surface->geometryAnimationTargetX
+                                   : lerpInt(surface->geometryAnimationStartX, surface->geometryAnimationTargetX, progress);
+    std::int32_t const nextY = finished
+                                   ? surface->geometryAnimationTargetY
+                                   : lerpInt(surface->geometryAnimationStartY, surface->geometryAnimationTargetY, progress);
     std::int32_t const nextWidth =
-        std::max(kMinWindowWidth,
-                 lerpInt(surface->geometryAnimationStartWidth, surface->geometryAnimationTargetWidth, progress));
+        finished
+            ? surface->geometryAnimationTargetWidth
+            : std::max(kMinWindowWidth,
+                       lerpInt(surface->geometryAnimationStartWidth, surface->geometryAnimationTargetWidth, progress));
     std::int32_t const nextHeight =
-        std::max(kMinWindowHeight,
-                 lerpInt(surface->geometryAnimationStartHeight, surface->geometryAnimationTargetHeight, progress));
-    surface->windowX = nextX;
-    surface->windowY = nextY;
-    setConfiguredFrameSize(surface.get(), nextWidth, nextHeight);
+        finished
+            ? surface->geometryAnimationTargetHeight
+            : std::max(kMinWindowHeight,
+                       lerpInt(surface->geometryAnimationStartHeight, surface->geometryAnimationTargetHeight, progress));
     traceResizeSurface("animation-frame", surface.get());
 
-    if (linearProgress >= 1.f) {
-      surface->windowX = surface->geometryAnimationTargetX;
-      surface->windowY = surface->geometryAnimationTargetY;
-      setConfiguredFrameSize(surface.get(),
-                             surface->geometryAnimationTargetWidth,
-                             surface->geometryAnimationTargetHeight);
-      surface->geometryAnimationActive = false;
-      if (!surface->geometryAnimationConfigureSent) {
-        sendToplevelConfigure(this,
-                              toplevelForSurface(this, surface.get()),
-                              surface->geometryAnimationTargetWidth,
-                              surface->geometryAnimationTargetHeight);
-        surface->geometryAnimationConfigureSent = true;
-        sentConfigure = true;
-      }
+    if (requestToplevelResizeConfigure(this, surface.get(), nextX, nextY, nextWidth, nextHeight)) {
+      sentConfigure = true;
     }
-    if (surface->windowX != oldX ||
-        surface->windowY != oldY ||
-        displayWidth(surface.get()) != oldWidth ||
-        displayHeight(surface.get()) != oldHeight) {
-      ++contentSerial_;
+
+    if (finished) {
+      surface->geometryAnimationActive = false;
     }
   }
   if (sentConfigure) flushClients();

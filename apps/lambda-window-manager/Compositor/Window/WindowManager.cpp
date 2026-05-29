@@ -289,6 +289,8 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         resizeStartWindowY_ = chromeControlTarget->windowY;
         resizeStartWidth_ = displayWidth(chromeControlTarget);
         resizeStartHeight_ = displayHeight(chromeControlTarget);
+        resizeLastX_ = resizeStartWindowX_;
+        resizeLastY_ = resizeStartWindowY_;
         resizeLastWidth_ = resizeStartWidth_;
         resizeLastHeight_ = resizeStartHeight_;
         resizeEdges_ = resizeEdges;
@@ -365,12 +367,16 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       updateResize(this);
       traceResizeSurface("end-resize", resizeSurface_);
       Surface* resizedSurface = resizeSurface_;
+      std::int32_t const finalX = resizeLastX_;
+      std::int32_t const finalY = resizeLastY_;
       std::int32_t const finalWidth = resizeLastWidth_;
       std::int32_t const finalHeight = resizeLastHeight_;
       resizeSurface_ = nullptr;
       resizeEdges_ = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
       if (finalWidth > 0 && finalHeight > 0) {
-        sendToplevelConfigure(this, toplevelForSurface(this, resizedSurface), finalWidth, finalHeight);
+        if (requestToplevelResizeConfigure(this, resizedSurface, finalX, finalY, finalWidth, finalHeight)) {
+          flushClients();
+        }
       } else {
         sendToplevelStateConfigure(this, toplevelForSurface(this, resizedSurface));
       }
