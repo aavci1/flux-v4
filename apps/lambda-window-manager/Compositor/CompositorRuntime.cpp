@@ -1212,7 +1212,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         forceRender = false;
         return true;
       }
-      bool const allowRenderFence = frame.renderedAhead;
+      bool const allowRenderFence = frame.renderedAhead && frame.profile.activeSizingSurfaces == 0;
       if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0 &&
           !presenter->atomicPresenter()->updateRenderReady(frame.presentToken)) {
         tracePacing("schedule-wait-render-ready token=%u surfaces=%zu contentSerial=%llu\n",
@@ -1339,7 +1339,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         if (!fdReadableNow(presenter->atomicPresenter()->preparedOverlayAcquireFenceFd())) return false;
         return presenter->atomicPresenter()->canScheduleOverlayOnly();
       }
-      bool const allowRenderFence = frame.renderedAhead;
+      bool const allowRenderFence = frame.renderedAhead && frame.profile.activeSizingSurfaces == 0;
       if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0) {
         return false;
       }

@@ -1,4 +1,5 @@
 #include "FilesStore.hpp"
+#include "FilesTrace.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -10,6 +11,7 @@
 #include <set>
 #include <sstream>
 #include <system_error>
+#include <unordered_map>
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -1592,18 +1594,37 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
                               std::filesystem::path const& path,
                               bool isDirectory,
                               int preferredSize) {
+  double const startMs = trace::nowMs();
   std::string const mime = mimeTypeForPath(path, isDirectory);
   std::string iconName = iconNameForMime(mime);
   if (auto themePath = lambda_shell::lookupIconThemePath(themeRoot, iconName, preferredSize); !themePath.empty()) {
+    trace::event("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=0 hit=1 elapsed=%.3fms\n",
+                 path.string().c_str(),
+                 themeRoot.string().c_str(),
+                 mime.c_str(),
+                 iconName.c_str(),
+                 trace::nowMs() - startMs);
     return {.iconName = iconName, .themePath = themePath, .fallback = false};
   }
   std::string fallback = isDirectory ? "folder" : "text-x-generic";
   if (mime == "application/octet-stream") fallback = "application-octet-stream";
   if (fallback != iconName) {
     if (auto themePath = lambda_shell::lookupIconThemePath(themeRoot, fallback, preferredSize); !themePath.empty()) {
+      trace::event("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=1 hit=1 elapsed=%.3fms\n",
+                   path.string().c_str(),
+                   themeRoot.string().c_str(),
+                   mime.c_str(),
+                   fallback.c_str(),
+                   trace::nowMs() - startMs);
       return {.iconName = fallback, .themePath = themePath, .fallback = true};
     }
   }
+  trace::event("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=1 hit=0 elapsed=%.3fms\n",
+               path.string().c_str(),
+               themeRoot.string().c_str(),
+               mime.c_str(),
+               fallback.c_str(),
+               trace::nowMs() - startMs);
   return {.iconName = fallback, .fallback = true};
 }
 
@@ -1611,14 +1632,66 @@ FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRo
                                std::filesystem::path const& path,
                                bool isDirectory,
                                int preferredSize) {
+  double const startMs = trace::nowMs();
+  auto cacheKey = [&] {
+    std::string key = path.string();
+    key.push_back('\x1f');
+    key += isDirectory ? 'd' : 'f';
+    key.push_back('\x1f');
+    key += std::to_string(preferredSize);
+    for (auto const& root : themeRoots) {
+      key.push_back('\x1f');
+      key += root.string();
+    }
+    return key;
+  }();
+  static std::unordered_map<std::string, FileIconLookup> cache;
+  if (auto found = cache.find(cacheKey); found != cache.end()) {
+    trace::event("icon-resolve-cache path=\"%s\" dir=%d roots=%zu hit=%d fallback=%d elapsed=%.3fms\n",
+                 path.string().c_str(),
+                 isDirectory ? 1 : 0,
+                 themeRoots.size(),
+                 found->second.themePath.empty() ? 0 : 1,
+                 found->second.fallback ? 1 : 0,
+                 trace::nowMs() - startMs);
+    return found->second;
+  }
   FileIconLookup fallback;
+  int rootsChecked = 0;
   for (auto const& root : themeRoots) {
+    ++rootsChecked;
     FileIconLookup const lookup = lookupFileIcon(root, path, isDirectory, preferredSize);
-    if (!lookup.themePath.empty()) return lookup;
+    if (!lookup.themePath.empty()) {
+      trace::event("icon-resolve path=\"%s\" dir=%d roots=%d hit=1 fallback=%d elapsed=%.3fms\n",
+                   path.string().c_str(),
+                   isDirectory ? 1 : 0,
+                   rootsChecked,
+                   lookup.fallback ? 1 : 0,
+                   trace::nowMs() - startMs);
+      cache.emplace(std::move(cacheKey), lookup);
+      return lookup;
+    }
     if (fallback.iconName.empty() || !lookup.fallback) fallback = lookup;
   }
-  if (!fallback.iconName.empty()) return fallback;
-  return lookupFileIcon({}, path, isDirectory, preferredSize);
+  if (!fallback.iconName.empty()) {
+    trace::event("icon-resolve path=\"%s\" dir=%d roots=%d hit=0 fallback=1 elapsed=%.3fms\n",
+                 path.string().c_str(),
+                 isDirectory ? 1 : 0,
+                 rootsChecked,
+                 trace::nowMs() - startMs);
+    cache.emplace(std::move(cacheKey), fallback);
+    return fallback;
+  }
+  FileIconLookup lookup = lookupFileIcon({}, path, isDirectory, preferredSize);
+  trace::event("icon-resolve path=\"%s\" dir=%d roots=%d hit=%d fallback=%d elapsed=%.3fms\n",
+               path.string().c_str(),
+               isDirectory ? 1 : 0,
+               rootsChecked,
+               lookup.themePath.empty() ? 0 : 1,
+               lookup.fallback ? 1 : 0,
+               trace::nowMs() - startMs);
+  cache.emplace(std::move(cacheKey), lookup);
+  return lookup;
 }
 
 FilesPreferences defaultFilesPreferences() {

@@ -3,6 +3,7 @@
 #include "FilesGlyphs.hpp"
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
+#include "FilesTrace.hpp"
 
 #include <Lambda/Graphics/ImageFillMode.hpp>
 #include <Lambda/Reactive/Bindable.hpp>
@@ -21,6 +22,7 @@
 #include <Lambda/UI/Views/VStack.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
@@ -87,11 +89,18 @@ struct FilesListRelayoutBridge {
 
   lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const& constraints,
                      lambda::LayoutHints const& hints, lambda::TextSystem& textSystem) const {
+    double const startMs = trace::nowMs();
     float const width = resolvedFilesListWidth(constraints);
     if (width > 0.f) {
       state->layoutWidth.set(width);
     }
-    return content.measure(ctx, constraints, hints, textSystem);
+    lambda::Size const size = content.measure(ctx, constraints, hints, textSystem);
+    trace::event("list bridge-measure width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+                 width,
+                 size.width,
+                 size.height,
+                 trace::nowMs() - startMs);
+    return size;
   }
 
   std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
@@ -104,12 +113,19 @@ struct FilesListRelayoutBridge {
     lambda::scenegraph::SceneNode* rawWrapper = wrapper.get();
     wrapper->appendChild(std::move(child));
     wrapper->setRelayout([state = state, rawChild, rawWrapper](lambda::LayoutConstraints const& constraints) {
+      double const startMs = trace::nowMs();
       float const width = resolvedFilesListWidth(constraints);
       if (width > 0.f) {
         state->layoutWidth.set(width);
       }
       (void)rawChild->relayout(constraints);
       rawWrapper->setSize(rawChild->size());
+      lambda::Size const size = rawChild->size();
+      trace::event("list bridge-relayout width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+                   width,
+                   size.width,
+                   size.height,
+                   trace::nowMs() - startMs);
     });
     return wrapper;
   }
@@ -274,6 +290,7 @@ struct FilesListView {
 
   lambda::Size measure(lambda::MeasureContext&, lambda::LayoutConstraints const& constraints,
                      lambda::LayoutHints const&, lambda::TextSystem&) const {
+    double const startMs = trace::nowMs();
     float const width = detail::resolvedFilesListWidth(constraints);
     if (width > 0.f) {
       state->layoutWidth.set(width);
@@ -281,7 +298,14 @@ struct FilesListView {
     std::size_t const count = entries.peek().size();
     float const rowsHeight = static_cast<float>(count) * FilesTheme::kListRowHeight;
     float const gaps = count > 0 ? static_cast<float>(count) * FilesTheme::kListRowGap : 0.f;
-    return lambda::Size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
+    lambda::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
+    trace::event("list measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+                 count,
+                 width,
+                 size.width,
+                 size.height,
+                 trace::nowMs() - startMs);
+    return size;
   }
 
   lambda::Element body() const {
@@ -323,17 +347,24 @@ struct FilesListView {
                     },
                     [selectedPathSignal, selectionSignal, roots, preferredIconSize, activate, tap, contextMenu,
                      listWidth](FileEntry const& entry, Signal<std::size_t> const&) {
+                      double const startMs = trace::nowMs();
                       Reactive::Bindable<bool> selected{
                           [selectedPathSignal, selectionSignal, entry] {
                             FileSelectionState const current = selectionSignal();
                             if (!current.selected.empty()) return current.contains(entry.path);
                             return selectedPathSignal() == entry.path.string();
                           }};
+                      double const iconStartMs = trace::nowMs();
+                      FileIconLookup const icon =
+                          resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize);
+                      double const iconMs = trace::nowMs() - iconStartMs;
+                      trace::event("list row-body path=\"%s\" iconResolve=%.3fms elapsed=%.3fms\n",
+                                   entry.path.string().c_str(),
+                                   iconMs,
+                                   trace::nowMs() - startMs);
                       return FileListRowView{
                           .entry = entry,
-                          .iconPath =
-                              resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize)
-                                  .themePath.string(),
+                          .iconPath = icon.themePath.string(),
                           .width = listWidth,
                           .selected = selected,
                           .onActivate = [activate, tap, entry](Modifiers modifiers) {
@@ -358,6 +389,7 @@ struct FilesListView {
 
 inline lambda::Size measureFilesListView(FilesListView const& list,
                                        lambda::LayoutConstraints const& constraints) {
+  double const startMs = trace::nowMs();
   float const width = detail::resolvedFilesListWidth(constraints);
   if (width > 0.f) {
     list.state->layoutWidth.set(width);
@@ -365,7 +397,14 @@ inline lambda::Size measureFilesListView(FilesListView const& list,
   std::size_t const count = list.entries.peek().size();
   float const rowsHeight = static_cast<float>(count) * FilesTheme::kListRowHeight;
   float const gaps = count > 0 ? static_cast<float>(count) * FilesTheme::kListRowGap : 0.f;
-  return lambda::Size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
+  lambda::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
+  trace::event("list test-measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+               count,
+               width,
+               size.width,
+               size.height,
+               trace::nowMs() - startMs);
+  return size;
 }
 
 } // namespace lambda_files

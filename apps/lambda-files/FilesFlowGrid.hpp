@@ -4,6 +4,7 @@
 #include "FilesGlyphs.hpp"
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
+#include "FilesTrace.hpp"
 
 #include <Lambda/Reactive/Effect.hpp>
 #include <Lambda/Reactive/Signal.hpp>
@@ -15,6 +16,7 @@
 #include <Lambda/UI/Views/HStack.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -45,14 +47,18 @@ inline float resolvedLayoutWidth(lambda::LayoutConstraints const& constraints) {
   return 0.f;
 }
 
-inline std::vector<RowDescriptor> makeRows(std::vector<FileEntry> const& currentEntries,
-                                           std::string const& currentListingKey, float layoutWidth,
-                                           FilesFlowGridLayout const& metrics) {
-  if (layoutWidth <= 0.f) {
+inline std::vector<RowDescriptor> makeRowsForColumns(std::vector<FileEntry> const& currentEntries,
+                                                     std::string const& currentListingKey,
+                                                     int columns, float layoutWidth) {
+  double const startMs = trace::nowMs();
+  if (columns <= 0) {
+    trace::event("flow-grid make-rows entries=%zu width=%.1f columns=0 rows=0 elapsed=%.3fms\n",
+                 currentEntries.size(),
+                 layoutWidth,
+                 trace::nowMs() - startMs);
     return {};
   }
-  int const columns = metrics.columnCountForWidth(layoutWidth);
-  int const rowCount = metrics.rowCountForEntries(currentEntries.size(), columns);
+  int const rowCount = FilesFlowGridLayout::rowCountForEntries(currentEntries.size(), columns);
   std::vector<RowDescriptor> nextRows;
   nextRows.reserve(static_cast<std::size_t>(rowCount));
   for (int row = 0; row < rowCount; ++row) {
@@ -79,26 +85,60 @@ inline std::vector<RowDescriptor> makeRows(std::vector<FileEntry> const& current
         .entries = std::move(rowEntries),
     });
   }
+  trace::event("flow-grid make-rows entries=%zu width=%.1f columns=%d rows=%zu elapsed=%.3fms\n",
+               currentEntries.size(),
+               layoutWidth,
+               columns,
+               nextRows.size(),
+               trace::nowMs() - startMs);
   return nextRows;
 }
 
+inline std::vector<RowDescriptor> makeRows(std::vector<FileEntry> const& currentEntries,
+                                           std::string const& currentListingKey, float layoutWidth,
+                                           FilesFlowGridLayout const& metrics) {
+  return makeRowsForColumns(currentEntries,
+                            currentListingKey,
+                            metrics.columnCountForWidth(layoutWidth),
+                            layoutWidth);
+}
+
 struct GridState {
-  lambda::Reactive::Signal<float> layoutWidth{0.f};
+  float layoutWidth = 0.f;
+  lambda::Reactive::Signal<int> columns{0};
   lambda::Reactive::Signal<std::vector<RowDescriptor>> rows{};
 };
 
-/// Forwards relayout constraints into `layoutWidth` so row/column counts track the viewport.
+inline void updateGridLayout(GridState& state, float width, FilesFlowGridLayout const& metrics) {
+  if (!std::isfinite(width) || width <= 0.f) {
+    return;
+  }
+  state.layoutWidth = width;
+  int const columns = metrics.columnCountForWidth(width);
+  if (columns != state.columns.peek()) {
+    state.columns.set(columns);
+  }
+}
+
+/// Forwards relayout constraints into the grid state so row/column counts track the viewport.
 struct GridRelayoutBridge {
   std::shared_ptr<GridState> state;
+  FilesFlowGridLayout metrics;
   lambda::Element content;
 
   lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const& constraints,
                      lambda::LayoutHints const& hints, lambda::TextSystem& textSystem) const {
+    double const startMs = trace::nowMs();
     float const width = resolvedLayoutWidth(constraints);
-    if (width > 0.f) {
-      state->layoutWidth.set(width);
-    }
-    return content.measure(ctx, constraints, hints, textSystem);
+    updateGridLayout(*state, width, metrics);
+    lambda::Size const size = content.measure(ctx, constraints, hints, textSystem);
+    trace::event("flow-grid bridge-measure width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
+                 width,
+                 state->rows.peek().size(),
+                 size.width,
+                 size.height,
+                 trace::nowMs() - startMs);
+    return size;
   }
 
   std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
@@ -110,13 +150,20 @@ struct GridRelayoutBridge {
     lambda::scenegraph::SceneNode* rawChild = child.get();
     lambda::scenegraph::SceneNode* rawWrapper = wrapper.get();
     wrapper->appendChild(std::move(child));
-    wrapper->setRelayout([state = state, rawChild, rawWrapper](lambda::LayoutConstraints const& constraints) {
+    wrapper->setRelayout([state = state, metrics = metrics, rawChild, rawWrapper](
+                             lambda::LayoutConstraints const& constraints) {
+      double const startMs = trace::nowMs();
       float const width = resolvedLayoutWidth(constraints);
-      if (width > 0.f) {
-        state->layoutWidth.set(width);
-      }
+      updateGridLayout(*state, width, metrics);
       (void)rawChild->relayout(constraints);
       rawWrapper->setSize(rawChild->size());
+      lambda::Size const size = rawChild->size();
+      trace::event("flow-grid bridge-relayout width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
+                   width,
+                   state->rows.peek().size(),
+                   size.width,
+                   size.height,
+                   trace::nowMs() - startMs);
     });
     return wrapper;
   }
@@ -160,24 +207,38 @@ struct FilesFlowGrid {
 
 inline lambda::Size FilesFlowGrid::measure(lambda::MeasureContext&, lambda::LayoutConstraints const& constraints,
                                          lambda::LayoutHints const&, lambda::TextSystem&) const {
+  double const startMs = trace::nowMs();
   float const width = detail::resolvedLayoutWidth(constraints);
-  if (width > 0.f) {
-    state->layoutWidth.set(width);
-  }
-  float const layoutWidth =
-      width > 0.f ? width : std::max(0.f, state->layoutWidth.peek());
-  return layoutMetrics().contentSizeFor(layoutWidth, entries.peek().size());
+  detail::updateGridLayout(*state, width, layoutMetrics());
+  float const layoutWidth = width > 0.f ? width : std::max(0.f, state->layoutWidth);
+  std::size_t const entryCount = entries.peek().size();
+  lambda::Size const size = layoutMetrics().contentSizeFor(layoutWidth, entryCount);
+  trace::event("flow-grid measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+               entryCount,
+               width,
+               layoutWidth,
+               size.width,
+               size.height,
+               trace::nowMs() - startMs);
+  return size;
 }
 
 inline lambda::Size measureFilesFlowGrid(FilesFlowGrid const& grid,
                                      lambda::LayoutConstraints const& constraints) {
+  double const startMs = trace::nowMs();
   float const width = detail::resolvedLayoutWidth(constraints);
-  if (width > 0.f) {
-    grid.state->layoutWidth.set(width);
-  }
-  float const layoutWidth =
-      width > 0.f ? width : std::max(0.f, grid.state->layoutWidth.peek());
-  return grid.layoutMetrics().contentSizeFor(layoutWidth, grid.entries.peek().size());
+  detail::updateGridLayout(*grid.state, width, grid.layoutMetrics());
+  float const layoutWidth = width > 0.f ? width : std::max(0.f, grid.state->layoutWidth);
+  std::size_t const entryCount = grid.entries.peek().size();
+  lambda::Size const size = grid.layoutMetrics().contentSizeFor(layoutWidth, entryCount);
+  trace::event("flow-grid test-measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+               entryCount,
+               width,
+               layoutWidth,
+               size.width,
+               size.height,
+               trace::nowMs() - startMs);
+  return size;
 }
 
 inline lambda::Element FilesFlowGrid::body() const {
@@ -202,22 +263,33 @@ inline lambda::Element FilesFlowGrid::body() const {
   LayoutConstraints const* constraints = useLayoutConstraints();
   if (constraints != nullptr) {
     float const width = detail::resolvedLayoutWidth(*constraints);
-    if (width > 0.f) {
-      gridState->layoutWidth.set(width);
-    }
+    detail::updateGridLayout(*gridState, width, metrics);
   }
 
-  Reactive::Effect([entriesSignal, listingKeySignal, gridState, metrics] {
+  Reactive::Effect([entriesSignal, listingKeySignal, gridState] {
+    double const startMs = trace::nowMs();
     (void)entriesSignal();
     (void)listingKeySignal();
-    (void)gridState->layoutWidth();
-    float const width = std::max(0.f, gridState->layoutWidth.peek());
-    gridState->rows.set(
-        detail::makeRows(entriesSignal.peek(), listingKeySignal.peek(), width, metrics));
+    (void)gridState->columns();
+    int const columns = gridState->columns.peek();
+    float const width = std::max(0.f, gridState->layoutWidth);
+    std::vector<detail::RowDescriptor> nextRows =
+        detail::makeRowsForColumns(entriesSignal.peek(), listingKeySignal.peek(), columns, width);
+    bool const changed = nextRows != gridState->rows.peek();
+    if (changed) {
+      gridState->rows.set(std::move(nextRows));
+    }
+    trace::event("flow-grid rows-effect entries=%zu width=%.1f columns=%d rows=%zu elapsed=%.3fms\n",
+                 entriesSignal.peek().size(),
+                 width,
+                 columns,
+                 gridState->rows.peek().size(),
+                 trace::nowMs() - startMs);
   });
 
   return Element{detail::GridRelayoutBridge{
       .state = gridState,
+      .metrics = metrics,
       .content = Element{For(
       gridState->rows,
       [](detail::RowDescriptor const& row) {
@@ -229,6 +301,8 @@ inline lambda::Element FilesFlowGrid::body() const {
         int const colCount = std::max(1, row.columns);
         std::vector<Element> cells;
         cells.reserve(static_cast<std::size_t>(colCount));
+        double const rowStartMs = trace::nowMs();
+        double iconResolveMs = 0.0;
         for (FileEntry const& entry : row.entries) {
           Reactive::Bindable<bool> selected{
               [selectedPathSignal, selectionSignal, entry] {
@@ -236,11 +310,12 @@ inline lambda::Element FilesFlowGrid::body() const {
                 if (!current.selected.empty()) return current.contains(entry.path);
                 return selectedPathSignal() == entry.path.string();
               }};
+          double const iconStartMs = trace::nowMs();
+          FileIconLookup const icon = resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize);
+          iconResolveMs += trace::nowMs() - iconStartMs;
           cells.push_back(Element{FileItemTile{
                                       .entry = entry,
-                                      .iconPath =
-                                          resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize)
-                                              .themePath.string(),
+                                      .iconPath = icon.themePath.string(),
                                       .selected = selected,
                                       .onActivate = [activate, tap, entry](Modifiers modifiers) {
                                         if (tap) {
@@ -258,6 +333,12 @@ inline lambda::Element FilesFlowGrid::body() const {
                               .size(tileW, tileH)
                               .clipContent(true));
         }
+        trace::event("flow-grid row-body row=%zu entries=%zu columns=%d iconResolve=%.3fms elapsed=%.3fms\n",
+                     row.rowIndex,
+                     row.entries.size(),
+                     colCount,
+                     iconResolveMs,
+                     trace::nowMs() - rowStartMs);
         return HStack{
             .spacing = gapH,
             .alignment = Alignment::Start,
