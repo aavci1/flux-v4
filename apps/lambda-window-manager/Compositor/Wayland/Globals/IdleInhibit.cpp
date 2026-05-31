@@ -1,11 +1,10 @@
 #include "Compositor/Wayland/Globals/IdleInhibit.hpp"
 
+#include "Compositor/Wayland/IdleInhibitState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "idle-inhibit-unstable-v1-server-protocol.h"
 
-#include <algorithm>
-#include <cstdio>
 #include <memory>
 #include <wayland-server-core.h>
 
@@ -38,7 +37,10 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
   auto inhibitor = std::make_unique<WaylandServer::Impl::IdleInhibitor>();
   inhibitor->server = server;
   inhibitor->surface = surface;
-  wl_resource* inhibitorResource = wl_resource_create(client, &zwp_idle_inhibitor_v1_interface, 1, id);
+  wl_resource* inhibitorResource = wl_resource_create(client,
+                                                      &zwp_idle_inhibitor_v1_interface,
+                                                      idleInhibitResourceVersion(wl_resource_get_version(resource)),
+                                                      id);
   if (!inhibitorResource) {
     wl_client_post_no_memory(client);
     return;
@@ -47,9 +49,6 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
   auto* raw = inhibitor.get();
   server->idleInhibitors_.push_back(std::move(inhibitor));
   wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, destroyResourceCallback<WaylandServer::Impl::IdleInhibitor, WaylandServer::Impl, &WaylandServer::Impl::destroyIdleInhibitor>);
-  std::fprintf(stderr,
-               "lambda-window-manager: idle inhibitors active=%zu\n",
-               server->idleInhibitors_.size());
 }
 
 struct zwp_idle_inhibit_manager_v1_interface const idleInhibitManagerImpl{
@@ -60,7 +59,11 @@ struct zwp_idle_inhibit_manager_v1_interface const idleInhibitManagerImpl{
 
 void bindIdleInhibitManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &zwp_idle_inhibit_manager_v1_interface,
-                                             std::min(version, 1u), id);
+                                             idleInhibitResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &idleInhibitManagerImpl, data, nullptr);
 }
 

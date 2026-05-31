@@ -10,7 +10,6 @@
 #include <wayland-server-core.h>
 
 #include <algorithm>
-#include <cstdio>
 #include <vector>
 
 namespace lambda::compositor {
@@ -480,7 +479,6 @@ void WaylandServer::Impl::destroyCursorShapeDevice(CursorShapeDevice* device) {
 
 void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
   eraseResource(idleInhibitors_, inhibitor);
-  std::fprintf(stderr, "lambda-window-manager: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {

@@ -30,6 +30,7 @@
 | P10 | WM-COMP-11 Pointer constraints synced state | Verified | Pointer constraints now use committed region/cursor-hint state and wlroots-style oneshot deactivation cleanup | Pointer constraint, subsurface, compositor, and broader feasible suites pass | No manual gate needed for this protocol-state workstream |
 | P11 | WM-COMP-12 Presentation-time resource versioning | Verified | Presentation feedback resources now use the client-bound manager version, capped by the implemented protocol version | Presentation helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P12 | WM-COMP-13 Fractional-scale consistency | Verified | Fractional-scale preferred-scale conversion is shared by initial and runtime events, including sub-1.0 scales | Fractional-scale helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P13 | WM-COMP-14 Idle-inhibit lifecycle/resource hygiene | Verified | Idle-inhibit resource versioning, bind allocation handling, logging, and active-surface checks now follow wlroots-style resource behavior | Idle-inhibit helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -468,6 +469,40 @@
 - Manager bind allocation failure posts no-memory instead of dereferencing a null resource.
 - Automated helper tests cover the conversion and implemented protocol-version cap.
 
+## WM-COMP-14 Idle-Inhibit Lifecycle/Resource Hygiene
+
+**Why this matters:** wlroots keeps idle-inhibit as a small resource-lifecycle protocol: manager and inhibitor resources use the client-bound protocol version, allocation failures return no-memory, and compositor idle policy observes only live mapped surfaces. Lambda already has the core protocol, but the active-surface predicate is embedded in frame scheduling and the bind path lacks a no-memory guard.
+
+**Goal:** centralize idle-inhibit resource versioning and active-surface rules, remove noisy per-inhibitor stderr logging, and add automated coverage for the policy helper.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/IdleInhibit.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/IdleInhibitState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/FrameScheduler.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Destroy.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: compared wlroots resource creation and cleanup rules, then centralized Lambda's implemented version cap and active-surface predicate.
+2. Done: used the helper from both binding and idle-policy checks, added bind allocation failure handling, and removed ad hoc stderr logs.
+3. Done: ran targeted idle-inhibit/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots creates idle-inhibit manager resources at the bound version and creates inhibitor resources using the manager resource's version.
+- wlroots posts no-memory when manager binding or inhibitor creation allocation fails.
+- Lambda already destroys surface-owned idle inhibitors from `destroySurface`, but it hardcodes inhibitor resources to version 1, dereferences a failed manager bind allocation, and logs every inhibitor create/destroy directly to stderr.
+- Lambda's active idle-inhibitor predicate is currently correct but local to `FrameScheduler.cpp`; moving it to a helper makes the lifecycle policy testable and keeps future idle-policy changes out of scheduling code.
+
+**Acceptance criteria:**
+
+- Manager and inhibitor resources use Lambda's implemented idle-inhibit version cap.
+- Manager bind allocation failure posts no-memory instead of dereferencing a null resource.
+- Idle inhibition is active only for surfaces with a committed buffer, non-zero dimensions, and no minimized state.
+- Automated helper tests cover version selection and active-surface policy.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -538,3 +573,5 @@
 | 2026-05-31 | WM-COMP-12 | Verified | Added a presentation version helper and used it for both manager binding and feedback resource creation so feedback resources inherit the client-bound version. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*presentation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-13 | In progress | Fractional-scale comparison found wlroots uses the same `scale * 120` conversion for all notifications, while Lambda clamped the initial object-created event to at least 1.0. Implementing a shared helper and bind no-memory guard. |
 | 2026-05-31 | WM-COMP-13 | Verified | Added a shared fractional-scale version/conversion helper, preserved sub-1.0 preferred scales on newly-created fractional-scale resources, reused the helper for runtime scale updates, and added bind no-memory handling. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*fractional scale*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-14 | In progress | Idle-inhibit comparison found wlroots uses the bound manager resource version for inhibitor resources, guards manager bind allocation failure, and keeps idle policy separate from protocol logging. Implementing a shared version/policy helper and removing ad hoc stderr logs. |
+| 2026-05-31 | WM-COMP-14 | Verified | Added an idle-inhibit version/policy helper, used the bound manager version for inhibitor resources, added manager bind no-memory handling, removed per-inhibitor stderr logs, and tested the active-surface predicate. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*idle inhibit*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

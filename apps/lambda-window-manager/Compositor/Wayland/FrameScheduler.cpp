@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include "Compositor/Wayland/BufferRelease.hpp"
+#include "Compositor/Wayland/IdleInhibitState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
@@ -207,12 +208,7 @@ bool WaylandServer::Impl::hasActiveResizePacing() const noexcept {
 
 bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
   return std::any_of(idleInhibitors_.begin(), idleInhibitors_.end(), [](auto const& inhibitor) {
-    auto const* surface = inhibitor ? inhibitor->surface : nullptr;
-    return surface &&
-           surface->bufferState.buffer &&
-           !surface->minimized &&
-           surface->width > 0 &&
-           surface->height > 0;
+    return idleInhibitorSurfaceActive(inhibitor ? inhibitor->surface : nullptr);
   });
 }
 
