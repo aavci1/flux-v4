@@ -170,6 +170,97 @@ WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry) {
 
 namespace {
 
+constexpr std::uint8_t kPopupEdgeTop = 1u << 0u;
+constexpr std::uint8_t kPopupEdgeBottom = 1u << 1u;
+constexpr std::uint8_t kPopupEdgeLeft = 1u << 2u;
+constexpr std::uint8_t kPopupEdgeRight = 1u << 3u;
+
+struct PopupConstraintOffsets {
+  std::int32_t top = 0;
+  std::int32_t bottom = 0;
+  std::int32_t left = 0;
+  std::int32_t right = 0;
+};
+
+std::uint8_t popupGravityEdges(PopupGravity gravity) {
+  switch (gravity) {
+  case PopupGravity::Top: return kPopupEdgeTop;
+  case PopupGravity::Bottom: return kPopupEdgeBottom;
+  case PopupGravity::Left: return kPopupEdgeLeft;
+  case PopupGravity::Right: return kPopupEdgeRight;
+  case PopupGravity::TopLeft: return kPopupEdgeTop | kPopupEdgeLeft;
+  case PopupGravity::BottomLeft: return kPopupEdgeBottom | kPopupEdgeLeft;
+  case PopupGravity::TopRight: return kPopupEdgeTop | kPopupEdgeRight;
+  case PopupGravity::BottomRight: return kPopupEdgeBottom | kPopupEdgeRight;
+  case PopupGravity::None: return 0;
+  }
+  return 0;
+}
+
+PopupAnchor invertPopupAnchorX(PopupAnchor anchor) {
+  switch (anchor) {
+  case PopupAnchor::Left: return PopupAnchor::Right;
+  case PopupAnchor::Right: return PopupAnchor::Left;
+  case PopupAnchor::TopLeft: return PopupAnchor::TopRight;
+  case PopupAnchor::TopRight: return PopupAnchor::TopLeft;
+  case PopupAnchor::BottomLeft: return PopupAnchor::BottomRight;
+  case PopupAnchor::BottomRight: return PopupAnchor::BottomLeft;
+  case PopupAnchor::None:
+  case PopupAnchor::Top:
+  case PopupAnchor::Bottom:
+    return anchor;
+  }
+  return anchor;
+}
+
+PopupGravity invertPopupGravityX(PopupGravity gravity) {
+  switch (gravity) {
+  case PopupGravity::Left: return PopupGravity::Right;
+  case PopupGravity::Right: return PopupGravity::Left;
+  case PopupGravity::TopLeft: return PopupGravity::TopRight;
+  case PopupGravity::TopRight: return PopupGravity::TopLeft;
+  case PopupGravity::BottomLeft: return PopupGravity::BottomRight;
+  case PopupGravity::BottomRight: return PopupGravity::BottomLeft;
+  case PopupGravity::None:
+  case PopupGravity::Top:
+  case PopupGravity::Bottom:
+    return gravity;
+  }
+  return gravity;
+}
+
+PopupAnchor invertPopupAnchorY(PopupAnchor anchor) {
+  switch (anchor) {
+  case PopupAnchor::Top: return PopupAnchor::Bottom;
+  case PopupAnchor::Bottom: return PopupAnchor::Top;
+  case PopupAnchor::TopLeft: return PopupAnchor::BottomLeft;
+  case PopupAnchor::BottomLeft: return PopupAnchor::TopLeft;
+  case PopupAnchor::TopRight: return PopupAnchor::BottomRight;
+  case PopupAnchor::BottomRight: return PopupAnchor::TopRight;
+  case PopupAnchor::None:
+  case PopupAnchor::Left:
+  case PopupAnchor::Right:
+    return anchor;
+  }
+  return anchor;
+}
+
+PopupGravity invertPopupGravityY(PopupGravity gravity) {
+  switch (gravity) {
+  case PopupGravity::Top: return PopupGravity::Bottom;
+  case PopupGravity::Bottom: return PopupGravity::Top;
+  case PopupGravity::TopLeft: return PopupGravity::BottomLeft;
+  case PopupGravity::BottomLeft: return PopupGravity::TopLeft;
+  case PopupGravity::TopRight: return PopupGravity::BottomRight;
+  case PopupGravity::BottomRight: return PopupGravity::TopRight;
+  case PopupGravity::None:
+  case PopupGravity::Left:
+  case PopupGravity::Right:
+    return gravity;
+  }
+  return gravity;
+}
+
 std::int32_t popupAnchorX(PopupPositionerGeometry const& geometry) {
   std::int32_t x = geometry.anchorRectX;
   if (geometry.anchor == PopupAnchor::Top ||
@@ -198,9 +289,7 @@ std::int32_t popupAnchorY(PopupPositionerGeometry const& geometry) {
   return y + geometry.offsetY;
 }
 
-} // namespace
-
-PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry) {
+WindowGeometry requestedPopupBox(PopupPositionerGeometry const& geometry) {
   std::int32_t const width = std::max(1, geometry.width);
   std::int32_t const height = std::max(1, geometry.height);
   std::int32_t const parentX = geometry.parent ? geometry.parent->x : 0;
@@ -208,34 +297,174 @@ PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry) {
   std::int32_t x = parentX + popupAnchorX(geometry);
   std::int32_t y = parentY + popupAnchorY(geometry);
 
-  if (geometry.gravity == PopupGravity::Left ||
-      geometry.gravity == PopupGravity::TopLeft ||
-      geometry.gravity == PopupGravity::BottomLeft) {
+  std::uint8_t const gravity = popupGravityEdges(geometry.gravity);
+  if ((gravity & kPopupEdgeLeft) != 0u) {
     x -= width;
-  } else if (geometry.gravity == PopupGravity::None ||
-             geometry.gravity == PopupGravity::Top ||
-             geometry.gravity == PopupGravity::Bottom) {
+  } else if ((gravity & kPopupEdgeRight) == 0u) {
     x -= width / 2;
   }
-  if (geometry.gravity == PopupGravity::Top ||
-      geometry.gravity == PopupGravity::TopLeft ||
-      geometry.gravity == PopupGravity::TopRight) {
+  if ((gravity & kPopupEdgeTop) != 0u) {
     y -= height;
-  } else if (geometry.gravity == PopupGravity::None ||
-             geometry.gravity == PopupGravity::Left ||
-             geometry.gravity == PopupGravity::Right) {
+  } else if ((gravity & kPopupEdgeBottom) == 0u) {
     y -= height / 2;
   }
 
-  x = std::clamp(x, 0, std::max(0, geometry.output.width - width));
-  y = std::clamp(y, 0, std::max(0, geometry.output.height - height));
+  return {.x = x, .y = y, .width = width, .height = height};
+}
+
+PopupConstraintOffsets popupConstraintOffsets(OutputGeometry output, WindowGeometry const& box) {
+  return {
+      .top = -box.y,
+      .bottom = box.y + box.height - output.height,
+      .left = -box.x,
+      .right = box.x + box.width - output.width,
+  };
+}
+
+bool popupUnconstrained(PopupConstraintOffsets const& offsets) {
+  return offsets.top <= 0 && offsets.bottom <= 0 && offsets.left <= 0 && offsets.right <= 0;
+}
+
+bool unconstrainPopupByFlip(PopupPositionerGeometry const& geometry,
+                            OutputGeometry output,
+                            WindowGeometry& box,
+                            PopupConstraintOffsets& offsets) {
+  bool const flipX = ((offsets.left > 0) != (offsets.right > 0)) &&
+                     hasPopupConstraintAdjustment(geometry.constraintAdjustment, PopupConstraintAdjustment::FlipX);
+  bool const flipY = ((offsets.top > 0) != (offsets.bottom > 0)) &&
+                     hasPopupConstraintAdjustment(geometry.constraintAdjustment, PopupConstraintAdjustment::FlipY);
+  if (!flipX && !flipY) return false;
+
+  PopupPositionerGeometry flipped = geometry;
+  if (flipX) {
+    flipped.anchor = invertPopupAnchorX(flipped.anchor);
+    flipped.gravity = invertPopupGravityX(flipped.gravity);
+  }
+  if (flipY) {
+    flipped.anchor = invertPopupAnchorY(flipped.anchor);
+    flipped.gravity = invertPopupGravityY(flipped.gravity);
+  }
+
+  WindowGeometry const flippedBox = requestedPopupBox(flipped);
+  PopupConstraintOffsets const flippedOffsets = popupConstraintOffsets(output, flippedBox);
+  if (flippedOffsets.left <= 0 && flippedOffsets.right <= 0) {
+    box.x = flippedBox.x;
+    offsets.left = flippedOffsets.left;
+    offsets.right = flippedOffsets.right;
+  }
+  if (flippedOffsets.top <= 0 && flippedOffsets.bottom <= 0) {
+    box.y = flippedBox.y;
+    offsets.top = flippedOffsets.top;
+    offsets.bottom = flippedOffsets.bottom;
+  }
+  return popupUnconstrained(offsets);
+}
+
+bool unconstrainPopupBySlide(PopupPositionerGeometry const& geometry,
+                             OutputGeometry output,
+                             WindowGeometry& box,
+                             PopupConstraintOffsets& offsets) {
+  std::uint8_t const gravity = popupGravityEdges(geometry.gravity);
+  bool const slideX = (offsets.left > 0 || offsets.right > 0) &&
+                      hasPopupConstraintAdjustment(geometry.constraintAdjustment, PopupConstraintAdjustment::SlideX);
+  bool const slideY = (offsets.top > 0 || offsets.bottom > 0) &&
+                      hasPopupConstraintAdjustment(geometry.constraintAdjustment, PopupConstraintAdjustment::SlideY);
+  if (!slideX && !slideY) return false;
+
+  if (slideX) {
+    if (offsets.left > 0 && offsets.right > 0) {
+      if ((gravity & kPopupEdgeLeft) != 0u) {
+        box.x -= offsets.right;
+      } else {
+        box.x += offsets.left;
+      }
+    } else {
+      std::int32_t const absLeft = offsets.left > 0 ? offsets.left : -offsets.left;
+      std::int32_t const absRight = offsets.right > 0 ? offsets.right : -offsets.right;
+      if (absLeft < absRight) {
+        box.x += offsets.left;
+      } else {
+        box.x -= offsets.right;
+      }
+    }
+  }
+  if (slideY) {
+    if (offsets.top > 0 && offsets.bottom > 0) {
+      if ((gravity & kPopupEdgeTop) != 0u) {
+        box.y -= offsets.bottom;
+      } else {
+        box.y += offsets.top;
+      }
+    } else {
+      std::int32_t const absTop = offsets.top > 0 ? offsets.top : -offsets.top;
+      std::int32_t const absBottom = offsets.bottom > 0 ? offsets.bottom : -offsets.bottom;
+      if (absTop < absBottom) {
+        box.y += offsets.top;
+      } else {
+        box.y -= offsets.bottom;
+      }
+    }
+  }
+
+  offsets = popupConstraintOffsets(output, box);
+  return popupUnconstrained(offsets);
+}
+
+bool unconstrainPopupByResize(PopupPositionerGeometry const& geometry,
+                              OutputGeometry output,
+                              WindowGeometry& box,
+                              PopupConstraintOffsets& offsets) {
+  bool const resizeX = (offsets.left > 0 || offsets.right > 0) &&
+                       hasPopupConstraintAdjustment(geometry.constraintAdjustment, PopupConstraintAdjustment::ResizeX);
+  bool const resizeY = (offsets.top > 0 || offsets.bottom > 0) &&
+                       hasPopupConstraintAdjustment(geometry.constraintAdjustment, PopupConstraintAdjustment::ResizeY);
+  if (!resizeX && !resizeY) return false;
+
+  PopupConstraintOffsets clipped = offsets;
+  clipped.left = std::max(0, clipped.left);
+  clipped.right = std::max(0, clipped.right);
+  clipped.top = std::max(0, clipped.top);
+  clipped.bottom = std::max(0, clipped.bottom);
+
+  WindowGeometry resized = box;
+  if (resizeX) {
+    resized.x += clipped.left;
+    resized.width -= clipped.left + clipped.right;
+  }
+  if (resizeY) {
+    resized.y += clipped.top;
+    resized.height -= clipped.top + clipped.bottom;
+  }
+  if (resized.width <= 0 || resized.height <= 0) return false;
+
+  box = resized;
+  offsets = popupConstraintOffsets(output, box);
+  return popupUnconstrained(offsets);
+}
+
+void unconstrainPopup(PopupPositionerGeometry const& geometry, WindowGeometry& box) {
+  if (geometry.output.width <= 0 || geometry.output.height <= 0) return;
+  PopupConstraintOffsets offsets = popupConstraintOffsets(geometry.output, box);
+  if (popupUnconstrained(offsets)) return;
+  if (unconstrainPopupByFlip(geometry, geometry.output, box, offsets)) return;
+  if (unconstrainPopupBySlide(geometry, geometry.output, box, offsets)) return;
+  unconstrainPopupByResize(geometry, geometry.output, box, offsets);
+}
+
+} // namespace
+
+PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry) {
+  std::int32_t const parentX = geometry.parent ? geometry.parent->x : 0;
+  std::int32_t const parentY = geometry.parent ? geometry.parent->y : 0;
+  WindowGeometry box = requestedPopupBox(geometry);
+  unconstrainPopup(geometry, box);
 
   return PopupGeometry{
-      .window = {.x = x, .y = y, .width = width, .height = height},
-      .configureX = geometry.parent ? x - parentX : x,
-      .configureY = geometry.parent ? y - parentY : y,
-      .configureWidth = width,
-      .configureHeight = height,
+      .window = box,
+      .configureX = geometry.parent ? box.x - parentX : box.x,
+      .configureY = geometry.parent ? box.y - parentY : box.y,
+      .configureWidth = box.width,
+      .configureHeight = box.height,
   };
 }
 

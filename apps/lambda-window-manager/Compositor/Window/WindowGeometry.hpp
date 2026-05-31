@@ -44,12 +44,33 @@ enum class PopupGravity : std::uint8_t {
   BottomRight,
 };
 
+enum class PopupConstraintAdjustment : std::uint32_t {
+  None = 0,
+  SlideX = 1u << 0u,
+  SlideY = 1u << 1u,
+  FlipX = 1u << 2u,
+  FlipY = 1u << 3u,
+  ResizeX = 1u << 4u,
+  ResizeY = 1u << 5u,
+};
+
 [[nodiscard]] constexpr ResizeEdge operator|(ResizeEdge lhs, ResizeEdge rhs) {
   return static_cast<ResizeEdge>(static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
 }
 
+[[nodiscard]] constexpr PopupConstraintAdjustment operator|(PopupConstraintAdjustment lhs,
+                                                           PopupConstraintAdjustment rhs) {
+  return static_cast<PopupConstraintAdjustment>(static_cast<std::uint32_t>(lhs) |
+                                                static_cast<std::uint32_t>(rhs));
+}
+
 [[nodiscard]] constexpr bool hasResizeEdge(ResizeEdge edges, ResizeEdge edge) {
   return (static_cast<std::uint8_t>(edges) & static_cast<std::uint8_t>(edge)) != 0u;
+}
+
+[[nodiscard]] constexpr bool hasPopupConstraintAdjustment(PopupConstraintAdjustment adjustment,
+                                                          PopupConstraintAdjustment flag) {
+  return (static_cast<std::uint32_t>(adjustment) & static_cast<std::uint32_t>(flag)) != 0u;
 }
 
 struct OutputGeometry {
@@ -108,6 +129,7 @@ struct PopupPositionerGeometry {
   std::int32_t offsetY = 0;
   PopupAnchor anchor = PopupAnchor::None;
   PopupGravity gravity = PopupGravity::None;
+  PopupConstraintAdjustment constraintAdjustment = PopupConstraintAdjustment::None;
 };
 
 struct PopupGeometry {

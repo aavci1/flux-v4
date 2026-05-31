@@ -253,7 +253,30 @@ TEST_CASE("compositor popup geometry uses anchor gravity and parent-relative con
   CHECK(popup.configureHeight == 180);
 }
 
-TEST_CASE("compositor popup geometry clamps to output") {
+TEST_CASE("compositor popup geometry slides to fit output when requested") {
+  lambda::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambda::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
+      .output = {.width = 800, .height = 600},
+      .anchorRectX = 280,
+      .anchorRectY = 180,
+      .anchorRectWidth = 40,
+      .anchorRectHeight = 40,
+      .width = 220,
+      .height = 160,
+      .anchor = lambda::compositor::PopupAnchor::BottomRight,
+      .gravity = lambda::compositor::PopupGravity::BottomRight,
+      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::SlideX |
+                              lambda::compositor::PopupConstraintAdjustment::SlideY,
+  };
+
+  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.x == 580);
+  CHECK(popup.window.y == 440);
+  CHECK(popup.configureX == -120);
+  CHECK(popup.configureY == -60);
+}
+
+TEST_CASE("compositor popup geometry leaves constrained boxes unchanged without adjustment flags") {
   lambda::compositor::PopupPositionerGeometry const positioner{
       .parent = lambda::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
       .output = {.width = 800, .height = 600},
@@ -268,10 +291,52 @@ TEST_CASE("compositor popup geometry clamps to output") {
   };
 
   auto popup = lambda::compositor::positionedPopupGeometry(positioner);
-  CHECK(popup.window.x == 580);
-  CHECK(popup.window.y == 440);
-  CHECK(popup.configureX == -120);
-  CHECK(popup.configureY == -60);
+  CHECK(popup.window.x == 1020);
+  CHECK(popup.window.y == 720);
+  CHECK(popup.configureX == 320);
+  CHECK(popup.configureY == 220);
+}
+
+TEST_CASE("compositor popup geometry flips when that fully satisfies constraints") {
+  lambda::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambda::compositor::WindowGeometry{.x = 700, .y = 100, .width = 80, .height = 80},
+      .output = {.width = 800, .height = 600},
+      .anchorRectX = 0,
+      .anchorRectY = 20,
+      .anchorRectWidth = 80,
+      .anchorRectHeight = 20,
+      .width = 100,
+      .height = 80,
+      .anchor = lambda::compositor::PopupAnchor::Right,
+      .gravity = lambda::compositor::PopupGravity::Right,
+      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::FlipX,
+  };
+
+  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.x == 600);
+  CHECK(popup.window.y == 90);
+  CHECK(popup.configureX == -100);
+  CHECK(popup.configureY == -10);
+}
+
+TEST_CASE("compositor popup geometry resizes when slide and flip cannot satisfy constraints") {
+  lambda::compositor::PopupPositionerGeometry const positioner{
+      .output = {.width = 200, .height = 100},
+      .anchorRectX = 100,
+      .anchorRectY = 50,
+      .width = 300,
+      .height = 120,
+      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::ResizeX |
+                              lambda::compositor::PopupConstraintAdjustment::ResizeY,
+  };
+
+  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.x == 0);
+  CHECK(popup.window.y == 0);
+  CHECK(popup.window.width == 200);
+  CHECK(popup.window.height == 100);
+  CHECK(popup.configureWidth == 200);
+  CHECK(popup.configureHeight == 100);
 }
 
 TEST_CASE("compositor popup geometry clamps empty size to one pixel") {

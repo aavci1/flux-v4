@@ -759,6 +759,7 @@ void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::X
       .offsetY = positioner->offsetY,
       .anchor = popupAnchor(positioner->anchor),
       .gravity = popupGravity(positioner->gravity),
+      .constraintAdjustment = static_cast<PopupConstraintAdjustment>(positioner->constraintAdjustment),
   });
 
   surface->windowX = geometry.window.x;
