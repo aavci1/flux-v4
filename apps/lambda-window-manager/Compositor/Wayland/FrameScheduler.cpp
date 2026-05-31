@@ -207,7 +207,11 @@ bool WaylandServer::Impl::hasActiveResizePacing() const noexcept {
 bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
   return std::any_of(idleInhibitors_.begin(), idleInhibitors_.end(), [](auto const& inhibitor) {
     auto const* surface = inhibitor ? inhibitor->surface : nullptr;
-    return surface && surface->currentBuffer && !surface->minimized && surface->width > 0 && surface->height > 0;
+    return surface &&
+           surface->bufferState.buffer &&
+           !surface->minimized &&
+           surface->width > 0 &&
+           surface->height > 0;
   });
 }
 

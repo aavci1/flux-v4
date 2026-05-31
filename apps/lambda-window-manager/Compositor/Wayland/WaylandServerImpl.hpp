@@ -42,6 +42,8 @@ struct WaylandServer::Impl {
   struct SurfacePendingRegionState;
   struct SurfaceDamageState;
   struct SurfacePendingDamageState;
+  struct SurfaceBufferState;
+  struct SurfacePendingBufferState;
   struct Subsurface;
   struct XdgPositioner;
   struct XdgSurface;
@@ -362,26 +364,34 @@ struct WaylandServer::Impl::SurfacePendingDamageState {
   std::vector<CommittedSurfaceSnapshot::RegionRect> bufferRects;
 };
 
+struct WaylandServer::Impl::SurfaceBufferState {
+  wl_resource* buffer = nullptr;
+  std::int32_t scale = 1;
+  std::int32_t transform = WL_OUTPUT_TRANSFORM_NORMAL;
+  std::int32_t offsetX = 0;
+  std::int32_t offsetY = 0;
+};
+
+struct WaylandServer::Impl::SurfacePendingBufferState {
+  wl_resource* buffer = nullptr;
+  bool bufferAttached = false;
+  std::int32_t scale = 1;
+  bool scaleSet = false;
+  std::int32_t transform = WL_OUTPUT_TRANSFORM_NORMAL;
+  bool transformSet = false;
+  std::int32_t offsetX = 0;
+  std::int32_t offsetY = 0;
+  bool offsetSet = false;
+};
+
 struct WaylandServer::Impl::Surface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::uint64_t id = 0;
-  wl_resource* pendingBuffer = nullptr;
-  bool pendingBufferAttached = false;
-  wl_resource* currentBuffer = nullptr;
+  SurfaceBufferState bufferState;
+  SurfacePendingBufferState pendingBufferState;
   std::int32_t x = 0;
   std::int32_t y = 0;
-  std::int32_t scale = 1;
-  std::int32_t pendingScale = 1;
-  bool pendingScaleSet = false;
-  std::int32_t bufferTransform = WL_OUTPUT_TRANSFORM_NORMAL;
-  std::int32_t pendingBufferTransform = WL_OUTPUT_TRANSFORM_NORMAL;
-  bool pendingBufferTransformSet = false;
-  std::int32_t bufferOffsetX = 0;
-  std::int32_t bufferOffsetY = 0;
-  std::int32_t pendingBufferOffsetX = 0;
-  std::int32_t pendingBufferOffsetY = 0;
-  bool pendingBufferOffsetSet = false;
   std::int32_t windowX = 96;
   std::int32_t windowY = 96;
   SurfaceRole role = SurfaceRole::None;
@@ -528,26 +538,26 @@ inline bool surfaceBufferTransformSwapsAxes(std::int32_t transform) {
 
 inline std::int32_t surfaceTransformedBufferWidth(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
-  return surfaceBufferTransformSwapsAxes(surface->bufferTransform) ? surface->height : surface->width;
+  return surfaceBufferTransformSwapsAxes(surface->bufferState.transform) ? surface->height : surface->width;
 }
 
 inline std::int32_t surfaceTransformedBufferHeight(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
-  return surfaceBufferTransformSwapsAxes(surface->bufferTransform) ? surface->width : surface->height;
+  return surfaceBufferTransformSwapsAxes(surface->bufferState.transform) ? surface->width : surface->height;
 }
 
 inline std::int32_t surfaceCommittedDisplayWidth(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
   if (surface->viewportState.destinationSet) return surface->viewportState.destinationWidth;
   if (surface->viewportState.sourceSet) return static_cast<std::int32_t>(surface->viewportState.sourceWidth);
-  return std::max(1, surfaceTransformedBufferWidth(surface) / std::max(1, surface->scale));
+  return std::max(1, surfaceTransformedBufferWidth(surface) / std::max(1, surface->bufferState.scale));
 }
 
 inline std::int32_t surfaceCommittedDisplayHeight(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
   if (surface->viewportState.destinationSet) return surface->viewportState.destinationHeight;
   if (surface->viewportState.sourceSet) return static_cast<std::int32_t>(surface->viewportState.sourceHeight);
-  return std::max(1, surfaceTransformedBufferHeight(surface) / std::max(1, surface->scale));
+  return std::max(1, surfaceTransformedBufferHeight(surface) / std::max(1, surface->bufferState.scale));
 }
 
 struct WaylandServer::Impl::Subsurface {

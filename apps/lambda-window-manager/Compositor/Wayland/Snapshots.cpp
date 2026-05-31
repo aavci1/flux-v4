@@ -80,8 +80,8 @@ bool canCropToXdgWindowGeometry(WaylandServer::Impl::Surface const* surface) {
       surface->viewportState.destinationSet) {
     return false;
   }
-  if (surface->bufferTransform != WL_OUTPUT_TRANSFORM_NORMAL) return false;
-  std::int32_t const scale = std::max(1, surface->scale);
+  if (surface->bufferState.transform != WL_OUTPUT_TRANSFORM_NORMAL) return false;
+  std::int32_t const scale = std::max(1, surface->bufferState.scale);
   std::int32_t const sourceX = surface->xdgWindowGeometryX * scale;
   std::int32_t const sourceY = surface->xdgWindowGeometryY * scale;
   std::int32_t const sourceWidth = surface->xdgWindowGeometryWidth * scale;
@@ -150,7 +150,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   ChromeButton const hovered =
       chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode, width);
   bool const cropToWindowGeometry = canCropToXdgWindowGeometry(surface);
-  std::int32_t const bufferScale = std::max(1, surface->scale);
+  std::int32_t const bufferScale = std::max(1, surface->bufferState.scale);
   bool const fullscreen = fullscreenToplevel(surface);
   float const sourceX = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryX * bufferScale)
                                              : surface->viewportState.sourceSet ? surface->viewportState.sourceX : 0.f;
@@ -188,7 +188,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .committedHeight = committedHeight,
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
-      .bufferTransform = surface->bufferTransform,
+      .bufferTransform = surface->bufferState.transform,
       .sourceX = sourceX,
       .sourceY = sourceY,
       .sourceWidth = sourceWidth,
@@ -369,7 +369,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
       .committedHeight = committedDisplayHeightForSurface(surface),
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
-      .bufferTransform = surface->bufferTransform,
+      .bufferTransform = surface->bufferState.transform,
       .sourceX = surface->viewportState.sourceSet ? surface->viewportState.sourceX : 0.f,
       .sourceY = surface->viewportState.sourceSet ? surface->viewportState.sourceY : 0.f,
       .sourceWidth =

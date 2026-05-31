@@ -165,7 +165,7 @@ TEST_CASE("surface viewport pending state does not affect committed display size
   lambda::compositor::WaylandServer::Impl::Surface surface{};
   surface.width = 400;
   surface.height = 200;
-  surface.scale = 2;
+  surface.bufferState.scale = 2;
 
   CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 200);
   CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 100);
@@ -181,6 +181,36 @@ TEST_CASE("surface viewport pending state does not affect committed display size
 
   CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 320);
   CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 180);
+}
+
+TEST_CASE("surface pending buffer state does not affect committed display size or offset") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.width = 400;
+  surface.height = 200;
+  surface.bufferState.scale = 2;
+
+  surface.pendingBufferState.scale = 4;
+  surface.pendingBufferState.scaleSet = true;
+  surface.pendingBufferState.transform = WL_OUTPUT_TRANSFORM_90;
+  surface.pendingBufferState.transformSet = true;
+  surface.pendingBufferState.offsetX = 12;
+  surface.pendingBufferState.offsetY = 24;
+  surface.pendingBufferState.offsetSet = true;
+
+  CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 200);
+  CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 100);
+  CHECK(surface.bufferState.offsetX == 0);
+  CHECK(surface.bufferState.offsetY == 0);
+
+  surface.bufferState.scale = surface.pendingBufferState.scale;
+  surface.bufferState.transform = surface.pendingBufferState.transform;
+  surface.bufferState.offsetX = surface.pendingBufferState.offsetX;
+  surface.bufferState.offsetY = surface.pendingBufferState.offsetY;
+
+  CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 50);
+  CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 100);
+  CHECK(surface.bufferState.offsetX == 12);
+  CHECK(surface.bufferState.offsetY == 24);
 }
 
 TEST_CASE("xdg window geometry validates positive size") {

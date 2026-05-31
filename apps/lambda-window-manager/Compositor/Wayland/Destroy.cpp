@@ -243,8 +243,8 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
     if (buffer) wl_buffer_send_release(buffer);
   }
   surface->pendingBufferReleases.clear();
-  if (surface->currentBuffer && surface->dmabufBuffer) {
-    wl_buffer_send_release(surface->currentBuffer);
+  if (surface->bufferState.buffer && surface->dmabufBuffer) {
+    wl_buffer_send_release(surface->bufferState.buffer);
   }
   eraseResource(surfaces_, surface);
   if (activatePrevious) activateMostRecentToplevel(this, 0);
@@ -330,12 +330,12 @@ void WaylandServer::Impl::destroyShmBuffer(ShmBuffer* buffer) {
   if (buffer && buffer->resource) {
     for (auto const& surface : surfaces_) {
       if (!surface) continue;
-      if (surface->pendingBuffer == buffer->resource) {
-        surface->pendingBuffer = nullptr;
-        surface->pendingBufferAttached = false;
+      if (surface->pendingBufferState.buffer == buffer->resource) {
+        surface->pendingBufferState.buffer = nullptr;
+        surface->pendingBufferState.bufferAttached = false;
       }
-      if (surface->currentBuffer == buffer->resource) {
-        surface->currentBuffer = nullptr;
+      if (surface->bufferState.buffer == buffer->resource) {
+        surface->bufferState.buffer = nullptr;
         surface->shmPixels = nullptr;
         surface->shmPixelBytes = 0;
         surface->rgbaPixels.reset();
@@ -370,12 +370,12 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
   for (auto const& surface : surfaces_) {
     if (!surface) continue;
     if (bufferResource) {
-      if (surface->pendingBuffer == bufferResource) {
-        surface->pendingBuffer = nullptr;
-        surface->pendingBufferAttached = false;
+      if (surface->pendingBufferState.buffer == bufferResource) {
+        surface->pendingBufferState.buffer = nullptr;
+        surface->pendingBufferState.bufferAttached = false;
       }
-      if (surface->currentBuffer == bufferResource) {
-        surface->currentBuffer = nullptr;
+      if (surface->bufferState.buffer == bufferResource) {
+        surface->bufferState.buffer = nullptr;
       }
       auto& releases = surface->pendingBufferReleases;
       releases.erase(std::remove(releases.begin(), releases.end(), bufferResource), releases.end());

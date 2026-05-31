@@ -239,12 +239,12 @@ void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::
                            "wl_surface.attach x/y must be 0 for wl_surface version 5 or newer");
     return;
   }
-  surface->pendingBuffer = buffer;
-  surface->pendingBufferAttached = true;
+  surface->pendingBufferState.buffer = buffer;
+  surface->pendingBufferState.bufferAttached = true;
   if (x != 0 || y != 0) {
-    surface->pendingBufferOffsetX = x;
-    surface->pendingBufferOffsetY = y;
-    surface->pendingBufferOffsetSet = true;
+    surface->pendingBufferState.offsetX = x;
+    surface->pendingBufferState.offsetY = y;
+    surface->pendingBufferState.offsetSet = true;
   }
 }
 
@@ -744,38 +744,38 @@ bool applySurfaceProtocolState(WaylandServer::Impl::Surface* surface,
   bool renderStateChanged = false;
   inputRegionChanged = false;
 
-  if (surface->pendingScaleSet) {
-    if (surface->scale != surface->pendingScale) {
-      surface->scale = surface->pendingScale;
+  if (surface->pendingBufferState.scaleSet) {
+    if (surface->bufferState.scale != surface->pendingBufferState.scale) {
+      surface->bufferState.scale = surface->pendingBufferState.scale;
       renderStateChanged = true;
     }
-    surface->pendingScaleSet = false;
+    surface->pendingBufferState.scaleSet = false;
   }
 
-  if (surface->pendingBufferTransformSet) {
-    if (surface->bufferTransform != surface->pendingBufferTransform) {
-      surface->bufferTransform = surface->pendingBufferTransform;
+  if (surface->pendingBufferState.transformSet) {
+    if (surface->bufferState.transform != surface->pendingBufferState.transform) {
+      surface->bufferState.transform = surface->pendingBufferState.transform;
       renderStateChanged = true;
     }
-    surface->pendingBufferTransformSet = false;
+    surface->pendingBufferState.transformSet = false;
   }
 
-  if (surface->pendingBufferOffsetSet) {
-    if (surface->bufferOffsetX != surface->pendingBufferOffsetX ||
-        surface->bufferOffsetY != surface->pendingBufferOffsetY) {
-      surface->bufferOffsetX = surface->pendingBufferOffsetX;
-      surface->bufferOffsetY = surface->pendingBufferOffsetY;
-      surface->x = surface->bufferOffsetX;
-      surface->y = surface->bufferOffsetY;
+  if (surface->pendingBufferState.offsetSet) {
+    if (surface->bufferState.offsetX != surface->pendingBufferState.offsetX ||
+        surface->bufferState.offsetY != surface->pendingBufferState.offsetY) {
+      surface->bufferState.offsetX = surface->pendingBufferState.offsetX;
+      surface->bufferState.offsetY = surface->pendingBufferState.offsetY;
+      surface->x = surface->bufferState.offsetX;
+      surface->y = surface->bufferState.offsetY;
       renderStateChanged = true;
       if (hasBufferAttach && surfaceIsTopLevelRenderable(surface)) {
-        surface->windowX += surface->bufferOffsetX;
-        surface->windowY += surface->bufferOffsetY;
+        surface->windowX += surface->bufferState.offsetX;
+        surface->windowY += surface->bufferState.offsetY;
       }
     }
-    surface->pendingBufferOffsetX = 0;
-    surface->pendingBufferOffsetY = 0;
-    surface->pendingBufferOffsetSet = false;
+    surface->pendingBufferState.offsetX = 0;
+    surface->pendingBufferState.offsetY = 0;
+    surface->pendingBufferState.offsetSet = false;
   }
 
   if (surface->pendingRegionState.opaqueRegionSet) {
@@ -801,7 +801,7 @@ bool applySurfaceProtocolState(WaylandServer::Impl::Surface* surface,
 
 bool bufferSizeValidForScale(WaylandServer::Impl::Surface const* surface) {
   if (!surface || surface->width <= 0 || surface->height <= 0) return true;
-  std::int32_t const scale = std::max(1, surface->scale);
+  std::int32_t const scale = std::max(1, surface->bufferState.scale);
   return surfaceTransformedBufferWidth(surface) % scale == 0 &&
          surfaceTransformedBufferHeight(surface) % scale == 0;
 }
@@ -911,7 +911,7 @@ void traceCrashSurfaceCommit(WaylandServer::Impl::Surface* surface,
                         surface->height,
                         surface->frameWidth,
                         surface->frameHeight,
-                        surface->scale,
+                        surface->bufferState.scale,
                         static_cast<unsigned long long>(surface->serial),
                         format);
 }
@@ -926,7 +926,7 @@ void bumpSurfaceSerial(WaylandServer::Impl::Surface* surface) {
 
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
-  bool const hasBufferAttach = surface->pendingBufferAttached;
+  bool const hasBufferAttach = surface->pendingBufferState.bufferAttached;
   if (surface->layerSurface && !surface->layerSurface->configured && !hasBufferAttach) {
     surface->layerSurface->configured = true;
     sendLayerConfigure(surface->layerSurface);
@@ -944,7 +944,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   surface->pendingPresentationFeedbacks.clear();
   bool const viewportChanged = pendingViewportStateChanged(surface);
   bool const damagePending = surfaceHasPendingDamage(surface);
-  bool const needsStateBufferRefresh = !hasBufferAttach && damagePending && surface->currentBuffer;
+  bool const needsStateBufferRefresh = !hasBufferAttach && damagePending && surface->bufferState.buffer;
   if (shouldDeferAtomicResizeState(surface, hasBufferAttach, viewportChanged, needsStateBufferRefresh)) {
     traceResizeSurface("commit-state-defer-atomic-resize", surface);
     clearPendingDamage(surface);
@@ -960,7 +960,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
 
   if (!hasBufferAttach) {
     bool serialBumped = false;
-    bool const needsBufferRefresh = damagePending && surface->currentBuffer;
+    bool const needsBufferRefresh = damagePending && surface->bufferState.buffer;
     if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged && !xdgRenderStateChanged &&
         !xdgConfigureStateChanged && !inputRegionChanged && !needsBufferRefresh &&
         surface->presentationFeedbacks.empty()) {
@@ -969,7 +969,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       return;
     }
     if (needsBufferRefresh) {
-      if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
+      if (auto* shmBuffer = shmBufferFor(surface->server, surface->bufferState.buffer)) {
         if (refreshCurrentShmBuffer(surface, *shmBuffer)) {
           if (!bufferSizeValidForScale(surface)) {
             wl_resource_post_error(resource,
@@ -988,7 +988,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
           }
           traceResizeSurface("commit-damage-shm", surface);
         }
-      } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
+      } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->bufferState.buffer)) {
         surface->dmabufBuffer = dmabufBuffer;
         if (!bufferSizeValidForScale(surface)) {
           wl_resource_post_error(resource,
@@ -1024,18 +1024,20 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     return;
   }
 
-  wl_resource* const previousBuffer = surface->currentBuffer;
+  wl_resource* const previousBuffer = surface->bufferState.buffer;
   bool const previousDmabufHeld = surface->dmabufBuffer != nullptr;
   bool const previousShmHeld = surface->shmPixels != nullptr;
-  if (previousBuffer && (previousDmabufHeld || previousShmHeld) && previousBuffer != surface->pendingBuffer) {
+  if (previousBuffer &&
+      (previousDmabufHeld || previousShmHeld) &&
+      previousBuffer != surface->pendingBufferState.buffer) {
     queueBufferRelease(surface, previousBuffer);
   }
-  surface->currentBuffer = surface->pendingBuffer;
-  surface->pendingBuffer = nullptr;
-  surface->pendingBufferAttached = false;
+  surface->bufferState.buffer = surface->pendingBufferState.buffer;
+  surface->pendingBufferState.buffer = nullptr;
+  surface->pendingBufferState.bufferAttached = false;
   bool releaseCurrentBufferImmediately = false;
-  if (surface->currentBuffer) {
-    if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
+  if (surface->bufferState.buffer) {
+    if (auto* shmBuffer = shmBufferFor(surface->server, surface->bufferState.buffer)) {
       if (refreshCurrentShmBuffer(surface, *shmBuffer)) {
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
@@ -1060,7 +1062,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         traceCrashSurfaceCommit(surface, "shm", 1u, static_cast<std::uint32_t>(shmBuffer->format));
         releaseCurrentBufferImmediately = surface->shmPixels == nullptr;
       }
-    } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
+    } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->bufferState.buffer)) {
       if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
         surface->rgbaPixels.reset();
         surface->shmPixels = nullptr;
@@ -1092,7 +1094,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     } else {
       releaseCurrentBufferImmediately = true;
     }
-    if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->currentBuffer);
+    if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->bufferState.buffer);
   } else {
     surface->rgbaPixels.reset();
     surface->shmPixels = nullptr;
@@ -1132,8 +1134,8 @@ void surfaceSetBufferScale(wl_client*, wl_resource* resource, std::int32_t scale
     wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_SCALE, "invalid wl_surface buffer scale");
     return;
   }
-  surface->pendingScale = scale;
-  surface->pendingScaleSet = true;
+  surface->pendingBufferState.scale = scale;
+  surface->pendingBufferState.scaleSet = true;
 }
 
 void surfaceSetBufferTransform(wl_client*, wl_resource* resource, std::int32_t transform) {
@@ -1142,8 +1144,8 @@ void surfaceSetBufferTransform(wl_client*, wl_resource* resource, std::int32_t t
     wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_TRANSFORM, "invalid wl_surface buffer transform");
     return;
   }
-  surface->pendingBufferTransform = transform;
-  surface->pendingBufferTransformSet = true;
+  surface->pendingBufferState.transform = transform;
+  surface->pendingBufferState.transformSet = true;
 }
 
 void surfaceDamageBuffer(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
@@ -1155,9 +1157,9 @@ void surfaceDamageBuffer(wl_client*, wl_resource* resource, std::int32_t x, std:
 
 void surfaceOffset(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
-  surface->pendingBufferOffsetX = x;
-  surface->pendingBufferOffsetY = y;
-  surface->pendingBufferOffsetSet = true;
+  surface->pendingBufferState.offsetX = x;
+  surface->pendingBufferState.offsetY = y;
+  surface->pendingBufferState.offsetSet = true;
 }
 
 struct wl_surface_interface const surfaceImpl{
@@ -1186,13 +1188,19 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
 std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameWidth > 0
              ? surface->frameWidth
-             : surface ? std::max(0, surfaceTransformedBufferWidth(surface) / std::max(1, surface->scale)) : 0;
+             : surface ? std::max(0,
+                                   surfaceTransformedBufferWidth(surface) /
+                                       std::max(1, surface->bufferState.scale))
+                       : 0;
 }
 
 std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameHeight > 0
              ? surface->frameHeight
-             : surface ? std::max(0, surfaceTransformedBufferHeight(surface) / std::max(1, surface->scale)) : 0;
+             : surface ? std::max(0,
+                                   surfaceTransformedBufferHeight(surface) /
+                                       std::max(1, surface->bufferState.scale))
+                       : 0;
 }
 
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface) {
@@ -1216,7 +1224,7 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
       surface->awaitingConfigureHeight,
       surface->width,
       surface->height,
-      surface->scale,
+      surface->bufferState.scale,
       surface->viewportState.sourceSet ? 1 : 0,
       surface->viewportState.sourceX,
       surface->viewportState.sourceY,
