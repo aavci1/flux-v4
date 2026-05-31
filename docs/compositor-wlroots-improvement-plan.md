@@ -26,7 +26,7 @@
 | P6 | WM-COMP-7 XDG popup and positioner completeness | Verified | Positioner validation, popup lifecycle checks, and wlroots-style popup constraint adjustment are implemented and covered by automated tests | Popup lifecycle, positioner validation, popup geometry, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol/geometry workstream |
 | P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified | XDG surface role sequencing, base-role creation checks, and buffer commit ordering now follow the wlroots rules covered by automated tests | XDG surface lifecycle, xdg popup, layer role, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-lifecycle workstream |
 | P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | XDG toplevel client-owned title/app-id/parent state now resets on null-buffer unmap | XDG toplevel reset tests plus compositor suite pass | No manual gate needed for this protocol-lifecycle slice |
-| P9 | WM-COMP-10 XDG activation token lifecycle | Verified slice | Activation token commits now validate supplied serials and focused-surface constraints against the seat serial ledger | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for serial/focus validation slice |
+| P9 | WM-COMP-10 XDG activation token lifecycle | Verified | Activation tokens are single-use, validate serial/focus constraints, and expire after the wlroots-style 30 second lifetime | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle workstream |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -359,7 +359,7 @@
 
 1. Done: make committed token resources immutable, require `activate` to reference a known committed token string, and consume that token after activation.
 2. Done: validate token serials and focused-surface constraints against the seat serial ledger.
-3. Planned: add token expiration or cleanup to avoid retaining unused committed tokens indefinitely.
+3. Done: add token expiration and cleanup so unused committed tokens are not retained indefinitely.
 
 **Step 1 inventory:**
 
@@ -372,6 +372,7 @@
 - A committed activation token cannot be mutated or committed again.
 - `xdg_activation.activate` only focuses a surface when the supplied token is known and committed.
 - A successful activation consumes the token so it cannot be reused.
+- Unused committed tokens expire and are destroyed after the wlroots-style 30 second lifetime.
 - Automated tests cover token matching and lifecycle helpers.
 
 ## Current Implementation Log
@@ -435,3 +436,4 @@
 | 2026-05-31 | WM-COMP-10 | In progress | Activation comparison found Lambda ignores token strings during `activate` and leaves committed token resources mutable. Implementing single-use token matching and consumption before serial/focus validation. |
 | 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token lifecycle helpers, made committed token resources inert, required `activate` to name a known committed token, and consumed tokens on successful activation. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token commit validation for supplied serials and focused-surface constraints against Lambda's seat serial ledger. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-10 | Verified | Added wlroots-style 30 second activation token expiry, event-loop timer cleanup, and expired-token lookup rejection. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

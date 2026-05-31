@@ -572,6 +572,15 @@ void WaylandServer::Impl::destroyDataOffer(DataOffer* offer) {
 }
 
 void WaylandServer::Impl::destroyActivationToken(ActivationToken* token) {
+  if (!token) return;
+  if (token->resource) {
+    wl_resource_set_user_data(token->resource, nullptr);
+    token->resource = nullptr;
+  }
+  if (token->timeout) {
+    wl_event_source_remove(token->timeout);
+    token->timeout = nullptr;
+  }
   eraseResource(activationTokens_, token);
 }
 

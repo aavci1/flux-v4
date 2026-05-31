@@ -61,6 +61,24 @@ bool activationTokenCommitRequestValid(wl_resource* resource, WaylandServer::Imp
   return activationTokenFocusedSurfaceValid(token->server, token);
 }
 
+int activationTokenTimeout(void* data) {
+  auto* token = static_cast<WaylandServer::Impl::ActivationToken*>(data);
+  if (!token || !token->server) return 0;
+  token->server->destroyActivationToken(token);
+  return 0;
+}
+
+bool armActivationTokenTimeout(WaylandServer::Impl::ActivationToken* token) {
+  if (!token || !token->server || kActivationTokenTimeoutMs == 0) return true;
+  if (!token->server->display_) return true;
+  wl_event_loop* loop = wl_display_get_event_loop(token->server->display_);
+  if (!loop) return true;
+  token->timeout = wl_event_loop_add_timer(loop, activationTokenTimeout, token);
+  if (!token->timeout) return false;
+  wl_event_source_timer_update(token->timeout, kActivationTokenTimeoutMs);
+  return true;
+}
+
 void sendInvalidActivationTokenAndDestroy(wl_resource* resource, WaylandServer::Impl::ActivationToken* token) {
   if (!token || !token->server) return;
   std::string const invalidToken = "lambda-invalid-" + std::to_string(token->server->nextActivationTokenId_++);
@@ -97,6 +115,14 @@ void activationTokenCommit(wl_client*, wl_resource* resource) {
     return;
   }
   token->committed = true;
+  token->expiresAtMs = monotonicMilliseconds() + kActivationTokenTimeoutMs;
+  if (!armActivationTokenTimeout(token)) {
+    wl_client_post_no_memory(wl_resource_get_client(resource));
+    auto* server = token->server;
+    makeActivationTokenResourceInert(resource, token);
+    server->destroyActivationToken(token);
+    return;
+  }
   xdg_activation_token_v1_send_done(resource, token->token.c_str());
   makeActivationTokenResourceInert(resource, token);
 }
@@ -139,7 +165,7 @@ void activationActivate(wl_client*, wl_resource* resource, char const* tokenName
   auto* server = serverFrom(resource);
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!server || !surfaceIsXdgToplevel(surface)) return;
-  auto* token = activationTokenForName(server->activationTokens_, tokenName ? tokenName : "");
+  auto* token = activationTokenForName(server->activationTokens_, tokenName ? tokenName : "", monotonicMilliseconds());
   if (!token) return;
 
   std::uint32_t const now = monotonicMilliseconds();

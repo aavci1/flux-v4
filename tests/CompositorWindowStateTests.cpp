@@ -129,6 +129,23 @@ TEST_CASE("xdg activation tokens are matched only after commit") {
   CHECK(lambda::compositor::activationTokenForName(tokens, "missing") == nullptr);
 }
 
+TEST_CASE("xdg activation tokens stop matching after the wlroots timeout") {
+  auto token = std::make_unique<lambda::compositor::WaylandServer::Impl::ActivationToken>();
+  token->token = "lambda-test";
+  token->committed = true;
+  token->expiresAtMs = 1'000;
+
+  std::vector<std::unique_ptr<lambda::compositor::WaylandServer::Impl::ActivationToken>> tokens;
+  tokens.push_back(std::move(token));
+
+  CHECK(lambda::compositor::kActivationTokenTimeoutMs == 30'000);
+  CHECK_FALSE(lambda::compositor::activationTokenExpired(tokens.front().get(), 999));
+  CHECK(lambda::compositor::activationTokenForName(tokens, "lambda-test", 999) == tokens.front().get());
+
+  CHECK(lambda::compositor::activationTokenExpired(tokens.front().get(), 1'000));
+  CHECK(lambda::compositor::activationTokenForName(tokens, "lambda-test", 1'000) == nullptr);
+}
+
 TEST_CASE("xdg activation token focused surface validation follows keyboard or pointer focus") {
   lambda::compositor::WaylandServer::Impl::Surface focused{};
   lambda::compositor::WaylandServer::Impl::Surface other{};
