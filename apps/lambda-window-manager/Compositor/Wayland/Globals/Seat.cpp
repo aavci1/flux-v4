@@ -66,9 +66,10 @@ int createKeymapFd(WaylandServer::Impl* server, std::uint32_t& size) {
   return -1;
 }
 
-constexpr std::array<SeatSerialKind, 2> kPointerCursorSerialKinds{
+constexpr std::array<SeatSerialKind, 3> kPointerCursorSerialKinds{
     SeatSerialKind::PointerEnter,
-    SeatSerialKind::PointerButton,
+    SeatSerialKind::PointerButtonPress,
+    SeatSerialKind::PointerButtonRelease,
 };
 
 void pointerSetCursor(wl_client* client, wl_resource* resource, std::uint32_t serial, wl_resource* surfaceResource,

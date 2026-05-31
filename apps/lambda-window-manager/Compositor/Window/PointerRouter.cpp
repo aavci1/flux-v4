@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <csignal>
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cctype>
 #include <cmath>
@@ -297,7 +298,6 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   if (next) {
     wl_fixed_t const x = wl_fixed_from_double(surfaceLocalX(next, server->pointerX_));
     wl_fixed_t const y = wl_fixed_from_double(surfaceLocalY(next, server->pointerY_));
-    server->pointerEnterSerial_ = serial;
     for (wl_resource* pointer : server->pointerResources_) {
       if (!resourceBelongsToSurfaceClient(pointer, next)) continue;
       wl_pointer_send_enter(pointer, serial, next->resource, x, y);
@@ -361,6 +361,24 @@ using wm::popupTrace;
 using wm::sendPointerFocus;
 using wm::setKeyboardFocus;
 
+namespace {
+
+constexpr std::array<SeatSerialKind, 2> kPopupGrabSerialKinds{
+    SeatSerialKind::PointerButtonPress,
+    SeatSerialKind::KeyboardKey,
+};
+
+bool validPopupGrabSerial(WaylandServer::Impl* server,
+                          WaylandServer::Impl::XdgPopup* popup,
+                          WaylandServer::Impl::Surface* parent,
+                          std::uint32_t serial) {
+  if (!server || !popup || !popup->resource) return false;
+  wl_client* const client = wl_resource_get_client(popup->resource);
+  return seatSerialIsValid(server, serial, client, parent, kPopupGrabSerialKinds);
+}
+
+} // namespace
+
 void establishPopupGrab(WaylandServer::Impl* server,
                         WaylandServer::Impl::XdgPopup* popup,
                         wl_resource* /*seat*/,
@@ -384,8 +402,8 @@ void establishPopupGrab(WaylandServer::Impl* server,
     }
   }
 
-  if (serial < server->pointerEnterSerial_ && serial != server->lastPointerButtonSerial_) {
-    wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB, "stale grab serial");
+  if (!validPopupGrabSerial(server, popup, parent, serial)) {
+    wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB, "invalid grab serial");
     return;
   }
 

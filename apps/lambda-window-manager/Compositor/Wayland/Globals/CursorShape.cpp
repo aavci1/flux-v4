@@ -61,9 +61,10 @@ void cursorShapeDeviceDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-constexpr std::array<SeatSerialKind, 2> kPointerCursorSerialKinds{
+constexpr std::array<SeatSerialKind, 3> kPointerCursorSerialKinds{
     SeatSerialKind::PointerEnter,
-    SeatSerialKind::PointerButton,
+    SeatSerialKind::PointerButtonPress,
+    SeatSerialKind::PointerButtonRelease,
 };
 
 void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t serial, std::uint32_t shape) {

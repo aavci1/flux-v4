@@ -12,6 +12,7 @@
 #include "xdg-shell-server-protocol.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -22,6 +23,22 @@
 namespace lambda::compositor {
 
 namespace {
+
+constexpr std::array<SeatSerialKind, 1> kToplevelGrabSerialKinds{
+    SeatSerialKind::PointerButtonPress,
+};
+
+bool validToplevelGrabSerial(WaylandServer::Impl const* server,
+                             wl_resource* requestResource,
+                             WaylandServer::Impl::Surface const* surface,
+                             std::uint32_t serial) {
+  if (!server || !requestResource || !surface) return false;
+  return seatSerialIsValid(server,
+                           serial,
+                           wl_resource_get_client(requestResource),
+                           surface,
+                           kToplevelGrabSerialKinds);
+}
 
 void appendToplevelState(wl_array* states, std::uint32_t state) {
   auto* value = static_cast<std::uint32_t*>(wl_array_add(states, sizeof(std::uint32_t)));
@@ -970,11 +987,7 @@ void xdgToplevelShowWindowMenu(wl_client*,
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
   auto* surface = toplevel->xdgSurface->surface;
-  if (serial == 0 ||
-      serial != toplevel->server->lastPointerButtonSerial_ ||
-      toplevel->server->lastPointerButtonSurface_ != surface) {
-    return;
-  }
+  if (!validToplevelGrabSerial(toplevel->server, resource, surface, serial)) return;
   focusSurface(toplevel->server, surface, monotonicMilliseconds());
 }
 
@@ -985,11 +998,7 @@ void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uin
   auto* surface = toplevel->xdgSurface->surface;
   std::int32_t const width = displayWidth(surface);
   std::int32_t const height = displayHeight(surface);
-  if (serial == 0 ||
-      serial != server->lastPointerButtonSerial_ ||
-      server->lastPointerButtonSurface_ != surface) {
-    return;
-  }
+  if (!validToplevelGrabSerial(server, resource, surface, serial)) return;
   if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE || width <= 0 || height <= 0 ||
       surface->fullscreen || surface->maximized) {
     return;
@@ -1013,11 +1022,7 @@ void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint3
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
   if (surface->fullscreen) return;
-  if (serial == 0 ||
-      serial != server->lastPointerButtonSerial_ ||
-      server->lastPointerButtonSurface_ != surface) {
-    return;
-  }
+  if (!validToplevelGrabSerial(server, resource, surface, serial)) return;
   focusSurface(server, surface, monotonicMilliseconds());
   server->dragSurface_ = surface;
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);

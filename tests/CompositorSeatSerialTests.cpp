@@ -18,16 +18,24 @@ TEST_CASE("seat serial ledger validates client surface and kind") {
   WaylandServer::Impl::Surface surfaceB{};
   auto* clientA = reinterpret_cast<wl_client*>(std::uintptr_t{1});
   auto* clientB = reinterpret_cast<wl_client*>(std::uintptr_t{2});
-  std::array pointerKinds{SeatSerialKind::PointerEnter, SeatSerialKind::PointerButton};
+  std::array pointerKinds{
+      SeatSerialKind::PointerEnter,
+      SeatSerialKind::PointerButtonPress,
+      SeatSerialKind::PointerButtonRelease,
+  };
   std::array keyboardKinds{SeatSerialKind::KeyboardKey};
+  std::array pointerPressOnly{SeatSerialKind::PointerButtonPress};
 
   std::uint32_t const serial =
-      issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButton, clientA, &surfaceA);
+      issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButtonPress, clientA, &surfaceA);
+  std::uint32_t const releaseSerial =
+      issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButtonRelease, clientA, &surfaceA);
 
   CHECK(seatSerialIsValid(records, serial, clientA, &surfaceA, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientB, &surfaceA, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientA, &surfaceB, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientA, &surfaceA, keyboardKinds));
+  CHECK_FALSE(seatSerialIsValid(records, releaseSerial, clientA, &surfaceA, pointerPressOnly));
   CHECK_FALSE(seatSerialIsValid(records, 0, clientA, &surfaceA, pointerKinds));
 }
 
@@ -42,7 +50,7 @@ TEST_CASE("seat serial ledger trims old records and clears destroyed surfaces") 
   std::deque<WaylandServer::Impl::SeatSerialRecord> records;
   WaylandServer::Impl::Surface surface{};
   auto* client = reinterpret_cast<wl_client*>(std::uintptr_t{1});
-  std::array pointerKinds{SeatSerialKind::PointerEnter, SeatSerialKind::PointerButton};
+  std::array pointerKinds{SeatSerialKind::PointerEnter, SeatSerialKind::PointerButtonPress};
 
   std::uint32_t firstSerial = 0;
   std::uint32_t lastSerial = 0;

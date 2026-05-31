@@ -39,7 +39,8 @@ enum class SurfaceRole : std::uint8_t {
 
 enum class SeatSerialKind : std::uint8_t {
   PointerEnter,
-  PointerButton,
+  PointerButtonPress,
+  PointerButtonRelease,
   KeyboardEnter,
   KeyboardKey,
   KeyboardModifiers,
@@ -295,9 +296,6 @@ struct WaylandServer::Impl {
   CursorShape compositorCursorShape_ = CursorShape::Arrow;
   std::int32_t cursorHotspotX_ = 0;
   std::int32_t cursorHotspotY_ = 0;
-  std::uint32_t pointerEnterSerial_ = 0;
-  std::uint32_t lastPointerButtonSerial_ = 0;
-  Surface* lastPointerButtonSurface_ = nullptr;
   std::deque<SeatSerialRecord> seatSerials_;
   float dragOffsetX_ = 0.f;
   float dragOffsetY_ = 0.f;

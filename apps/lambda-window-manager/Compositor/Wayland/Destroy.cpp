@@ -159,7 +159,6 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (maximizePressSurface_ == surface) maximizePressSurface_ = nullptr;
   if (minimizePressSurface_ == surface) minimizePressSurface_ = nullptr;
   if (lastTitleClickSurface_ == surface) lastTitleClickSurface_ = nullptr;
-  if (lastPointerButtonSurface_ == surface) lastPointerButtonSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
   if (lastActivationSurface_ == surface) lastActivationSurface_ = nullptr;
   for (auto& token : activationTokens_) {
