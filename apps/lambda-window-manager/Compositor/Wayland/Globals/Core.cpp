@@ -64,23 +64,6 @@ bool regionsEqual(std::vector<RegionRect> const& a, std::vector<RegionRect> cons
   return true;
 }
 
-bool transformSwapsAxes(std::int32_t transform) {
-  return transform == WL_OUTPUT_TRANSFORM_90 ||
-         transform == WL_OUTPUT_TRANSFORM_270 ||
-         transform == WL_OUTPUT_TRANSFORM_FLIPPED_90 ||
-         transform == WL_OUTPUT_TRANSFORM_FLIPPED_270;
-}
-
-std::int32_t transformedBufferWidth(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  return transformSwapsAxes(surface->bufferTransform) ? surface->height : surface->width;
-}
-
-std::int32_t transformedBufferHeight(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  return transformSwapsAxes(surface->bufferTransform) ? surface->width : surface->height;
-}
-
 void subtractRegionRect(std::vector<RegionRect>& rects, RegionRect cut) {
   if (emptyRegionRect(cut)) return;
 
@@ -370,17 +353,11 @@ bool isIntegerSize(float value) {
 }
 
 std::int32_t committedDisplayWidth(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  if (surface->destinationSet) return surface->destinationWidth;
-  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceWidth);
-  return std::max(1, transformedBufferWidth(surface) / std::max(1, surface->scale));
+  return surfaceCommittedDisplayWidth(surface);
 }
 
 std::int32_t committedDisplayHeight(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  if (surface->destinationSet) return surface->destinationHeight;
-  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceHeight);
-  return std::max(1, transformedBufferHeight(surface) / std::max(1, surface->scale));
+  return surfaceCommittedDisplayHeight(surface);
 }
 
 std::int32_t committedWindowDisplayWidth(WaylandServer::Impl::Surface const* surface) {
@@ -497,23 +474,23 @@ void traceConfigureCommitLag(char const* event, WaylandServer::Impl::Surface con
 }
 
 bool applyViewportState(WaylandServer::Impl::Surface* surface) {
-  surface->sourceSet = surface->pendingSourceSet;
-  surface->sourceX = surface->pendingSourceX;
-  surface->sourceY = surface->pendingSourceY;
-  surface->sourceWidth = surface->pendingSourceWidth;
-  surface->sourceHeight = surface->pendingSourceHeight;
-  surface->destinationSet = surface->pendingDestinationSet;
-  surface->destinationWidth = surface->pendingDestinationWidth;
-  surface->destinationHeight = surface->pendingDestinationHeight;
+  surface->viewportState.sourceSet = surface->pendingViewportState.sourceSet;
+  surface->viewportState.sourceX = surface->pendingViewportState.sourceX;
+  surface->viewportState.sourceY = surface->pendingViewportState.sourceY;
+  surface->viewportState.sourceWidth = surface->pendingViewportState.sourceWidth;
+  surface->viewportState.sourceHeight = surface->pendingViewportState.sourceHeight;
+  surface->viewportState.destinationSet = surface->pendingViewportState.destinationSet;
+  surface->viewportState.destinationWidth = surface->pendingViewportState.destinationWidth;
+  surface->viewportState.destinationHeight = surface->pendingViewportState.destinationHeight;
 
   if (surface->width <= 0 || surface->height <= 0) {
     setConfiguredFrameSize(surface, 0, 0);
     return true;
   }
 
-  if (surface->sourceSet) {
-    if (surface->sourceX < 0.f || surface->sourceY < 0.f ||
-        surface->sourceWidth <= 0.f || surface->sourceHeight <= 0.f) {
+  if (surface->viewportState.sourceSet) {
+    if (surface->viewportState.sourceX < 0.f || surface->viewportState.sourceY < 0.f ||
+        surface->viewportState.sourceWidth <= 0.f || surface->viewportState.sourceHeight <= 0.f) {
       if (surface->viewport && surface->viewport->resource) {
         wl_resource_post_error(surface->viewport->resource,
                                WP_VIEWPORT_ERROR_BAD_VALUE,
@@ -521,8 +498,8 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
       }
       return false;
     }
-    if (surface->sourceX + surface->sourceWidth > static_cast<float>(surface->width) ||
-        surface->sourceY + surface->sourceHeight > static_cast<float>(surface->height)) {
+    if (surface->viewportState.sourceX + surface->viewportState.sourceWidth > static_cast<float>(surface->width) ||
+        surface->viewportState.sourceY + surface->viewportState.sourceHeight > static_cast<float>(surface->height)) {
       if (surface->viewport && surface->viewport->resource) {
         wl_resource_post_error(surface->viewport->resource,
                                WP_VIEWPORT_ERROR_OUT_OF_BUFFER,
@@ -584,11 +561,11 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
   if (surface->xdgWindowGeometrySet) {
     surface->frameWidth = surface->xdgWindowGeometryWidth;
     surface->frameHeight = surface->xdgWindowGeometryHeight;
-  } else if (surface->destinationSet) {
-    surface->frameWidth = surface->destinationWidth;
-    surface->frameHeight = surface->destinationHeight;
-  } else if (surface->sourceSet) {
-    if (!isIntegerSize(surface->sourceWidth) || !isIntegerSize(surface->sourceHeight)) {
+  } else if (surface->viewportState.destinationSet) {
+    surface->frameWidth = surface->viewportState.destinationWidth;
+    surface->frameHeight = surface->viewportState.destinationHeight;
+  } else if (surface->viewportState.sourceSet) {
+    if (!isIntegerSize(surface->viewportState.sourceWidth) || !isIntegerSize(surface->viewportState.sourceHeight)) {
       if (surface->viewport && surface->viewport->resource) {
         wl_resource_post_error(surface->viewport->resource,
                                WP_VIEWPORT_ERROR_BAD_SIZE,
@@ -596,8 +573,8 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
       }
       return false;
     }
-    surface->frameWidth = static_cast<std::int32_t>(surface->sourceWidth);
-    surface->frameHeight = static_cast<std::int32_t>(surface->sourceHeight);
+    surface->frameWidth = static_cast<std::int32_t>(surface->viewportState.sourceWidth);
+    surface->frameHeight = static_cast<std::int32_t>(surface->viewportState.sourceHeight);
   } else {
     surface->frameWidth = committedDisplayWidth(surface);
     surface->frameHeight = committedDisplayHeight(surface);
@@ -607,13 +584,15 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
 }
 
 bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Impl::Surface const* surface) {
-  if (!surface || !surface->pendingSourceSet) return true;
-  return surface->pendingSourceX >= 0.f &&
-         surface->pendingSourceY >= 0.f &&
-         surface->pendingSourceWidth > 0.f &&
-         surface->pendingSourceHeight > 0.f &&
-         surface->pendingSourceX + surface->pendingSourceWidth <= static_cast<float>(surface->width) &&
-         surface->pendingSourceY + surface->pendingSourceHeight <= static_cast<float>(surface->height);
+  if (!surface || !surface->pendingViewportState.sourceSet) return true;
+  return surface->pendingViewportState.sourceX >= 0.f &&
+         surface->pendingViewportState.sourceY >= 0.f &&
+         surface->pendingViewportState.sourceWidth > 0.f &&
+         surface->pendingViewportState.sourceHeight > 0.f &&
+         surface->pendingViewportState.sourceX + surface->pendingViewportState.sourceWidth <=
+             static_cast<float>(surface->width) &&
+         surface->pendingViewportState.sourceY + surface->pendingViewportState.sourceHeight <=
+             static_cast<float>(surface->height);
 }
 
 bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
@@ -822,8 +801,8 @@ bool applySurfaceProtocolState(WaylandServer::Impl::Surface* surface,
 bool bufferSizeValidForScale(WaylandServer::Impl::Surface const* surface) {
   if (!surface || surface->width <= 0 || surface->height <= 0) return true;
   std::int32_t const scale = std::max(1, surface->scale);
-  return transformedBufferWidth(surface) % scale == 0 &&
-         transformedBufferHeight(surface) % scale == 0;
+  return surfaceTransformedBufferWidth(surface) % scale == 0 &&
+         surfaceTransformedBufferHeight(surface) % scale == 0;
 }
 
 bool refreshCurrentShmBuffer(WaylandServer::Impl::Surface* surface,
@@ -865,14 +844,14 @@ bool refreshCurrentShmBuffer(WaylandServer::Impl::Surface* surface,
 
 bool pendingViewportStateChanged(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return false;
-  return surface->pendingSourceSet != surface->sourceSet ||
-         surface->pendingSourceX != surface->sourceX ||
-         surface->pendingSourceY != surface->sourceY ||
-         surface->pendingSourceWidth != surface->sourceWidth ||
-         surface->pendingSourceHeight != surface->sourceHeight ||
-         surface->pendingDestinationSet != surface->destinationSet ||
-         surface->pendingDestinationWidth != surface->destinationWidth ||
-         surface->pendingDestinationHeight != surface->destinationHeight;
+  return surface->pendingViewportState.sourceSet != surface->viewportState.sourceSet ||
+         surface->pendingViewportState.sourceX != surface->viewportState.sourceX ||
+         surface->pendingViewportState.sourceY != surface->viewportState.sourceY ||
+         surface->pendingViewportState.sourceWidth != surface->viewportState.sourceWidth ||
+         surface->pendingViewportState.sourceHeight != surface->viewportState.sourceHeight ||
+         surface->pendingViewportState.destinationSet != surface->viewportState.destinationSet ||
+         surface->pendingViewportState.destinationWidth != surface->viewportState.destinationWidth ||
+         surface->pendingViewportState.destinationHeight != surface->viewportState.destinationHeight;
 }
 
 bool surfaceHasActiveResizeSizing(WaylandServer::Impl::Surface const* surface) {
@@ -1027,7 +1006,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         }
         traceResizeSurface("commit-damage-dmabuf", surface);
       }
-    } else if (surface->pendingSourceSet || surface->pendingDestinationSet) {
+    } else if (surface->pendingViewportState.sourceSet || surface->pendingViewportState.destinationSet) {
       traceResizeSurface("commit-state-defer-viewport", surface);
     } else if (pendingViewportSourceFitsCurrentBuffer(surface)) {
       if (!applyViewportState(surface)) return;
@@ -1206,13 +1185,13 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
 std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameWidth > 0
              ? surface->frameWidth
-             : surface ? std::max(0, transformedBufferWidth(surface) / std::max(1, surface->scale)) : 0;
+             : surface ? std::max(0, surfaceTransformedBufferWidth(surface) / std::max(1, surface->scale)) : 0;
 }
 
 std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameHeight > 0
              ? surface->frameHeight
-             : surface ? std::max(0, transformedBufferHeight(surface) / std::max(1, surface->scale)) : 0;
+             : surface ? std::max(0, surfaceTransformedBufferHeight(surface) / std::max(1, surface->scale)) : 0;
 }
 
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface) {
@@ -1237,14 +1216,14 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
       surface->width,
       surface->height,
       surface->scale,
-      surface->sourceSet ? 1 : 0,
-      surface->sourceX,
-      surface->sourceY,
-      surface->sourceWidth,
-      surface->sourceHeight,
-      surface->destinationSet ? 1 : 0,
-      surface->destinationWidth,
-      surface->destinationHeight,
+      surface->viewportState.sourceSet ? 1 : 0,
+      surface->viewportState.sourceX,
+      surface->viewportState.sourceY,
+      surface->viewportState.sourceWidth,
+      surface->viewportState.sourceHeight,
+      surface->viewportState.destinationSet ? 1 : 0,
+      surface->viewportState.destinationWidth,
+      surface->viewportState.destinationHeight,
       static_cast<unsigned long long>(surface->serial),
       surface->lastConfigureSerial,
       surface->lastConfigureWidth,

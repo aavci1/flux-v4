@@ -30,11 +30,11 @@ void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed
   bool const unset = x == wl_fixed_from_int(-1) && y == wl_fixed_from_int(-1) &&
                      width == wl_fixed_from_int(-1) && height == wl_fixed_from_int(-1);
   if (unset) {
-    viewport->surface->pendingSourceSet = false;
-    viewport->surface->pendingSourceX = 0.f;
-    viewport->surface->pendingSourceY = 0.f;
-    viewport->surface->pendingSourceWidth = 0.f;
-    viewport->surface->pendingSourceHeight = 0.f;
+    viewport->surface->pendingViewportState.sourceSet = false;
+    viewport->surface->pendingViewportState.sourceX = 0.f;
+    viewport->surface->pendingViewportState.sourceY = 0.f;
+    viewport->surface->pendingViewportState.sourceWidth = 0.f;
+    viewport->surface->pendingViewportState.sourceHeight = 0.f;
     return;
   }
 
@@ -47,11 +47,11 @@ void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed
     return;
   }
 
-  viewport->surface->pendingSourceSet = true;
-  viewport->surface->pendingSourceX = static_cast<float>(sourceX);
-  viewport->surface->pendingSourceY = static_cast<float>(sourceY);
-  viewport->surface->pendingSourceWidth = static_cast<float>(sourceWidth);
-  viewport->surface->pendingSourceHeight = static_cast<float>(sourceHeight);
+  viewport->surface->pendingViewportState.sourceSet = true;
+  viewport->surface->pendingViewportState.sourceX = static_cast<float>(sourceX);
+  viewport->surface->pendingViewportState.sourceY = static_cast<float>(sourceY);
+  viewport->surface->pendingViewportState.sourceWidth = static_cast<float>(sourceWidth);
+  viewport->surface->pendingViewportState.sourceHeight = static_cast<float>(sourceHeight);
 }
 
 void viewportSetDestination(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
@@ -62,9 +62,9 @@ void viewportSetDestination(wl_client*, wl_resource* resource, std::int32_t widt
   }
 
   if (width == -1 && height == -1) {
-    viewport->surface->pendingDestinationSet = false;
-    viewport->surface->pendingDestinationWidth = 0;
-    viewport->surface->pendingDestinationHeight = 0;
+    viewport->surface->pendingViewportState.destinationSet = false;
+    viewport->surface->pendingViewportState.destinationWidth = 0;
+    viewport->surface->pendingViewportState.destinationHeight = 0;
     return;
   }
   if (width <= 0 || height <= 0) {
@@ -72,9 +72,9 @@ void viewportSetDestination(wl_client*, wl_resource* resource, std::int32_t widt
     return;
   }
 
-  viewport->surface->pendingDestinationSet = true;
-  viewport->surface->pendingDestinationWidth = width;
-  viewport->surface->pendingDestinationHeight = height;
+  viewport->surface->pendingViewportState.destinationSet = true;
+  viewport->surface->pendingViewportState.destinationWidth = width;
+  viewport->surface->pendingViewportState.destinationHeight = height;
 }
 
 struct wp_viewport_interface const viewportImpl{

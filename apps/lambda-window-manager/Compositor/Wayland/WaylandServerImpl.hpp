@@ -13,6 +13,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -36,6 +37,7 @@ enum class SurfaceRole : std::uint8_t {
 
 struct WaylandServer::Impl {
   struct Surface;
+  struct SurfaceViewportState;
   struct Subsurface;
   struct XdgPositioner;
   struct XdgSurface;
@@ -322,6 +324,17 @@ struct WaylandServer::Impl {
   std::uint32_t lastActivationTimeMs_ = 0;
 };
 
+struct WaylandServer::Impl::SurfaceViewportState {
+  float sourceX = 0.f;
+  float sourceY = 0.f;
+  float sourceWidth = 0.f;
+  float sourceHeight = 0.f;
+  bool sourceSet = false;
+  std::int32_t destinationWidth = 0;
+  std::int32_t destinationHeight = 0;
+  bool destinationSet = false;
+};
+
 struct WaylandServer::Impl::Surface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
@@ -365,22 +378,8 @@ struct WaylandServer::Impl::Surface {
   std::int32_t xdgWindowGeometryY = 0;
   std::int32_t xdgWindowGeometryWidth = 0;
   std::int32_t xdgWindowGeometryHeight = 0;
-  float sourceX = 0.f;
-  float sourceY = 0.f;
-  float sourceWidth = 0.f;
-  float sourceHeight = 0.f;
-  bool sourceSet = false;
-  float pendingSourceX = 0.f;
-  float pendingSourceY = 0.f;
-  float pendingSourceWidth = 0.f;
-  float pendingSourceHeight = 0.f;
-  bool pendingSourceSet = false;
-  std::int32_t destinationWidth = 0;
-  std::int32_t destinationHeight = 0;
-  bool destinationSet = false;
-  std::int32_t pendingDestinationWidth = 0;
-  std::int32_t pendingDestinationHeight = 0;
-  bool pendingDestinationSet = false;
+  SurfaceViewportState viewportState;
+  SurfaceViewportState pendingViewportState;
   bool snapped = false;
   bool maximized = false;
   bool fullscreen = false;
@@ -498,6 +497,37 @@ inline bool surfaceIsTopLevelRenderable(WaylandServer::Impl::Surface const* surf
          (surface->role == SurfaceRole::XdgToplevel ||
           surface->role == SurfaceRole::XdgPopup ||
           surface->role == SurfaceRole::LayerSurface);
+}
+
+inline bool surfaceBufferTransformSwapsAxes(std::int32_t transform) {
+  return transform == WL_OUTPUT_TRANSFORM_90 ||
+         transform == WL_OUTPUT_TRANSFORM_270 ||
+         transform == WL_OUTPUT_TRANSFORM_FLIPPED_90 ||
+         transform == WL_OUTPUT_TRANSFORM_FLIPPED_270;
+}
+
+inline std::int32_t surfaceTransformedBufferWidth(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  return surfaceBufferTransformSwapsAxes(surface->bufferTransform) ? surface->height : surface->width;
+}
+
+inline std::int32_t surfaceTransformedBufferHeight(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  return surfaceBufferTransformSwapsAxes(surface->bufferTransform) ? surface->width : surface->height;
+}
+
+inline std::int32_t surfaceCommittedDisplayWidth(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  if (surface->viewportState.destinationSet) return surface->viewportState.destinationWidth;
+  if (surface->viewportState.sourceSet) return static_cast<std::int32_t>(surface->viewportState.sourceWidth);
+  return std::max(1, surfaceTransformedBufferWidth(surface) / std::max(1, surface->scale));
+}
+
+inline std::int32_t surfaceCommittedDisplayHeight(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  if (surface->viewportState.destinationSet) return surface->viewportState.destinationHeight;
+  if (surface->viewportState.sourceSet) return static_cast<std::int32_t>(surface->viewportState.sourceHeight);
+  return std::max(1, surfaceTransformedBufferHeight(surface) / std::max(1, surface->scale));
 }
 
 struct WaylandServer::Impl::Subsurface {

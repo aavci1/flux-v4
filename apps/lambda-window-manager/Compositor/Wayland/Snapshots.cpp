@@ -30,38 +30,15 @@ bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
           surface->dmabufBuffer);
 }
 
-bool transformSwapsAxes(std::int32_t transform) {
-  return transform == WL_OUTPUT_TRANSFORM_90 ||
-         transform == WL_OUTPUT_TRANSFORM_270 ||
-         transform == WL_OUTPUT_TRANSFORM_FLIPPED_90 ||
-         transform == WL_OUTPUT_TRANSFORM_FLIPPED_270;
-}
-
-std::int32_t transformedBufferWidth(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  return transformSwapsAxes(surface->bufferTransform) ? surface->height : surface->width;
-}
-
-std::int32_t transformedBufferHeight(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  return transformSwapsAxes(surface->bufferTransform) ? surface->width : surface->height;
-}
-
 std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const* surface);
 std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const* surface);
 
 std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  if (surface->destinationSet) return surface->destinationWidth;
-  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceWidth);
-  return std::max(1, transformedBufferWidth(surface) / std::max(1, surface->scale));
+  return surfaceCommittedDisplayWidth(surface);
 }
 
 std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return 0;
-  if (surface->destinationSet) return surface->destinationHeight;
-  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceHeight);
-  return std::max(1, transformedBufferHeight(surface) / std::max(1, surface->scale));
+  return surfaceCommittedDisplayHeight(surface);
 }
 
 WaylandServer::Impl::XdgToplevel const* toplevelForSurface(WaylandServer::Impl const* server,
@@ -97,7 +74,12 @@ bool fullscreenToplevel(WaylandServer::Impl::Surface const* surface) {
 }
 
 bool canCropToXdgWindowGeometry(WaylandServer::Impl::Surface const* surface) {
-  if (!surface || !surface->xdgWindowGeometrySet || surface->sourceSet || surface->destinationSet) return false;
+  if (!surface ||
+      !surface->xdgWindowGeometrySet ||
+      surface->viewportState.sourceSet ||
+      surface->viewportState.destinationSet) {
+    return false;
+  }
   if (surface->bufferTransform != WL_OUTPUT_TRANSFORM_NORMAL) return false;
   std::int32_t const scale = std::max(1, surface->scale);
   std::int32_t const sourceX = surface->xdgWindowGeometryX * scale;
@@ -171,15 +153,17 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   std::int32_t const bufferScale = std::max(1, surface->scale);
   bool const fullscreen = fullscreenToplevel(surface);
   float const sourceX = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryX * bufferScale)
-                                             : surface->sourceSet ? surface->sourceX : 0.f;
+                                             : surface->viewportState.sourceSet ? surface->viewportState.sourceX : 0.f;
   float const sourceY = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryY * bufferScale)
-                                             : surface->sourceSet ? surface->sourceY : 0.f;
-  float const sourceWidth = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryWidth * bufferScale)
-                                                 : surface->sourceSet ? surface->sourceWidth
-                                                                      : static_cast<float>(surface->width);
-  float const sourceHeight = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryHeight * bufferScale)
-                                                  : surface->sourceSet ? surface->sourceHeight
-                                                                       : static_cast<float>(surface->height);
+                                             : surface->viewportState.sourceSet ? surface->viewportState.sourceY : 0.f;
+  float const sourceWidth = cropToWindowGeometry
+                                ? static_cast<float>(surface->xdgWindowGeometryWidth * bufferScale)
+                                : surface->viewportState.sourceSet ? surface->viewportState.sourceWidth
+                                                                    : static_cast<float>(surface->width);
+  float const sourceHeight = cropToWindowGeometry
+                                 ? static_cast<float>(surface->xdgWindowGeometryHeight * bufferScale)
+                                 : surface->viewportState.sourceSet ? surface->viewportState.sourceHeight
+                                                                     : static_cast<float>(surface->height);
   std::int32_t const titleBarHeight = decorated && !cutoutMode && !fullscreen ? server->chromeConfig_.titleBarHeight : 0;
   std::int32_t const outputHeight = server ? server->logicalOutputHeight() : 0;
   std::int32_t const workTop = 0;
@@ -209,8 +193,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .sourceY = sourceY,
       .sourceWidth = sourceWidth,
       .sourceHeight = sourceHeight,
-      .destinationWidth = surface->destinationSet ? surface->destinationWidth : width,
-      .destinationHeight = surface->destinationSet ? surface->destinationHeight : height,
+      .destinationWidth = surface->viewportState.destinationSet ? surface->viewportState.destinationWidth : width,
+      .destinationHeight = surface->viewportState.destinationSet ? surface->viewportState.destinationHeight : height,
       .titleBarHeight = titleBarHeight,
       .title = decorated && !cutoutMode && !fullscreen ? titleForSurface(server, surface) : std::string{},
       .serverSideDecorated = decorated && !fullscreen,
@@ -386,12 +370,14 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
       .bufferTransform = surface->bufferTransform,
-      .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
-      .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
-      .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
-      .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
-      .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
-      .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
+      .sourceX = surface->viewportState.sourceSet ? surface->viewportState.sourceX : 0.f,
+      .sourceY = surface->viewportState.sourceSet ? surface->viewportState.sourceY : 0.f,
+      .sourceWidth =
+          surface->viewportState.sourceSet ? surface->viewportState.sourceWidth : static_cast<float>(surface->width),
+      .sourceHeight =
+          surface->viewportState.sourceSet ? surface->viewportState.sourceHeight : static_cast<float>(surface->height),
+      .destinationWidth = surface->viewportState.destinationSet ? surface->viewportState.destinationWidth : displayWidth(surface),
+      .destinationHeight = surface->viewportState.destinationSet ? surface->viewportState.destinationHeight : displayHeight(surface),
       .titleBarHeight = 0,
       .title = {},
 	      .focused = false,

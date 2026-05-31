@@ -73,14 +73,14 @@ void resetViewportRole(WaylandServer::Impl* server, WaylandServer::Impl::Viewpor
   if (!server || !viewport) return;
   if (viewport->surface && viewport->surface->viewport == viewport) {
     viewport->surface->viewport = nullptr;
-    viewport->surface->pendingSourceSet = false;
-    viewport->surface->pendingSourceX = 0.f;
-    viewport->surface->pendingSourceY = 0.f;
-    viewport->surface->pendingSourceWidth = 0.f;
-    viewport->surface->pendingSourceHeight = 0.f;
-    viewport->surface->pendingDestinationSet = false;
-    viewport->surface->pendingDestinationWidth = 0;
-    viewport->surface->pendingDestinationHeight = 0;
+    viewport->surface->pendingViewportState.sourceSet = false;
+    viewport->surface->pendingViewportState.sourceX = 0.f;
+    viewport->surface->pendingViewportState.sourceY = 0.f;
+    viewport->surface->pendingViewportState.sourceWidth = 0.f;
+    viewport->surface->pendingViewportState.sourceHeight = 0.f;
+    viewport->surface->pendingViewportState.destinationSet = false;
+    viewport->surface->pendingViewportState.destinationWidth = 0;
+    viewport->surface->pendingViewportState.destinationHeight = 0;
   }
   if (viewport->resource) wl_resource_set_user_data(viewport->resource, nullptr);
   eraseResource(server->viewports_, viewport);

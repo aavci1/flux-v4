@@ -130,6 +130,28 @@ TEST_CASE("surface input region defaults to full surface and can exclude points"
   CHECK_FALSE(lambda::compositor::wm::inputRegionContains(&surface, 10.f, 60.f));
 }
 
+TEST_CASE("surface viewport pending state does not affect committed display size") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.width = 400;
+  surface.height = 200;
+  surface.scale = 2;
+
+  CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 200);
+  CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 100);
+
+  surface.pendingViewportState.destinationSet = true;
+  surface.pendingViewportState.destinationWidth = 320;
+  surface.pendingViewportState.destinationHeight = 180;
+
+  CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 200);
+  CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 100);
+
+  surface.viewportState = surface.pendingViewportState;
+
+  CHECK(lambda::compositor::surfaceCommittedDisplayWidth(&surface) == 320);
+  CHECK(lambda::compositor::surfaceCommittedDisplayHeight(&surface) == 180);
+}
+
 TEST_CASE("xdg window geometry validates positive size") {
   CHECK(lambda::compositor::wm::xdgWindowGeometrySizeValid(1, 1));
   CHECK_FALSE(lambda::compositor::wm::xdgWindowGeometrySizeValid(0, 1));
