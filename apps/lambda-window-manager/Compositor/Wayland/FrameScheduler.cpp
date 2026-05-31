@@ -255,15 +255,37 @@ void WaylandServer::Impl::releasePendingBuffers() {
 }
 
 void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
-  sendPresentationFeedbacks(timeMs, timing);
-  sendFrameCallbacksOnly(timeMs);
+  std::vector<std::uint64_t> frameSurfaceIds;
+  frameSurfaceIds.reserve(surfaces_.size());
+  for (auto const& surface : surfaces_) {
+    if (surface) frameSurfaceIds.push_back(surface->id);
+  }
+  sendFrameCallbacks(timeMs, timing, frameSurfaceIds);
+}
+
+void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs,
+                                             PresentationTiming timing,
+                                             std::span<std::uint64_t const> frameSurfaceIds) {
+  sendPresentationFeedbacks(timeMs, timing, frameSurfaceIds);
+  sendFrameCallbacksOnly(timeMs, frameSurfaceIds);
 }
 
 void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
+  std::vector<std::uint64_t> frameSurfaceIds;
+  frameSurfaceIds.reserve(surfaces_.size());
+  for (auto const& surface : surfaces_) {
+    if (surface) frameSurfaceIds.push_back(surface->id);
+  }
+  sendFrameCallbacksOnly(timeMs, frameSurfaceIds);
+}
+
+void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs,
+                                                 std::span<std::uint64_t const> frameSurfaceIds) {
   releasePendingBuffers();
   std::uint64_t callbackCount = 0;
   for (auto const& surface : surfaces_) {
     if (surface && hiddenFullscreenShellPanel(*this, surface.get())) continue;
+    if (!surfaceParticipatesInPresentedFrame(surface.get(), frameSurfaceIds)) continue;
     std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);
     surface->frameCallbacks.clear();
     callbackCount += callbacks.size();
@@ -281,9 +303,21 @@ void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
 }
 
 void WaylandServer::Impl::sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing) {
+  std::vector<std::uint64_t> frameSurfaceIds;
+  frameSurfaceIds.reserve(surfaces_.size());
+  for (auto const& surface : surfaces_) {
+    if (surface) frameSurfaceIds.push_back(surface->id);
+  }
+  sendPresentationFeedbacks(timeMs, timing, frameSurfaceIds);
+}
+
+void WaylandServer::Impl::sendPresentationFeedbacks(std::uint32_t timeMs,
+                                                    PresentationTiming timing,
+                                                    std::span<std::uint64_t const> frameSurfaceIds) {
   normalizePresentationTiming(output_, timing);
   std::vector<PresentationFeedback*> delayedFeedbacks;
   for (auto const& surface : surfaces_) {
+    if (!surfaceParticipatesInPresentedFrame(surface.get(), frameSurfaceIds)) continue;
     std::vector<PresentationFeedback*> feedbacks = std::move(surface->presentationFeedbacks);
     surface->presentationFeedbacks.clear();
     for (auto* feedback : feedbacks) {

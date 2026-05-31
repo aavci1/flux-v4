@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -74,8 +75,15 @@ public:
   [[nodiscard]] bool hasActiveResizePacing() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void sendFrameCallbacksOnly(std::uint32_t timeMs);
+  void sendFrameCallbacksOnly(std::uint32_t timeMs, std::span<std::uint64_t const> frameSurfaceIds);
   void sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing);
+  void sendPresentationFeedbacks(std::uint32_t timeMs,
+                                 PresentationTiming timing,
+                                 std::span<std::uint64_t const> frameSurfaceIds);
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
+  void sendFrameCallbacks(std::uint32_t timeMs,
+                          PresentationTiming timing,
+                          std::span<std::uint64_t const> frameSurfaceIds);
   void completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions, std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);

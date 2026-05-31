@@ -146,12 +146,29 @@ void WaylandServer::sendFrameCallbacksOnly(std::uint32_t timeMs) {
   impl_->sendFrameCallbacksOnly(timeMs);
 }
 
+void WaylandServer::sendFrameCallbacksOnly(std::uint32_t timeMs,
+                                           std::span<std::uint64_t const> frameSurfaceIds) {
+  impl_->sendFrameCallbacksOnly(timeMs, frameSurfaceIds);
+}
+
 void WaylandServer::sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing) {
   impl_->sendPresentationFeedbacks(timeMs, timing);
 }
 
+void WaylandServer::sendPresentationFeedbacks(std::uint32_t timeMs,
+                                              PresentationTiming timing,
+                                              std::span<std::uint64_t const> frameSurfaceIds) {
+  impl_->sendPresentationFeedbacks(timeMs, timing, frameSurfaceIds);
+}
+
 void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
   impl_->sendFrameCallbacks(timeMs, timing);
+}
+
+void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs,
+                                       PresentationTiming timing,
+                                       std::span<std::uint64_t const> frameSurfaceIds) {
+  impl_->sendFrameCallbacks(timeMs, timing, frameSurfaceIds);
 }
 
 void WaylandServer::completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions,

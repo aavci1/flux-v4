@@ -829,6 +829,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     bool atomicFrameDirty = true;
     std::uint64_t lastKnownContentSerial = wayland.contentSerial();
     presentation::AtomicFrameProfile lastAtomicScheduledProfile{};
+    std::vector<std::uint64_t> lastAtomicScheduledFrameSurfaceIds;
     std::uint64_t atomicRenderAheadLeadEstimateNsec = initialRenderAheadLeadNsec(output.refreshRateMilliHz());
     std::uint64_t lastAcquireWaitFrameCallbackNsec = 0;
     auto lastCrashHeartbeat = SteadyClock::now();
@@ -939,6 +940,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         lastAtomicScheduledNsec = scheduledNsec;
         lastAtomicScheduledRenderMs = 0.0;
         lastAtomicScheduledProfile = {};
+        lastAtomicScheduledFrameSurfaceIds.clear();
       } else {
         return false;
       }
@@ -1118,7 +1120,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frame.timing.backendPresentId = presentId;
         frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                          WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
-        wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
+        lastAtomicScheduledFrameSurfaceIds = frame.frameCallbackSurfaceIds;
+        wayland.sendPresentationFeedbacks(monotonicMilliseconds(),
+                                          frame.timing,
+                                          lastAtomicScheduledFrameSurfaceIds);
         commitScheduledSceneDamage(frame);
         frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
@@ -1212,7 +1217,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frame.timing.backendPresentId = presentId;
         frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                          WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
-        wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
+        lastAtomicScheduledFrameSurfaceIds = frame.frameCallbackSurfaceIds;
+        wayland.sendPresentationFeedbacks(monotonicMilliseconds(),
+                                          frame.timing,
+                                          lastAtomicScheduledFrameSurfaceIds);
         commitScheduledSceneDamage(frame);
         frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
@@ -1296,7 +1304,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       frame.timing.backendPresentId = presentId;
       frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                        WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
-      wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
+      lastAtomicScheduledFrameSurfaceIds = frame.frameCallbackSurfaceIds;
+      wayland.sendPresentationFeedbacks(monotonicMilliseconds(),
+                                        frame.timing,
+                                        lastAtomicScheduledFrameSurfaceIds);
       commitScheduledSceneDamage(frame);
       frame = AtomicReadyFrame{};
       if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
@@ -1467,7 +1478,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 	      };
 	      wayland.setRetainedDmabufBufferIds(presenter->atomicPresenter()->overlayBufferIdsInUse());
 	      wayland.completePresentationFeedbacks({completion}, monotonicMilliseconds());
-	      wayland.sendFrameCallbacksOnly(monotonicMilliseconds());
+	      wayland.sendFrameCallbacksOnly(monotonicMilliseconds(), lastAtomicScheduledFrameSurfaceIds);
+	      lastAtomicScheduledFrameSurfaceIds.clear();
       double const renderSubmitToFlipMs =
           flip->renderSubmittedMonotonicNsec > 0 && completionNsec >= flip->renderSubmittedMonotonicNsec
               ? static_cast<double>(completionNsec - flip->renderSubmittedMonotonicNsec) / 1'000'000.0

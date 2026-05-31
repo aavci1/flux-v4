@@ -68,6 +68,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Window/WindowGeometry.cpp
     CompositorConfigTests.cpp
     CompositorDecorationStateTests.cpp
+    CompositorFrameSchedulerTests.cpp
     CompositorWindowGeometryTests.cpp
     CompositorWindowFrameGeometryTests.cpp
     CompositorConfigHotReloadTests.cpp

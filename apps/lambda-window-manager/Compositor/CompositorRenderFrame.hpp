@@ -10,8 +10,10 @@
 #include <Lambda/Graphics/Canvas.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace lambda {
 class FreeTypeTextSystem;
@@ -41,6 +43,7 @@ struct AtomicReadyFrame {
   presentation::AtomicFrameProfile profile{};
   SceneDamageState sceneDamageState;
   bool sceneDamageStateValid = false;
+  std::vector<std::uint64_t> frameCallbackSurfaceIds;
   std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate> scanoutCandidate;
 };
 

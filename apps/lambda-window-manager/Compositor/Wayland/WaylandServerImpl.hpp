@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -133,8 +134,15 @@ struct WaylandServer::Impl {
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void releasePendingBuffers();
   void sendFrameCallbacksOnly(std::uint32_t timeMs);
+  void sendFrameCallbacksOnly(std::uint32_t timeMs, std::span<std::uint64_t const> frameSurfaceIds);
   void sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing);
+  void sendPresentationFeedbacks(std::uint32_t timeMs,
+                                 PresentationTiming timing,
+                                 std::span<std::uint64_t const> frameSurfaceIds);
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
+  void sendFrameCallbacks(std::uint32_t timeMs,
+                          PresentationTiming timing,
+                          std::span<std::uint64_t const> frameSurfaceIds);
   void completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions, std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);
@@ -832,6 +840,11 @@ std::vector<WaylandServer::Impl::Subsurface const*> orderedSubsurfacesForParent(
     std::vector<WaylandServer::Impl::Subsurface const*> subsurfaces,
     WaylandServer::Impl::Surface const* parent,
     SubsurfaceStackLayer layer);
+inline bool surfaceParticipatesInPresentedFrame(WaylandServer::Impl::Surface const* surface,
+                                                std::span<std::uint64_t const> frameSurfaceIds) {
+  if (!surface || surface->id == 0) return false;
+  return std::ranges::find(frameSurfaceIds, surface->id) != frameSurfaceIds.end();
+}
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 void establishPopupGrab(WaylandServer::Impl* server,
                         WaylandServer::Impl::XdgPopup* popup,

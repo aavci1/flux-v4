@@ -201,6 +201,15 @@ bool rectsOverlap(CommittedSurfaceSnapshot const& a, CommittedSurfaceSnapshot co
   return a.x < bx2 && ax2 > b.x && a.y < by2 && ay2 > b.y;
 }
 
+std::vector<std::uint64_t> frameSurfaceIds(std::vector<CommittedSurfaceSnapshot> const& surfaces) {
+  std::vector<std::uint64_t> ids;
+  ids.reserve(surfaces.size());
+  for (CommittedSurfaceSnapshot const& surface : surfaces) {
+    if (surface.id != 0) ids.push_back(surface.id);
+  }
+  return ids;
+}
+
 bool surfaceOpenAnimationComplete(SurfaceRenderState const& state,
                                   CommittedSurfaceSnapshot const& surface,
                                   std::chrono::steady_clock::time_point frameTime,
@@ -534,6 +543,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
           .profile = atomicFrameProfile,
           .sceneDamageState = std::move(frameSceneDamageState),
           .sceneDamageStateValid = true,
+          .frameCallbackSurfaceIds = {},
           .scanoutCandidate = nullptr,
       };
       *ctx.atomicFrameDirty = false;
@@ -547,6 +557,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   auto snapPreview = ctx.wayland.snapPreview();
   bool snapPreviewDrawn = false;
   auto committedSurfaces = ctx.wayland.committedSurfaces();
+  std::vector<std::uint64_t> frameCallbackSurfaceIds = frameSurfaceIds(committedSurfaces);
   committedSurfaceCount = committedSurfaces.size();
   auto screenshotOverlay = ctx.wayland.screenshotSelectionOverlay();
   std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
@@ -732,6 +743,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
             .profile = atomicFrameProfile,
             .sceneDamageState = std::move(frameSceneDamageState),
             .sceneDamageStateValid = true,
+            .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
             .scanoutCandidate = directDeferred ? ownOverlayCandidate(std::move(directCandidate)) : nullptr,
         };
         *ctx.atomicFrameDirty = false;
@@ -804,6 +816,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
               .profile = atomicFrameProfile,
               .sceneDamageState = std::move(frameSceneDamageState),
               .sceneDamageStateValid = true,
+              .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
               .scanoutCandidate = overlayDeferred ? ownOverlayCandidate(std::move(pendingOverlay->candidate)) : nullptr,
           };
           *ctx.atomicFrameDirty = false;
@@ -940,6 +953,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
         .profile = atomicFrameProfile,
         .sceneDamageState = std::move(frameSceneDamageState),
         .sceneDamageStateValid = true,
+        .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
         .scanoutCandidate = nullptr,
     };
     *ctx.atomicFrameDirty = false;
@@ -1000,7 +1014,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   if (!atomicPresenter) {
     ctx.surfaceRenderState.sceneDamage = std::move(frameSceneDamageState);
     ctx.wayland.completePresentationFeedbacks(presentationCompletions, presentation::monotonicMilliseconds());
-    ctx.wayland.sendFrameCallbacks(presentation::monotonicMilliseconds(), presentationTiming);
+    ctx.wayland.sendFrameCallbacks(presentation::monotonicMilliseconds(),
+                                   presentationTiming,
+                                   frameCallbackSurfaceIds);
   }
 }
 
