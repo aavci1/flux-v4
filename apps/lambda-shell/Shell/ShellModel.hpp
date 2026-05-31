@@ -20,9 +20,8 @@ public:
   struct SnapshotChanges {
     bool dockItems = false;
     bool activeTitle = false;
-    bool systemStatus = false;
 
-    [[nodiscard]] bool any() const { return dockItems || activeTitle || systemStatus; }
+    [[nodiscard]] bool any() const { return dockItems || activeTitle; }
   };
 
   std::vector<DockItem> const& dockItems() const { return dockItems_.peek(); }
@@ -58,6 +57,7 @@ public:
 
   void resetDockItems();
   void setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config);
+  [[nodiscard]] bool setSystemStatus(SystemStatus status);
   [[nodiscard]] bool setDockDpiScale(float scale);
   void setPreviewFocus(std::string_view appId);
   [[nodiscard]] SnapshotChanges applySnapshot(std::string_view json);

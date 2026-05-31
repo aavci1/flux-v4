@@ -108,7 +108,7 @@ TEST_CASE("Shell model launcher query editing is cursor aware") {
   CHECK(model.queryCursor() == 11);
 }
 
-TEST_CASE("Shell model applies structured snapshots to dock status title and system status") {
+TEST_CASE("Shell model applies snapshots to dock and title while status remains shell owned") {
   lambda_shell::ShellModel model;
   model.resetDockItems();
 
@@ -123,8 +123,16 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   })");
   CHECK(changes.dockItems);
   CHECK(changes.activeTitle);
-  CHECK(changes.systemStatus);
   CHECK(model.activeTitle() == "Files Home");
+  CHECK(model.systemStatus().network == "unknown");
+
+  CHECK(model.setSystemStatus(lambda_shell::SystemStatus{
+      .network = "online",
+      .wifi = "Lambda",
+      .bluetooth = "off",
+      .volume = "55%",
+      .battery = "88%",
+  }));
   CHECK(model.systemStatus().network == "online");
   CHECK(model.systemStatus().wifi == "Lambda");
 

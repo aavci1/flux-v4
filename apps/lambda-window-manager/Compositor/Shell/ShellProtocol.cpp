@@ -106,8 +106,7 @@ std::string desktopSnapshotJson(WaylandServer::Impl const* server) {
   json += server->keyboardFocus_ && surfaceIsXdgToplevel(server->keyboardFocus_)
               ? std::to_string(server->keyboardFocus_->id)
               : "null";
-  json += ",\"system\":{\"network\":\"unknown\",\"wifi\":\"unknown\",\"bluetooth\":\"unknown\",";
-  json += "\"volume\":\"unknown\",\"battery\":\"unknown\"}}";
+  json += "}";
   return json;
 }
 

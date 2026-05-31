@@ -11,6 +11,7 @@ lambda_add_app(lambda-shell
     Shell/ShellJson.cpp
     Shell/ShellModel.cpp
     Shell/ShellModels.cpp
+    Shell/ShellSystemStatus.cpp
     Shell/UI/LambdaCommandLauncher.cpp
     Shell/UI/LambdaDock.cpp
     Shell/UI/LambdaShellTypes.cpp)

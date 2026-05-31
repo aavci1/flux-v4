@@ -3,6 +3,7 @@
 #include "Shell/ShellAppRegistry.hpp"
 #include "Shell/ShellDesktopView.hpp"
 #include "Shell/ShellJson.hpp"
+#include "Shell/ShellSystemStatus.hpp"
 
 #include "Shell/ShellIpc.hpp"
 #include "Shell/ShellViews.hpp"
@@ -166,6 +167,10 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       }
       return;
     }
+    if (systemStatusTimerId_ != 0 && event.timerId == systemStatusTimerId_) {
+      (void)refreshSystemStatus();
+      return;
+    }
     if (configReloadTimerId_ != 0 && event.timerId == configReloadTimerId_) {
       checkShellConfigReload();
     }
@@ -300,9 +305,8 @@ bool ShellController::saveShellConfig(ShellConfig const& config) {
 void ShellController::applyShellConfigToModel() {
   model_.setDockItems(appRegistry_, shellConfig_);
   (void)updateDockClockWidth();
-  ShellModel::SnapshotChanges changes{};
   if (!lastSnapshotLine_.empty()) {
-    changes = model_.applySnapshot(lastSnapshotLine_);
+    (void)model_.applySnapshot(lastSnapshotLine_);
   }
 
   if (dockWindow_) {
@@ -310,9 +314,6 @@ void ShellController::applyShellConfigToModel() {
     int const width = dockWidth(model_.dockItems(), model_.dockClockWidth());
     dockWindow_->setLayerShellOptions(
         dockWindowConfig(width, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius).layerShell);
-  }
-  if (changes.systemStatus) {
-    requestDockRedraw();
   }
   requestDockRedraw();
   if (model_.launcherOpen()) requestLauncherRedraw();
@@ -343,7 +344,9 @@ void ShellController::createProductionWindows() {
   dockWindow_ = &dock;
   dockHandle_ = dock.handle();
   lastDockWidth_ = dockWidthPx;
+  (void)refreshSystemStatus();
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *dockHandle_);
+  systemStatusTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{5}, *dockHandle_);
 
   auto& dockMenu = app_.createWindow<lambda::Window>(dockMenuWindowConfig());
   dockMenu.setBackground(lambda::WindowBackground::transparent());
@@ -367,6 +370,7 @@ void ShellController::setupPreviewWindow(lambda::Window& window, float width, fl
   previewHandle_ = window.handle();
   model_.setLauncherSize(width, height);
   (void)updateDockClockWidth();
+  (void)refreshSystemStatus();
   mountPreviewView();
 }
 
@@ -423,6 +427,15 @@ void ShellController::requestDockMenuRedraw() {
 
 void ShellController::requestLauncherRedraw() {
   if (launcherWindow_) launcherWindow_->requestRedraw();
+}
+
+bool ShellController::refreshSystemStatus() {
+  if (!model_.setSystemStatus(readShellSystemStatus())) {
+    return false;
+  }
+  requestDockRedraw();
+  if (previewHandle_) requestLauncherRedraw();
+  return true;
 }
 
 int ShellController::measureDockClockWidth() {
@@ -627,9 +640,6 @@ void ShellController::handleIpcLine(std::string_view line) {
     }
     resizeDockWindowIfNeeded();
     if (changes.dockItems) {
-      requestDockRedraw();
-    }
-    if (changes.systemStatus) {
       requestDockRedraw();
     }
     if (changes.dockItems && model_.launcherOpen()) {

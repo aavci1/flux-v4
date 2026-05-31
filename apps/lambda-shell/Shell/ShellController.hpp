@@ -45,6 +45,7 @@ private:
   void resizeDockWindowIfNeeded();
   void handleIpcLine(std::string_view line);
   void checkShellConfigReload();
+  [[nodiscard]] bool refreshSystemStatus();
   void syncLauncherWindow();
   void openDockMenu(DockItem const& item);
   void syncDockMenuOverlay();
@@ -81,6 +82,7 @@ private:
   int lastDockWidth_ = 0;
   std::uint64_t ipcPollId_ = 0;
   std::uint64_t clockTimerId_ = 0;
+  std::uint64_t systemStatusTimerId_ = 0;
   std::uint64_t configReloadTimerId_ = 0;
   std::uint64_t nextRequestId_ = 1;
   std::filesystem::path configPath_;

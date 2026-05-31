@@ -599,13 +599,6 @@ ShellDesktopSnapshot parseShellSnapshot(std::string_view json) {
   }
 
   snapshot.activeWindowId = lambda::shell::jsonUintField(json, "activeWindowId");
-  snapshot.system = {
-      .network = lambda::shell::jsonStringField(json, "network"),
-      .wifi = lambda::shell::jsonStringField(json, "wifi"),
-      .bluetooth = lambda::shell::jsonStringField(json, "bluetooth"),
-      .volume = lambda::shell::jsonStringField(json, "volume"),
-      .battery = lambda::shell::jsonStringField(json, "battery"),
-  };
   return snapshot;
 }
 

@@ -189,6 +189,12 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
   refreshLauncherResults();
 }
 
+bool ShellModel::setSystemStatus(SystemStatus status) {
+  if (status == systemStatus_.peek()) return false;
+  systemStatus_.set(std::move(status));
+  return true;
+}
+
 bool ShellModel::setDockDpiScale(float scale) {
   scale = std::clamp(scale, 0.5f, 4.f);
   if (std::abs(scale - dockDpiScale_) < 0.001f) return false;
@@ -270,14 +276,6 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     items.push_back(std::move(item));
   }
 
-  SystemStatus nextStatus{
-      .network = snapshot.system.network,
-      .wifi = snapshot.system.wifi,
-      .bluetooth = snapshot.system.bluetooth,
-      .volume = snapshot.system.volume,
-      .battery = snapshot.system.battery,
-  };
-
   if (!dockItemsVisualStateEqual(items, dockItems_.peek())) {
     dockItems_.set(std::move(items));
     refreshLauncherResults();
@@ -286,10 +284,6 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
   if (nextTitle != activeTitle_.peek()) {
     activeTitle_.set(std::move(nextTitle));
     changes.activeTitle = true;
-  }
-  if (!(nextStatus == systemStatus_.peek())) {
-    systemStatus_.set(std::move(nextStatus));
-    changes.systemStatus = true;
   }
   return changes;
 }

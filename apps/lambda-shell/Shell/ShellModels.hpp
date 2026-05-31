@@ -34,7 +34,6 @@ struct ShellDesktopSnapshot {
   std::vector<AppRegistryEntry> apps;
   std::vector<ShellWindowSnapshot> windows;
   std::uint64_t activeWindowId = 0;
-  ShellSystemStatusSnapshot system;
 
   bool operator==(ShellDesktopSnapshot const&) const = default;
 };

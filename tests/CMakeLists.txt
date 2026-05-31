@@ -39,6 +39,7 @@ set(_lambda_test_sources
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellJson.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellModel.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellModels.cpp
+  ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellSystemStatus.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/UI/LambdaDock.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/UI/LambdaShellTypes.cpp
   ShellAppRegistryTests.cpp
@@ -47,6 +48,7 @@ set(_lambda_test_sources
   ShellIpcTests.cpp
   ShellModelTests.cpp
   ShellModelsTests.cpp
+  ShellSystemStatusTests.cpp
   SvgPathTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-terminal/TerminalCore.cpp
   TerminalCoreTests.cpp

@@ -342,11 +342,6 @@ TEST_CASE("Shell snapshot parser handles reordered fields and escaped strings") 
                                  .minimized = true,
                              });
   CHECK(snapshot.activeWindowId == 11);
-  CHECK(snapshot.system.network == "online");
-  CHECK(snapshot.system.wifi == "Home");
-  CHECK(snapshot.system.bluetooth == "off");
-  CHECK(snapshot.system.volume == "44%");
-  CHECK(snapshot.system.battery == "95%");
 }
 
 TEST_CASE("Shell config parses defaults and invalid fallback") {
