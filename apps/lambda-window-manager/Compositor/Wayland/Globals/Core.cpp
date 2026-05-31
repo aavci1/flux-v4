@@ -2,6 +2,7 @@
 
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Diagnostics/CpuTrace.hpp"
+#include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
@@ -1119,11 +1120,13 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
   bool const xdgRenderStateChanged = applyXdgProtocolState(surface);
 
   if (!hasBufferAttach) {
+    bool const pointerConstraintStateChanged =
+        applyPointerConstraintsPendingState(surface->server, surface, allowSynchronizedSubsurfaceCache);
     bool serialBumped = false;
     bool const needsBufferRefresh = damagePending && surface->bufferState.buffer;
     if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged && !xdgRenderStateChanged &&
         !xdgConfigureStateChanged && !inputRegionChanged && !needsBufferRefresh && !layerCommit.stateChanged &&
-        !subsurfaceStateChanged && surface->presentationFeedbacks.empty()) {
+        !subsurfaceStateChanged && !pointerConstraintStateChanged && surface->presentationFeedbacks.empty()) {
       if (flushLayerConfigure) surface->server->flushClients();
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       clearPendingDamage(surface);
@@ -1303,6 +1306,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
     traceResizeSurface("commit-empty", surface);
     traceCrashSurfaceCommit(surface, "empty", 0u, 0u);
   }
+  applyPointerConstraintsPendingState(surface->server, surface, allowSynchronizedSubsurfaceCache);
   clearPendingDamage(surface);
   releaseCachedSubsurfaceCommits(surface);
 }

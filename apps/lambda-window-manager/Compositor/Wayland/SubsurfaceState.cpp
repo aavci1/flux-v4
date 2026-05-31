@@ -1,5 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/Wayland/PointerConstraintState.hpp"
+
 #include <algorithm>
 #include <utility>
 #include <vector>
@@ -125,6 +127,7 @@ void clearSurfacePendingCommit(Surface* surface) {
   surface->pendingViewportState = surface->viewportState;
   surface->pendingRegionState = {};
   surface->pendingDamageState = {};
+  surface->pendingPointerConstraintStates.clear();
   surface->pendingBackgroundBlurRects.clear();
   surface->pendingBackgroundEffectState = {};
   surface->backgroundBlurPending = false;
@@ -183,6 +186,7 @@ void mergePendingCommitState(SurfacePendingCommitState& cached,
   cached.damageState.bufferRects.insert(cached.damageState.bufferRects.end(),
                                         incoming.damageState.bufferRects.begin(),
                                         incoming.damageState.bufferRects.end());
+  mergePointerConstraintCommitStates(cached.pointerConstraintStates, std::move(incoming.pointerConstraintStates));
   if (incoming.backgroundBlurPending) {
     cached.pendingBackgroundBlurRects = std::move(incoming.pendingBackgroundBlurRects);
     cached.backgroundBlurPending = true;
@@ -246,6 +250,7 @@ SurfacePendingCommitState takeSurfacePendingCommit(WaylandServer::Impl::Surface*
   state.viewportChanged = viewportPendingChanged(surface);
   state.regionState = std::move(surface->pendingRegionState);
   state.damageState = std::move(surface->pendingDamageState);
+  state.pointerConstraintStates = takePointerConstraintPendingStates(surface->server, surface);
   state.pendingBackgroundBlurRects = std::move(surface->pendingBackgroundBlurRects);
   state.pendingBackgroundEffectState = surface->pendingBackgroundEffectState;
   state.backgroundBlurPending = surface->backgroundBlurPending;
@@ -263,6 +268,7 @@ void restoreSurfacePendingCommit(WaylandServer::Impl::Surface* surface,
   surface->pendingViewportState = state.viewportChanged ? state.viewportState : surface->viewportState;
   surface->pendingRegionState = std::move(state.regionState);
   surface->pendingDamageState = std::move(state.damageState);
+  surface->pendingPointerConstraintStates = std::move(state.pointerConstraintStates);
   surface->pendingBackgroundBlurRects = std::move(state.pendingBackgroundBlurRects);
   surface->pendingBackgroundEffectState = state.pendingBackgroundEffectState;
   surface->backgroundBlurPending = state.backgroundBlurPending;

@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 
+#include "Compositor/Wayland/PointerConstraintState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
@@ -11,6 +12,11 @@
 
 namespace lambda::compositor {
 namespace {
+
+std::vector<PointerConstraintRegionRect> copyPointerConstraintRegion(wl_resource* regionResource) {
+  auto* region = resourceData<WaylandServer::Impl::Region>(regionResource);
+  return region ? region->rects : std::vector<PointerConstraintRegionRect>{};
+}
 
 void relativePointerManagerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -119,12 +125,23 @@ void lockedPointerDestroy(wl_client*, wl_resource* resource) {
 
 void lockedPointerSetCursorPositionHint(wl_client*, wl_resource* resource, wl_fixed_t surfaceX, wl_fixed_t surfaceY) {
   auto* constraint = resourceData<WaylandServer::Impl::PointerConstraint>(resource);
-  if (!constraint) return;
-  constraint->cursorHintX = static_cast<float>(wl_fixed_to_double(surfaceX));
-  constraint->cursorHintY = static_cast<float>(wl_fixed_to_double(surfaceY));
+  if (!constraint || constraint->defunct) return;
+  constraint->pendingCursorHintX = static_cast<float>(wl_fixed_to_double(surfaceX));
+  constraint->pendingCursorHintY = static_cast<float>(wl_fixed_to_double(surfaceY));
+  constraint->pendingCursorHintSet = true;
 }
 
-void lockedPointerSetRegion(wl_client*, wl_resource*, wl_resource*) {}
+void pointerConstraintSetRegion(wl_resource* resource, wl_resource* regionResource) {
+  auto* constraint = resourceData<WaylandServer::Impl::PointerConstraint>(resource);
+  if (!constraint || constraint->defunct) return;
+  constraint->pendingRegionInfinite = regionResource == nullptr;
+  constraint->pendingRegionRects = copyPointerConstraintRegion(regionResource);
+  constraint->pendingRegionSet = true;
+}
+
+void lockedPointerSetRegion(wl_client*, wl_resource* resource, wl_resource* regionResource) {
+  pointerConstraintSetRegion(resource, regionResource);
+}
 
 struct zwp_locked_pointer_v1_interface const lockedPointerImpl{
     .destroy = lockedPointerDestroy,
@@ -136,7 +153,9 @@ void confinedPointerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void confinedPointerSetRegion(wl_client*, wl_resource*, wl_resource*) {}
+void confinedPointerSetRegion(wl_client*, wl_resource* resource, wl_resource* regionResource) {
+  pointerConstraintSetRegion(resource, regionResource);
+}
 
 struct zwp_confined_pointer_v1_interface const confinedPointerImpl{
     .destroy = confinedPointerDestroy,
@@ -148,6 +167,7 @@ void createPointerConstraint(wl_client* client,
                              std::uint32_t id,
                              wl_resource* surfaceResource,
                              wl_resource* pointerResource,
+                             wl_resource* regionResource,
                              std::uint32_t lifetime,
                              WaylandServer::Impl::PointerConstraint::Kind kind) {
   auto* server = serverFrom(resource);
@@ -175,7 +195,10 @@ void createPointerConstraint(wl_client* client,
   constraint->pointer = pointerResource;
   constraint->kind = kind;
   constraint->lifetime = lifetime;
+  constraint->regionInfinite = regionResource == nullptr;
+  constraint->regionRects = copyPointerConstraintRegion(regionResource);
   auto* raw = constraint.get();
+  rebuildPointerConstraintEffectiveRegion(raw);
   server->pointerConstraints_.push_back(std::move(constraint));
   wl_resource_set_implementation(constraintResource,
                                  kind == WaylandServer::Impl::PointerConstraint::Kind::Lock
@@ -191,13 +214,14 @@ void pointerConstraintsLockPointer(wl_client* client,
                                    std::uint32_t id,
                                    wl_resource* surface,
                                    wl_resource* pointer,
-                                   wl_resource*,
+                                   wl_resource* region,
                                    std::uint32_t lifetime) {
   createPointerConstraint(client,
                           resource,
                           id,
                           surface,
                           pointer,
+                          region,
                           lifetime,
                           WaylandServer::Impl::PointerConstraint::Kind::Lock);
 }
@@ -207,13 +231,14 @@ void pointerConstraintsConfinePointer(wl_client* client,
                                       std::uint32_t id,
                                       wl_resource* surface,
                                       wl_resource* pointer,
-                                      wl_resource*,
+                                      wl_resource* region,
                                       std::uint32_t lifetime) {
   createPointerConstraint(client,
                           resource,
                           id,
                           surface,
                           pointer,
+                          region,
                           lifetime,
                           WaylandServer::Impl::PointerConstraint::Kind::Confine);
 }
@@ -244,6 +269,23 @@ void updatePointerConstraintsForFocus(WaylandServer::Impl* server) {
 
 WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server) {
   return activePointerConstraintImpl(server);
+}
+
+bool applyPointerConstraintsPendingState(WaylandServer::Impl* server,
+                                         WaylandServer::Impl::Surface* surface,
+                                         bool includeLivePendingState) {
+  if (!server || !surface) return false;
+  bool changed = false;
+  for (auto const& state : surface->pendingPointerConstraintStates) {
+    changed |= applyPointerConstraintCommitState(state);
+  }
+  surface->pendingPointerConstraintStates.clear();
+  for (auto const& constraint : server->pointerConstraints_) {
+    if (constraint->surface != surface) continue;
+    changed |= includeLivePendingState ? applyPointerConstraintPendingState(constraint.get())
+                                       : rebuildPointerConstraintEffectiveRegion(constraint.get());
+  }
+  return changed;
 }
 
 void bindRelativePointerManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {

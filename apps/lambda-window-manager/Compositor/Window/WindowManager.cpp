@@ -1,5 +1,6 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 
+#include "Compositor/Wayland/PointerConstraintState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
@@ -135,12 +136,7 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
                          std::max(0.f, static_cast<float>(logicalOutputHeight() - 1)));
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Confine && constraint->surface) {
-    pointerX_ = std::clamp(pointerX_,
-                           static_cast<float>(constraint->surface->windowX),
-                           static_cast<float>(constraint->surface->windowX + std::max(0, displayWidth(constraint->surface) - 1)));
-    pointerY_ = std::clamp(pointerY_,
-                           static_cast<float>(constraint->surface->windowY),
-                           static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
+    clampPointerConstraintGlobalPoint(constraint, pointerX_, pointerY_);
   }
   if (resizeSurface_) {
     updateResize(this);
@@ -178,12 +174,7 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
                          std::max(0.f, static_cast<float>(logicalOutputHeight() - 1)));
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Confine && constraint->surface) {
-    pointerX_ = std::clamp(pointerX_,
-                           static_cast<float>(constraint->surface->windowX),
-                           static_cast<float>(constraint->surface->windowX + std::max(0, displayWidth(constraint->surface) - 1)));
-    pointerY_ = std::clamp(pointerY_,
-                           static_cast<float>(constraint->surface->windowY),
-                           static_cast<float>(constraint->surface->windowY + std::max(0, displayHeight(constraint->surface) - 1)));
+    clampPointerConstraintGlobalPoint(constraint, pointerX_, pointerY_);
   }
   if (resizeSurface_) {
     updateResize(this);

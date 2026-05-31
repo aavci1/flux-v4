@@ -55,6 +55,7 @@ struct WaylandServer::Impl {
   struct SurfacePendingRegionState;
   struct SurfaceDamageState;
   struct SurfacePendingDamageState;
+  struct PointerConstraintCommitState;
   struct SurfaceBufferState;
   struct SurfacePendingBufferState;
   struct SurfacePendingCommitState;
@@ -395,6 +396,16 @@ struct WaylandServer::Impl::SurfacePendingDamageState {
   std::vector<CommittedSurfaceSnapshot::RegionRect> bufferRects;
 };
 
+struct WaylandServer::Impl::PointerConstraintCommitState {
+  PointerConstraint* constraint = nullptr;
+  bool regionInfinite = true;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> regionRects;
+  bool regionSet = false;
+  bool cursorHintSet = false;
+  float cursorHintX = 0.f;
+  float cursorHintY = 0.f;
+};
+
 struct WaylandServer::Impl::SurfaceBufferState {
   wl_resource* buffer = nullptr;
   std::int32_t scale = 1;
@@ -421,6 +432,7 @@ struct WaylandServer::Impl::SurfacePendingCommitState {
   bool viewportChanged = false;
   SurfacePendingRegionState regionState;
   SurfacePendingDamageState damageState;
+  std::vector<PointerConstraintCommitState> pointerConstraintStates;
   std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBackgroundBlurRects;
   SurfaceBackgroundEffectSnapshot pendingBackgroundEffectState;
   bool backgroundBlurPending = false;
@@ -522,6 +534,7 @@ struct WaylandServer::Impl::Surface {
   SurfacePendingRegionState pendingRegionState;
   SurfaceDamageState damageState;
   SurfacePendingDamageState pendingDamageState;
+  std::vector<PointerConstraintCommitState> pendingPointerConstraintStates;
   Viewport* viewport = nullptr;
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;
@@ -786,8 +799,18 @@ struct WaylandServer::Impl::PointerConstraint {
   std::uint32_t lifetime = ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT;
   bool active = false;
   bool defunct = false;
+  bool regionInfinite = true;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> regionRects;
+  bool pendingRegionInfinite = true;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingRegionRects;
+  bool pendingRegionSet = false;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> effectiveRegionRects;
+  bool cursorHintSet = false;
   float cursorHintX = 0.f;
   float cursorHintY = 0.f;
+  bool pendingCursorHintSet = false;
+  float pendingCursorHintX = 0.f;
+  float pendingCursorHintY = 0.f;
 };
 
 struct WaylandServer::Impl::PrimarySelectionSource {

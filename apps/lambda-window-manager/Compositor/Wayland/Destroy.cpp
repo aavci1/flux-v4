@@ -517,7 +517,22 @@ void WaylandServer::Impl::destroyRelativePointer(RelativePointer* relativePointe
 }
 
 void WaylandServer::Impl::destroyPointerConstraint(PointerConstraint* constraint) {
-  if (constraint && constraint->active && constraint->resource) {
+  if (!constraint) return;
+  auto removeConstraintState = [constraint](std::vector<PointerConstraintCommitState>& states) {
+    states.erase(std::remove_if(states.begin(),
+                                states.end(),
+                                [constraint](PointerConstraintCommitState const& state) {
+                                  return state.constraint == constraint;
+                                }),
+                 states.end());
+  };
+  for (auto& surface : surfaces_) {
+    removeConstraintState(surface->pendingPointerConstraintStates);
+    if (surface->cachedSubsurfaceCommit) {
+      removeConstraintState(surface->cachedSubsurfaceCommit->pointerConstraintStates);
+    }
+  }
+  if (constraint->active && constraint->resource) {
     if (constraint->kind == PointerConstraint::Kind::Lock) {
       zwp_locked_pointer_v1_send_unlocked(constraint->resource);
     } else {

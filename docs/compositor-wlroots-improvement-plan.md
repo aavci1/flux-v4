@@ -27,6 +27,7 @@
 | P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified | XDG surface role sequencing, base-role creation checks, and buffer commit ordering now follow the wlroots rules covered by automated tests | XDG surface lifecycle, xdg popup, layer role, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-lifecycle workstream |
 | P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | XDG toplevel client-owned title/app-id/parent state now resets on null-buffer unmap | XDG toplevel reset tests plus compositor suite pass | No manual gate needed for this protocol-lifecycle slice |
 | P9 | WM-COMP-10 XDG activation token lifecycle | Verified | Activation tokens are single-use, validate serial/focus constraints, and expire after the wlroots-style 30 second lifetime | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle workstream |
+| P10 | WM-COMP-11 Pointer constraints synced state | Verified slice | Pointer constraint region/cursor-hint state is committed through the surface commit path, including synchronized subsurface cached commits | Pointer constraint, subsurface, compositor, and broader feasible suites pass | No manual gate needed for this protocol-state slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -375,6 +376,39 @@
 - Unused committed tokens expire and are destroyed after the wlroots-style 30 second lifetime.
 - Automated tests cover token matching and lifecycle helpers.
 
+## WM-COMP-11 Pointer Constraints Synced State
+
+**Why this matters:** wlroots treats pointer constraint region and cursor-position hint updates as surface-synchronized state that becomes effective on the constrained surface's next commit. Lambda currently accepts `set_region` but ignores it, applies cursor hints immediately, and confines only to the full surface bounds.
+
+**Goal:** make pointer constraints observe committed region/cursor-hint state and use the committed effective region for confinement.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/PointerExtensions.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/PointerConstraintState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Core.cpp`
+- `apps/lambda-window-manager/Compositor/Window/WindowManager.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: add committed/pending pointer constraint region and cursor-hint state, apply it from the surface commit path, and use the effective committed region during confinement.
+2. Planned: review oneshot constraint deactivation/resource-inert behavior against wlroots after the region-state slice.
+
+**Step 1 inventory:**
+
+- wlroots stores pointer constraint `set_region` and locked-pointer `set_cursor_position_hint` requests in pending synchronized state and applies them on the associated surface commit.
+- wlroots computes the effective region as the committed constraint region intersected with the surface input region, or the committed input region alone when no constraint region is set.
+- Lambda currently ignores `set_region`, writes cursor hints immediately, and clamps confined pointer motion to the full committed surface bounds.
+
+**Acceptance criteria:**
+
+- Pointer constraint region and cursor hint requests do not affect compositor behavior before the constrained surface commits.
+- Confined pointer motion clamps to the committed effective constraint region rather than always using the full surface bounds.
+- Input-region changes on the constrained surface update the effective pointer constraint region on commit.
+- Automated helper and compositor tests cover pending/current pointer constraint state and existing pointer/compositor behavior continues to pass.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -437,3 +471,5 @@
 | 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token lifecycle helpers, made committed token resources inert, required `activate` to name a known committed token, and consumed tokens on successful activation. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token commit validation for supplied serials and focused-surface constraints against Lambda's seat serial ledger. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-10 | Verified | Added wlroots-style 30 second activation token expiry, event-loop timer cleanup, and expired-token lookup rejection. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-11 | In progress | Pointer-constraints comparison found wlroots commits constraint regions and cursor hints through surface-synchronized state and computes confinement from the committed constraint region intersected with the surface input region. Implementing the synced-state slice. |
+| 2026-05-31 | WM-COMP-11 | Verified slice | Added pointer constraint pending/current region and cursor-hint state, cached it with synchronized subsurface commits, dropped cached state on constraint destruction, rebuilt effective regions from committed surface input state, and confined pointer movement to the committed effective region. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

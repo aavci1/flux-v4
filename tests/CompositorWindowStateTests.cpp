@@ -1,5 +1,6 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/ActivationState.hpp"
+#include "Compositor/Wayland/PointerConstraintState.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
 #include "Compositor/Wayland/XdgToplevelState.hpp"
@@ -162,6 +163,103 @@ TEST_CASE("xdg activation token focused surface validation follows keyboard or p
 
   token.surface = &other;
   CHECK_FALSE(lambda::compositor::activationTokenFocusedSurfaceValid(nullptr, &focused, &token));
+}
+
+TEST_CASE("pointer constraint region is pending until surface commit") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.width = 100;
+  surface.height = 80;
+  surface.windowX = 10;
+  surface.windowY = 20;
+
+  lambda::compositor::WaylandServer::Impl::PointerConstraint constraint{};
+  constraint.surface = &surface;
+  REQUIRE(lambda::compositor::rebuildPointerConstraintEffectiveRegion(&constraint));
+  CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 90.f, 70.f));
+
+  constraint.pendingRegionInfinite = false;
+  constraint.pendingRegionRects = {{.x = 20, .y = 10, .width = 30, .height = 20}};
+  constraint.pendingRegionSet = true;
+
+  CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 90.f, 70.f));
+  CHECK(lambda::compositor::applyPointerConstraintPendingState(&constraint));
+  CHECK_FALSE(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 90.f, 70.f));
+  CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 25.f, 15.f));
+
+  float globalX = 90.f;
+  float globalY = 70.f;
+  CHECK(lambda::compositor::clampPointerConstraintGlobalPoint(&constraint, globalX, globalY));
+  CHECK(globalX == 59.f);
+  CHECK(globalY == 49.f);
+}
+
+TEST_CASE("pointer constraint effective region follows surface input region") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.width = 100;
+  surface.height = 80;
+  surface.regionState.inputRegionInfinite = false;
+  surface.regionState.inputRegionRects = {
+      {.x = 0, .y = 0, .width = 40, .height = 40},
+      {.x = 50, .y = 0, .width = 20, .height = 20},
+  };
+
+  lambda::compositor::WaylandServer::Impl::PointerConstraint constraint{};
+  constraint.surface = &surface;
+  constraint.regionInfinite = false;
+  constraint.regionRects = {{.x = 30, .y = 10, .width = 40, .height = 20}};
+
+  CHECK(lambda::compositor::rebuildPointerConstraintEffectiveRegion(&constraint));
+  REQUIRE(constraint.effectiveRegionRects.size() == 2);
+  CHECK(constraint.effectiveRegionRects[0].x == 30);
+  CHECK(constraint.effectiveRegionRects[0].y == 10);
+  CHECK(constraint.effectiveRegionRects[0].width == 10);
+  CHECK(constraint.effectiveRegionRects[0].height == 20);
+  CHECK(constraint.effectiveRegionRects[1].x == 50);
+  CHECK(constraint.effectiveRegionRects[1].y == 10);
+  CHECK(constraint.effectiveRegionRects[1].width == 20);
+  CHECK(constraint.effectiveRegionRects[1].height == 10);
+}
+
+TEST_CASE("locked pointer cursor hint is committed with pointer constraint state") {
+  lambda::compositor::WaylandServer::Impl::PointerConstraint constraint{};
+  constraint.pendingCursorHintX = 12.5f;
+  constraint.pendingCursorHintY = 7.25f;
+  constraint.pendingCursorHintSet = true;
+
+  CHECK_FALSE(constraint.cursorHintSet);
+  CHECK(lambda::compositor::applyPointerConstraintPendingState(&constraint));
+  CHECK(constraint.cursorHintSet);
+  CHECK(constraint.cursorHintX == 12.5f);
+  CHECK(constraint.cursorHintY == 7.25f);
+}
+
+TEST_CASE("pointer constraint cached commit state does not consume later pending requests") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.width = 100;
+  surface.height = 80;
+
+  lambda::compositor::WaylandServer::Impl::PointerConstraint constraint{};
+  constraint.surface = &surface;
+  constraint.pendingRegionInfinite = false;
+  constraint.pendingRegionRects = {{.x = 10, .y = 10, .width = 20, .height = 20}};
+  constraint.pendingRegionSet = true;
+
+  auto cached = lambda::compositor::takePointerConstraintPendingState(&constraint);
+  CHECK(cached.regionSet);
+  CHECK_FALSE(constraint.pendingRegionSet);
+
+  constraint.pendingRegionInfinite = false;
+  constraint.pendingRegionRects = {{.x = 40, .y = 40, .width = 20, .height = 20}};
+  constraint.pendingRegionSet = true;
+
+  CHECK(lambda::compositor::applyPointerConstraintCommitState(cached));
+  CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 15.f, 15.f));
+  CHECK_FALSE(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 45.f, 45.f));
+  CHECK(constraint.pendingRegionSet);
+
+  CHECK(lambda::compositor::applyPointerConstraintPendingState(&constraint));
+  CHECK_FALSE(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 15.f, 15.f));
+  CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 45.f, 45.f));
 }
 
 TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
