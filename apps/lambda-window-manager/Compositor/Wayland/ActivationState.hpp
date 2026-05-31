@@ -26,4 +26,18 @@ namespace lambda::compositor {
   return nullptr;
 }
 
+[[nodiscard]] inline bool activationTokenFocusedSurfaceValid(WaylandServer::Impl::Surface const* keyboardFocus,
+                                                             WaylandServer::Impl::Surface const* pointerFocus,
+                                                             WaylandServer::Impl::ActivationToken const* token) {
+  if (!token || !token->surface) return true;
+  return token->surface == keyboardFocus || token->surface == pointerFocus;
+}
+
+[[nodiscard]] inline bool activationTokenFocusedSurfaceValid(WaylandServer::Impl const* server,
+                                                             WaylandServer::Impl::ActivationToken const* token) {
+  return activationTokenFocusedSurfaceValid(server ? server->keyboardFocus_ : nullptr,
+                                            server ? server->pointerFocus_ : nullptr,
+                                            token);
+}
+
 } // namespace lambda::compositor

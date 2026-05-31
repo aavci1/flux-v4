@@ -6,6 +6,7 @@
 #include "xdg-activation-v1-server-protocol.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -16,6 +17,16 @@ namespace lambda::compositor {
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 
 namespace {
+
+constexpr std::array<SeatSerialKind, 7> kActivationSerialKinds{
+    SeatSerialKind::PointerEnter,
+    SeatSerialKind::PointerButtonPress,
+    SeatSerialKind::PointerButtonRelease,
+    SeatSerialKind::KeyboardEnter,
+    SeatSerialKind::KeyboardKey,
+    SeatSerialKind::KeyboardModifiers,
+    SeatSerialKind::DataDeviceEnter,
+};
 
 std::uint32_t monotonicMilliseconds() {
   using Clock = std::chrono::steady_clock;
@@ -36,10 +47,34 @@ bool postActivationTokenAlreadyUsedIfNeeded(wl_resource* resource,
   return true;
 }
 
+void makeActivationTokenResourceInert(wl_resource* resource, WaylandServer::Impl::ActivationToken* token) {
+  wl_resource_set_user_data(resource, nullptr);
+  if (token) token->resource = nullptr;
+}
+
+bool activationTokenCommitRequestValid(wl_resource* resource, WaylandServer::Impl::ActivationToken const* token) {
+  if (!token || !token->hasSerial) return true;
+  wl_client* client = wl_resource_get_client(resource);
+  if (!seatSerialIsValid(token->server, token->serial, client, nullptr, kActivationSerialKinds)) {
+    return false;
+  }
+  return activationTokenFocusedSurfaceValid(token->server, token);
+}
+
+void sendInvalidActivationTokenAndDestroy(wl_resource* resource, WaylandServer::Impl::ActivationToken* token) {
+  if (!token || !token->server) return;
+  std::string const invalidToken = "lambda-invalid-" + std::to_string(token->server->nextActivationTokenId_++);
+  xdg_activation_token_v1_send_done(resource, invalidToken.c_str());
+  auto* server = token->server;
+  makeActivationTokenResourceInert(resource, token);
+  server->destroyActivationToken(token);
+}
+
 void activationTokenSetSerial(wl_client*, wl_resource* resource, std::uint32_t serial, wl_resource*) {
   auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
   if (postActivationTokenAlreadyUsedIfNeeded(resource, token)) return;
   token->serial = serial;
+  token->hasSerial = true;
 }
 
 void activationTokenSetAppId(wl_client*, wl_resource* resource, char const* appId) {
@@ -57,10 +92,13 @@ void activationTokenSetSurface(wl_client*, wl_resource* resource, wl_resource* s
 void activationTokenCommit(wl_client*, wl_resource* resource) {
   auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
   if (postActivationTokenAlreadyUsedIfNeeded(resource, token)) return;
+  if (!activationTokenCommitRequestValid(resource, token)) {
+    sendInvalidActivationTokenAndDestroy(resource, token);
+    return;
+  }
   token->committed = true;
   xdg_activation_token_v1_send_done(resource, token->token.c_str());
-  wl_resource_set_user_data(resource, nullptr);
-  token->resource = nullptr;
+  makeActivationTokenResourceInert(resource, token);
 }
 
 struct xdg_activation_token_v1_interface const activationTokenImpl{

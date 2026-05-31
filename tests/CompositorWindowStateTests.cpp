@@ -129,6 +129,24 @@ TEST_CASE("xdg activation tokens are matched only after commit") {
   CHECK(lambda::compositor::activationTokenForName(tokens, "missing") == nullptr);
 }
 
+TEST_CASE("xdg activation token focused surface validation follows keyboard or pointer focus") {
+  lambda::compositor::WaylandServer::Impl::Surface focused{};
+  lambda::compositor::WaylandServer::Impl::Surface other{};
+  lambda::compositor::WaylandServer::Impl::ActivationToken token{};
+
+  CHECK(lambda::compositor::activationTokenFocusedSurfaceValid(nullptr, nullptr, &token));
+
+  token.surface = &focused;
+  CHECK_FALSE(lambda::compositor::activationTokenFocusedSurfaceValid(nullptr, nullptr, &token));
+
+  CHECK(lambda::compositor::activationTokenFocusedSurfaceValid(&focused, nullptr, &token));
+
+  CHECK(lambda::compositor::activationTokenFocusedSurfaceValid(nullptr, &focused, &token));
+
+  token.surface = &other;
+  CHECK_FALSE(lambda::compositor::activationTokenFocusedSurfaceValid(nullptr, &focused, &token));
+}
+
 TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
   CHECK(lambda::compositor::xdgPopupParentHasValidRole(nullptr));
 

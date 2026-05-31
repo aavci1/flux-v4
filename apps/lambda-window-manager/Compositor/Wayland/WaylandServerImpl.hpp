@@ -839,6 +839,7 @@ struct WaylandServer::Impl::ActivationToken {
   std::string appId;
   Surface* surface = nullptr;
   std::uint32_t serial = 0;
+  bool hasSerial = false;
   bool committed = false;
 };
 

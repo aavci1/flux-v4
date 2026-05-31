@@ -26,7 +26,7 @@
 | P6 | WM-COMP-7 XDG popup and positioner completeness | Verified | Positioner validation, popup lifecycle checks, and wlroots-style popup constraint adjustment are implemented and covered by automated tests | Popup lifecycle, positioner validation, popup geometry, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol/geometry workstream |
 | P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified | XDG surface role sequencing, base-role creation checks, and buffer commit ordering now follow the wlroots rules covered by automated tests | XDG surface lifecycle, xdg popup, layer role, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-lifecycle workstream |
 | P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | XDG toplevel client-owned title/app-id/parent state now resets on null-buffer unmap | XDG toplevel reset tests plus compositor suite pass | No manual gate needed for this protocol-lifecycle slice |
-| P9 | WM-COMP-10 XDG activation token lifecycle | Verified slice | Committed activation tokens are now single-use and activation validates/consumes known token strings | XDG activation token tests plus compositor suite pass | No manual gate needed for token lifecycle slice |
+| P9 | WM-COMP-10 XDG activation token lifecycle | Verified slice | Activation token commits now validate supplied serials and focused-surface constraints against the seat serial ledger | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for serial/focus validation slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -358,7 +358,7 @@
 **Implementation steps:**
 
 1. Done: make committed token resources immutable, require `activate` to reference a known committed token string, and consume that token after activation.
-2. Planned: validate token serials and focused-surface constraints against the seat serial ledger.
+2. Done: validate token serials and focused-surface constraints against the seat serial ledger.
 3. Planned: add token expiration or cleanup to avoid retaining unused committed tokens indefinitely.
 
 **Step 1 inventory:**
@@ -434,3 +434,4 @@
 | 2026-05-31 | WM-COMP-9 | Verified slice | Added a toplevel unmap reset helper that clears client-owned parent, mapped, title, and app_id state. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg toplevel*"`, `./build/tests/lambda_tests --test-case="*unmap*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-10 | In progress | Activation comparison found Lambda ignores token strings during `activate` and leaves committed token resources mutable. Implementing single-use token matching and consumption before serial/focus validation. |
 | 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token lifecycle helpers, made committed token resources inert, required `activate` to name a known committed token, and consumed tokens on successful activation. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token commit validation for supplied serials and focused-surface constraints against Lambda's seat serial ledger. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
