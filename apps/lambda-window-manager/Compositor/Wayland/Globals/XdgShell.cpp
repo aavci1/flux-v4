@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <wayland-server-core.h>
@@ -1057,6 +1058,12 @@ void xdgToplevelDestroy(wl_client*, wl_resource* resource) {
 void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   std::string const nextTitle = title ? title : "";
+  if (!xdgToplevelTitleUtf8Valid(nextTitle)) {
+    wl_resource_post_error(resource,
+                           std::numeric_limits<std::uint32_t>::max(),
+                           "xdg_toplevel title is not valid UTF-8");
+    return;
+  }
   if (toplevel->title == nextTitle) return;
   toplevel->title = nextTitle;
   if (toplevel->server) {

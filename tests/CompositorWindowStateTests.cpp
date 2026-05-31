@@ -6,7 +6,9 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <initializer_list>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace {
@@ -209,6 +211,30 @@ TEST_CASE("xdg toplevel interactive requests require a configured toplevel surfa
 
   xdgSurface.configured = false;
   CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
+}
+
+TEST_CASE("xdg toplevel title validation follows strict UTF-8") {
+  auto bytes = [](std::initializer_list<unsigned char> values) {
+    std::string result;
+    result.reserve(values.size());
+    for (unsigned char value : values) {
+      result.push_back(static_cast<char>(value));
+    }
+    return result;
+  };
+
+  CHECK(lambda::compositor::xdgToplevelTitleUtf8Valid(""));
+  CHECK(lambda::compositor::xdgToplevelTitleUtf8Valid("Settings"));
+  CHECK(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xC2, 0xA2})));
+  CHECK(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xE2, 0x82, 0xAC})));
+  CHECK(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xF0, 0x9F, 0x98, 0x80})));
+
+  CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0x80})));
+  CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xC0, 0x80})));
+  CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xE0, 0x80, 0x80})));
+  CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xED, 0xA0, 0x80})));
+  CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xF5, 0x80, 0x80, 0x80})));
+  CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xE2, 0x82})));
 }
 
 TEST_CASE("xdg popup topmost validation detects live child popups") {
