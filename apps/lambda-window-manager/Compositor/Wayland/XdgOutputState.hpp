@@ -1,0 +1,35 @@
+#pragma once
+
+#include <algorithm>
+#include <cstdint>
+
+namespace lambda::compositor {
+
+inline constexpr std::uint32_t kXdgOutputVersion = 3;
+inline constexpr std::uint32_t kXdgOutputDoneDeprecatedSinceVersion = 3;
+inline constexpr std::uint32_t kWlOutputDoneSinceVersion = 2;
+
+enum class XdgOutputDoneKind : std::uint8_t {
+  None,
+  XdgOutput,
+  WlOutput,
+};
+
+[[nodiscard]] inline std::uint32_t xdgOutputResourceVersion(std::uint32_t boundVersion) {
+  return std::min(boundVersion, kXdgOutputVersion);
+}
+
+[[nodiscard]] inline XdgOutputDoneKind xdgOutputDoneKind(std::uint32_t xdgOutputVersion,
+                                                         std::uint32_t wlOutputVersion) {
+  if (xdgOutputVersion < kXdgOutputDoneDeprecatedSinceVersion) return XdgOutputDoneKind::XdgOutput;
+  return wlOutputVersion >= kWlOutputDoneSinceVersion ? XdgOutputDoneKind::WlOutput : XdgOutputDoneKind::None;
+}
+
+[[nodiscard]] inline bool xdgOutputLogicalSizeChanged(std::int32_t currentWidth,
+                                                      std::int32_t currentHeight,
+                                                      std::int32_t nextWidth,
+                                                      std::int32_t nextHeight) {
+  return currentWidth != nextWidth || currentHeight != nextHeight;
+}
+
+} // namespace lambda::compositor

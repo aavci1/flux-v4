@@ -481,6 +481,10 @@ void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
   eraseResource(idleInhibitors_, inhibitor);
 }
 
+void WaylandServer::Impl::destroyXdgOutput(XdgOutput* output) {
+  eraseResource(xdgOutputs_, output);
+}
+
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
   resetLayerSurfaceRole(this, layerSurface);
 }

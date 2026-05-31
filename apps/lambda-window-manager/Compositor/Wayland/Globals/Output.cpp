@@ -19,6 +19,9 @@ void outputResourceDestroyed(wl_resource* resource) {
   if (!server) return;
   auto& resources = server->outputResources_;
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
+  for (auto const& xdgOutput : server->xdgOutputs_) {
+    if (xdgOutput && xdgOutput->outputResource == resource) xdgOutput->outputResource = nullptr;
+  }
 }
 
 } // namespace

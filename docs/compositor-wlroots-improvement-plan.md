@@ -32,6 +32,7 @@
 | P12 | WM-COMP-13 Fractional-scale consistency | Verified | Fractional-scale preferred-scale conversion is shared by initial and runtime events, including sub-1.0 scales | Fractional-scale helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P13 | WM-COMP-14 Idle-inhibit lifecycle/resource hygiene | Verified | Idle-inhibit resource versioning, bind allocation handling, logging, and active-surface checks now follow wlroots-style resource behavior | Idle-inhibit helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P14 | WM-COMP-15 Output scale/resource hygiene | Verified | Legacy `wl_output.scale` rounding, resource-version checks, and bind no-memory handling now follow wlroots | Output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P15 | WM-COMP-16 XDG output runtime updates | Verified | XDG-output resources are tracked and receive logical-size updates when output scale changes, with wlroots-style done-event selection | XDG-output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -537,6 +538,42 @@
 - Output events are gated by the bound resource version.
 - Automated helper tests cover version selection and integer-scale rounding.
 
+## WM-COMP-16 XDG Output Runtime Updates
+
+**Why this matters:** xdg-output logical size is how clients such as Xwayland discover the compositor-space size of a scaled output. wlroots updates xdg-output resources when output layout or effective resolution changes. Lambda currently sends logical size only when the xdg-output object is created, so runtime output-scale changes can leave clients with stale logical output geometry.
+
+**Goal:** track xdg-output resources, update their logical size when Lambda's output scale changes the effective logical output size, and select the correct done event based on xdg-output and wl_output resource versions.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgOutput.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgOutput.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/XdgOutputState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Output.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/ServerLifecycle.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: compared wlroots xdg-output resource creation, done-event selection, and runtime update behavior.
+2. Done: stored xdg-output resources with their paired `wl_output` resource, cleared stale output-resource links, and updated logical size from runtime scale changes.
+3. Done: ran targeted xdg-output/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots stores xdg-output resources per output and emits logical position/size details when output layout or effective resolution changes.
+- For xdg-output resources below version 3, wlroots sends `zxdg_output_v1.done`; for version 3 and newer, it uses `wl_output.done` only when the paired wl_output resource supports done events.
+- wlroots posts no-memory on xdg-output manager bind and object allocation failure.
+- Lambda currently does not retain xdg-output resources after creation, cannot update their logical size on output-scale changes, calls `wl_output.done` for xdg-output v3 without checking the paired wl_output resource version, and lacks a manager bind no-memory guard.
+
+**Acceptance criteria:**
+
+- Runtime output-scale changes that alter logical output size send xdg-output logical-size updates.
+- Done-event selection follows xdg-output and wl_output resource versions.
+- Destroyed wl_output resources are not used for later xdg-output done events.
+- Automated helper tests cover version selection, done-event selection, and logical-size update detection.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -611,3 +648,5 @@
 | 2026-05-31 | WM-COMP-14 | Verified | Added an idle-inhibit version/policy helper, used the bound manager version for inhibitor resources, added manager bind no-memory handling, removed per-inhibitor stderr logs, and tested the active-surface predicate. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*idle inhibit*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-15 | In progress | Output comparison found wlroots gates output events by bound resource version, guards bind allocation failure, and sends legacy `wl_output.scale` as `ceil(output->scale)`. Implementing a shared output version/scale helper and applying it to initial bind plus runtime scale updates. |
 | 2026-05-31 | WM-COMP-15 | Verified | Added an output version/scale helper, changed legacy `wl_output.scale` to round fractional scales up with `ceil`, reused it for runtime scale updates, gated output events by bound resource version, and added bind no-memory handling. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-16 | In progress | XDG-output comparison found wlroots keeps xdg-output resources attached to outputs and sends logical-size updates when effective resolution changes. Lambda sends xdg-output details only at creation and does not guard manager bind allocation failure. Implementing resource tracking, done-event selection, and runtime logical-size updates. |
+| 2026-05-31 | WM-COMP-16 | Verified | Added tracked xdg-output resources, clear stale paired `wl_output` links on output-resource destruction, update xdg-output logical size when runtime output scale changes, select `zxdg_output_v1.done` versus `wl_output.done` from resource versions, and guard manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

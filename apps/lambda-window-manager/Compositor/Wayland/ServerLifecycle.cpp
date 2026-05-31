@@ -336,6 +336,7 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
     }
   }
   if (outputGeometryChanged) {
+    sendXdgOutputUpdatesForOutputGeometry(this);
     reconfigureLayerSurfacesForOutputGeometry(this);
     ++contentSerial_;
     notifyShellStateChanged();

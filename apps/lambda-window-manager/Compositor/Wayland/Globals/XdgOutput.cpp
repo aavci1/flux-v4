@@ -2,9 +2,10 @@
 
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgOutputState.hpp"
 #include "xdg-output-unstable-v1-server-protocol.h"
 
-#include <algorithm>
+#include <memory>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
@@ -23,34 +24,78 @@ struct zxdg_output_v1_interface const xdgOutputImpl{
     .destroy = xdgOutputDestroy,
 };
 
+void sendXdgOutputDone(WaylandServer::Impl::XdgOutput* xdgOutput) {
+  if (!xdgOutput || !xdgOutput->resource) return;
+  std::uint32_t const xdgVersion = static_cast<std::uint32_t>(wl_resource_get_version(xdgOutput->resource));
+  std::uint32_t const outputVersion = xdgOutput->outputResource
+                                          ? static_cast<std::uint32_t>(wl_resource_get_version(xdgOutput->outputResource))
+                                          : 0u;
+  switch (xdgOutputDoneKind(xdgVersion, outputVersion)) {
+    case XdgOutputDoneKind::XdgOutput:
+      zxdg_output_v1_send_done(xdgOutput->resource);
+      break;
+    case XdgOutputDoneKind::WlOutput:
+      wl_output_send_done(xdgOutput->outputResource);
+      break;
+    case XdgOutputDoneKind::None:
+      break;
+  }
+}
+
+bool sendXdgOutputLogicalDetails(WaylandServer::Impl& server,
+                                 WaylandServer::Impl::XdgOutput* xdgOutput,
+                                 bool force) {
+  if (!xdgOutput || !xdgOutput->resource) return false;
+  std::int32_t const logicalWidth = server.logicalOutputWidth();
+  std::int32_t const logicalHeight = server.logicalOutputHeight();
+  if (!force &&
+      !xdgOutputLogicalSizeChanged(xdgOutput->lastLogicalWidth,
+                                   xdgOutput->lastLogicalHeight,
+                                   logicalWidth,
+                                   logicalHeight)) {
+    return false;
+  }
+
+  xdgOutput->lastLogicalWidth = logicalWidth;
+  xdgOutput->lastLogicalHeight = logicalHeight;
+  zxdg_output_v1_send_logical_position(xdgOutput->resource, 0, 0);
+  zxdg_output_v1_send_logical_size(xdgOutput->resource, logicalWidth, logicalHeight);
+  sendXdgOutputDone(xdgOutput);
+  return true;
+}
+
 void xdgOutputManagerGetXdgOutput(wl_client* client,
                                   wl_resource* resource,
                                   std::uint32_t id,
                                   wl_resource* outputResource) {
   auto* server = serverFrom(resource);
-  std::uint32_t const version = static_cast<std::uint32_t>(wl_resource_get_version(resource));
-  wl_resource* xdgOutput = wl_resource_create(client, &zxdg_output_v1_interface, std::min(version, 3u), id);
-  if (!xdgOutput) {
+  std::uint32_t const resourceVersion =
+      xdgOutputResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* xdgOutputResource = wl_resource_create(client, &zxdg_output_v1_interface, resourceVersion, id);
+  if (!xdgOutputResource) {
     wl_client_post_no_memory(client);
     return;
   }
-  wl_resource_set_implementation(xdgOutput, &xdgOutputImpl, server, nullptr);
+
+  auto xdgOutput = std::make_unique<WaylandServer::Impl::XdgOutput>();
+  xdgOutput->server = server;
+  xdgOutput->resource = xdgOutputResource;
+  xdgOutput->outputResource = outputResource;
+  auto* raw = xdgOutput.get();
+  server->xdgOutputs_.push_back(std::move(xdgOutput));
+  wl_resource_set_implementation(xdgOutputResource,
+                                 &xdgOutputImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgOutput, WaylandServer::Impl, &WaylandServer::Impl::destroyXdgOutput>);
 
   WaylandOutputInfo const& output = server->output_;
-  zxdg_output_v1_send_logical_position(xdgOutput, 0, 0);
-  zxdg_output_v1_send_logical_size(xdgOutput, server->logicalOutputWidth(), server->logicalOutputHeight());
-  if (version >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION) {
-    zxdg_output_v1_send_name(xdgOutput, output.name.c_str());
+  if (resourceVersion >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION) {
+    zxdg_output_v1_send_name(xdgOutputResource, output.name.c_str());
   }
-  if (version >= ZXDG_OUTPUT_V1_DESCRIPTION_SINCE_VERSION) {
-    zxdg_output_v1_send_description(xdgOutput, "Lambda compositor output");
+  if (resourceVersion >= ZXDG_OUTPUT_V1_DESCRIPTION_SINCE_VERSION) {
+    zxdg_output_v1_send_description(xdgOutputResource, "Lambda compositor output");
   }
-
-  if (version >= 3) {
-    wl_output_send_done(outputResource);
-  } else {
-    zxdg_output_v1_send_done(xdgOutput);
-  }
+  sendXdgOutputLogicalDetails(*server, raw, true);
 }
 
 struct zxdg_output_manager_v1_interface const xdgOutputManagerImpl{
@@ -62,8 +107,19 @@ struct zxdg_output_manager_v1_interface const xdgOutputManagerImpl{
 
 void bindXdgOutputManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &zxdg_output_manager_v1_interface,
-                                             std::min(version, 3u), id);
+                                             xdgOutputResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &xdgOutputManagerImpl, data, nullptr);
+}
+
+void sendXdgOutputUpdatesForOutputGeometry(WaylandServer::Impl* server) {
+  if (!server) return;
+  for (auto const& xdgOutput : server->xdgOutputs_) {
+    sendXdgOutputLogicalDetails(*server, xdgOutput.get(), false);
+  }
 }
 
 } // namespace lambda::compositor

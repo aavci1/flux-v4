@@ -78,6 +78,7 @@ struct WaylandServer::Impl {
   struct FractionalScale;
   struct CursorShapeDevice;
   struct IdleInhibitor;
+  struct XdgOutput;
   struct LayerSurface;
   struct PresentationFeedback;
   struct PendingPresentationBatch;
@@ -192,6 +193,7 @@ struct WaylandServer::Impl {
   void destroyFractionalScale(FractionalScale* fractionalScale);
   void destroyCursorShapeDevice(CursorShapeDevice* device);
   void destroyIdleInhibitor(IdleInhibitor* inhibitor);
+  void destroyXdgOutput(XdgOutput* output);
   void destroyLayerSurface(LayerSurface* layerSurface);
   void destroyPresentationFeedback(PresentationFeedback* feedback);
   void destroyRelativePointer(RelativePointer* relativePointer);
@@ -284,6 +286,7 @@ struct WaylandServer::Impl {
   DataOffer* dndOffer_ = nullptr;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> outputResources_;
+  std::vector<std::unique_ptr<XdgOutput>> xdgOutputs_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
   Surface* pointerFocus_ = nullptr;
@@ -694,6 +697,14 @@ struct WaylandServer::Impl::IdleInhibitor {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
+};
+
+struct WaylandServer::Impl::XdgOutput {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  wl_resource* outputResource = nullptr;
+  std::int32_t lastLogicalWidth = 0;
+  std::int32_t lastLogicalHeight = 0;
 };
 
 struct LayerSurfacePendingState {
