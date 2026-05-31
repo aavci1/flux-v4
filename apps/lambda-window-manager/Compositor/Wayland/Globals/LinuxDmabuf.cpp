@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Wayland/DmabufFeedback.hpp"
 #include "Compositor/Wayland/DmabufValidation.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
@@ -117,20 +118,6 @@ std::vector<std::uint64_t> sampledDmabufModifiersForFormat(std::uint32_t drmForm
 
 bool isSupportedDmabufModifier(std::uint32_t format, std::uint64_t modifier) {
   return containsModifier(sampledDmabufModifiersForFormat(format), modifier);
-}
-
-std::vector<std::uint64_t> advertisedDmabufModifiersForFormat(WaylandServer::Impl const* server,
-                                                              std::uint32_t format) {
-  std::vector<std::uint64_t> sampled = sampledDmabufModifiersForFormat(format);
-  std::vector<std::uint64_t> modifiers;
-  if (server) {
-    for (DmabufFormatModifierPreference const& preference : server->dmabufFormatModifierPreferences_) {
-      if (preference.format != format) continue;
-      if (!containsModifier(sampled, preference.modifier)) continue;
-      appendUniqueModifier(modifiers, preference.modifier);
-    }
-  }
-  return modifiers.empty() ? sampled : modifiers;
 }
 
 bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_t width, std::int32_t height,
@@ -344,16 +331,46 @@ struct zwp_linux_dmabuf_feedback_v1_interface const linuxDmabufFeedbackImpl{
     .destroy = linuxDmabufFeedbackDestroy,
 };
 
-std::vector<DmabufFormatModifier> supportedDmabufFormatTable(WaylandServer::Impl const* server) {
-  std::vector<DmabufFormatModifier> table;
+std::vector<DmabufFeedbackPair> rendererDmabufFeedbackPairs() {
+  std::vector<DmabufFeedbackPair> pairs;
   for (std::uint32_t format : kSupportedSinglePlaneDmabufFormats) {
-    for (std::uint64_t modifier : advertisedDmabufModifiersForFormat(server, format)) {
-      table.push_back({
+    for (std::uint64_t modifier : sampledDmabufModifiersForFormat(format)) {
+      pairs.push_back({
           .format = format,
-          .padding = 0,
           .modifier = modifier,
       });
     }
+  }
+  return pairs;
+}
+
+std::vector<DmabufFeedbackPair> scanoutPreferredDmabufFeedbackPairs(WaylandServer::Impl const* server) {
+  std::vector<DmabufFeedbackPair> pairs;
+  if (!server) return pairs;
+  for (DmabufFormatModifierPreference const& preference : server->dmabufFormatModifierPreferences_) {
+    pairs.push_back({
+        .format = preference.format,
+        .modifier = preference.modifier,
+    });
+  }
+  return pairs;
+}
+
+DmabufFeedbackPlan feedbackPlanForServer(WaylandServer::Impl const* server) {
+  std::vector<DmabufFeedbackPair> rendererPairs = rendererDmabufFeedbackPairs();
+  std::vector<DmabufFeedbackPair> scanoutPairs = scanoutPreferredDmabufFeedbackPairs(server);
+  return buildDmabufFeedbackPlan(rendererPairs, scanoutPairs);
+}
+
+std::vector<DmabufFormatModifier> formatTableForPlan(DmabufFeedbackPlan const& plan) {
+  std::vector<DmabufFormatModifier> table;
+  table.reserve(plan.table.size());
+  for (DmabufFeedbackPair const& pair : plan.table) {
+    table.push_back({
+        .format = pair.format,
+        .padding = 0,
+        .modifier = pair.modifier,
+    });
   }
   return table;
 }
@@ -402,14 +419,28 @@ void sendDeviceArray(wl_resource* resource, bool trancheTarget, std::uint64_t ra
   wl_array_release(&deviceArray);
 }
 
+void sendTrancheFormatIndices(wl_resource* resource, std::vector<std::uint16_t> const& tableIndices) {
+  wl_array indices;
+  wl_array_init(&indices);
+  for (std::uint16_t const index : tableIndices) {
+    appendArrayBytes(indices, &index, sizeof(index));
+  }
+  if (indices.size == tableIndices.size() * sizeof(std::uint16_t)) {
+    zwp_linux_dmabuf_feedback_v1_send_tranche_formats(resource, &indices);
+  }
+  wl_array_release(&indices);
+}
+
 void sendDmabufFeedback(wl_resource* resource, WaylandServer::Impl* server) {
-  auto const table = supportedDmabufFormatTable(server);
+  DmabufFeedbackPlan const plan = feedbackPlanForServer(server);
+  auto const table = formatTableForPlan(plan);
   static bool logged = false;
   if (!logged) {
     logged = true;
     std::fprintf(stderr,
-                 "lambda-window-manager: linux-dmabuf feedback advertises %zu format/modifier pairs (%zu preferred)\n",
+                 "lambda-window-manager: linux-dmabuf feedback advertises %zu format/modifier pairs in %zu tranches (%zu scanout preferred)\n",
                  table.size(),
+                 plan.tranches.size(),
                  server ? server->dmabufFormatModifierPreferences_.size() : 0u);
   }
   int tableFd = createDmabufFormatTableFd(table);
@@ -424,20 +455,13 @@ void sendDmabufFeedback(wl_resource* resource, WaylandServer::Impl* server) {
 
   std::uint64_t const device = server && server->output_.drmDevice != 0 ? server->output_.drmDevice : 1;
   sendDeviceArray(resource, false, device);
-  sendDeviceArray(resource, true, device);
 
-  wl_array indices;
-  wl_array_init(&indices);
-  for (std::uint16_t i = 0; i < table.size(); ++i) {
-    appendArrayBytes(indices, &i, sizeof(i));
+  for (DmabufFeedbackTranchePlan const& tranche : plan.tranches) {
+    sendDeviceArray(resource, true, device);
+    zwp_linux_dmabuf_feedback_v1_send_tranche_flags(resource, tranche.flags);
+    sendTrancheFormatIndices(resource, tranche.indices);
+    zwp_linux_dmabuf_feedback_v1_send_tranche_done(resource);
   }
-  if (indices.size == table.size() * sizeof(std::uint16_t)) {
-    zwp_linux_dmabuf_feedback_v1_send_tranche_formats(resource, &indices);
-  }
-  wl_array_release(&indices);
-
-  zwp_linux_dmabuf_feedback_v1_send_tranche_flags(resource, 0);
-  zwp_linux_dmabuf_feedback_v1_send_tranche_done(resource);
   zwp_linux_dmabuf_feedback_v1_send_done(resource);
 }
 
@@ -476,8 +500,9 @@ struct zwp_linux_dmabuf_v1_interface const linuxDmabufImpl{
 };
 
 void sendDmabufFormat(wl_resource* resource, WaylandServer::Impl const* server, std::uint32_t format) {
+  (void)server;
   if (wl_resource_get_version(resource) >= ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION) {
-    for (std::uint64_t modifier : advertisedDmabufModifiersForFormat(server, format)) {
+    for (std::uint64_t modifier : sampledDmabufModifiersForFormat(format)) {
       zwp_linux_dmabuf_v1_send_modifier(resource,
                                         format,
                                         static_cast<std::uint32_t>(modifier >> 32u),

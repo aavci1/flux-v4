@@ -82,10 +82,12 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorSubsurfaceHitTests.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellZones.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellState.cpp
+    ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/DmabufFeedback.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/DmabufValidation.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/SeatSerials.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/SubsurfaceState.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/PresenterEnv.cpp
+    CompositorDmabufFeedbackTests.cpp
     CompositorDmabufValidationTests.cpp
     VulkanRenderTargetTests.cpp
   )
