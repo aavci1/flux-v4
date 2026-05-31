@@ -26,6 +26,7 @@
 | P6 | WM-COMP-7 XDG popup and positioner completeness | Verified | Positioner validation, popup lifecycle checks, and wlroots-style popup constraint adjustment are implemented and covered by automated tests | Popup lifecycle, positioner validation, popup geometry, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol/geometry workstream |
 | P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified | XDG surface role sequencing, base-role creation checks, and buffer commit ordering now follow the wlroots rules covered by automated tests | XDG surface lifecycle, xdg popup, layer role, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-lifecycle workstream |
 | P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | XDG toplevel client-owned title/app-id/parent state now resets on null-buffer unmap | XDG toplevel reset tests plus compositor suite pass | No manual gate needed for this protocol-lifecycle slice |
+| P9 | WM-COMP-10 XDG activation token lifecycle | Verified slice | Committed activation tokens are now single-use and activation validates/consumes known token strings | XDG activation token tests plus compositor suite pass | No manual gate needed for token lifecycle slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -341,6 +342,38 @@
 - WM capabilities accurately advertise the toplevel operations Lambda supports.
 - Automated tests cover the new toplevel lifecycle helper behavior and existing xdg/compositor tests continue to pass.
 
+## WM-COMP-10 XDG Activation Token Lifecycle
+
+**Why this matters:** wlroots treats xdg-activation tokens as explicit single-use objects. Token requests become inert after commit, activation only works for a known committed token string, and activation consumes the token. Lambda currently generates token strings but activates any requested toplevel regardless of the supplied token.
+
+**Goal:** make xdg-activation token lifecycle and activation matching explicit before tightening serial/focus validation.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Activation.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/ActivationState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: make committed token resources immutable, require `activate` to reference a known committed token string, and consume that token after activation.
+2. Planned: validate token serials and focused-surface constraints against the seat serial ledger.
+3. Planned: add token expiration or cleanup to avoid retaining unused committed tokens indefinitely.
+
+**Step 1 inventory:**
+
+- wlroots makes the token resource inert on commit. Follow-up `set_serial`, `set_app_id`, `set_surface`, or `commit` requests on that resource receive `XDG_ACTIVATION_TOKEN_V1_ERROR_ALREADY_USED`.
+- wlroots stores committed tokens in the activation manager, ignores unknown activation token strings, emits an activation request for known tokens, and destroys the token after use.
+- Lambda sends a token string on commit but leaves the token object mutable, ignores the token string in `activate`, and rate-limits repeated focus by surface instead of consuming tokens.
+
+**Acceptance criteria:**
+
+- A committed activation token cannot be mutated or committed again.
+- `xdg_activation.activate` only focuses a surface when the supplied token is known and committed.
+- A successful activation consumes the token so it cannot be reused.
+- Automated tests cover token matching and lifecycle helpers.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -399,3 +432,5 @@
 | 2026-05-31 | WM-COMP-9 | Verified slice | Reset xdg_surface configured/configure-list/current-configure state on null-buffer unmap and sent a fresh toplevel configure so remapping clients have a new serial to ack. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg surface configure*"`, `./build/tests/lambda_tests --test-case="*xdg surface*"`, `./build/tests/lambda_tests --test-case="*xdg toplevel*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-9 | In progress | Toplevel role reset comparison found wlroots clears parent, title, app_id, and requested state on unmap. Lambda now clears mapped/parent state but still keeps title and app_id. Implementing the client-owned title/app-id reset as an automated slice. |
 | 2026-05-31 | WM-COMP-9 | Verified slice | Added a toplevel unmap reset helper that clears client-owned parent, mapped, title, and app_id state. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg toplevel*"`, `./build/tests/lambda_tests --test-case="*unmap*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-10 | In progress | Activation comparison found Lambda ignores token strings during `activate` and leaves committed token resources mutable. Implementing single-use token matching and consumption before serial/focus validation. |
+| 2026-05-31 | WM-COMP-10 | Verified slice | Added activation token lifecycle helpers, made committed token resources inert, required `activate` to name a known committed token, and consumed tokens on successful activation. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

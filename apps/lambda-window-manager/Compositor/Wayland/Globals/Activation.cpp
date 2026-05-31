@@ -1,12 +1,12 @@
 #include "Compositor/Wayland/Globals/Activation.hpp"
 
+#include "Compositor/Wayland/ActivationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "xdg-activation-v1-server-protocol.h"
 
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
 #include <memory>
 #include <string>
 #include <wayland-server-core.h>
@@ -27,30 +27,40 @@ void activationTokenDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+bool postActivationTokenAlreadyUsedIfNeeded(wl_resource* resource,
+                                            WaylandServer::Impl::ActivationToken const* token) {
+  if (activationTokenMutable(token)) return false;
+  wl_resource_post_error(resource,
+                         XDG_ACTIVATION_TOKEN_V1_ERROR_ALREADY_USED,
+                         "activation token already committed");
+  return true;
+}
+
 void activationTokenSetSerial(wl_client*, wl_resource* resource, std::uint32_t serial, wl_resource*) {
   auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
-  if (token && !token->committed) token->serial = serial;
+  if (postActivationTokenAlreadyUsedIfNeeded(resource, token)) return;
+  token->serial = serial;
 }
 
 void activationTokenSetAppId(wl_client*, wl_resource* resource, char const* appId) {
   auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
-  if (token && !token->committed) token->appId = appId ? appId : "";
+  if (postActivationTokenAlreadyUsedIfNeeded(resource, token)) return;
+  token->appId = appId ? appId : "";
 }
 
 void activationTokenSetSurface(wl_client*, wl_resource* resource, wl_resource* surfaceResource) {
   auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
-  if (token && !token->committed) token->surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
+  if (postActivationTokenAlreadyUsedIfNeeded(resource, token)) return;
+  token->surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
 }
 
 void activationTokenCommit(wl_client*, wl_resource* resource) {
   auto* token = resourceData<WaylandServer::Impl::ActivationToken>(resource);
-  if (!token) return;
-  if (token->committed) {
-    wl_resource_post_error(resource, XDG_ACTIVATION_TOKEN_V1_ERROR_ALREADY_USED, "activation token already committed");
-    return;
-  }
+  if (postActivationTokenAlreadyUsedIfNeeded(resource, token)) return;
   token->committed = true;
   xdg_activation_token_v1_send_done(resource, token->token.c_str());
+  wl_resource_set_user_data(resource, nullptr);
+  token->resource = nullptr;
 }
 
 struct xdg_activation_token_v1_interface const activationTokenImpl{
@@ -87,20 +97,18 @@ void activationGetToken(wl_client* client, wl_resource* resource, std::uint32_t 
                                                          &WaylandServer::Impl::destroyActivationToken>);
 }
 
-void activationActivate(wl_client*, wl_resource* resource, char const*, wl_resource* surfaceResource) {
+void activationActivate(wl_client*, wl_resource* resource, char const* tokenName, wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!server || !surfaceIsXdgToplevel(surface)) return;
+  auto* token = activationTokenForName(server->activationTokens_, tokenName ? tokenName : "");
+  if (!token) return;
 
   std::uint32_t const now = monotonicMilliseconds();
-  if (server->lastActivationSurface_ == surface && now - server->lastActivationTimeMs_ < 500u) {
-    std::fprintf(stderr, "lambda-window-manager: denied repeated xdg-activation request for surface=%llu\n",
-                 static_cast<unsigned long long>(surface->id));
-    return;
-  }
   server->lastActivationSurface_ = surface;
   server->lastActivationTimeMs_ = now;
   focusSurface(server, surface, now);
+  server->destroyActivationToken(token);
   server->flushClients();
 }
 

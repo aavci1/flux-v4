@@ -1,4 +1,5 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
+#include "Compositor/Wayland/ActivationState.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
 #include "Compositor/Wayland/XdgToplevelState.hpp"
@@ -107,6 +108,25 @@ TEST_CASE("presentation eligibility excludes minimized toplevels and dismissed p
   CHECK(lambda::compositor::wm::surfaceEligibleForPresentation(&popup));
   popupRole.dismissed = true;
   CHECK_FALSE(lambda::compositor::wm::surfaceEligibleForPresentation(&popup));
+}
+
+TEST_CASE("xdg activation tokens are matched only after commit") {
+  auto token = std::make_unique<lambda::compositor::WaylandServer::Impl::ActivationToken>();
+  token->token = "lambda-test";
+
+  CHECK(lambda::compositor::activationTokenMutable(token.get()));
+  CHECK_FALSE(lambda::compositor::activationTokenMatches(token.get(), "lambda-test"));
+
+  std::vector<std::unique_ptr<lambda::compositor::WaylandServer::Impl::ActivationToken>> tokens;
+  tokens.push_back(std::move(token));
+  CHECK(lambda::compositor::activationTokenForName(tokens, "lambda-test") == nullptr);
+
+  tokens.front()->committed = true;
+  CHECK_FALSE(lambda::compositor::activationTokenMutable(tokens.front().get()));
+  CHECK(lambda::compositor::activationTokenMatches(tokens.front().get(), "lambda-test"));
+  CHECK_FALSE(lambda::compositor::activationTokenMatches(tokens.front().get(), "missing"));
+  CHECK(lambda::compositor::activationTokenForName(tokens, "lambda-test") == tokens.front().get());
+  CHECK(lambda::compositor::activationTokenForName(tokens, "missing") == nullptr);
 }
 
 TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
