@@ -31,6 +31,7 @@
 | P11 | WM-COMP-12 Presentation-time resource versioning | Verified | Presentation feedback resources now use the client-bound manager version, capped by the implemented protocol version | Presentation helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P12 | WM-COMP-13 Fractional-scale consistency | Verified | Fractional-scale preferred-scale conversion is shared by initial and runtime events, including sub-1.0 scales | Fractional-scale helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P13 | WM-COMP-14 Idle-inhibit lifecycle/resource hygiene | Verified | Idle-inhibit resource versioning, bind allocation handling, logging, and active-surface checks now follow wlroots-style resource behavior | Idle-inhibit helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P14 | WM-COMP-15 Output scale/resource hygiene | Verified | Legacy `wl_output.scale` rounding, resource-version checks, and bind no-memory handling now follow wlroots | Output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -503,6 +504,39 @@
 - Idle inhibition is active only for surfaces with a committed buffer, non-zero dimensions, and no minimized state.
 - Automated helper tests cover version selection and active-surface policy.
 
+## WM-COMP-15 Output Scale/Resource Hygiene
+
+**Why this matters:** wlroots sends legacy `wl_output.scale` as `ceil(output->scale)`, while Lambda currently reports `1` for every non-integral scale. Fractional-scale clients already get accurate preferred-scale events, but legacy clients without fractional-scale support can render at the wrong scale on HiDPI fractional outputs.
+
+**Goal:** make initial and runtime `wl_output.scale` events use a shared wlroots-style integer-scale helper, and make output binding use explicit resource-version/no-memory handling.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Output.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/OutputState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/ServerLifecycle.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: compared wlroots output resource binding and scale notification behavior, then centralized Lambda's output version and integer-scale helper.
+2. Done: used the helper for both initial output binding and runtime scale updates.
+3. Done: ran targeted output/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots binds `wl_output` resources at the advertised output version, posts no-memory on allocation failure, and gates scale/name/description/done events on the resource's bound version.
+- wlroots sends `wl_output.scale` as `ceil(output->scale)`, so fractional values above an integer are rounded up for legacy clients.
+- Lambda currently has duplicate integer-scale helpers in output binding and runtime scale updates; both return `1` for non-integral output scales.
+- Lambda's output bind path dereferences a failed `wl_resource_create` allocation.
+
+**Acceptance criteria:**
+
+- Initial output bind and runtime output-scale updates use the same `ceil`-based integer scale helper.
+- Output bind allocation failure posts no-memory instead of dereferencing a null resource.
+- Output events are gated by the bound resource version.
+- Automated helper tests cover version selection and integer-scale rounding.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -575,3 +609,5 @@
 | 2026-05-31 | WM-COMP-13 | Verified | Added a shared fractional-scale version/conversion helper, preserved sub-1.0 preferred scales on newly-created fractional-scale resources, reused the helper for runtime scale updates, and added bind no-memory handling. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*fractional scale*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-14 | In progress | Idle-inhibit comparison found wlroots uses the bound manager resource version for inhibitor resources, guards manager bind allocation failure, and keeps idle policy separate from protocol logging. Implementing a shared version/policy helper and removing ad hoc stderr logs. |
 | 2026-05-31 | WM-COMP-14 | Verified | Added an idle-inhibit version/policy helper, used the bound manager version for inhibitor resources, added manager bind no-memory handling, removed per-inhibitor stderr logs, and tested the active-surface predicate. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*idle inhibit*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-15 | In progress | Output comparison found wlroots gates output events by bound resource version, guards bind allocation failure, and sends legacy `wl_output.scale` as `ceil(output->scale)`. Implementing a shared output version/scale helper and applying it to initial bind plus runtime scale updates. |
+| 2026-05-31 | WM-COMP-15 | Verified | Added an output version/scale helper, changed legacy `wl_output.scale` to round fractional scales up with `ceil`, reused it for runtime scale updates, gated output events by bound resource version, and added bind no-memory handling. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

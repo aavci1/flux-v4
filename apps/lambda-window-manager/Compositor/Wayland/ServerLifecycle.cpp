@@ -20,6 +20,7 @@
 #include "Compositor/Wayland/Globals/Viewporter.hpp"
 #include "Compositor/Wayland/Globals/XdgOutput.hpp"
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
+#include "Compositor/Wayland/OutputState.hpp"
 #include "cursor-shape-v1-server-protocol.h"
 #include "ext-background-effect-v1-server-protocol.h"
 #include "fractional-scale-v1-server-protocol.h"
@@ -118,11 +119,6 @@ void initializeKeyboard(WaylandServer::Impl* server) {
     xkb_context_unref(server->xkbContext_);
     server->xkbContext_ = nullptr;
   }
-}
-
-std::int32_t integerOutputScale(float scale) {
-  float const rounded = std::round(scale);
-  return std::abs(scale - rounded) < 0.001f ? std::max(1, static_cast<std::int32_t>(rounded)) : 1;
 }
 
 std::int32_t scaledLogicalSize(std::int32_t physicalSize, float scale) {
@@ -326,7 +322,7 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
   bool const outputGeometryChanged = std::abs(previousScale - preferredScale_) > 0.001f ||
                                      previousLogicalWidth != logicalOutputWidth() ||
                                      previousLogicalHeight != logicalOutputHeight();
-  std::int32_t const integerScale = integerOutputScale(preferredScale_);
+  std::int32_t const integerScale = outputIntegerScale(preferredScale_);
   for (wl_resource* output : outputResources_) {
     if (output && wl_resource_get_version(output) >= 2) {
       wl_output_send_scale(output, integerScale);
