@@ -4,6 +4,7 @@
 #include "Compositor/Config/AppliedCompositorConfig.hpp"
 #include "Compositor/Config/CompositorConfig.hpp"
 #include "Compositor/Presenter.hpp"
+#include "Compositor/SceneDamage.hpp"
 #include "Compositor/WaylandServer.hpp"
 
 #include <Lambda/Graphics/Canvas.hpp>
@@ -38,6 +39,8 @@ struct AtomicReadyFrame {
   bool directScanout = false;
   std::uint64_t contentSerial = 0;
   presentation::AtomicFrameProfile profile{};
+  SceneDamageState sceneDamageState;
+  bool sceneDamageStateValid = false;
   std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate> scanoutCandidate;
 };
 

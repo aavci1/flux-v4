@@ -1020,7 +1020,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                             wayland.logicalOutputHeight(),
                             static_cast<unsigned long long>(wayland.contentSerial()));
     };
-	    auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
+    auto commitScheduledSceneDamage = [&](AtomicReadyFrame& frame) {
+      if (!frame.sceneDamageStateValid) return;
+      surfaceRenderState.sceneDamage = std::move(frame.sceneDamageState);
+      frame.sceneDamageStateValid = false;
+    };
+    auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
       if (!presenter->atomicPresenter() || !frame.ready) return false;
       if (frame.directScanout) {
         std::uint64_t const scheduleStartNsec = monotonicNanoseconds();
@@ -1114,7 +1119,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                          WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
         wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
-	        frame = AtomicReadyFrame{};
+        commitScheduledSceneDamage(frame);
+        frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
         forceRender = false;
         return true;
@@ -1207,7 +1213,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                          WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
         wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
-	        frame = AtomicReadyFrame{};
+        commitScheduledSceneDamage(frame);
+        frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
         forceRender = false;
         return true;
@@ -1290,7 +1297,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                        WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
       wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
-	      frame = AtomicReadyFrame{};
+      commitScheduledSceneDamage(frame);
+      frame = AtomicReadyFrame{};
       if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
       forceRender = false;
       return true;
@@ -1676,6 +1684,41 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       acknowledgeVtAcquireAfterFrame();
       forceRender = false;
     };
+    auto tryClearAtomicDirtyForEmptyDamage = [&](bool animationFrameNeededNow,
+                                                 bool screenshotFlashFrameNeededNow,
+                                                 bool snapPreviewFrameNeededNow,
+                                                 bool inputHardwareCursorFrameRequiredNow,
+                                                 bool inputRenderRequiredNow,
+                                                 bool configReloadedNow) {
+      if (!presenter->atomicPresenter() || !atomicFrameDirty) return false;
+      if (forceRender || animationFrameNeededNow || screenshotFlashFrameNeededNow ||
+          snapPreviewFrameNeededNow || inputHardwareCursorFrameRequiredNow ||
+          inputRenderRequiredNow || configReloadedNow) {
+        return false;
+      }
+
+      SceneDamageState nextDamageState = surfaceRenderState.sceneDamage;
+      std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
+      if (!appliedConfig.config.hardwareCursorEnabled || !hardwareCursorAvailable) {
+        softwareCursorSnapshot = wayland.cursorSurface();
+      }
+      auto const committedSurfaces = wayland.committedSurfaces();
+      SceneDamageResult const damage = updateSceneDamage(nextDamageState,
+                                                         committedSurfaces,
+                                                         softwareCursorSnapshot,
+                                                         wayland.logicalOutputWidth(),
+                                                         wayland.logicalOutputHeight(),
+                                                         false);
+      if (!damage.empty()) return false;
+
+      surfaceRenderState.sceneDamage = std::move(nextDamageState);
+      atomicFrameDirty = false;
+      lastKnownContentSerial = wayland.contentSerial();
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-skip empty=1 surfaces=%zu contentSerial=%llu\n",
+                    committedSurfaces.size(),
+                    static_cast<unsigned long long>(lastKnownContentSerial));
+      return true;
+    };
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       ++loopStats.loops;
@@ -1884,6 +1927,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           atomicFrameDirty = true;
         }
       }
+      bool const emptyDamageSkipped =
+          tryClearAtomicDirtyForEmptyDamage(animationFrameNeeded,
+                                            screenshotFlashFrameNeeded,
+                                            snapPreviewFrameNeeded,
+                                            inputHardwareCursorFrameRequired,
+                                            inputRenderRequired,
+                                            configReloaded);
       bool const atomicPageFlipPending = presenter->atomicPresenter() && presenter->atomicPresenter()->hasPendingPageFlip();
       bool const queuedAtomicCanSchedule = queuedAtomicScheduleCandidate().has_value();
       bool const atomicFrameBlocked =
@@ -1934,6 +1984,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                     static_cast<unsigned long long>(wayland.contentSerial()),
                     static_cast<unsigned long long>(queuedContentSerial()),
                     renderReadyUpdated ? 1 : 0);
+        if (emptyDamageSkipped) {
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("loop-empty-damage-skip contentSerial=%llu queuedSerial=%llu\n",
+                      static_cast<unsigned long long>(wayland.contentSerial()),
+                      static_cast<unsigned long long>(queuedContentSerial()));
+        }
       }
       diagnostics::recordCpuLoopDecision({
           .pollTimeoutZero = pollTimeoutMs == 0,

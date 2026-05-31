@@ -475,6 +475,13 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   platform::KmsAtomicPresenter* atomicPresenter = ctx.presenter.atomicPresenter();
   std::size_t committedSurfaceCount = 0;
   if (ctx.idleBlanked) {
+    SceneDamageState frameSceneDamageState = ctx.surfaceRenderState.sceneDamage;
+    (void)updateSceneDamage(frameSceneDamageState,
+                            {},
+                            std::nullopt,
+                            ctx.wayland.logicalOutputWidth(),
+                            ctx.wayland.logicalOutputHeight(),
+                            true);
     if (atomicPresenter) atomicPresenter->prepareFrame();
     ctx.canvas.beginFrame();
     ctx.canvas.clear(Color{0.f, 0.f, 0.f, 1.f});
@@ -525,9 +532,15 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
           .renderedAhead = renderAheadFrame,
           .contentSerial = ctx.wayland.contentSerial(),
           .profile = atomicFrameProfile,
+          .sceneDamageState = std::move(frameSceneDamageState),
+          .sceneDamageStateValid = true,
+          .scanoutCandidate = nullptr,
       };
       *ctx.atomicFrameDirty = false;
       *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
+    }
+    if (!atomicPresenter) {
+      ctx.surfaceRenderState.sceneDamage = std::move(frameSceneDamageState);
     }
     return;
   }
@@ -545,8 +558,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       screenshotOverlay.has_value() ||
       ctx.screenshotFlashOpacity > 0.001f ||
       !ctx.surfaceRenderState.closingSurfaces.empty();
+  SceneDamageState frameSceneDamageState = ctx.surfaceRenderState.sceneDamage;
   SceneDamageResult const sceneDamage =
-      updateSceneDamage(ctx.surfaceRenderState.sceneDamage,
+      updateSceneDamage(frameSceneDamageState,
                         committedSurfaces,
                         softwareCursorSnapshot,
                         ctx.wayland.logicalOutputWidth(),
@@ -716,6 +730,8 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
             .directScanout = true,
             .contentSerial = ctx.wayland.contentSerial(),
             .profile = atomicFrameProfile,
+            .sceneDamageState = std::move(frameSceneDamageState),
+            .sceneDamageStateValid = true,
             .scanoutCandidate = directDeferred ? ownOverlayCandidate(std::move(directCandidate)) : nullptr,
         };
         *ctx.atomicFrameDirty = false;
@@ -786,6 +802,8 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
               .overlayOnly = true,
               .contentSerial = ctx.wayland.contentSerial(),
               .profile = atomicFrameProfile,
+              .sceneDamageState = std::move(frameSceneDamageState),
+              .sceneDamageStateValid = true,
               .scanoutCandidate = overlayDeferred ? ownOverlayCandidate(std::move(pendingOverlay->candidate)) : nullptr,
           };
           *ctx.atomicFrameDirty = false;
@@ -920,6 +938,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
         .renderedAhead = renderAheadFrame,
         .contentSerial = ctx.wayland.contentSerial(),
         .profile = atomicFrameProfile,
+        .sceneDamageState = std::move(frameSceneDamageState),
+        .sceneDamageStateValid = true,
+        .scanoutCandidate = nullptr,
     };
     *ctx.atomicFrameDirty = false;
     *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
@@ -977,6 +998,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   ctx.frameProfile.maybeLog();
   ctx.loopStats.recordRender(renderStart);
   if (!atomicPresenter) {
+    ctx.surfaceRenderState.sceneDamage = std::move(frameSceneDamageState);
     ctx.wayland.completePresentationFeedbacks(presentationCompletions, presentation::monotonicMilliseconds());
     ctx.wayland.sendFrameCallbacks(presentation::monotonicMilliseconds(), presentationTiming);
   }
