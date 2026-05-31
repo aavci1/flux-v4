@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/Seat.hpp"
 
+#include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -26,12 +27,7 @@ void seatDestroyResource(wl_resource* resource) {
 void pointerDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) {
     removeResource(server->pointerResources_, resource);
-    for (auto& relativePointer : server->relativePointers_) {
-      if (relativePointer->pointer == resource) relativePointer->pointer = nullptr;
-    }
-    for (auto& constraint : server->pointerConstraints_) {
-      if (constraint->pointer == resource) constraint->pointer = nullptr;
-    }
+    destroyPointerExtensionResourcesForPointer(server, resource);
   }
 }
 

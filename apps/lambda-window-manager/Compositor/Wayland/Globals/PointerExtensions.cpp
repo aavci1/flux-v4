@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 
 #include "Compositor/Wayland/PointerConstraintState.hpp"
+#include "Compositor/Wayland/PointerExtensionState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
@@ -38,7 +39,10 @@ void relativePointerManagerGetRelativePointer(wl_client* client,
   auto relativePointer = std::make_unique<WaylandServer::Impl::RelativePointer>();
   relativePointer->server = server;
   relativePointer->pointer = pointerResource;
-  wl_resource* relativePointerResource = wl_resource_create(client, &zwp_relative_pointer_v1_interface, 1, id);
+  wl_resource* relativePointerResource = wl_resource_create(client,
+                                                           &zwp_relative_pointer_v1_interface,
+                                                           relativePointerResourceVersion(wl_resource_get_version(resource)),
+                                                           id);
   if (!relativePointerResource) {
     wl_client_post_no_memory(client);
     return;
@@ -62,6 +66,12 @@ void bindRelativePointerManagerImpl(wl_client* client, void* data, std::uint32_t
     return;
   }
   wl_resource_set_implementation(resource, &relativePointerManagerImpl, data, nullptr);
+}
+
+void makeRelativePointerResourceInert(WaylandServer::Impl::RelativePointer* relativePointer) {
+  if (!relativePointer || !relativePointer->resource) return;
+  wl_resource_set_user_data(relativePointer->resource, nullptr);
+  relativePointer->resource = nullptr;
 }
 
 void makePointerConstraintResourceInert(WaylandServer::Impl::PointerConstraint* constraint) {
@@ -199,7 +209,10 @@ void createPointerConstraint(wl_client* client,
   wl_interface const* interface = kind == WaylandServer::Impl::PointerConstraint::Kind::Lock
                                       ? &zwp_locked_pointer_v1_interface
                                       : &zwp_confined_pointer_v1_interface;
-  wl_resource* constraintResource = wl_resource_create(client, interface, 1, id);
+  wl_resource* constraintResource = wl_resource_create(client,
+                                                       interface,
+                                                       pointerConstraintsResourceVersion(wl_resource_get_version(resource)),
+                                                       id);
   if (!constraintResource) {
     wl_client_post_no_memory(client);
     return;
@@ -268,7 +281,7 @@ struct zwp_pointer_constraints_v1_interface const pointerConstraintsImpl{
 
 void bindPointerConstraintsImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_pointer_constraints_v1_interface, std::min(version, 1u), id);
+      wl_resource_create(client, &zwp_pointer_constraints_v1_interface, pointerConstraintsResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
@@ -286,6 +299,34 @@ void updatePointerConstraintsForFocus(WaylandServer::Impl* server) {
 
 WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server) {
   return activePointerConstraintImpl(server);
+}
+
+void destroyPointerExtensionResourcesForPointer(WaylandServer::Impl* server, wl_resource* pointerResource) {
+  if (!server || !pointerResource) return;
+
+  while (true) {
+    auto found = std::find_if(server->relativePointers_.begin(),
+                              server->relativePointers_.end(),
+                              [pointerResource](auto const& relativePointer) {
+                                return relativePointerUsesPointer(relativePointer.get(), pointerResource);
+                              });
+    if (found == server->relativePointers_.end()) break;
+    auto* relativePointer = found->get();
+    makeRelativePointerResourceInert(relativePointer);
+    server->destroyRelativePointer(relativePointer);
+  }
+
+  while (true) {
+    auto found = std::find_if(server->pointerConstraints_.begin(),
+                              server->pointerConstraints_.end(),
+                              [pointerResource](auto const& constraint) {
+                                return pointerConstraintUsesPointer(constraint.get(), pointerResource);
+                              });
+    if (found == server->pointerConstraints_.end()) break;
+    auto* constraint = found->get();
+    makePointerConstraintResourceInert(constraint);
+    server->destroyPointerConstraint(constraint);
+  }
 }
 
 bool applyPointerConstraintsPendingState(WaylandServer::Impl* server,

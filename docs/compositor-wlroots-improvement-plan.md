@@ -34,6 +34,7 @@
 | P14 | WM-COMP-15 Output scale/resource hygiene | Verified | Legacy `wl_output.scale` rounding, resource-version checks, and bind no-memory handling now follow wlroots | Output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P15 | WM-COMP-16 XDG output runtime updates | Verified | XDG-output resources are tracked and receive logical-size updates when output scale changes, with wlroots-style done-event selection | XDG-output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P16 | WM-COMP-17 Output done-event batching | Verified | Runtime `wl_output.scale` and xdg-output logical-size updates are batched behind one `wl_output.done`, matching wlroots scheduling semantics | XDG-output/output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P17 | WM-COMP-18 Pointer extension dependent-resource cleanup | Verified | Server-side relative-pointer and pointer-constraint objects are removed when their wl_pointer resource is destroyed, leaving protocol resources inert | Pointer-extension helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -607,6 +608,38 @@
 - Pre-v3 xdg-output resources still receive `zxdg_output_v1.done` for xdg-output details.
 - Automated helper tests cover suppressing only wl_output done events during a batched update.
 
+## WM-COMP-18 Pointer Extension Dependent-Resource Cleanup
+
+**Why this matters:** wlroots removes server-side relative-pointer and pointer-constraint state when the underlying `wl_pointer` resource is destroyed, while leaving the extension protocol resource inert. Lambda currently only nulls the stored pointer, which keeps dead objects in the compositor lists until the extension resource is destroyed.
+
+**Goal:** make pointer-extension objects follow wlroots' dependent-resource cleanup model and centralize their implemented protocol-version caps.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/PointerExtensions.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/PointerExtensions.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Seat.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/PointerExtensionState.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: added version helpers and cleanup entry points for relative-pointer and pointer-constraint resources.
+2. Done: called those cleanup entry points from `wl_pointer` resource destruction.
+3. Done: ran targeted pointer-extension/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots creates relative-pointer and pointer-constraint resources at the bound manager version.
+- When the underlying pointer resource is destroyed, wlroots removes the server-side relative-pointer or pointer-constraint object and sets the extension resource user data to null so future destructor callbacks are inert.
+- Lambda already nulls `relativePointer->pointer` and `constraint->pointer` on pointer destruction, but leaves the server-side objects resident.
+
+**Acceptance criteria:**
+
+- Destroying a `wl_pointer` removes associated relative-pointer and pointer-constraint server objects.
+- Extension protocol resources left alive after dependent pointer destruction are inert.
+- Resource version selection is centralized and covered by automated helper tests.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -685,3 +718,5 @@
 | 2026-05-31 | WM-COMP-16 | Verified | Added tracked xdg-output resources, cleared stale paired `wl_output` links on output-resource destruction, updated xdg-output logical size when runtime output scale changes, selected `zxdg_output_v1.done` versus `wl_output.done` from resource versions, and guarded manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-17 | In progress | Output done comparison found wlroots coalesces output scale and xdg-output logical-size notifications behind scheduled `wl_output.done`. Lambda can now emit a scale done and a separate xdg-output done in the same runtime scale update. Implementing batched done emission. |
 | 2026-05-31 | WM-COMP-17 | Verified | Batched runtime scale notifications by sending `wl_output.scale`, then xdg-output logical details with only wl_output done suppressed, then one final `wl_output.done` per output resource. Pre-v3 xdg-output resources still receive `zxdg_output_v1.done`. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*,*output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-18 | In progress | Pointer-extension comparison found wlroots removes server-side relative-pointer and pointer-constraint state when the underlying `wl_pointer` resource is destroyed, while leaving the extension protocol resource inert. Implementing pointer-resource cleanup helpers and shared version caps. |
+| 2026-05-31 | WM-COMP-18 | Verified | Added shared pointer-extension version helpers, matched extension objects by dependent `wl_pointer`, and changed `wl_pointer` destruction to inert and remove associated relative-pointer and pointer-constraint server objects instead of retaining null-pointer entries. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer extension*,*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

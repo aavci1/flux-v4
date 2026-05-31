@@ -78,6 +78,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorOutputSelectorTests.cpp
     CompositorOutputStateTests.cpp
     CompositorPresentationFeedbackTests.cpp
+    CompositorPointerExtensionTests.cpp
     CompositorScreenshotTests.cpp
     CompositorSceneDamageTests.cpp
     CompositorSeatSerialTests.cpp
