@@ -1,6 +1,7 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -276,9 +277,11 @@ void popupTrace(char const* fmt, ...) {
 }
 
 wl_client* popupGrabClient(WaylandServer::Impl* server) {
-  return server && server->popupGrabsEnabled_ && server->grabPopup_ && server->grabPopup_->resource
-             ? wl_resource_get_client(server->grabPopup_->resource)
-             : nullptr;
+  if (!server || !server->popupGrabsEnabled_) return nullptr;
+  auto* popup = xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
+  if (!popup) return nullptr;
+  if (server->popupGrab_.client) return server->popupGrab_.client;
+  return popup->resource ? wl_resource_get_client(popup->resource) : nullptr;
 }
 
 bool surfaceBelongsToClient(WaylandServer::Impl::Surface const* surface, wl_client* client) {

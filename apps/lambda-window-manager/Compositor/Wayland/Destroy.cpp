@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
@@ -31,7 +32,8 @@ void detachPointerButtonGrabSurface(WaylandServer::Impl* server, WaylandServer::
                  static_cast<void*>(server->pointerButtonGrabClient_),
                  server->pointerButtonCount_);
   server->pointerButtonGrabSurface_ = nullptr;
-  if (!server->pointerButtonGrabClient_) server->pointerButtonCount_ = 0;
+  server->pointerButtonGrabClient_ = nullptr;
+  server->pointerButtonCount_ = 0;
 }
 
 bool resetXdgPopupRole(WaylandServer::Impl* server,
@@ -56,12 +58,10 @@ bool resetXdgPopupRole(WaylandServer::Impl* server,
                         static_cast<unsigned long long>(surface ? surface->id : 0),
                         sendPopupDone ? 1u : 0u);
 
-  if (server->grabPopup_ == popup) releasePopupGrab(server, popup, 0);
-  if (server->grabPopup_ == popup) {
-    server->grabPopup_ = nullptr;
-    popup->grabbed = false;
-  }
+  if (xdgPopupGrabContains(server->popupGrab_, popup)) releasePopupGrab(server, popup, 0);
+  if (server->grabPopup_ == popup) xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
   if (surface) {
+    detachPointerButtonGrabSurface(server, surface);
     if (server->pointerFocus_ == surface) server->pointerFocus_ = nullptr;
     if (server->keyboardFocus_ == surface) server->keyboardFocus_ = nullptr;
     if (surface->xdgPopup == popup) surface->xdgPopup = nullptr;

@@ -262,7 +262,7 @@ Config application policy:
 | `[chrome]`, `[chrome.glass]`, `[chrome.dark]` | Hot reload |
 | `[keybindings]` | Hot reload |
 
-`[input] popup_grabs` enables xdg-popup grab handling for application menus and context menus. It is on by default so popup input uses popup-first hit testing, same-client owner events, and implicit pointer-button delivery while transient menu surfaces are being recreated. Disable it only when isolating a client-side popup issue.
+`[input] popup_grabs` enables xdg-popup grab handling for application menus and context menus. It is on by default so popup input uses popup-first hit testing, same-client owner events, wlroots-style parent/child popup grab stacking, and implicit pointer-button delivery while transient menu surfaces are being recreated. Disable it only when isolating a client-side popup issue.
 
 ## Window Management
 
@@ -328,7 +328,7 @@ Set them before launching the compositor if you need to force a theme or size.
 - Single active output only. The selected output is configurable, but multi-monitor desktop layout is not implemented.
 - No display-manager, login, lock screen, workspaces, or XWayland.
 - Input device permissions are still manual unless your session grants ACLs.
-- Popup support works for the test demos and uses popup-first pointer hit testing with xdg-popup grabs enabled by default. The popup demo has visible hover/click validation, and Firefox application/context menus have been manually validated for menu actions and click-open submenus. Broader GTK/Qt menu coverage is still useful.
+- Popup support works for the test demos and uses popup-first pointer hit testing with xdg-popup grabs enabled by default. Popup grabs track parent/child grab stacks and reject invalid grab-after-commit requests. The popup demo has visible hover/click validation, and Firefox application/context menus have been manually validated for menu actions and click-open submenus. Broader GTK/Qt menu coverage is still useful.
 - Presentation-time feedback uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available. If the driver rejects vblank waits, the compositor falls back to compositor-clock timing.
 - Software idle blanking is available with `idle_blank_timeout_seconds`; `0` disables it. Active idle inhibitors prevent the compositor from blanking. DPMS/panel power-off is not implemented yet.
 

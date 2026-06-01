@@ -241,6 +241,7 @@ void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy
 WaylandServer::Impl::XdgPopup* topmostPopup(WaylandServer::Impl* server);
 bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer::Impl::XdgPopup* popup);
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup);
+bool dismissPopupGrab(WaylandServer::Impl* server);
 bool dismissTopPopup(WaylandServer::Impl* server);
 bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target);
 

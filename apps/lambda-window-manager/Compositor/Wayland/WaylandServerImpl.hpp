@@ -65,6 +65,7 @@ struct WaylandServer::Impl {
   struct XdgSurface;
   struct XdgToplevel;
   struct XdgPopup;
+  struct XdgPopupGrab;
   struct ShmPool;
   struct ShmBuffer;
   struct DmabufParams;
@@ -105,6 +106,11 @@ struct WaylandServer::Impl {
     SeatSerialKind kind = SeatSerialKind::PointerEnter;
     wl_client* client = nullptr;
     Surface* surface = nullptr;
+  };
+  struct XdgPopupGrab {
+    wl_resource* seatResource = nullptr;
+    wl_client* client = nullptr;
+    std::vector<XdgPopup*> popups;
   };
 
   explicit Impl(WaylandOutputInfo output);
@@ -248,6 +254,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
   std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
   std::vector<std::unique_ptr<XdgPopup>> popups_;
+  XdgPopupGrab popupGrab_;
   WaylandServer::Impl::XdgPopup* grabPopup_ = nullptr;
   bool popupGrabsEnabled_ = true;
   std::vector<std::unique_ptr<ShmPool>> shmPools_;
@@ -1069,6 +1076,9 @@ struct WaylandServer::Impl::XdgPopup {
   bool hasParentConfigureSerial = false;
   std::uint32_t parentConfigureSerial = 0;
   bool grabbed = false;
+  wl_resource* grabSeatResource = nullptr;
+  bool committed = false;
+  bool mapped = false;
   bool dismissed = false;
 };
 

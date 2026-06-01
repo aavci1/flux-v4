@@ -41,7 +41,7 @@ bool validToplevelGrabSerial(WaylandServer::Impl const* server,
   return seatSerialIsValid(server,
                            serial,
                            wl_resource_get_client(requestResource),
-                           surface,
+                           nullptr,
                            kToplevelGrabSerialKinds);
 }
 

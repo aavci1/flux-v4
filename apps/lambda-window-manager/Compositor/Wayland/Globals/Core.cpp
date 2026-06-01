@@ -5,6 +5,7 @@
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
 #include "Compositor/Wayland/XdgToplevelState.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -435,10 +436,13 @@ bool xdgSurfaceCommittedConfigureSerial(WaylandServer::Impl::Surface const* surf
 bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->resizeConfigureInFlight || !surface->resizeConfigureAcked) return false;
   if (!xdgSurfaceCommittedConfigureSerial(surface, surface->resizeConfigureSerial)) return false;
-  if (committedWindowDisplayWidth(surface) != surface->resizeConfigureWidth ||
-      committedWindowDisplayHeight(surface) != surface->resizeConfigureHeight) {
+  std::int32_t const committedWidth = committedWindowDisplayWidth(surface);
+  std::int32_t const committedHeight = committedWindowDisplayHeight(surface);
+  if (committedWidth <= 0 || committedHeight <= 0) {
     return false;
   }
+  bool const exactSizeMatch = committedWidth == surface->resizeConfigureWidth &&
+                              committedHeight == surface->resizeConfigureHeight;
   bool const hasPending = surface->pendingResizeConfigure;
   std::int32_t const pendingX = surface->pendingResizeConfigureX;
   std::int32_t const pendingY = surface->pendingResizeConfigureY;
@@ -446,8 +450,8 @@ bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   std::int32_t const pendingHeight = surface->pendingResizeConfigureHeight;
   std::int32_t const committedX = surface->resizeConfigureX;
   std::int32_t const committedY = surface->resizeConfigureY;
-  std::int32_t const committedWidth = surface->resizeConfigureWidth;
-  std::int32_t const committedHeight = surface->resizeConfigureHeight;
+  std::int32_t const requestedWidth = surface->resizeConfigureWidth;
+  std::int32_t const requestedHeight = surface->resizeConfigureHeight;
   surface->windowX = committedX;
   surface->windowY = committedY;
   setConfiguredFrameSize(surface, committedWidth, committedHeight);
@@ -475,12 +479,15 @@ bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   }
   LAMBDA_RESIZE_TRACE("compositor",
                               "resize-configure-commit surface=%llu committed=%d,%d %dx%d "
-                              "pending=%d %d,%d %dx%d\n",
+                              "requested=%dx%d exact=%d pending=%d %d,%d %dx%d\n",
                               static_cast<unsigned long long>(surface->id),
                               committedX,
                               committedY,
                               committedWidth,
                               committedHeight,
+                              requestedWidth,
+                              requestedHeight,
+                              exactSizeMatch ? 1 : 0,
                               hasPending ? 1 : 0,
                               pendingX,
                               pendingY,
@@ -716,6 +723,28 @@ void markXdgToplevelMapped(WaylandServer::Impl::Surface* surface) {
   if (!toplevel || toplevel->mapped) return;
   toplevel->mapped = true;
   surface->server->notifyShellStateChanged();
+}
+
+void markXdgPopupCommitted(WaylandServer::Impl::Surface* surface) {
+  auto* popup = surface && surface->server ? wm::popupForSurface(surface->server, surface) : nullptr;
+  if (!popup) return;
+  popup->committed = true;
+}
+
+void markXdgPopupMapped(WaylandServer::Impl::Surface* surface) {
+  auto* popup = surface && surface->server ? wm::popupForSurface(surface->server, surface) : nullptr;
+  if (!popup) return;
+  popup->committed = true;
+  popup->mapped = true;
+}
+
+void resetXdgPopupForUnmap(WaylandServer::Impl::Surface* surface) {
+  auto* popup = surface && surface->server ? wm::popupForSurface(surface->server, surface) : nullptr;
+  if (!popup) return;
+  popup->mapped = false;
+  if (xdgPopupGrabContains(surface->server->popupGrab_, popup)) {
+    releasePopupGrab(surface->server, popup, 0);
+  }
 }
 
 void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
@@ -1120,6 +1149,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
   bool const xdgRenderStateChanged = applyXdgProtocolState(surface);
 
   if (!hasBufferAttach) {
+    markXdgPopupCommitted(surface);
     bool const pointerConstraintStateChanged =
         applyPointerConstraintsPendingState(surface->server, surface, allowSynchronizedSubsurfaceCache);
     bool serialBumped = false;
@@ -1222,6 +1252,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         if (markLayerSurfaceMapped(surface->layerSurface)) refreshShellReservedZones(surface->server);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         markXdgToplevelMapped(surface);
+        markXdgPopupMapped(surface);
         surface->dmabufBuffer = nullptr;
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
@@ -1254,6 +1285,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         if (markLayerSurfaceMapped(surface->layerSurface)) refreshShellReservedZones(surface->server);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         markXdgToplevelMapped(surface);
+        markXdgPopupMapped(surface);
         surface->dmabufBuffer = dmabufBuffer;
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
@@ -1269,6 +1301,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
     if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->bufferState.buffer);
   } else {
     resetXdgToplevelForUnmap(surface);
+    resetXdgPopupForUnmap(surface);
     bool const xdgSurfaceConfigureReset =
         resetXdgSurfaceConfigureStateForUnmap(xdgSurfaceForSurface(surface->server, surface));
     surface->rgbaPixels.reset();

@@ -76,6 +76,27 @@ WindowGeometry snapPreviewCurrentWindow(WaylandServer::Impl* server, std::uint32
   };
 }
 
+WindowGeometry fallbackFloatingGeometry(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  OutputGeometry const output = snapOutputGeometryFor(server);
+  std::int32_t const topInset = topInsetForSurface(server, surface);
+  std::int32_t const availableWidth = std::max(kMinWindowWidth, output.width);
+  std::int32_t const availableHeight = std::max(kMinWindowHeight, output.height - topInset);
+  std::int32_t const width = std::clamp(availableWidth * 2 / 3,
+                                        kMinWindowWidth,
+                                        std::max(kMinWindowWidth, std::min(availableWidth, 1280)));
+  std::int32_t const height = std::clamp(availableHeight * 2 / 3,
+                                         kMinWindowHeight,
+                                         std::max(kMinWindowHeight, std::min(availableHeight, 900)));
+  std::int32_t const preferredX = surface ? surface->windowX : 80;
+  std::int32_t const preferredY = surface ? surface->windowY : topInset;
+  return {
+      .x = std::clamp(preferredX, 0, std::max(0, output.width - width)),
+      .y = std::clamp(preferredY, topInset, std::max(topInset, output.height - height)),
+      .width = width,
+      .height = height,
+  };
+}
+
 void resetDragSnapState(WaylandServer::Impl* server) {
   server->dragSnapTarget_.reset();
   server->dragSnapTargetStartedAtMs_ = 0;
@@ -233,6 +254,12 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationStartY = surface->windowY;
   surface->geometryAnimationStartWidth = displayWidth(surface);
   surface->geometryAnimationStartHeight = displayHeight(surface);
+  if (surface->geometryAnimationStartWidth <= 0 && targetWidth > 0) {
+    surface->geometryAnimationStartWidth = targetWidth;
+  }
+  if (surface->geometryAnimationStartHeight <= 0 && targetHeight > 0) {
+    surface->geometryAnimationStartHeight = targetHeight;
+  }
   surface->geometryAnimationTargetX = targetX;
   surface->geometryAnimationTargetY = targetY;
   surface->geometryAnimationTargetWidth = targetWidth;
@@ -280,10 +307,13 @@ namespace lambda::compositor::wm {
 void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, SnapTarget target) {
   if (!isManagedToplevel(surface)) return;
   if (!surface->snapped && !surface->maximized && !surface->fullscreen) {
+    WindowGeometry const fallback = fallbackFloatingGeometry(server, surface);
+    std::int32_t const currentWidth = displayWidth(surface);
+    std::int32_t const currentHeight = displayHeight(surface);
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
-    surface->restoreWidth = displayWidth(surface);
-    surface->restoreHeight = displayHeight(surface);
+    surface->restoreWidth = currentWidth > 0 ? currentWidth : fallback.width;
+    surface->restoreHeight = currentHeight > 0 ? currentHeight : fallback.height;
   }
   WindowGeometry const geometry =
       snapTargetGeometry(snapOutputGeometryFor(server), target, topInsetForSurface(server, surface));
@@ -315,6 +345,7 @@ using wm::isManagedToplevel;
 using wm::kMinWindowHeight;
 using wm::kMinWindowWidth;
 using wm::clearPreFullscreenState;
+using wm::fallbackFloatingGeometry;
 using wm::snapOutputGeometryFor;
 using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
@@ -355,10 +386,11 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
     startGeometryAnimation(server, surface, targetX, targetY, targetWidth, targetHeight);
     return true;
   }
+  WindowGeometry const fallback = fallbackFloatingGeometry(server, surface);
   std::int32_t const restoreWidth =
-      std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
+      std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : fallback.width);
   std::int32_t const restoreHeight =
-      std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
+      std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : fallback.height);
   std::int32_t const restoreX =
       std::clamp(surface->restoreX, 0, std::max(0, server->logicalOutputWidth() - restoreWidth));
   OutputGeometry const restoreOutput = snapOutputGeometryFor(server);
@@ -380,6 +412,7 @@ namespace lambda::compositor {
 
 using wm::isManagedToplevel;
 using wm::clearPreFullscreenState;
+using wm::fallbackFloatingGeometry;
 using wm::snapOutputGeometryFor;
 using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
@@ -388,10 +421,13 @@ void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   if (!isManagedToplevel(surface)) return;
   if (surface->maximized || surface->fullscreen) return;
   if (!surface->snapped) {
+    WindowGeometry const fallback = fallbackFloatingGeometry(server, surface);
+    std::int32_t const currentWidth = displayWidth(surface);
+    std::int32_t const currentHeight = displayHeight(surface);
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
-    surface->restoreWidth = displayWidth(surface);
-    surface->restoreHeight = displayHeight(surface);
+    surface->restoreWidth = currentWidth > 0 ? currentWidth : fallback.width;
+    surface->restoreHeight = currentHeight > 0 ? currentHeight : fallback.height;
   }
   WindowGeometry const target = maximizedWindowGeometry(snapOutputGeometryFor(server),
                                                         topInsetForSurface(server, surface));

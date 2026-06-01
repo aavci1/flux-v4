@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <cstdint>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -505,6 +506,68 @@ TEST_CASE("xdg popup topmost validation detects live child popups") {
       &liveChild,
   };
   CHECK(lambda::compositor::xdgPopupHasLiveChild(withLiveChild, &parent));
+}
+
+TEST_CASE("xdg popup grab stack preserves parent grabs while child is active") {
+  lambda::compositor::WaylandServer::Impl::XdgPopupGrab grab{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup parent{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup child{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup* cachedTop = &parent;
+  auto* client = reinterpret_cast<wl_client*>(std::uintptr_t{1});
+  auto* seat = reinterpret_cast<wl_resource*>(std::uintptr_t{2});
+
+  CHECK(lambda::compositor::xdgPopupGrabSyncTop(grab, cachedTop) == nullptr);
+  CHECK(cachedTop == nullptr);
+
+  CHECK(lambda::compositor::xdgPopupGrabPush(grab, &parent, client, seat));
+  CHECK(lambda::compositor::xdgPopupGrabTop(grab) == &parent);
+  CHECK(lambda::compositor::xdgPopupGrabSyncTop(grab, cachedTop) == &parent);
+  CHECK(cachedTop == &parent);
+  CHECK(lambda::compositor::xdgPopupGrabContains(grab, &parent));
+  CHECK(parent.grabbed);
+  CHECK(parent.grabSeatResource == seat);
+
+  CHECK(lambda::compositor::xdgPopupGrabPush(grab, &child, client, seat));
+  CHECK(lambda::compositor::xdgPopupGrabTop(grab) == &child);
+  CHECK(lambda::compositor::xdgPopupGrabSyncTop(grab, cachedTop) == &child);
+  CHECK(cachedTop == &child);
+  CHECK(parent.grabbed);
+  CHECK(child.grabbed);
+
+  CHECK(lambda::compositor::xdgPopupGrabRemove(grab, &child));
+  CHECK_FALSE(child.grabbed);
+  CHECK(child.grabSeatResource == nullptr);
+  CHECK(lambda::compositor::xdgPopupGrabTop(grab) == &parent);
+  CHECK(lambda::compositor::xdgPopupGrabSyncTop(grab, cachedTop) == &parent);
+  CHECK(cachedTop == &parent);
+  CHECK(parent.grabbed);
+  CHECK(grab.client == client);
+  CHECK(grab.seatResource == seat);
+
+  CHECK(lambda::compositor::xdgPopupGrabRemove(grab, &parent));
+  CHECK_FALSE(parent.grabbed);
+  CHECK(grab.popups.empty());
+  CHECK(lambda::compositor::xdgPopupGrabSyncTop(grab, cachedTop) == nullptr);
+  CHECK(cachedTop == nullptr);
+  CHECK(grab.client == nullptr);
+  CHECK(grab.seatResource == nullptr);
+}
+
+TEST_CASE("xdg popup grab requests are rejected after commit or existing grab") {
+  lambda::compositor::WaylandServer::Impl::XdgPopup popup{};
+
+  CHECK(lambda::compositor::xdgPopupGrabRequestAllowed(&popup));
+
+  popup.committed = true;
+  CHECK_FALSE(lambda::compositor::xdgPopupGrabRequestAllowed(&popup));
+
+  popup.committed = false;
+  popup.grabbed = true;
+  CHECK_FALSE(lambda::compositor::xdgPopupGrabRequestAllowed(&popup));
+
+  popup.grabbed = false;
+  popup.dismissed = true;
+  CHECK_FALSE(lambda::compositor::xdgPopupGrabRequestAllowed(&popup));
 }
 
 TEST_CASE("shell app id matching accepts built-in app aliases") {

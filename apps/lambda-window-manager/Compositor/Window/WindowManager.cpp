@@ -2,6 +2,7 @@
 
 #include "Compositor/Wayland/PointerConstraintState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -35,6 +36,7 @@ namespace lambda::compositor {
 using wm::activeDragSnapTarget;
 using wm::clearSnapPreview;
 using wm::closeFocusedToplevel;
+using wm::dismissPopupGrab;
 using wm::dismissTopPopup;
 using wm::dismissTopPopupOutside;
 using wm::handleCompositorShortcut;
@@ -109,9 +111,11 @@ bool resourceBelongsToClient(wl_resource* resource, wl_client* client) {
 }
 
 wl_client* popupGrabClient(WaylandServer::Impl* server) {
-  return server && server->popupGrabsEnabled_ && server->grabPopup_ && server->grabPopup_->resource
-             ? wl_resource_get_client(server->grabPopup_->resource)
-             : nullptr;
+  if (!server || !server->popupGrabsEnabled_) return nullptr;
+  auto* popup = xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
+  if (!popup) return nullptr;
+  if (server->popupGrab_.client) return server->popupGrab_.client;
+  return popup->resource ? wl_resource_get_client(popup->resource) : nullptr;
 }
 
 std::uint64_t surfaceId(WaylandServer::Impl::Surface const* surface) {
@@ -119,9 +123,8 @@ std::uint64_t surfaceId(WaylandServer::Impl::Surface const* surface) {
 }
 
 WaylandServer::Impl::Surface* popupGrabSurface(WaylandServer::Impl* server) {
-  return server && server->grabPopup_ && server->grabPopup_->xdgSurface
-             ? server->grabPopup_->xdgSurface->surface
-             : nullptr;
+  auto* popup = server ? xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_) : nullptr;
+  return popup && popup->xdgSurface ? popup->xdgSurface->surface : nullptr;
 }
 
 bool surfaceIsPopupTreeMember(WaylandServer::Impl::Surface const* surface) {
@@ -133,14 +136,25 @@ bool surfaceIsPopupTreeMember(WaylandServer::Impl::Surface const* surface) {
   return false;
 }
 
+void clearStalePointerButtonGrab(WaylandServer::Impl* server) {
+  if (!server || server->pointerButtonCount_ == 0 || server->pointerButtonGrabSurface_) return;
+  popupTrace("lambda-window-manager: pointer button grab cleared stale client=%p count=%u\n",
+             static_cast<void*>(server->pointerButtonGrabClient_),
+             server->pointerButtonCount_);
+  server->pointerButtonGrabClient_ = nullptr;
+  server->pointerButtonCount_ = 0;
+}
+
 WaylandServer::Impl::Surface* pointerButtonDeliverySurface(WaylandServer::Impl* server) {
   if (!server) return nullptr;
+  clearStalePointerButtonGrab(server);
   return server->pointerButtonCount_ > 0 ? server->pointerButtonGrabSurface_ : server->pointerFocus_;
 }
 
 wl_client* pointerButtonDeliveryClient(WaylandServer::Impl* server,
                                        WaylandServer::Impl::Surface const* deliverySurface) {
   if (!server) return nullptr;
+  clearStalePointerButtonGrab(server);
   if (server->pointerButtonCount_ > 0 && server->pointerButtonGrabClient_) return server->pointerButtonGrabClient_;
   return surfaceClient(deliverySurface ? deliverySurface : server->pointerFocus_);
 }
@@ -228,7 +242,7 @@ bool handlePopupGrabPointerButton(WaylandServer::Impl* server,
              static_cast<unsigned long long>(surfaceId(server->pointerButtonGrabSurface_)),
              static_cast<void*>(server->pointerButtonGrabClient_),
              static_cast<unsigned long long>(surfaceId(popupGrabSurface(server))));
-  dismissTopPopup(server);
+  dismissPopupGrab(server);
   return true;
 }
 

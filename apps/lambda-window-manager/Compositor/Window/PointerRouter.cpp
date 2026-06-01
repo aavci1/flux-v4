@@ -1,6 +1,7 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -81,9 +82,11 @@ using wm::surfaceUsesCutouts;
 namespace {
 
 wl_client* popupGrabClient(WaylandServer::Impl* server) {
-  return server && server->popupGrabsEnabled_ && server->grabPopup_ && server->grabPopup_->resource
-             ? wl_resource_get_client(server->grabPopup_->resource)
-             : nullptr;
+  if (!server || !server->popupGrabsEnabled_) return nullptr;
+  auto* popup = xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
+  if (!popup) return nullptr;
+  if (server->popupGrab_.client) return server->popupGrab_.client;
+  return popup->resource ? wl_resource_get_client(popup->resource) : nullptr;
 }
 
 bool surfaceBelongsToClient(WaylandServer::Impl::Surface const* surface, wl_client* client) {
@@ -291,9 +294,8 @@ std::uint64_t traceSurfaceId(WaylandServer::Impl::Surface const* surface) {
 }
 
 std::uint64_t traceGrabPopupSurfaceId(WaylandServer::Impl const* server) {
-  return server && server->grabPopup_ && server->grabPopup_->xdgSurface && server->grabPopup_->xdgSurface->surface
-             ? server->grabPopup_->xdgSurface->surface->id
-             : 0;
+  auto* popup = server ? xdgPopupGrabTop(server->popupGrab_) : nullptr;
+  return popup && popup->xdgSurface && popup->xdgSurface->surface ? popup->xdgSurface->surface->id : 0;
 }
 
 } // namespace
@@ -363,11 +365,13 @@ using wm::popupForSurface;
 using wm::popupIsDescendantOf;
 
 bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
-  if (!server || !server->popupGrabsEnabled_ || !server->grabPopup_ || !surface) return false;
+  if (!server || !server->popupGrabsEnabled_ || !surface) return false;
+  auto* grabPopup = xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
+  if (!grabPopup) return false;
   if (surfaceBelongsToClient(surface, popupGrabClient(server))) return true;
-  if (server->grabPopup_->xdgSurface && surface == server->grabPopup_->xdgSurface->surface) return true;
+  if (grabPopup->xdgSurface && surface == grabPopup->xdgSurface->surface) return true;
   WaylandServer::Impl::XdgPopup* popup = popupForSurface(server, surface);
-  return popup && popupIsDescendantOf(server, popup, server->grabPopup_);
+  return popup && popupIsDescendantOf(server, popup, grabPopup);
 }
 
 } // namespace lambda::compositor
@@ -381,22 +385,18 @@ using wm::setKeyboardFocus;
 using wm::dismissPopup;
 
 void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup, std::uint32_t timeMs) {
-  if (!server || !popup || server->grabPopup_ != popup) return;
+  if (!server || !popup || !xdgPopupGrabContains(server->popupGrab_, popup)) return;
   popupTrace("lambda-window-manager: xdg_popup grab released surface=%llu\n",
              static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
                                                  ? popup->xdgSurface->surface->id
                                                  : 0));
-  server->grabPopup_ = nullptr;
-  popup->grabbed = false;
+  bool const wasTop = server->grabPopup_ == popup || xdgPopupGrabTop(server->popupGrab_) == popup;
+  xdgPopupGrabRemove(server->popupGrab_, popup);
+  xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
 
-  WaylandServer::Impl::Surface* parent = popup->parentSurface;
-  if (parent && surfaceIsXdgPopup(parent)) {
-    WaylandServer::Impl::XdgPopup* parentPopup = popupForSurface(server, parent);
-    if (parentPopup && parentPopup->grabbed && !parentPopup->dismissed) {
-      server->grabPopup_ = parentPopup;
-      setKeyboardFocus(server, parentPopup->xdgSurface->surface);
-      sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
-    }
+  if (wasTop && server->grabPopup_ && server->grabPopup_->xdgSurface && !server->grabPopup_->dismissed) {
+    setKeyboardFocus(server, server->grabPopup_->xdgSurface->surface);
+    sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
   }
 }
 
@@ -438,10 +438,25 @@ bool validPopupGrabSerial(WaylandServer::Impl* server,
 
 void establishPopupGrab(WaylandServer::Impl* server,
                         WaylandServer::Impl::XdgPopup* popup,
-                        wl_resource* /*seat*/,
+                        wl_resource* seat,
                         std::uint32_t serial) {
   if (!server || !popup || popup->dismissed || !popup->resource || !popup->xdgSurface ||
       !popup->xdgSurface->surface) {
+    return;
+  }
+
+  if (popup->committed) {
+    wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB, "xdg_popup is already mapped");
+    return;
+  }
+  if (!xdgPopupGrabRequestAllowed(popup) || xdgPopupGrabContains(server->popupGrab_, popup)) {
+    wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB, "xdg_popup already has an active grab");
+    return;
+  }
+  if (xdgPopupHasLiveChild(server, popup)) {
+    wl_resource_post_error(popup->resource,
+                           XDG_WM_BASE_ERROR_NOT_THE_TOPMOST_POPUP,
+                           "xdg_popup was not created on the topmost popup");
     return;
   }
 
@@ -470,11 +485,8 @@ void establishPopupGrab(WaylandServer::Impl* server,
     return;
   }
 
-  if (server->grabPopup_ && server->grabPopup_ != popup) {
-    server->grabPopup_->grabbed = false;
-  }
-
-  popup->grabbed = true;
+  wl_client* const client = wl_resource_get_client(popup->resource);
+  xdgPopupGrabPush(server->popupGrab_, popup, client, seat);
   server->grabPopup_ = popup;
   setKeyboardFocus(server, popup->xdgSurface->surface);
 
@@ -560,9 +572,28 @@ bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
                                     popup->xdgSurface->surface &&
                                     server->keyboardFocus_ == popup->xdgSurface->surface;
   bool const reset = resetXdgPopupRole(server, popup, true);
-  if (restoreToplevelFocus) activateMostRecentToplevel(server, 0);
+  if (restoreToplevelFocus && server->popupGrab_.popups.empty()) activateMostRecentToplevel(server, 0);
   server->flushClients();
   return reset;
+}
+
+} // namespace lambda::compositor::wm
+
+namespace lambda::compositor::wm {
+
+bool dismissPopupGrab(WaylandServer::Impl* server) {
+  if (!server || !server->popupGrabsEnabled_ || server->popupGrab_.popups.empty()) return false;
+  auto popups = server->popupGrab_.popups;
+  bool const restoreToplevelFocus = surfaceIsXdgPopup(server->keyboardFocus_);
+  popupTrace("lambda-window-manager: xdg_popup grab dismiss count=%zu\n", popups.size());
+  for (auto it = popups.rbegin(); it != popups.rend(); ++it) {
+    if (*it) resetXdgPopupRole(server, *it, true);
+  }
+  xdgPopupGrabClear(server->popupGrab_);
+  server->grabPopup_ = nullptr;
+  if (restoreToplevelFocus) activateMostRecentToplevel(server, 0);
+  server->flushClients();
+  return true;
 }
 
 } // namespace lambda::compositor::wm
@@ -578,11 +609,11 @@ bool dismissTopPopup(WaylandServer::Impl* server) {
 namespace lambda::compositor::wm {
 
 bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target) {
-  if (server->popupGrabsEnabled_ && server->grabPopup_) {
+  if (server->popupGrabsEnabled_ && xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_)) {
     if (surfaceInGrabSubtree(server, target)) return false;
-    WaylandServer::Impl::XdgPopup* popup = topmostPopup(server);
-    return popup ? dismissPopup(popup) : false;
+    return dismissPopupGrab(server);
   }
+  if (server->popupGrab_.popups.empty()) xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
   WaylandServer::Impl::XdgPopup* popup = topmostPopup(server);
   if (!popup || surfaceBelongsToPopup(target, popup)) return false;
   return dismissPopup(popup);
@@ -593,6 +624,14 @@ bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Su
 namespace lambda::compositor::wm {
 
 void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next) {
+  if (server && server->popupGrabsEnabled_) {
+    auto* popup = xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
+    if (popup && popup->xdgSurface && popup->xdgSurface->surface) {
+      next = popup->xdgSurface->surface;
+    } else if (server->popupGrab_.popups.empty()) {
+      xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
+    }
+  }
   if (server->keyboardFocus_ == next) return;
   std::uint32_t serial = issueSeatSerialForSurface(server, SeatSerialKind::KeyboardEnter, next);
   WaylandServer::Impl::Surface* previous = server->keyboardFocus_;
