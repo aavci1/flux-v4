@@ -1,97 +1,59 @@
+#include "EditorDocument.hpp"
+
 #include <Lambda.hpp>
 #include <Lambda/UI/Shortcut.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/UI.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
-#include <filesystem>
-#include <fstream>
 #include <string>
+#include <utility>
 
 using namespace lambda;
+using namespace lambda_editor;
 
 namespace {
 
-struct TextFileResult {
-  std::string text;
-  std::string status;
-  bool ok = false;
-};
-
-TextFileResult readTextFile(std::string const& pathText) {
-  if (pathText.empty()) {
-    return {.status = "Enter a file path to open."};
-  }
-  std::filesystem::path const path(pathText);
-  std::ifstream file(path, std::ios::binary);
-  if (!file) {
-    return {.status = "Could not open " + path.string()};
-  }
-  std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-  if (!file.eof() && file.fail()) {
-    return {.status = "Could not read " + path.string()};
-  }
-  return {.text = std::move(text), .status = "Opened " + path.string(), .ok = true};
-}
-
-TextFileResult writeTextFile(std::string const& pathText, std::string const& text) {
-  if (pathText.empty()) {
-    return {.status = "Enter a file path to save."};
-  }
-  std::filesystem::path const path(pathText);
-  std::error_code ec;
-  if (!path.parent_path().empty()) {
-    std::filesystem::create_directories(path.parent_path(), ec);
-    if (ec) {
-      return {.status = "Could not create " + path.parent_path().string() + ": " + ec.message()};
-    }
-  }
-  std::ofstream file(path, std::ios::binary | std::ios::trunc);
-  if (!file) {
-    return {.status = "Could not save " + path.string()};
-  }
-  file.write(text.data(), static_cast<std::streamsize>(text.size()));
-  if (!file) {
-    return {.status = "Could not write " + path.string()};
-  }
-  return {.status = "Saved " + path.string(), .ok = true};
-}
-
-std::string fileLabel(std::string const& path) {
-  if (path.empty()) return "Untitled";
-  return std::filesystem::path(path).filename().string();
-}
-
 struct LambdaEditor {
-  std::string initialPath;
-  std::string initialText;
+  EditorDocument initialDocument = EditorDocument::untitled();
+  std::string initialPathText;
   std::string initialStatus;
 
   Element body() const {
     auto theme = useEnvironment<ThemeKey>();
-    auto path = useState(initialPath);
-    auto text = useState(initialText);
+    auto document = useState(initialDocument);
+    auto path = useState(initialPathText.empty() ? initialDocument.pathText() : initialPathText);
+    auto text = useState(initialDocument.text());
     auto status = useState(initialStatus.empty() ? std::string{"Ready"} : initialStatus);
-    auto dirty = useState(false);
 
-    auto openFile = [path, text, status, dirty] {
-      TextFileResult result = readTextFile(path.peek());
+    auto openFile = [document, path, text, status] {
+      EditorDocumentResult result = openDocument(path.peek());
       status.set(result.status);
       if (result.ok) {
-        text.set(std::move(result.text));
-        dirty.set(false);
+        document.set(result.document);
+        path.set(result.document.pathText());
+        text.set(result.document.text());
       }
     };
-    auto saveFile = [path, text, status, dirty] {
-      TextFileResult result = writeTextFile(path.peek(), text.peek());
+    auto saveFile = [document, path, text, status] {
+      EditorDocument current = document.peek();
+      current.setText(text.peek());
+      EditorDocumentResult result =
+          current.hasPath() && path.peek() == current.pathText()
+              ? saveDocument(current)
+              : saveDocumentAs(current, path.peek());
       status.set(result.status);
-      if (result.ok) dirty.set(false);
+      if (result.ok) {
+        document.set(result.document);
+        path.set(result.document.pathText());
+        text.set(result.document.text());
+      }
     };
-    auto newFile = [path, text, status, dirty] {
+    auto newFile = [document, path, text, status] {
+      document.set(EditorDocument::untitled());
       path.set("");
       text.set("");
       status.set("New document");
-      dirty.set(false);
     };
 
     TextInput::Style pathStyle;
@@ -121,8 +83,9 @@ struct LambdaEditor {
                        .alignment = Alignment::Center,
                        .children = children(
                            Text{
-                               .text = [path, dirty] {
-                                 return fileLabel(path()) + (dirty() ? " *" : "");
+                               .text = [document] {
+                                 EditorDocument const& current = document();
+                                 return current.displayName() + (current.isDirty() ? " *" : "");
                                },
                                .font = Font{.size = 15.f, .weight = 650.f},
                                .color = Color::primary(),
@@ -155,7 +118,11 @@ struct LambdaEditor {
                        .style = editorStyle,
                        .multiline = true,
                        .multilineHeight = {.fixed = 0.f, .minIntrinsic = 560.f},
-                       .onChange = [dirty](std::string const&) { dirty.set(true); },
+                       .onChange = [document](std::string const& value) {
+                         EditorDocument current = document.peek();
+                         current.setText(value);
+                         document.set(std::move(current));
+                       },
                    }.flex(1.f, 1.f, 0.f)
                        .fill(FillStyle::solid(Color::controlBackground())),
                    HStack{
@@ -186,7 +153,8 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   std::string initialPath = argc > 1 ? std::string(argv[1]) : std::string{};
-  TextFileResult initial = initialPath.empty() ? TextFileResult{} : readTextFile(initialPath);
+  EditorDocumentResult initial =
+      initialPath.empty() ? EditorDocumentResult{} : openDocument(initialPath);
 
   auto& window = app.createWindow<Window>({
       .size = {920.f, 720.f},
@@ -199,8 +167,8 @@ int main(int argc, char* argv[]) {
   window.registerAction("edit.selectAll", {.label = "Select All", .shortcut = shortcuts::SelectAll});
   window.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
   window.setView<LambdaEditor>({
-      .initialPath = std::move(initialPath),
-      .initialText = std::move(initial.text),
+      .initialDocument = initial.ok ? std::move(initial.document) : EditorDocument::untitled(),
+      .initialPathText = initial.ok ? std::string{} : std::move(initialPath),
       .initialStatus = initial.status,
   });
   return app.exec();

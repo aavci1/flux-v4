@@ -16,6 +16,8 @@ set(_lambda_test_sources
   AlertTests.cpp
   AnimationTests.cpp
   BindableInferenceTests.cpp
+  ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorDocument.cpp
+  EditorDocumentTests.cpp
   EnvironmentKeyOtherTU.cpp
   EnvironmentKeyTests.cpp
   FilesFlowGridTests.cpp
@@ -113,6 +115,7 @@ target_include_directories(lambda_tests PRIVATE
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/apps/lambda-files
+  ${PROJECT_SOURCE_DIR}/apps/lambda-editor
   ${PROJECT_SOURCE_DIR}/apps/lambda-settings
   ${PROJECT_SOURCE_DIR}/apps/lambda-terminal
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell
