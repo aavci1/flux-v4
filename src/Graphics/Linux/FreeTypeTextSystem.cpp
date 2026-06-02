@@ -612,6 +612,7 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
   bool const allowWrap = options.wrapping != TextWrapping::NoWrap && maxWidth > 0.f;
   float x = 0.f;
   float y = paragraph->ascent;
+  float lineTop = 0.f;
   float lineAscent = paragraph->ascent;
   float lineDescent = paragraph->descent;
   float lineHeight = paragraph->lineHeight;
@@ -648,18 +649,30 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
 
   auto flushLine = [&](std::uint32_t byteEnd) {
     flushRun(byteEnd);
+    float const leading = std::max(0.f, lineHeight - lineAscent - lineDescent);
+    float const finalBaseline = lineTop + leading * 0.5f + lineAscent;
+    float const baselineDelta = finalBaseline - y;
+    if (std::fabs(baselineDelta) > 1e-6f) {
+      for (auto& run : result->runs) {
+        if (run.ctLineIndex == lineIndex) {
+          run.origin.y += baselineDelta;
+        }
+      }
+    }
     result->lines.push_back(TextLayout::LineRange{lineIndex, static_cast<int>(lineStartByte),
-                                                  static_cast<int>(byteEnd), 0.f, y - lineAscent,
-                                                  y + lineDescent, y});
+                                                  static_cast<int>(byteEnd), 0.f, lineTop,
+                                                  lineTop + lineHeight, finalBaseline});
     lineWidths[lineIndex] = x;
     maxLineWidth = std::max(maxLineWidth, x);
     ++lineIndex;
     x = 0.f;
-    y += lineHeight;
+    lineTop += lineHeight;
     lineStartByte = byteEnd;
     lineAscent = paragraph->ascent;
     lineDescent = paragraph->descent;
     lineHeight = paragraph->lineHeight;
+    float const nextLeading = std::max(0.f, lineHeight - lineAscent - lineDescent);
+    y = lineTop + nextLeading * 0.5f + lineAscent;
   };
 
   for (Impl::ShapedGlyph const& glyph : shaped) {
@@ -694,8 +707,8 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
     run.run.width = lineWidths[run.ctLineIndex];
   }
   result->measuredSize = {maxLineWidth, result->lines.empty() ? 0.f : result->lines.back().bottom};
-  result->firstBaseline = result->runs.empty() ? 0.f : result->runs.front().origin.y;
-  result->lastBaseline = result->runs.empty() ? 0.f : result->runs.back().origin.y;
+  result->firstBaseline = result->lines.empty() ? 0.f : result->lines.front().baseline;
+  result->lastBaseline = result->lines.empty() ? 0.f : result->lines.back().baseline;
   d->cacheLayout(std::move(cacheKey), result);
   return result;
 }

@@ -159,6 +159,20 @@ class PreparedCountingRenderer final : public Renderer {
     std::vector<Mat3> transforms_ {Mat3::identity()};
 };
 
+TEST_CASE("RectNode local bounds keep strokes inside and expand for shadows") {
+    RectNode stroked(Rect {0.f, 0.f, 20.f, 10.f},
+                     FillStyle::none(),
+                     StrokeStyle::solid(Colors::blue, 4.f));
+    CHECK(stroked.localBounds() == Rect::sharp(0.f, 0.f, 20.f, 10.f));
+
+    RectNode shadowed(Rect {0.f, 0.f, 20.f, 10.f},
+                      FillStyle::solid(Colors::white),
+                      StrokeStyle::none(),
+                      CornerRadius {},
+                      ShadowStyle {.radius = 3.f, .offset = {1.f, 2.f}, .color = Colors::black});
+    CHECK(shadowed.localBounds() == Rect::sharp(-2.f, -1.f, 26.f, 16.f));
+}
+
 TEST_CASE("SceneRenderer accumulates parent-space bounds as local translations") {
     auto root = std::make_unique<SceneNode>(Rect {10.f, 20.f, 300.f, 200.f});
     auto panel = std::make_unique<SceneNode>(Rect {15.f, 25.f, 120.f, 80.f});

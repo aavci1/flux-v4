@@ -8,18 +8,33 @@ namespace lambda::scenegraph {
 
 namespace {
 
-Rect expandForStrokeAndShadow(Rect rect, StrokeStyle const &stroke, ShadowStyle const &shadow) noexcept {
-    float const strokeInset = stroke.isNone() ? 0.f : stroke.width * 0.5f;
+Rect expandForShadow(Rect rect, ShadowStyle const &shadow) noexcept {
     float const blur = shadow.isNone() ? 0.f : shadow.radius;
-    float const left = std::max(strokeInset, blur - shadow.offset.x);
-    float const right = std::max(strokeInset, blur + shadow.offset.x);
-    float const top = std::max(strokeInset, blur - shadow.offset.y);
-    float const bottom = std::max(strokeInset, blur + shadow.offset.y);
+    float const left = std::max(0.f, blur - shadow.offset.x);
+    float const right = std::max(0.f, blur + shadow.offset.x);
+    float const top = std::max(0.f, blur - shadow.offset.y);
+    float const bottom = std::max(0.f, blur + shadow.offset.y);
     rect.x -= left;
     rect.y -= top;
     rect.width += left + right;
     rect.height += top + bottom;
     return rect;
+}
+
+Rect insetRect(Rect rect, float inset) noexcept {
+    rect.x += inset;
+    rect.y += inset;
+    rect.width = std::max(0.f, rect.width - 2.f * inset);
+    rect.height = std::max(0.f, rect.height - 2.f * inset);
+    return rect;
+}
+
+CornerRadius insetCornerRadius(CornerRadius radius, float inset) noexcept {
+    radius.topLeft = std::max(0.f, radius.topLeft - inset);
+    radius.topRight = std::max(0.f, radius.topRight - inset);
+    radius.bottomRight = std::max(0.f, radius.bottomRight - inset);
+    radius.bottomLeft = std::max(0.f, radius.bottomLeft - inset);
+    return radius;
 }
 
 } // namespace
@@ -108,13 +123,21 @@ void RectNode::setOpacity(float opacity) noexcept {
 }
 
 Rect RectNode::localBounds() const noexcept {
-    return expandForStrokeAndShadow(Rect::sharp(0.f, 0.f, size().width, size().height),
-                                    stroke_, shadow_);
+    return expandForShadow(Rect::sharp(0.f, 0.f, size().width, size().height), shadow_);
 }
 
 void RectNode::render(Renderer &renderer) const {
-    renderer.drawRect(Rect::sharp(0.f, 0.f, size().width, size().height), cornerRadius_,
-                      fill_, stroke_, shadow_);
+    Rect const bounds = Rect::sharp(0.f, 0.f, size().width, size().height);
+    renderer.drawRect(bounds, cornerRadius_, fill_, StrokeStyle::none(), shadow_);
+    if (stroke_.isNone() || stroke_.width <= 0.f) {
+        return;
+    }
+    float const strokeInset = stroke_.width * 0.5f;
+    renderer.drawRect(insetRect(bounds, strokeInset),
+                      insetCornerRadius(cornerRadius_, strokeInset),
+                      FillStyle::none(),
+                      stroke_,
+                      ShadowStyle::none());
 }
 
 } // namespace lambda::scenegraph

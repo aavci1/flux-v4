@@ -203,8 +203,9 @@ void setTextLayout(scenegraph::TextNode& node, TextInput const& input,
                    Size frameSize,
                    std::shared_ptr<detail::TextEditLayoutResult> const& layoutResult = {}) {
   Rect const box = textBox(frameSize, style);
+  Rect const layoutBox = Rect::sharp(0.f, 0.f, box.width, box.height);
   node.setBounds(box);
-  auto layout = textSystem.layout(attributedText(input, style), box,
+  auto layout = textSystem.layout(attributedText(input, style), layoutBox,
                                   textInputLayoutOptions(input.multiline));
   node.setLayout(layout);
   if (layoutResult) {
