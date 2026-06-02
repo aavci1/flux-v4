@@ -6,59 +6,121 @@
 #include <Lambda/UI/UI.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
+#include <functional>
 #include <string>
 #include <utility>
+#include <vector>
 
 using namespace lambda;
 using namespace lambda_editor;
 
 namespace {
 
+std::string editorWindowTitle(EditorDocument const& document) {
+  return document.displayName() + (document.isDirty() ? " *" : "") + " - Lambda Editor";
+}
+
+struct ToolbarButton {
+  IconName icon;
+  std::string tooltip;
+  std::function<void()> onTap;
+  bool disabled = false;
+
+  Element body() const {
+    useTooltip(TooltipConfig{.text = tooltip, .placement = PopoverPlacement::Below});
+    auto handleTap = [onTap = onTap, disabled = disabled] {
+      if (!disabled && onTap) {
+        onTap();
+      }
+    };
+    auto handleKey = [handleTap](KeyCode key, Modifiers) {
+      if (key == keys::Return || key == keys::Space) {
+        handleTap();
+      }
+    };
+
+    return ZStack{
+        .horizontalAlignment = Alignment::Center,
+        .verticalAlignment = Alignment::Center,
+        .children = children(
+            Rectangle{}
+                .size(34.f, 34.f)
+                .cornerRadius(CornerRadius{6.f})
+                .fill(FillStyle::solid(disabled ? Color{0.f, 0.f, 0.f, 0.02f}
+                                                 : Color{0.f, 0.f, 0.f, 0.035f})),
+            Icon{
+                .name = icon,
+                .size = 20.f,
+                .weight = 440.f,
+                .color = disabled ? Color::secondary() : Color::primary(),
+            })}
+        .size(34.f, 34.f)
+        .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
+        .focusable(!disabled)
+        .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleKey})
+        .onTap(std::function<void()>{handleTap});
+  }
+};
+
+Element toolbarDivider() {
+  return Divider{.orientation = Divider::Orientation::Vertical}.height(34.f);
+}
+
+Element toolbarGroup(std::vector<Element> items) {
+  return HStack{
+      .spacing = 4.f,
+      .alignment = Alignment::Center,
+      .children = std::move(items),
+  }
+      .padding(3.f, 4.f, 3.f, 4.f)
+      .height(42.f)
+      .fill(FillStyle::solid(Color::controlBackground()))
+      .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+      .cornerRadius(CornerRadius{7.f});
+}
+
 struct LambdaEditor {
   EditorDocument initialDocument = EditorDocument::untitled();
-  std::string initialPathText;
   std::string initialStatus;
 
   Element body() const {
     auto theme = useEnvironment<ThemeKey>();
+    Runtime* runtime = Runtime::current();
+    Window* window = runtime ? &runtime->window() : nullptr;
     auto document = useState(initialDocument);
-    auto path = useState(initialPathText.empty() ? initialDocument.pathText() : initialPathText);
     auto text = useState(initialDocument.text());
     auto status = useState(initialStatus.empty() ? std::string{"Ready"} : initialStatus);
 
-    auto openFile = [document, path, text, status] {
-      EditorDocumentResult result = openDocument(path.peek());
-      status.set(result.status);
-      if (result.ok) {
-        document.set(result.document);
-        path.set(result.document.pathText());
-        text.set(result.document.text());
+    useEffect([document, window] {
+      if (window) {
+        window->setTitle(editorWindowTitle(document.get()));
       }
+    });
+
+    auto markComingSoon = [status](std::string label) {
+      status.set(label + " is not implemented yet.");
     };
-    auto saveFile = [document, path, text, status] {
+    auto openFile = [markComingSoon] {
+      markComingSoon("Open dialog");
+    };
+    auto saveFile = [document, text, status] {
       EditorDocument current = document.peek();
       current.setText(text.peek());
-      EditorDocumentResult result =
-          current.hasPath() && path.peek() == current.pathText()
-              ? saveDocument(current)
-              : saveDocumentAs(current, path.peek());
+      EditorDocumentResult result = saveDocument(current);
       status.set(result.status);
       if (result.ok) {
         document.set(result.document);
-        path.set(result.document.pathText());
         text.set(result.document.text());
       }
     };
-    auto newFile = [document, path, text, status] {
+    auto saveFileAs = [markComingSoon] {
+      markComingSoon("Save As dialog");
+    };
+    auto newFile = [document, text, status] {
       document.set(EditorDocument::untitled());
-      path.set("");
       text.set("");
       status.set("New document");
     };
-
-    TextInput::Style pathStyle;
-    pathStyle.font = Font{.size = 13.f, .weight = 450.f};
-    pathStyle.height = 34.f;
 
     TextInput::Style editorStyle = TextInput::Style::plain();
     editorStyle.font = Font{.family = "monospace", .size = 14.f};
@@ -68,48 +130,82 @@ struct LambdaEditor {
     editorStyle.paddingV = 12.f;
     editorStyle.lineHeight = 20.f;
 
-    Button::Style buttonStyle;
-    buttonStyle.font = Font{.size = 12.f, .weight = 650.f};
-    buttonStyle.paddingH = 12.f;
-    buttonStyle.paddingV = 7.f;
-    buttonStyle.cornerRadius = 7.f;
-
     return VStack{
                .spacing = 0.f,
                .alignment = Alignment::Stretch,
                .children = children(
                    HStack{
-                       .spacing = theme().space3,
+                       .spacing = 8.f,
                        .alignment = Alignment::Center,
                        .children = children(
-                           Text{
-                               .text = [document] {
-                                 EditorDocument const& current = document();
-                                 return current.displayName() + (current.isDirty() ? " *" : "");
-                               },
-                               .font = Font{.size = 15.f, .weight = 650.f},
-                               .color = Color::primary(),
-                               .verticalAlignment = VerticalAlignment::Center,
-                           }.width(180.f),
-                           TextInput{
-                               .value = path,
-                               .placeholder = "/path/to/file.txt",
-                               .style = pathStyle,
-                               .onSubmit = [openFile](std::string const&) { openFile(); },
-                           }.flex(1.f, 1.f, 0.f),
-                           Button{.label = "New",
-                                  .variant = ButtonVariant::Secondary,
-                                  .style = buttonStyle,
-                                  .onTap = newFile},
-                           Button{.label = "Open",
-                                  .variant = ButtonVariant::Secondary,
-                                  .style = buttonStyle,
-                                  .onTap = openFile},
-                           Button{.label = "Save",
-                                  .variant = ButtonVariant::Primary,
-                                  .style = buttonStyle,
-                                  .onTap = saveFile})}
-                       .padding(theme().space3)
+                           toolbarGroup(children(
+                               ToolbarButton{.icon = IconName::NoteAdd,
+                                             .tooltip = "New",
+                                             .onTap = newFile},
+                               ToolbarButton{.icon = IconName::FileOpen,
+                                             .tooltip = "Open",
+                                             .onTap = openFile},
+                               ToolbarButton{.icon = IconName::Save,
+                                             .tooltip = "Save",
+                                             .onTap = saveFile},
+                               ToolbarButton{.icon = IconName::SaveAs,
+                                             .tooltip = "Save As",
+                                             .onTap = saveFileAs})),
+                           toolbarDivider(),
+                           toolbarGroup(children(
+                               ToolbarButton{.icon = IconName::Print,
+                                             .tooltip = "Print",
+                                             .onTap = [markComingSoon] { markComingSoon("Print"); }})),
+                           toolbarDivider(),
+                           toolbarGroup(children(
+                               ToolbarButton{.icon = IconName::Undo,
+                                             .tooltip = "Undo",
+                                             .onTap = [markComingSoon] { markComingSoon("Undo"); }},
+                               ToolbarButton{.icon = IconName::Redo,
+                                             .tooltip = "Redo",
+                                             .onTap = [markComingSoon] { markComingSoon("Redo"); }})),
+                           toolbarDivider(),
+                           toolbarGroup(children(
+                               ToolbarButton{.icon = IconName::ContentCut,
+                                             .tooltip = "Cut",
+                                             .onTap = [markComingSoon] { markComingSoon("Cut toolbar action"); }},
+                               ToolbarButton{.icon = IconName::ContentCopy,
+                                             .tooltip = "Copy",
+                                             .onTap = [markComingSoon] { markComingSoon("Copy toolbar action"); }},
+                               ToolbarButton{.icon = IconName::ContentPaste,
+                                             .tooltip = "Paste",
+                                             .onTap = [markComingSoon] { markComingSoon("Paste toolbar action"); }},
+                               ToolbarButton{.icon = IconName::Delete,
+                                             .tooltip = "Delete",
+                                             .onTap = [markComingSoon] { markComingSoon("Delete"); }})),
+                           toolbarDivider(),
+                           toolbarGroup(children(
+                               ToolbarButton{.icon = IconName::Search,
+                                             .tooltip = "Find",
+                                             .onTap = [markComingSoon] { markComingSoon("Find"); }},
+                               ToolbarButton{.icon = IconName::FindReplace,
+                                             .tooltip = "Replace",
+                                             .onTap = [markComingSoon] { markComingSoon("Replace"); }},
+                               ToolbarButton{.icon = IconName::MoreHoriz,
+                                             .tooltip = "Go To Line",
+                                             .onTap = [markComingSoon] { markComingSoon("Go To Line"); }})),
+                           toolbarDivider(),
+                           toolbarGroup(children(
+                               ToolbarButton{.icon = IconName::WrapText,
+                                             .tooltip = "Word Wrap",
+                                             .onTap = [markComingSoon] { markComingSoon("Word Wrap"); }},
+                               ToolbarButton{.icon = IconName::ZoomOut,
+                                             .tooltip = "Zoom Out",
+                                             .onTap = [markComingSoon] { markComingSoon("Zoom Out"); }},
+                               ToolbarButton{.icon = IconName::ZoomIn,
+                                             .tooltip = "Zoom In",
+                                             .onTap = [markComingSoon] { markComingSoon("Zoom In"); }},
+                               ToolbarButton{.icon = IconName::TextFields,
+                                             .tooltip = "Font",
+                                             .onTap = [markComingSoon] { markComingSoon("Font"); }})),
+                           Spacer{})}
+                       .height(56.f)
+                       .padding(7.f, theme().space3, 7.f, theme().space3)
                        .fill(FillStyle::solid(Color::windowBackground()))
                        .stroke(StrokeStyle::solid(Color::separator(), 1.f)),
                    TextInput{
@@ -168,7 +264,6 @@ int main(int argc, char* argv[]) {
   window.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
   window.setView<LambdaEditor>({
       .initialDocument = initial.ok ? std::move(initial.document) : EditorDocument::untitled(),
-      .initialPathText = initial.ok ? std::string{} : std::move(initialPath),
       .initialStatus = initial.status,
   });
   return app.exec();
