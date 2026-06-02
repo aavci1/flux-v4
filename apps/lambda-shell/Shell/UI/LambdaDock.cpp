@@ -53,6 +53,13 @@ std::string icon(IconName name) {
   return utf8(static_cast<char32_t>(name));
 }
 
+inline constexpr float kDockEnabledGlyphAlpha = 0.8f;
+inline constexpr float kDockMutedGlyphAlpha = 0.42f;
+
+Color dockBorderGlyphColor(float alpha = kDockEnabledGlyphAlpha) {
+  return Color{VisualTokens::border.r, VisualTokens::border.g, VisualTokens::border.b, alpha};
+}
+
 std::shared_ptr<Image> iconImage(std::string const& path, int pixelSize) {
   if (path.empty()) return nullptr;
   static std::unordered_map<std::string, std::shared_ptr<Image>> cache;
@@ -72,7 +79,7 @@ Element lambdaLauncherIcon(float iconSize, float iconInsetX, float lift) {
   return Text{
       .text = "λ",
       .font = Font{.family = "", .size = std::max(22.f, iconSize * 0.83f), .weight = 900.f},
-      .color = VisualTokens::primaryText,
+      .color = dockBorderGlyphColor(),
       .horizontalAlignment = HorizontalAlignment::Center,
       .verticalAlignment = VerticalAlignment::Center,
   }.size(iconSize, iconSize).position(iconInsetX, lift);
@@ -411,7 +418,7 @@ Element dockSeparator(int itemSize) {
   return ZStack{.children = children(Rectangle{}
                                          .size(thickness, height)
                                          .position(x, y)
-                                         .fill(FillStyle::solid(VisualTokens::separator)))}
+                                         .fill(FillStyle::solid(dockBorderGlyphColor(kDockMutedGlyphAlpha))))}
       .size(slotWidth, slotHeight);
 }
 
@@ -426,7 +433,7 @@ Element statusIcon(Reactive::Bindable<IconName> iconName,
     return Color{0.f, 0.f, 0.f, 0.001f};
   }};
   Reactive::Bindable<Color> const color{[available] {
-    return available.evaluate() ? VisualTokens::primaryText : VisualTokens::tertiaryText;
+    return available.evaluate() ? dockBorderGlyphColor() : dockBorderGlyphColor(kDockMutedGlyphAlpha);
   }};
 
   float const cellSize = static_cast<float>(dockStatusCellSize(itemSize));
@@ -473,7 +480,7 @@ Element fixedStatusIcon(IconName iconName, bool available, int itemSize) {
 }
 
 Element statusIconGrid(Reactive::Bindable<SystemStatus> system, int itemSize) {
-  float const gap = static_cast<float>(kDockStatusGridGap);
+  float const gap = static_cast<float>(dockStatusGridGap(itemSize));
   float const width = static_cast<float>(dockStatusGridWidth(itemSize));
   float const height = static_cast<float>(dockStatusGridHeight(itemSize));
 
@@ -540,9 +547,9 @@ Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth, int i
                .children = children(Text{
                    .text = singleRowText,
                    .font = Font{.family = "",
-                                .size = kDockClockSingleRowFontSize,
+                                .size = dockClockSingleRowFontSize(itemSize),
                                 .weight = kDockClockSingleRowFontWeight},
-                   .color = VisualTokens::primaryText,
+                   .color = dockBorderGlyphColor(),
                    .horizontalAlignment = HorizontalAlignment::Center,
                    .verticalAlignment = VerticalAlignment::Center,
                }.size(textWidth, textHeight).position(kDockClockLeadingPaddingX, textY))}
@@ -550,9 +557,9 @@ Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth, int i
   }
 
   float const bandTop = static_cast<float>(kDockSlotMargin);
-  float const dateHeight = 19.f;
-  float const timeHeight = 26.f;
-  float const rowGap = std::max(0.f, static_cast<float>(clampedDockItemSize(itemSize)) - dateHeight - timeHeight);
+  float const dateHeight = dockClockDateRowHeight(itemSize);
+  float const timeHeight = dockClockTimeRowHeight(itemSize);
+  float const rowGap = dockClockRowGap(itemSize);
   return ZStack{
              .horizontalAlignment = Alignment::Center,
              .verticalAlignment = Alignment::Center,
@@ -560,18 +567,18 @@ Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth, int i
                  Text{
                      .text = dateText,
                      .font = Font{.family = "",
-                                  .size = kDockClockDateFontSize,
+                                  .size = dockClockDateFontSize(itemSize),
                                   .weight = kDockClockDateFontWeight},
-                     .color = VisualTokens::primaryText,
+                     .color = dockBorderGlyphColor(),
                      .horizontalAlignment = HorizontalAlignment::Center,
                      .verticalAlignment = VerticalAlignment::Center,
                  }.size(textWidth, dateHeight).position(kDockClockLeadingPaddingX, bandTop),
                  Text{
                      .text = clockText,
                      .font = Font{.family = "",
-                                  .size = kDockClockTimeFontSize,
+                                  .size = dockClockTimeFontSize(itemSize),
                                   .weight = kDockClockTimeFontWeight},
-                     .color = VisualTokens::primaryText,
+                     .color = dockBorderGlyphColor(),
                      .horizontalAlignment = HorizontalAlignment::Center,
                      .verticalAlignment = VerticalAlignment::Center,
                  }.size(textWidth, timeHeight).position(kDockClockLeadingPaddingX, bandTop + dateHeight + rowGap))}
@@ -592,8 +599,7 @@ Element LambdaDock::body() const {
   int const hoverIndex = props.hoverIndex;
   int const itemSize = itemSizeSignal();
 
-  std::vector<Element> sections;
-  sections.push_back(Element{For(
+  Element appSection = Element{For(
       items,
       [itemSize](DockItem const& item) {
         return dockRowKey(item) + "|size=" + std::to_string(clampedDockItemSize(itemSize));
@@ -632,8 +638,33 @@ Element LambdaDock::body() const {
       static_cast<float>(kDockGap),
       Alignment::Center,
       ForLayout::HorizontalStack)}
-                         .height(static_cast<float>(dockSlotHeight(itemSize)))
-                         .clipContent(true));
+      .height(static_cast<float>(dockSlotHeight(itemSize)))
+      .clipContent(true);
+
+  if (props.fullWidth) {
+    auto content = HStack{
+        .spacing = static_cast<float>(kDockGap),
+        .alignment = Alignment::Center,
+        .children = children(std::move(appSection),
+                             Spacer{},
+                             dockSeparator(itemSize),
+                             statusIconGrid(system, itemSize),
+                             dockSeparator(itemSize),
+                             clockDocklet(timeText, clockWidth, itemSize)),
+    }.height(static_cast<float>(dockHeight(itemSize)));
+    return ZStack{
+        .horizontalAlignment = Alignment::Stretch,
+        .verticalAlignment = Alignment::Start,
+        .children = children(
+            Rectangle{}
+                .height(1.f)
+                .fill(FillStyle::solid(VisualTokens::border)),
+            std::move(content)),
+    }.height(static_cast<float>(dockHeight(itemSize)));
+  }
+
+  std::vector<Element> sections;
+  sections.push_back(std::move(appSection));
   sections.push_back(dockSeparator(itemSize));
   sections.push_back(statusIconGrid(system, itemSize));
   sections.push_back(dockSeparator(itemSize));

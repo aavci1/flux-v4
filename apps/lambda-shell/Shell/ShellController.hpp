@@ -97,7 +97,9 @@ private:
 lambda::WindowConfig dockWindowConfig(int width,
                                       int itemSize = kDockIconSize,
                                       int bottomGap = kDockBottom,
-                                      int cornerRadius = kDockCornerRadius);
+                                      int cornerRadius = kDockCornerRadius,
+                                      DockMaterialConfig material = {},
+                                      bool fullWidth = false);
 lambda::WindowConfig dockMenuWindowConfig();
 lambda::WindowConfig launcherWindowConfig();
 

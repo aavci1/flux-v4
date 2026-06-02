@@ -11,7 +11,7 @@ namespace lambda {
 struct VisualTokens {
   static constexpr Color windowSurface{245.f / 255.f, 248.f / 255.f, 252.f / 255.f, 0.78f};
   static constexpr Color elevatedSurface{245.f / 255.f, 248.f / 255.f, 252.f / 255.f, 0.84f};
-  static constexpr Color dockSurface{245.f / 255.f, 248.f / 255.f, 252.f / 255.f, 0.86f};
+  static constexpr Color dockSurface{1.f, 1.f, 1.f, 97.f * (1.f / 255.f)};
   static constexpr Color sidebarSurface{225.f / 255.f, 235.f / 255.f, 245.f / 255.f, 0.42f};
   static constexpr Color controlSurface{1.f, 1.f, 1.f, 0.46f};
   static constexpr Color controlSurfaceHover{1.f, 1.f, 1.f, 0.58f};

@@ -196,6 +196,8 @@ std::optional<NumericControlSpec> numericSpecForSetting(SettingSchema const& sch
   if (schema.id == "scale") return NumericControlSpec{.min = 1.f, .max = 3.f, .step = 0.25f, .slider = true};
   if (schema.id == "cursor_size") return NumericControlSpec{.min = 16.f, .max = 64.f, .step = 1.f, .slider = true};
   if (schema.id == "dock.item_size") return NumericControlSpec{.min = 32.f, .max = 96.f, .step = 1.f, .slider = true};
+  if (schema.id == "dock.blur_radius") return NumericControlSpec{.min = 0.f, .max = 160.f, .step = 1.f, .slider = true};
+  if (schema.id == "dock.opacity") return NumericControlSpec{.min = 0.f, .max = 1.f, .step = 0.05f, .slider = true};
   if (schema.id == "input.keyboard.repeat_rate") return NumericControlSpec{.min = 10.f, .max = 80.f, .step = 1.f, .slider = true};
   if (schema.id == "input.keyboard.repeat_delay_ms") {
     return NumericControlSpec{.min = 150.f, .max = 1000.f, .step = 50.f, .slider = true};
@@ -1385,6 +1387,7 @@ Element contentForSection(SettingsSection section,
                         {SettingsGroup{.heading = "Dock",
                                        .settings = {shell("dock.position"),
                                                     shell("dock.auto_hide"),
+                                                    shell("dock.full_width"),
                                                     shell("dock.item_size"),
                                                     shell("dock.bottom_gap"),
                                                     shell("dock.corner_radius"),
@@ -1392,6 +1395,12 @@ Element contentForSection(SettingsSection section,
                                                     shell("dock.show_running_unpinned"),
                                                     shell("dock.show_tooltips"),
                                                     shell("dock.pinned")}},
+                         SettingsGroup{.heading = "Dock Material",
+                                       .settings = {shell("dock.blur_radius"),
+                                                    shell("dock.opacity"),
+                                                    shell("dock.base_color"),
+                                                    shell("dock.tint_color"),
+                                                    shell("dock.border_color")}},
                          SettingsGroup{.heading = "Quick Settings",
                                        .settings = {shell("quick_settings.modules")}}},
                         wmValues,

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <string_view>
 #include <utility>
 
@@ -53,13 +54,23 @@ int dockSlotHeight(int itemSize) {
 }
 
 int dockStatusCellSize(int itemSize) {
-  if (!dockUsesSingleRowDocklets(itemSize)) return kDockStatusCell;
+  if (!dockUsesSingleRowDocklets(itemSize)) {
+    return std::max(14, static_cast<int>(std::round(static_cast<float>(clampedDockItemSize(itemSize)) * 0.4f)));
+  }
   return std::max(kDockStatusCell, clampedDockItemSize(itemSize));
 }
 
 int dockStatusIconSize(int itemSize) {
+  if (!dockUsesSingleRowDocklets(itemSize)) return dockStatusCellSize(itemSize);
   int const cell = dockStatusCellSize(itemSize);
   return std::clamp(cell - 8, 14, std::max(14, clampedDockItemSize(itemSize)));
+}
+
+int dockStatusGridGap(int itemSize) {
+  if (!dockUsesSingleRowDocklets(itemSize)) {
+    return std::max(0, static_cast<int>(std::round(static_cast<float>(clampedDockItemSize(itemSize)) * 0.2f)));
+  }
+  return kDockStatusGridGap;
 }
 
 int dockStatusGridColumns(int itemSize) {
@@ -72,12 +83,42 @@ int dockStatusGridRows(int itemSize) {
 
 int dockStatusGridWidth(int itemSize) {
   int const columns = dockStatusGridColumns(itemSize);
-  return columns * dockStatusCellSize(itemSize) + std::max(0, columns - 1) * kDockStatusGridGap;
+  return columns * dockStatusCellSize(itemSize) + std::max(0, columns - 1) * dockStatusGridGap(itemSize);
 }
 
 int dockStatusGridHeight(int itemSize) {
   int const rows = dockStatusGridRows(itemSize);
-  return rows * dockStatusCellSize(itemSize) + std::max(0, rows - 1) * kDockStatusGridGap;
+  return rows * dockStatusCellSize(itemSize) + std::max(0, rows - 1) * dockStatusGridGap(itemSize);
+}
+
+float dockClockDateRowHeight(int itemSize) {
+  if (dockUsesSingleRowDocklets(itemSize)) return 0.f;
+  return std::max(14.f, std::round(static_cast<float>(clampedDockItemSize(itemSize)) * 0.4f));
+}
+
+float dockClockTimeRowHeight(int itemSize) {
+  return dockClockDateRowHeight(itemSize);
+}
+
+float dockClockRowGap(int itemSize) {
+  if (dockUsesSingleRowDocklets(itemSize)) return 0.f;
+  return std::max(0.f, static_cast<float>(clampedDockItemSize(itemSize)) -
+                           dockClockDateRowHeight(itemSize) -
+                           dockClockTimeRowHeight(itemSize));
+}
+
+float dockClockDateFontSize(int itemSize) {
+  if (dockUsesSingleRowDocklets(itemSize)) return kDockClockDateFontSize;
+  return std::max(10.f, dockClockDateRowHeight(itemSize) * 0.68f);
+}
+
+float dockClockTimeFontSize(int itemSize) {
+  if (dockUsesSingleRowDocklets(itemSize)) return kDockClockTimeFontSize;
+  return std::max(12.f, dockClockTimeRowHeight(itemSize) * 0.9f);
+}
+
+float dockClockSingleRowFontSize(int itemSize) {
+  return std::max(12.f, static_cast<float>(clampedDockItemSize(itemSize)) * 0.39f);
 }
 
 int dockItemWidth(DockItem const& item, int itemSize) {

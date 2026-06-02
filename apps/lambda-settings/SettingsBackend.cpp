@@ -163,6 +163,9 @@ void setShellTomlValue(toml::table& table, std::string const& key, std::string c
   auto setInt = [&](std::string const& section, std::string const& field) {
     ensureTomlTable(table, section).insert_or_assign(field, static_cast<std::int64_t>(std::strtoll(value.c_str(), nullptr, 10)));
   };
+  auto setFloat = [&](std::string const& section, std::string const& field) {
+    ensureTomlTable(table, section).insert_or_assign(field, std::strtod(value.c_str(), nullptr));
+  };
   auto setArray = [&](std::string const& section, std::string const& field) {
     ensureTomlTable(table, section).insert_or_assign(field, tomlStringArray(parseStringListValue(value)));
   };
@@ -172,9 +175,15 @@ void setShellTomlValue(toml::table& table, std::string const& key, std::string c
   else if (key == "appearance.reduced_motion") setBool("appearance", "reduced_motion");
   else if (key == "dock.position") setString("dock", "position");
   else if (key == "dock.auto_hide") setBool("dock", "auto_hide");
+  else if (key == "dock.full_width") setBool("dock", "full_width");
   else if (key == "dock.item_size") setInt("dock", "item_size");
   else if (key == "dock.bottom_gap") setInt("dock", "bottom_gap");
   else if (key == "dock.corner_radius") setInt("dock", "corner_radius");
+  else if (key == "dock.blur_radius") setFloat("dock", "blur_radius");
+  else if (key == "dock.opacity") setFloat("dock", "opacity");
+  else if (key == "dock.base_color") setString("dock", "base_color");
+  else if (key == "dock.tint_color") setString("dock", "tint_color");
+  else if (key == "dock.border_color") setString("dock", "border_color");
   else if (key == "dock.clock_format") setString("dock", "clock_format");
   else if (key == "dock.show_running_unpinned") setBool("dock", "show_running_unpinned");
   else if (key == "dock.show_tooltips") setBool("dock", "show_tooltips");
@@ -329,12 +338,24 @@ std::vector<SettingSchema> shellSettingsSchema() {
        .applyMode = ApplyMode::HotReload, .enumValues = {"left", "right", "bottom"}, .defaultValue = "bottom"},
       {.id = "dock.auto_hide", .label = "Dock auto-hide", .type = SettingType::Boolean,
        .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "dock.full_width", .label = "Full-width dock", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
       {.id = "dock.item_size", .label = "Dock item size", .type = SettingType::Integer,
        .applyMode = ApplyMode::HotReload, .defaultValue = "48"},
       {.id = "dock.bottom_gap", .label = "Dock bottom gap", .type = SettingType::Integer,
        .applyMode = ApplyMode::HotReload, .defaultValue = "8"},
       {.id = "dock.corner_radius", .label = "Dock corner radius", .type = SettingType::Integer,
        .applyMode = ApplyMode::HotReload, .defaultValue = "18"},
+      {.id = "dock.blur_radius", .label = "Dock blur radius", .type = SettingType::Float,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "72"},
+      {.id = "dock.opacity", .label = "Dock material opacity", .type = SettingType::Float,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "1"},
+      {.id = "dock.base_color", .label = "Dock base color", .type = SettingType::Color,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "#ffffff61"},
+      {.id = "dock.tint_color", .label = "Dock tint color", .type = SettingType::Color,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "#ffffff06"},
+      {.id = "dock.border_color", .label = "Dock border color", .type = SettingType::Color,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "#ffffff99"},
       {.id = "dock.clock_format", .label = "Clock format", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload, .defaultValue = "%a %d %b, %H:%M"},
       {.id = "dock.show_running_unpinned", .label = "Show running unpinned apps", .type = SettingType::Boolean,
@@ -400,8 +421,13 @@ bool validateSettingValue(SettingSchema const& schema, std::string const& value)
     auto parsed = parseDouble(value);
     return parsed && std::floor(*parsed) == *parsed;
   }
-  case SettingType::Float:
-    return parseDouble(value).has_value();
+  case SettingType::Float: {
+    auto parsed = parseDouble(value);
+    if (!parsed) return false;
+    if (schema.id == "dock.blur_radius") return *parsed >= 0.0 && *parsed <= 160.0;
+    if (schema.id == "dock.opacity") return *parsed >= 0.0 && *parsed <= 1.0;
+    return true;
+  }
   case SettingType::Color:
     return validHexColor(value);
   case SettingType::Enum:
@@ -506,9 +532,15 @@ SettingsDocument loadShellSettings(std::string_view tomlText) {
   if (auto* dock = table["dock"].as_table()) {
     setIf("dock.position", tomlString(*dock, "position"));
     setIf("dock.auto_hide", tomlBool(*dock, "auto_hide"));
+    setIf("dock.full_width", tomlBool(*dock, "full_width"));
     setIf("dock.item_size", tomlNumber(*dock, "item_size"));
     setIf("dock.bottom_gap", tomlNumber(*dock, "bottom_gap"));
     setIf("dock.corner_radius", tomlNumber(*dock, "corner_radius"));
+    setIf("dock.blur_radius", tomlNumber(*dock, "blur_radius"));
+    setIf("dock.opacity", tomlNumber(*dock, "opacity"));
+    setIf("dock.base_color", tomlString(*dock, "base_color"));
+    setIf("dock.tint_color", tomlString(*dock, "tint_color"));
+    setIf("dock.border_color", tomlString(*dock, "border_color"));
     setIf("dock.clock_format", tomlString(*dock, "clock_format"));
     setIf("dock.show_running_unpinned", tomlBool(*dock, "show_running_unpinned"));
     setIf("dock.show_tooltips", tomlBool(*dock, "show_tooltips"));

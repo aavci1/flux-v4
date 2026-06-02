@@ -102,6 +102,7 @@ struct DockRoot {
   lambda::Signal<std::string> timeText;
   lambda::Signal<int> clockWidth;
   lambda::Signal<int> itemSize{lambda_shell::kDockIconSize};
+  bool fullWidth = false;
 
   lambda::Element body() const {
     lambda::Reactive::Bindable<int> width{[items = items, clockWidth = clockWidth, itemSize = itemSize] {
@@ -113,6 +114,7 @@ struct DockRoot {
         .clockWidth = clockWidth,
         .itemSize = itemSize,
         .system = lambda::Reactive::Bindable<lambda_shell::SystemStatus>{lambda_shell::SystemStatus{}},
+        .fullWidth = fullWidth,
         .width = width,
     }}};
   }
@@ -210,8 +212,65 @@ TEST_CASE("LambdaDock switches status and clock docklets to single row for compa
   CHECK(status.size().width == doctest::Approx(static_cast<float>(lambda_shell::dockStatusGridWidth(36))));
   CHECK(status.size().height == doctest::Approx(static_cast<float>(lambda_shell::dockStatusGridHeight(36))));
   CHECK(lambda_shell::dockStatusGridRows(36) == 1);
+  CHECK(lambda_shell::dockUsesSingleRowDocklets(39));
+  CHECK_FALSE(lambda_shell::dockUsesSingleRowDocklets(40));
+  CHECK(lambda_shell::dockStatusGridRows(40) == lambda_shell::kDockStatusRows);
+  CHECK(lambda_shell::dockStatusCellSize(40) == 16);
+  CHECK(lambda_shell::dockStatusIconSize(40) == 16);
+  CHECK(lambda_shell::dockStatusGridGap(40) == 8);
+  CHECK(lambda_shell::dockStatusGridHeight(40) == 40);
+  CHECK(lambda_shell::dockStatusCellSize(48) == 19);
+  CHECK(lambda_shell::dockStatusIconSize(48) == 19);
+  CHECK(lambda_shell::dockStatusGridGap(48) == 10);
+  CHECK(lambda_shell::dockStatusGridHeight(48) == 48);
+  CHECK(lambda_shell::dockClockDateRowHeight(48) == doctest::Approx(19.f));
+  CHECK(lambda_shell::dockClockTimeRowHeight(48) == doctest::Approx(19.f));
+  CHECK(lambda_shell::dockClockRowGap(48) == doctest::Approx(10.f));
   CHECK(clock.size().width == doctest::Approx(148.f));
   CHECK(clock.position().x + clock.size().width <=
         static_cast<float>(lambda_shell::dockWidth(pinned, 148, 36)) -
             static_cast<float>(lambda_shell::kDockPaddingX) + 0.01f);
+}
+
+TEST_CASE("LambdaDock full-width layout reserves space before status docklets") {
+  auto pinned = pinnedDockItems();
+
+  lambda::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
+  lambda::Signal<std::string> timeText{"Sat 30 May, 18:31"};
+  lambda::Signal<int> clockWidth{148};
+  lambda::Signal<int> itemSize{48};
+
+  FakeTextSystem textSystem;
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<DockRoot>>(
+          std::in_place, DockRoot{items, timeText, clockWidth, itemSize, true}),
+      textSystem,
+      testEnvironment(),
+      lambda::Size{1100.f, static_cast<float>(lambda_shell::dockHeight(48))},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const* wrapper = &sceneGraph.root();
+  if (wrapper->children().size() == 1) {
+    wrapper = wrapper->children().front().get();
+  }
+  REQUIRE(wrapper->children().size() == 2);
+  auto const& topBorder = *wrapper->children()[0];
+  auto const* stack = wrapper->children()[1].get();
+  while (stack->children().size() == 1) {
+    stack = stack->children().front().get();
+  }
+  REQUIRE(stack->children().size() == 6);
+  auto const& appSection = *stack->children()[0];
+  auto const& spacer = *stack->children()[1];
+  auto const& statusSeparator = *stack->children()[2];
+  CHECK(wrapper->size().width == doctest::Approx(1100.f));
+  CHECK(topBorder.size().width == doctest::Approx(1100.f));
+  CHECK(stack->size().width == doctest::Approx(1100.f));
+  CHECK(appSection.position().x == doctest::Approx(0.f));
+  CHECK(spacer.size().width > 0.f);
+  CHECK(statusSeparator.position().x >
+        appSection.position().x + appSection.size().width + static_cast<float>(lambda_shell::kDockGap));
 }

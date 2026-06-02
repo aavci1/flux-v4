@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Shell/ShellModels.hpp"
 #include "Shell/UI/LambdaShellTypes.hpp"
 
 #include <Lambda/Core/Color.hpp>
@@ -17,8 +18,15 @@ using lambda::LayerShellChromeOptions;
 using lambda::LayerShellChromeStyle;
 
 inline LayerShellChromeOptions defaultDockChrome() {
+  DockMaterialConfig const material{};
   LayerShellChromeOptions chrome{};
   chrome.style = LayerShellChromeStyle::BlurPanelBorder;
+  chrome.cornerRadius = lambda::CornerRadius{static_cast<float>(kDockCornerRadius)};
+  chrome.glass.blurRadius = material.blurRadius;
+  chrome.glass.opacity = material.opacity;
+  chrome.glass.baseColor = material.baseColor;
+  chrome.glass.tintColor = material.tintColor;
+  chrome.glass.borderColor = material.borderColor;
   return chrome;
 }
 

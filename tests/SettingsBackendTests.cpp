@@ -69,8 +69,14 @@ TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
   CHECK(defaults.at("dock.pinned") ==
         "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,firefox");
   CHECK(defaults.at("dock.bottom_gap") == "8");
+  CHECK(defaults.at("dock.full_width") == "false");
   CHECK(defaults.at("dock.item_size") == "48");
   CHECK(defaults.at("dock.corner_radius") == "18");
+  CHECK(defaults.at("dock.blur_radius") == "72");
+  CHECK(defaults.at("dock.opacity") == "1");
+  CHECK(defaults.at("dock.base_color") == "#ffffff61");
+  CHECK(defaults.at("dock.tint_color") == "#ffffff06");
+  CHECK(defaults.at("dock.border_color") == "#ffffff99");
   CHECK(defaults.at("dock.clock_format") == "%a %d %b, %H:%M");
   CHECK(defaults.at("clipboard_history.persist") == "false");
   CHECK(defaults.at("launcher.empty_query") == "recommended");
@@ -145,9 +151,15 @@ unknown_appearance = "keep"
 [dock]
 pinned = ["lambda-files", "lambda-terminal"]
 show_running_unpinned = true
+full_width = true
 bottom_gap = 6
 item_size = 36
 corner_radius = 20
+blur_radius = 96
+opacity = 0.85
+base_color = "#ffffff55"
+tint_color = "#ddeeff22"
+border_color = "#ffffffaa"
 clock_format = "%H:%M"
 [clipboard_history]
 enabled = true
@@ -163,8 +175,14 @@ max_results = 12
   CHECK(loaded.values.at("appearance.icon_theme") == "Adwaita");
   CHECK(loaded.values.at("dock.pinned") == "lambda-files,lambda-terminal");
   CHECK(loaded.values.at("dock.bottom_gap") == "6");
+  CHECK(loaded.values.at("dock.full_width") == "true");
   CHECK(loaded.values.at("dock.item_size") == "36");
   CHECK(loaded.values.at("dock.corner_radius") == "20");
+  CHECK(loaded.values.at("dock.blur_radius").starts_with("96"));
+  CHECK(loaded.values.at("dock.opacity").starts_with("0.85"));
+  CHECK(loaded.values.at("dock.base_color") == "#ffffff55");
+  CHECK(loaded.values.at("dock.tint_color") == "#ddeeff22");
+  CHECK(loaded.values.at("dock.border_color") == "#ffffffaa");
   CHECK(loaded.values.at("dock.clock_format") == "%H:%M");
   CHECK(loaded.values.at("clipboard_history.max_entries") == "100");
   CHECK(loaded.values.at("notifications.do_not_disturb") == "false");
@@ -174,8 +192,14 @@ max_results = 12
       {"appearance.icon_theme", "Lambda"},
       {"dock.pinned", "lambda-terminal,lambda-settings"},
       {"dock.item_size", "40"},
+      {"dock.full_width", "true"},
       {"dock.bottom_gap", "8"},
       {"dock.corner_radius", "18"},
+      {"dock.blur_radius", "72"},
+      {"dock.opacity", "0.7"},
+      {"dock.base_color", "#ffffff61"},
+      {"dock.tint_color", "#ffffff08"},
+      {"dock.border_color", "#ffffffcc"},
       {"dock.clock_format", "%a %d %b, %H:%M"},
       {"dock.show_running_unpinned", "false"},
       {"clipboard_history.enabled", "false"},
@@ -189,6 +213,15 @@ max_results = 12
   CHECK(output.find("Lambda") != std::string::npos);
   CHECK(output.find("lambda-settings") != std::string::npos);
   CHECK(output.find("item_size = 40") != std::string::npos);
+  CHECK(output.find("full_width = true") != std::string::npos);
+  CHECK(output.find("blur_radius = 72") != std::string::npos);
+  auto rewritten = lambda_settings::loadShellSettings(output);
+  CHECK(rewritten.values.at("dock.opacity").starts_with("0.7"));
+  CHECK(rewritten.values.at("dock.base_color") == "#ffffff61");
+  CHECK(rewritten.values.at("dock.tint_color") == "#ffffff08");
+  CHECK(rewritten.values.at("dock.border_color") == "#ffffffcc");
+  CHECK(output.find("#ffffff08") != std::string::npos);
+  CHECK(output.find("#ffffffcc") != std::string::npos);
   CHECK(output.find("show_running_unpinned = false") != std::string::npos);
   CHECK(output.find("enabled = false") != std::string::npos);
   CHECK(output.find("max_entries = 25") != std::string::npos);

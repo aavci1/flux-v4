@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -134,8 +135,60 @@ std::optional<bool> readTomlBool(toml::table const& table, char const* key) {
   return table[key].value<bool>();
 }
 
+std::optional<double> readTomlDouble(toml::table const& table, char const* key) {
+  if (auto value = table[key].value<double>()) return *value;
+  if (auto value = table[key].value<std::int64_t>()) return static_cast<double>(*value);
+  return std::nullopt;
+}
+
 std::optional<std::string> readTomlString(toml::table const& table, char const* key) {
   return table[key].value<std::string>();
+}
+
+std::optional<int> hexNibble(char ch) {
+  if (ch >= '0' && ch <= '9') return ch - '0';
+  if (ch >= 'a' && ch <= 'f') return 10 + ch - 'a';
+  if (ch >= 'A' && ch <= 'F') return 10 + ch - 'A';
+  return std::nullopt;
+}
+
+std::optional<std::uint8_t> hexByte(std::string_view value, std::size_t offset) {
+  auto high = hexNibble(value[offset]);
+  auto low = hexNibble(value[offset + 1u]);
+  if (!high || !low) return std::nullopt;
+  return static_cast<std::uint8_t>((*high << 4) | *low);
+}
+
+std::optional<lambda::Color> parseHexColor(std::string_view value) {
+  if ((value.size() != 7u && value.size() != 9u) || value.front() != '#') return std::nullopt;
+  auto r = hexByte(value, 1u);
+  auto g = hexByte(value, 3u);
+  auto b = hexByte(value, 5u);
+  auto a = value.size() == 9u ? hexByte(value, 7u) : std::optional<std::uint8_t>{static_cast<std::uint8_t>(255u)};
+  if (!r || !g || !b || !a) return std::nullopt;
+  float constexpr scale = 1.f / 255.f;
+  return lambda::Color{*r * scale, *g * scale, *b * scale, *a * scale};
+}
+
+std::optional<lambda::Color> readTomlColor(toml::table const& table, char const* key) {
+  auto value = readTomlString(table, key);
+  if (!value) return std::nullopt;
+  return parseHexColor(*value);
+}
+
+std::uint8_t colorByte(float value) {
+  return static_cast<std::uint8_t>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f);
+}
+
+std::string tomlColor(lambda::Color color) {
+  std::ostringstream out;
+  out << "\"#" << std::hex << std::nouppercase << std::setfill('0')
+      << std::setw(2) << static_cast<int>(colorByte(color.r))
+      << std::setw(2) << static_cast<int>(colorByte(color.g))
+      << std::setw(2) << static_cast<int>(colorByte(color.b))
+      << std::setw(2) << static_cast<int>(colorByte(color.a))
+      << "\"";
+  return out.str();
 }
 
 std::vector<std::string> readTomlStringArray(toml::table const& table, char const* key) {
@@ -638,6 +691,7 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
       config.dockPosition = *value;
     }
     if (auto value = readTomlBool(*dock, "auto_hide")) config.dockAutoHide = *value;
+    if (auto value = readTomlBool(*dock, "full_width")) config.dockFullWidth = *value;
     if (auto value = readTomlInt(*dock, "item_size");
         value && *value >= kDockMinItemSize && *value <= kDockMaxItemSize) {
       config.dockItemSize = static_cast<int>(*value);
@@ -648,6 +702,15 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
     if (auto value = readTomlInt(*dock, "corner_radius"); value && *value >= 0 && *value <= 48) {
       config.dockCornerRadius = static_cast<int>(*value);
     }
+    if (auto value = readTomlDouble(*dock, "blur_radius"); value && *value >= 0.0 && *value <= 160.0) {
+      config.dockMaterial.blurRadius = static_cast<float>(*value);
+    }
+    if (auto value = readTomlDouble(*dock, "opacity"); value && *value >= 0.0 && *value <= 1.0) {
+      config.dockMaterial.opacity = static_cast<float>(*value);
+    }
+    if (auto value = readTomlColor(*dock, "base_color")) config.dockMaterial.baseColor = *value;
+    if (auto value = readTomlColor(*dock, "tint_color")) config.dockMaterial.tintColor = *value;
+    if (auto value = readTomlColor(*dock, "border_color")) config.dockMaterial.borderColor = *value;
     if (auto value = readTomlString(*dock, "clock_format")) config.dockClockFormat = *value;
     if (auto value = readTomlBool(*dock, "show_running_unpinned")) config.showRunningUnpinned = *value;
     if (auto value = readTomlBool(*dock, "show_tooltips")) config.dockShowTooltips = *value;
@@ -709,9 +772,15 @@ std::string writeShellConfigToml(ShellConfig const& config) {
   out << "[dock]\n";
   out << "position = " << tomlQuote(config.dockPosition) << "\n";
   out << "auto_hide = " << (config.dockAutoHide ? "true" : "false") << "\n";
+  out << "full_width = " << (config.dockFullWidth ? "true" : "false") << "\n";
   out << "item_size = " << clampedDockItemSize(config.dockItemSize) << "\n";
   out << "bottom_gap = " << config.dockBottomGap << "\n";
   out << "corner_radius = " << config.dockCornerRadius << "\n";
+  out << "blur_radius = " << config.dockMaterial.blurRadius << "\n";
+  out << "opacity = " << config.dockMaterial.opacity << "\n";
+  out << "base_color = " << tomlColor(config.dockMaterial.baseColor) << "\n";
+  out << "tint_color = " << tomlColor(config.dockMaterial.tintColor) << "\n";
+  out << "border_color = " << tomlColor(config.dockMaterial.borderColor) << "\n";
   out << "clock_format = " << tomlQuote(config.dockClockFormat) << "\n";
   out << "show_running_unpinned = " << (config.showRunningUnpinned ? "true" : "false") << "\n";
   out << "show_tooltips = " << (config.dockShowTooltips ? "true" : "false") << "\n";

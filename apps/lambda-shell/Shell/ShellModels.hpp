@@ -2,6 +2,8 @@
 
 #include "Shell/ShellAppRegistry.hpp"
 
+#include <Lambda/Core/Color.hpp>
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -175,6 +177,16 @@ struct ShellStatusModuleState {
   bool operator==(ShellStatusModuleState const&) const = default;
 };
 
+struct DockMaterialConfig {
+  float blurRadius = 72.f;
+  float opacity = 1.f;
+  lambda::Color baseColor{1.f, 1.f, 1.f, 97.f * (1.f / 255.f)};
+  lambda::Color tintColor{1.f, 1.f, 1.f, 6.f * (1.f / 255.f)};
+  lambda::Color borderColor{1.f, 1.f, 1.f, 153.f * (1.f / 255.f)};
+
+  bool operator==(DockMaterialConfig const&) const = default;
+};
+
 struct ShellConfig {
   std::string iconTheme;
   std::string symbolicIconTheme;
@@ -182,9 +194,11 @@ struct ShellConfig {
 
   std::string dockPosition = "bottom";
   bool dockAutoHide = false;
+  bool dockFullWidth = false;
   int dockItemSize = 48;
   int dockBottomGap = 8;
   int dockCornerRadius = 18;
+  DockMaterialConfig dockMaterial;
   std::string dockClockFormat = "%a %d %b, %H:%M";
   bool showRunningUnpinned = true;
   bool dockShowTooltips = true;

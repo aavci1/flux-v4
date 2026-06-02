@@ -355,8 +355,13 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
                                    "firefox",
                                });
   CHECK(defaults.dockItemSize == 48);
+  CHECK_FALSE(defaults.dockFullWidth);
   CHECK(defaults.dockBottomGap == 8);
   CHECK(defaults.dockCornerRadius == 18);
+  CHECK(defaults.dockMaterial.blurRadius == doctest::Approx(72.f));
+  CHECK(defaults.dockMaterial.opacity == doctest::Approx(1.f));
+  CHECK(defaults.dockMaterial.baseColor.a == doctest::Approx(97.f / 255.f));
+  CHECK(defaults.dockMaterial.tintColor.a == doctest::Approx(6.f / 255.f));
   CHECK(defaults.dockClockFormat == "%a %d %b, %H:%M");
   CHECK(defaults.clipboardHistoryEnabled);
   CHECK(defaults.clipboardHistoryMaxEntries == 100);
@@ -370,9 +375,15 @@ reduced_motion = true
 [dock]
 pinned = ["lambda-terminal", "lambda-files"]
 auto_hide = true
+full_width = true
 item_size = 36
 bottom_gap = 6
 corner_radius = 20
+blur_radius = 96
+opacity = 0.85
+base_color = "#ffffff55"
+tint_color = "#ddeeff22"
+border_color = "#ffffffaa"
 clock_format = "%H:%M"
 show_running_unpinned = false
 [quick_settings]
@@ -396,8 +407,17 @@ max_results = 4
   CHECK(parsed.reducedMotion);
   CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-files"});
   CHECK(parsed.dockAutoHide);
+  CHECK(parsed.dockFullWidth);
   CHECK(parsed.dockBottomGap == 6);
   CHECK(parsed.dockCornerRadius == 20);
+  CHECK(parsed.dockMaterial.blurRadius == doctest::Approx(96.f));
+  CHECK(parsed.dockMaterial.opacity == doctest::Approx(0.85f));
+  CHECK(parsed.dockMaterial.baseColor.a == doctest::Approx(0x55 / 255.f));
+  CHECK(parsed.dockMaterial.tintColor.r == doctest::Approx(0xdd / 255.f));
+  CHECK(parsed.dockMaterial.tintColor.g == doctest::Approx(0xee / 255.f));
+  CHECK(parsed.dockMaterial.tintColor.b == doctest::Approx(1.f));
+  CHECK(parsed.dockMaterial.tintColor.a == doctest::Approx(0x22 / 255.f));
+  CHECK(parsed.dockMaterial.borderColor.a == doctest::Approx(0xaa / 255.f));
   CHECK(parsed.dockClockFormat == "%H:%M");
   CHECK_FALSE(parsed.showRunningUnpinned);
   CHECK(parsed.quickSettingsModules == std::vector<std::string>{"audio", "battery"});
@@ -419,6 +439,11 @@ pinned = []
 position = "floating"
 bottom_gap = -1
 corner_radius = 99
+blur_radius = 200
+opacity = 2
+base_color = "white"
+tint_color = "#bad"
+border_color = "#ffff"
 [clipboard_history]
 enabled = maybe
 max_entries = -1

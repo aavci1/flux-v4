@@ -79,17 +79,28 @@ LayerShellOptions visibleMenuLayer(char const* nameSpace) {
 
 } // namespace
 
-lambda::WindowConfig dockWindowConfig(int width, int itemSize, int bottomGap, int cornerRadius) {
+lambda::WindowConfig dockWindowConfig(int width,
+                                      int itemSize,
+                                      int bottomGap,
+                                      int cornerRadius,
+                                      DockMaterialConfig material,
+                                      bool fullWidth) {
   LayerShellOptions layer = layerBase(LayerShellLayer::Overlay, "lambda.dock");
   layer.anchorBottom = true;
-  layer.marginBottom = std::clamp(bottomGap, 0, 64);
-  layer.chrome.style = LayerShellChromeStyle::BlurPanelBorder;
-  layer.chrome.cornerRadius = CornerRadius{static_cast<float>(std::clamp(cornerRadius, 0, 48))};
-  layer.chrome.glass.baseColor = VisualTokens::dockSurface;
-  layer.chrome.glass.tintColor = Color{1.f, 1.f, 1.f, 0.06f};
-  layer.chrome.glass.borderColor = VisualTokens::border;
+  layer.anchorLeft = fullWidth;
+  layer.anchorRight = fullWidth;
+  layer.marginBottom = fullWidth ? 0 : std::clamp(bottomGap, 0, 64);
+  layer.chrome.style = fullWidth ? LayerShellChromeStyle::BlurPanel : LayerShellChromeStyle::BlurPanelBorder;
+  layer.chrome.cornerRadius = fullWidth
+                                  ? CornerRadius{}
+                                  : CornerRadius{static_cast<float>(std::clamp(cornerRadius, 0, 48))};
+  layer.chrome.glass.blurRadius = std::clamp(material.blurRadius, 0.f, 160.f);
+  layer.chrome.glass.opacity = std::clamp(material.opacity, 0.f, 1.f);
+  layer.chrome.glass.baseColor = material.baseColor;
+  layer.chrome.glass.tintColor = material.tintColor;
+  layer.chrome.glass.borderColor = material.borderColor;
   return WindowConfig{
-      .size = {static_cast<float>(std::max(width, 1)), static_cast<float>(dockHeight(itemSize))},
+      .size = {static_cast<float>(fullWidth ? 0 : std::max(width, 1)), static_cast<float>(dockHeight(itemSize))},
       .title = "Lambda Dock",
       .resizable = false,
       .layerShell = layer,
@@ -317,10 +328,14 @@ void ShellController::applyShellConfigToModel() {
     int const itemSize = model_.dockItemSize();
     int const width = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
     dockWindow_->setLayerShellOptions(
-        dockWindowConfig(width, itemSize, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius).layerShell);
-    if (dockItemSizeChanged) {
-      mountDockView();
-    }
+        dockWindowConfig(width,
+                         itemSize,
+                         shellConfig_.dockBottomGap,
+                         shellConfig_.dockCornerRadius,
+                         shellConfig_.dockMaterial,
+                         shellConfig_.dockFullWidth)
+            .layerShell);
+    mountDockView();
   }
   if (dockItemSizeChanged && dockMenuOpen_) {
     syncDockMenuOverlay();
@@ -350,11 +365,16 @@ void ShellController::createProductionWindows() {
   int const itemSize = model_.dockItemSize();
   int const dockWidthPx = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
   auto& dock = app_.createWindow<lambda::Window>(
-      dockWindowConfig(dockWidthPx, itemSize, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius));
+      dockWindowConfig(dockWidthPx,
+                       itemSize,
+                       shellConfig_.dockBottomGap,
+                       shellConfig_.dockCornerRadius,
+                       shellConfig_.dockMaterial,
+                       shellConfig_.dockFullWidth));
   dock.setBackground(lambda::WindowBackground::transparent());
   dockWindow_ = &dock;
   dockHandle_ = dock.handle();
-  lastDockWidth_ = dockWidthPx;
+  lastDockWidth_ = shellConfig_.dockFullWidth ? 0 : dockWidthPx;
   lastDockHeight_ = dockHeight(itemSize);
   (void)refreshSystemStatus();
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *dockHandle_);
@@ -393,6 +413,7 @@ void ShellController::mountDockView() {
       [this] { openLauncher(); },
       makeActivateCallback(),
       makeShowDockMenuCallback(),
+      shellConfig_.dockFullWidth,
   });
 }
 
@@ -461,10 +482,11 @@ int ShellController::measureDockClockWidth() {
   options.suppressCacheStats = true;
 
   std::string const text = model_.timeText();
-  if (dockUsesSingleRowDocklets(model_.dockItemSize())) {
+  int const itemSize = model_.dockItemSize();
+  if (dockUsesSingleRowDocklets(itemSize)) {
     lambda::Size const textSize = app_.textSystem().measure(text,
                                                             lambda::Font{.family = "",
-                                                                         .size = kDockClockSingleRowFontSize,
+                                                                         .size = dockClockSingleRowFontSize(itemSize),
                                                                          .weight = kDockClockSingleRowFontWeight},
                                                             lambda::VisualTokens::primaryText,
                                                             0.f,
@@ -479,14 +501,14 @@ int ShellController::measureDockClockWidth() {
   std::string const time = dockClockTimeText(text);
   lambda::Size const dateSize = app_.textSystem().measure(date,
                                                           lambda::Font{.family = "",
-                                                                       .size = kDockClockDateFontSize,
+                                                                       .size = dockClockDateFontSize(itemSize),
                                                                        .weight = kDockClockDateFontWeight},
                                                           lambda::VisualTokens::primaryText,
                                                           0.f,
                                                           options);
   lambda::Size const timeSize = app_.textSystem().measure(time,
                                                           lambda::Font{.family = "",
-                                                                       .size = kDockClockTimeFontSize,
+                                                                       .size = dockClockTimeFontSize(itemSize),
                                                                        .weight = kDockClockTimeFontWeight},
                                                           lambda::VisualTokens::primaryText,
                                                           0.f,
@@ -504,7 +526,7 @@ bool ShellController::updateDockClockWidth() {
 void ShellController::resizeDockWindowIfNeeded() {
   if (!dockWindow_) return;
   int const itemSize = model_.dockItemSize();
-  int const width = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
+  int const width = shellConfig_.dockFullWidth ? 0 : dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
   int const height = dockHeight(itemSize);
   if (width == lastDockWidth_ && height == lastDockHeight_) return;
   lastDockWidth_ = width;

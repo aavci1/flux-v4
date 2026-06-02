@@ -6,6 +6,7 @@
 
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/VisualTokens.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
 #include <algorithm>
@@ -18,6 +19,7 @@ struct ShellDockView {
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
   std::function<void(DockItem const&)> onShowMenu;
+  bool fullWidth = false;
 
   lambda::Element body() const {
     auto const items = model.dockItemsSignal();
@@ -35,6 +37,7 @@ struct ShellDockView {
         .itemSize = itemSize,
         .system = lambda::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
         .hoverIndex = -1,
+        .fullWidth = fullWidth,
         .width = widthBinding,
         .onOpenLauncher = onOpenLauncher,
         .onActivateItem = onActivateItem,
