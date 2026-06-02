@@ -100,7 +100,8 @@ lambda::WindowConfig dockWindowConfig(int width,
   layer.chrome.glass.tintColor = material.tintColor;
   layer.chrome.glass.borderColor = material.borderColor;
   return WindowConfig{
-      .size = {static_cast<float>(fullWidth ? 0 : std::max(width, 1)), static_cast<float>(dockHeight(itemSize))},
+      .size = {static_cast<float>(fullWidth ? 0 : std::max(width, 1)),
+               static_cast<float>(dockHeight(itemSize))},
       .title = "Lambda Dock",
       .resizable = false,
       .layerShell = layer,
@@ -613,8 +614,9 @@ void ShellController::syncDockMenuOverlay() {
   float const outputWidth = std::max({dockMenuOverlayWidth_,
                                       static_cast<float>(dockWidth(items, model_.dockClockWidth(), itemSize))});
   int const dockBottomGap = std::clamp(shellConfig_.dockBottomGap, 0, 64);
+  int const dockSurfaceH = dockHeight(itemSize);
   float const outputHeight = std::max(dockMenuOverlayHeight_,
-                                      static_cast<float>(dockBottomGap + dockHeight(itemSize) + kDockMenuGap +
+                                      static_cast<float>(dockBottomGap + dockSurfaceH + kDockMenuGap +
                                                          kDockMenuSurfaceHeight));
   int const currentDockWidth = dockWidth(items, model_.dockClockWidth(), itemSize);
   float const dockLeft = std::max(0.f, (outputWidth - static_cast<float>(currentDockWidth)) * 0.5f);
@@ -629,7 +631,7 @@ void ShellController::syncDockMenuOverlay() {
                  0.f,
                  std::max(0.f, outputWidth - static_cast<float>(kDockMenuSurfaceWidth)))));
   int const menuTop = static_cast<int>(std::lround(
-      std::clamp(outputHeight - static_cast<float>(dockBottomGap + dockHeight(itemSize) + kDockMenuGap +
+      std::clamp(outputHeight - static_cast<float>(dockBottomGap + dockSurfaceH + kDockMenuGap +
                                                    kDockMenuSurfaceHeight),
                  0.f,
                  std::max(0.f, outputHeight - static_cast<float>(kDockMenuSurfaceHeight)))));

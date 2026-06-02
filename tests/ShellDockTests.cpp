@@ -147,6 +147,13 @@ void checkDockAppSection(lambda::scenegraph::SceneGraph const& sceneGraph,
   CHECK(statusSeparator.position().x ==
         doctest::Approx(appSection.position().x + appSection.size().width +
                         static_cast<float>(lambda_shell::kDockGap)));
+  REQUIRE(statusSeparator.children().size() == 1);
+  auto const* separatorLine = statusSeparator.children().front().get();
+  while (separatorLine->children().size() == 1) {
+    separatorLine = separatorLine->children().front().get();
+  }
+  CHECK(separatorLine->size().height ==
+        doctest::Approx(static_cast<float>(lambda_shell::clampedDockItemSize(itemSize))));
   CHECK(root.size().width == doctest::Approx(expectedFrameWidth));
   CHECK(appSection.position().x == doctest::Approx(static_cast<float>(lambda_shell::kDockPaddingX)));
   CHECK(clock.position().x + clock.size().width <=

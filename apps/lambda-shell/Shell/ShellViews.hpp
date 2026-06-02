@@ -6,10 +6,8 @@
 
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
-#include <Lambda/UI/VisualTokens.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
-#include <algorithm>
 #include <functional>
 
 namespace lambda_shell {

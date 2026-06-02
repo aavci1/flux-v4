@@ -24,7 +24,8 @@ LayerShellReservedZones aggregateLayerShellReservedZones(
     if (!layer.nameSpace) continue;
     if (std::string_view(layer.nameSpace) == "lambda.dock" &&
         hasAnchor(layer.anchor, kLayerShellAnchorBottom)) {
-      zones.dock = std::max(zones.dock, layer.extent + std::max(0, layer.marginBottom));
+      std::int32_t const bottomGap = std::max(0, layer.marginBottom);
+      zones.dock = std::max(zones.dock, layer.extent + bottomGap * 2);
     }
   }
   return zones;

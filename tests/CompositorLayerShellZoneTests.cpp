@@ -14,7 +14,7 @@ TEST_CASE("layer shell reserved zones aggregate dock") {
        .extent = 64},
   };
   auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
-  CHECK(zones.dock == 72);
+  CHECK(zones.dock == 80);
 }
 
 TEST_CASE("layer shell reserved zones ignore unrelated namespaces") {

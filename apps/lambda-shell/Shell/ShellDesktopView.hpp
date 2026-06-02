@@ -45,6 +45,7 @@ struct ShellDesktopView {
                 onOpenLauncher,
                 onActivateItem,
                 onShowDockItemMenu,
+                false,
             }},
             static_cast<float>(dockW),
             dockH)
