@@ -19,6 +19,7 @@
 #include <Lambda/UI/Views/Checkbox.hpp>
 #include <Lambda/UI/Views/Dialog.hpp>
 #include <Lambda/UI/Views/Divider.hpp>
+#include <Lambda/UI/Views/FileDialog.hpp>
 #include <Lambda/UI/Views/For.hpp>
 #include <Lambda/UI/Views/Grid.hpp>
 #include <Lambda/UI/Views/HStack.hpp>

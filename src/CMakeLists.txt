@@ -74,6 +74,7 @@ set(LAMBDA_UI_SOURCES
   UI/Views/Checkbox.cpp
   UI/Views/Dialog.cpp
   UI/Views/Divider.cpp
+  UI/Views/FileDialog.cpp
   UI/Views/Grid.cpp
   UI/Views/Icon.cpp
   UI/Views/Image.cpp

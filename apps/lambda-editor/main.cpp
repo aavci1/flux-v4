@@ -6,6 +6,7 @@
 #include <Lambda/UI/UI.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <utility>
@@ -18,6 +19,22 @@ namespace {
 
 std::string editorWindowTitle(EditorDocument const& document) {
   return document.displayName() + (document.isDirty() ? " *" : "") + " - Lambda Editor";
+}
+
+std::filesystem::path documentDirectory(EditorDocument const& document) {
+  if (document.hasPath()) {
+    return document.path().parent_path();
+  }
+  std::error_code ec;
+  std::filesystem::path current = std::filesystem::current_path(ec);
+  return ec ? std::filesystem::path{"."} : current;
+}
+
+std::string saveDialogInitialName(EditorDocument const& document) {
+  if (!document.hasPath()) {
+    return "Untitled.txt";
+  }
+  return document.displayName();
 }
 
 struct ToolbarButton {
@@ -90,6 +107,8 @@ struct LambdaEditor {
     auto document = useState(initialDocument);
     auto text = useState(initialDocument.text());
     auto status = useState(initialStatus.empty() ? std::string{"Ready"} : initialStatus);
+    auto [showDialog, hideDialog, fileDialogPresented] = useOverlay();
+    (void)fileDialogPresented;
 
     useEffect([document, window] {
       if (window) {
@@ -100,10 +119,53 @@ struct LambdaEditor {
     auto markComingSoon = [status](std::string label) {
       status.set(label + " is not implemented yet.");
     };
-    auto openFile = [markComingSoon] {
-      markComingSoon("Open dialog");
+    auto showFileDialog = [showDialog, hideDialog](FileDialog dialog) mutable {
+      dialog.onCancel = hideDialog;
+      showDialog(
+          Element{std::move(dialog)},
+          OverlayConfig{
+              .modal = true,
+              .backdropColor = Color{0.f, 0.f, 0.f, 0.24f},
+              .dismissOnOutsideTap = true,
+              .dismissOnEscape = true,
+              .onDismiss = hideDialog,
+              .debugName = "lambda-editor-file-dialog",
+          });
     };
-    auto saveFile = [document, text, status] {
+    auto openFile = [document, text, status, showFileDialog, hideDialog] mutable {
+      showFileDialog(FileDialog{
+          .mode = FileDialogMode::Open,
+          .initialDirectory = documentDirectory(document.peek()),
+          .onAccept = [document, text, status, hideDialog](std::filesystem::path path) {
+            EditorDocumentResult result = openDocument(path.string());
+            status.set(result.status);
+            if (result.ok) {
+              document.set(result.document);
+              text.set(result.document.text());
+              hideDialog();
+            }
+          },
+      });
+    };
+    auto saveFileAs = [document, text, status, showFileDialog, hideDialog] mutable {
+      showFileDialog(FileDialog{
+          .mode = FileDialogMode::Save,
+          .initialDirectory = documentDirectory(document.peek()),
+          .initialName = saveDialogInitialName(document.peek()),
+          .onAccept = [document, text, status, hideDialog](std::filesystem::path path) {
+            EditorDocument current = document.peek();
+            current.setText(text.peek());
+            EditorDocumentResult result = saveDocumentAs(current, path.string());
+            status.set(result.status);
+            if (result.ok) {
+              document.set(result.document);
+              text.set(result.document.text());
+              hideDialog();
+            }
+          },
+      });
+    };
+    auto saveFile = [document, text, status, saveFileAs] mutable {
       EditorDocument current = document.peek();
       current.setText(text.peek());
       EditorDocumentResult result = saveDocument(current);
@@ -111,10 +173,9 @@ struct LambdaEditor {
       if (result.ok) {
         document.set(result.document);
         text.set(result.document.text());
+      } else if (result.needsPath) {
+        saveFileAs();
       }
-    };
-    auto saveFileAs = [markComingSoon] {
-      markComingSoon("Save As dialog");
     };
     auto newFile = [document, text, status] {
       document.set(EditorDocument::untitled());
