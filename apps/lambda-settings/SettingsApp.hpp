@@ -369,6 +369,33 @@ std::string applyModeText(ApplyMode mode) {
   return "Applies after Save";
 }
 
+std::string joinLabels(std::vector<std::string> const& labels) {
+  std::string out;
+  for (std::size_t index = 0; index < labels.size(); ++index) {
+    if (index > 0) out += index + 1u == labels.size() ? " and " : ", ";
+    out += labels[index];
+  }
+  return out;
+}
+
+std::string savedStatusText(SettingsApplySummary const& wmSummary,
+                            SettingsApplySummary const& shellSummary) {
+  std::vector<std::string> restartLabels = wmSummary.restartRequiredLabels;
+  restartLabels.insert(restartLabels.end(),
+                       shellSummary.restartRequiredLabels.begin(),
+                       shellSummary.restartRequiredLabels.end());
+  if (!restartLabels.empty()) {
+    return "Saved; restart required for " + joinLabels(restartLabels);
+  }
+  if (wmSummary.hasNextWindow || shellSummary.hasNextWindow) {
+    return "Saved; some changes apply to new windows";
+  }
+  if (wmSummary.hasHotReload || shellSummary.hasHotReload) {
+    return "Saved; live settings will update shortly";
+  }
+  return "Saved";
+}
+
 std::string settingValue(std::map<std::string, std::string> const& values, SettingSchema const& schema) {
   auto found = values.find(schema.id);
   if (found != values.end()) return found->second;
@@ -1222,6 +1249,10 @@ struct SettingsAppRoot {
     };
 
     auto save = [wmLoad, shellLoad, wmValues, shellValues, savedWmValues, savedShellValues, statusText] {
+      SettingsApplySummary const wmApplySummary =
+          summarizeChangedApplyModes(savedWmValues(), wmValues(), cachedWindowManagerSettingsSchema());
+      SettingsApplySummary const shellApplySummary =
+          summarizeChangedApplyModes(savedShellValues(), shellValues(), cachedShellSettingsSchema());
       auto wmResult = saveWindowManagerSettingsFile(wmValues(), wmLoad().path);
       auto shellResult = saveShellSettingsFile(shellValues(), shellLoad().path);
       if (!wmResult.ok || !shellResult.ok) {
@@ -1238,7 +1269,7 @@ struct SettingsAppRoot {
       }
       savedWmValues.set(wmValues());
       savedShellValues.set(shellValues());
-      statusText.set("Saved");
+      statusText.set(savedStatusText(wmApplySummary, shellApplySummary));
     };
 
     return VStack{

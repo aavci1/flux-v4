@@ -411,6 +411,33 @@ bool schemaIdsUnique(std::vector<SettingSchema> const& schema) {
   return true;
 }
 
+SettingsApplySummary summarizeChangedApplyModes(std::map<std::string, std::string> const& saved,
+                                                std::map<std::string, std::string> const& current,
+                                                std::vector<SettingSchema> const& schema) {
+  SettingsApplySummary summary;
+  for (SettingSchema const& setting : schema) {
+    auto const savedIt = saved.find(setting.id);
+    auto const currentIt = current.find(setting.id);
+    std::string const savedValue = savedIt == saved.end() ? setting.defaultValue : savedIt->second;
+    std::string const currentValue = currentIt == current.end() ? setting.defaultValue : currentIt->second;
+    if (savedValue == currentValue) continue;
+
+    summary.hasChanges = true;
+    switch (setting.applyMode) {
+    case ApplyMode::HotReload:
+      summary.hasHotReload = true;
+      break;
+    case ApplyMode::NextWindow:
+      summary.hasNextWindow = true;
+      break;
+    case ApplyMode::RestartRequired:
+      summary.restartRequiredLabels.push_back(setting.label);
+      break;
+    }
+  }
+  return summary;
+}
+
 bool validateSettingValue(SettingSchema const& schema, std::string const& value) {
   switch (schema.type) {
   case SettingType::Boolean: {

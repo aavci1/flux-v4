@@ -62,6 +62,27 @@ TEST_CASE("Settings schema descriptors are unique and expose apply modes") {
   CHECK(output->applyMode == lambda_settings::ApplyMode::RestartRequired);
 }
 
+TEST_CASE("Settings apply summary classifies changed settings by apply mode") {
+  auto schema = lambda_settings::windowManagerSettingsSchema();
+  auto saved = lambda_settings::schemaDefaults(schema);
+  auto current = saved;
+  current["scale"] = "1.25";
+  current["output"] = "HDMI-A-1";
+
+  auto summary = lambda_settings::summarizeChangedApplyModes(saved, current, schema);
+  CHECK(summary.hasChanges);
+  CHECK(summary.hasHotReload);
+  CHECK_FALSE(summary.hasNextWindow);
+  REQUIRE(summary.restartRequiredLabels.size() == 1u);
+  CHECK(summary.restartRequiredLabels[0] == "Output");
+
+  current = saved;
+  summary = lambda_settings::summarizeChangedApplyModes(saved, current, schema);
+  CHECK_FALSE(summary.hasChanges);
+  CHECK_FALSE(summary.hasHotReload);
+  CHECK(summary.restartRequiredLabels.empty());
+}
+
 TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
   auto schema = lambda_settings::shellSettingsSchema();
   CHECK(lambda_settings::schemaIdsUnique(schema));

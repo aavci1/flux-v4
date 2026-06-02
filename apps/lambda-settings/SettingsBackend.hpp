@@ -64,6 +64,15 @@ struct SettingsFileSaveResult {
   bool operator==(SettingsFileSaveResult const&) const = default;
 };
 
+struct SettingsApplySummary {
+  bool hasChanges = false;
+  bool hasHotReload = false;
+  bool hasNextWindow = false;
+  std::vector<std::string> restartRequiredLabels;
+
+  bool operator==(SettingsApplySummary const&) const = default;
+};
+
 class SettingsState {
 public:
   explicit SettingsState(std::map<std::string, std::string> defaults = {});
@@ -104,6 +113,9 @@ struct ThemeSelectionStatus {
 [[nodiscard]] std::vector<SettingSchema> shellSettingsSchema();
 [[nodiscard]] std::map<std::string, std::string> schemaDefaults(std::vector<SettingSchema> const& schema);
 [[nodiscard]] bool schemaIdsUnique(std::vector<SettingSchema> const& schema);
+[[nodiscard]] SettingsApplySummary summarizeChangedApplyModes(std::map<std::string, std::string> const& saved,
+                                                              std::map<std::string, std::string> const& current,
+                                                              std::vector<SettingSchema> const& schema);
 
 [[nodiscard]] bool validateSettingValue(SettingSchema const& schema, std::string const& value);
 [[nodiscard]] bool shortcutConflicts(std::map<std::string, std::string> const& shortcuts);
