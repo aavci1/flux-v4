@@ -66,7 +66,7 @@ TextLayoutOptions textInputLayoutOptions(bool multiline) {
   TextLayoutOptions options{};
   options.wrapping = multiline ? TextWrapping::Wrap : TextWrapping::NoWrap;
   options.horizontalAlignment = HorizontalAlignment::Leading;
-  options.verticalAlignment = VerticalAlignment::Top;
+  options.verticalAlignment = multiline ? VerticalAlignment::Top : VerticalAlignment::Center;
   return options;
 }
 
