@@ -76,8 +76,16 @@ inline Rect windowVisibleContentRect(CommittedSurfaceSnapshot const& surface, fl
 }
 
 inline CornerRadius windowVisibleContentCornerRadius(CommittedSurfaceSnapshot const& surface,
-                                                    CornerRadius const& frameRadius) {
-  return windowContentCornerRadius(surface, frameRadius);
+                                                    CornerRadius const& frameRadius,
+                                                    float configuredInsetWidth) {
+  float const inset = windowContentChromeInsetWidth(surface, configuredInsetWidth);
+  CornerRadius const contentRadius = windowContentCornerRadius(surface, frameRadius);
+  return CornerRadius{
+      std::max(0.f, contentRadius.topLeft - inset),
+      std::max(0.f, contentRadius.topRight - inset),
+      std::max(0.f, contentRadius.bottomRight - inset),
+      std::max(0.f, contentRadius.bottomLeft - inset),
+  };
 }
 
 inline WindowShadowLayerGeometry windowShadowLayerGeometry(Rect const& frameRect,

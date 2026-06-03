@@ -38,10 +38,20 @@ std::optional<Rect> clippedShadowRect(Rect const& layerRect, CommittedSurfaceSna
 
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   return ShadowStyle{
-      .radius = focused ? 18.f : 12.f,
-      .offset = {0.f, focused ? 7.f : 4.f},
+      .radius = focused ? chrome.focusedShadowRadius : chrome.unfocusedShadowRadius,
+      .offset = focused ? chrome.focusedShadowOffset : chrome.unfocusedShadowOffset,
       .color = focused ? chrome.focusedShadowColor : chrome.unfocusedShadowColor,
   };
+}
+
+Point shadowLayerJitter(int index) {
+  float const angle = static_cast<float>((index * 47) % 360) * 0.01745329252f;
+  float const radius = (index % 3 == 0 ? 0.28f : 0.52f);
+  return Point{std::cos(angle) * radius, std::sin(angle) * radius};
+}
+
+float shadowSpreadJitter(int index) {
+  return (static_cast<float>((index * 29) % 17) / 16.f - 0.5f) * 0.75f;
 }
 
 void drawGlassMaterialRect(Canvas& canvas, Rect const& rect, CornerRadius const& radius, ChromeConfig const& chrome) {
@@ -219,7 +229,7 @@ void drawDefaultChrome(Canvas& canvas,
                          windowFrameRect(surface),
                          frameRadius,
                          windowVisibleContentRect(surface, chrome.contentInsetWidth),
-                         windowVisibleContentCornerRadius(surface, frameRadius),
+                         windowVisibleContentCornerRadius(surface, frameRadius, chrome.contentInsetWidth),
                          chrome);
 
   float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
@@ -288,24 +298,29 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
   ShadowStyle const shadow = windowShadow(chrome, surface.focused);
   if (shadow.isNone()) return;
 
-  int const steps = std::clamp(static_cast<int>(std::ceil(shadow.radius / 3.f)), 3, 8);
+  int const steps = std::clamp(static_cast<int>(std::ceil(shadow.radius * 4.f)), 48, 96);
   for (int i = steps; i >= 1; --i) {
     float const t = static_cast<float>(i) / static_cast<float>(steps);
-    float const spread = shadow.radius * t;
-    float const alpha = shadow.color.a * (1.f - t * 0.72f) / static_cast<float>(steps);
+    float const spread = std::max(0.f, shadow.radius * t + shadowSpreadJitter(i));
+    float const falloff = (1.f - t * 0.72f);
+    float const alphaJitter = 0.86f + 0.28f * (static_cast<float>((i * 37) % 11) / 10.f);
+    float const alpha = shadow.color.a * falloff * alphaJitter / static_cast<float>(steps);
     Color color = shadow.color;
     color.a = alpha;
     if (color.a <= 0.f) continue;
 
     WindowShadowLayerGeometry const layer = windowShadowLayerGeometry(frameRect, chrome.windowCornerRadius, shadow, spread);
+    Point const jitter = shadowLayerJitter(i);
+    Rect const layerRect = Rect::sharp(layer.rect.x + jitter.x, layer.rect.y + jitter.y, layer.rect.width, layer.rect.height);
+    Rect const innerRect = Rect::sharp(frameRect.x + jitter.x, frameRect.y + jitter.y, frameRect.width, frameRect.height);
     Path ring;
-    ring.rect(layer.rect, layer.cornerRadius);
-    ring.rect(frameRect, chrome.windowCornerRadius);
+    ring.rect(layerRect, layer.cornerRadius);
+    ring.rect(innerRect, chrome.windowCornerRadius);
     FillStyle fill = FillStyle::solid(color);
     fill.fillRule = FillRule::EvenOdd;
-    if (auto const shadowClip = clippedShadowRect(layer.rect, surface)) {
-      bool const clipNeeded = std::abs(shadowClip->y - layer.rect.y) > 0.5f ||
-                              std::abs(shadowClip->height - layer.rect.height) > 0.5f;
+    if (auto const shadowClip = clippedShadowRect(layerRect, surface)) {
+      bool const clipNeeded = std::abs(shadowClip->y - layerRect.y) > 0.5f ||
+                              std::abs(shadowClip->height - layerRect.height) > 0.5f;
       if (!clipNeeded) {
         canvas.drawPath(ring, fill, StrokeStyle::none(), ShadowStyle::none());
         continue;

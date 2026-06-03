@@ -40,6 +40,10 @@ struct ChromeConfig {
   float windowBorderWidth = 1.f;
   Color borderLineColor = Color{1.f, 1.f, 1.f, 102.f * (1.f / 255.f)};
   Color insetHighlightColor = Colors::transparent;
+  float focusedShadowRadius = 18.f;
+  float unfocusedShadowRadius = 12.f;
+  Point focusedShadowOffset{};
+  Point unfocusedShadowOffset{};
   Color focusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.52f};
   Color unfocusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.32f};
 };

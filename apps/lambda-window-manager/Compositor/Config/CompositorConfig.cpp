@@ -490,6 +490,12 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseFloatField("window_border_width", chrome.windowBorderWidth, 0.f, 8.f);
   parseColorField("border_line_color", chrome.borderLineColor);
   parseColorField("inset_highlight_color", chrome.insetHighlightColor);
+  parseFloatField("focused_shadow_radius", chrome.focusedShadowRadius, 0.f, 80.f);
+  parseFloatField("unfocused_shadow_radius", chrome.unfocusedShadowRadius, 0.f, 80.f);
+  parseFloatField("focused_shadow_offset_x", chrome.focusedShadowOffset.x, -80.f, 80.f);
+  parseFloatField("focused_shadow_offset_y", chrome.focusedShadowOffset.y, -80.f, 80.f);
+  parseFloatField("unfocused_shadow_offset_x", chrome.unfocusedShadowOffset.x, -80.f, 80.f);
+  parseFloatField("unfocused_shadow_offset_y", chrome.unfocusedShadowOffset.y, -80.f, 80.f);
   parseColorField("focused_shadow_color", chrome.focusedShadowColor);
   parseColorField("unfocused_shadow_color", chrome.unfocusedShadowColor);
 }
@@ -609,6 +615,12 @@ resize_grip_size = 4
 window_border_color = "#ffffff66"
 window_border_width = 1
 border_line_color = "#ffffff66"
+focused_shadow_radius = 18
+focused_shadow_offset_x = 0
+focused_shadow_offset_y = 0
+unfocused_shadow_radius = 12
+unfocused_shadow_offset_x = 0
+unfocused_shadow_offset_y = 0
 focused_shadow_color = "#141e3c85"
 unfocused_shadow_color = "#141e3c52"
 

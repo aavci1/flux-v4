@@ -492,6 +492,7 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
       surface.windowClipTop <= 0 &&
       surface.windowClipBottom <= 0 &&
       surface.backgroundEffect.shape != BackgroundEffectShape::Callout &&
+      !hasCompositorMaterial(surface, chrome) &&
       !surface.activeSizing &&
       !surface.pacingSizing &&
       !surface.geometryAnimationGrowing &&

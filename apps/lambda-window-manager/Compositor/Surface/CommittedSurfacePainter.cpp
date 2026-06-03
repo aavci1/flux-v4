@@ -386,15 +386,7 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
   if (material.shape == BackgroundEffectShape::Callout) return;
 
   if (windowExternalTitleBarHeight(surface) > 0.f) {
-    Rect const frameRect = windowFrameRect(surface);
-    CornerRadius const frameCorners = material.cornerRadiusSet
-                                          ? material.cornerRadius
-                                          : windowCorners;
-    canvas.drawRect(frameRect,
-                    frameCorners,
-                    FillStyle::none(),
-                    StrokeStyle::solid(material.borderColor, 1.f),
-                    ShadowStyle::none());
+    (void)windowCorners;
     return;
   }
 
@@ -523,12 +515,18 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                         : windowHeight;
   Rect const fullContentRect = windowContentRect(surface);
   Rect const visibleContentRect = windowVisibleContentRect(surface, chrome.contentInsetWidth);
-  CornerRadius const visibleContentCorners = windowVisibleContentCornerRadius(surface, windowCorners);
-  drawSurfaceBackgroundBlur(canvas, surface, fullContentRect, contentCorners);
+  CornerRadius const visibleContentCorners = windowVisibleContentCornerRadius(surface, windowCorners, chrome.contentInsetWidth);
+  bool const systemExternalChrome = !cutoutChrome && windowExternalTitleBarHeight(surface) > 0.f;
+  if (!systemExternalChrome) {
+    drawSurfaceBackgroundBlur(canvas, surface, visibleContentRect, visibleContentCorners);
+  }
   drawWindowFrameShadow(canvas, surface, chrome);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
   canvas.clipRect(visibleContentRect, visibleContentCorners, true);
+  if (systemExternalChrome) {
+    drawSurfaceBackgroundBlur(canvas, surface, visibleContentRect, visibleContentCorners);
+  }
   drawClientSurfacePiece(canvas,
                          clientImage,
                          Rect::sharp(surface.sourceX,

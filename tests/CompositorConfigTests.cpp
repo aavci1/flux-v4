@@ -206,6 +206,12 @@ TEST_CASE("compositor config parses chrome section") {
   file << "content_inset_width = 6\n";
   file << "window_border_color = \"#10203040\"\n";
   file << "window_border_width = 1.5\n";
+  file << "focused_shadow_radius = 24\n";
+  file << "focused_shadow_offset_x = 2\n";
+  file << "focused_shadow_offset_y = -3\n";
+  file << "unfocused_shadow_radius = 14\n";
+  file << "unfocused_shadow_offset_x = -1\n";
+  file << "unfocused_shadow_offset_y = 4\n";
   file << "close_hover_background = \"#ff0000\"\n";
   file << "[chrome.glass]\n";
   file << "opacity = 0.05\n";
@@ -232,6 +238,12 @@ TEST_CASE("compositor config parses chrome section") {
   CHECK(chrome.windowBorderColor.a == doctest::Approx(64.f / 255.f));
   CHECK(chrome.glass.borderColor.a == doctest::Approx(144.f / 255.f));
   CHECK(chrome.windowBorderWidth == doctest::Approx(1.5f));
+  CHECK(chrome.focusedShadowRadius == doctest::Approx(24.f));
+  CHECK(chrome.focusedShadowOffset.x == doctest::Approx(2.f));
+  CHECK(chrome.focusedShadowOffset.y == doctest::Approx(-3.f));
+  CHECK(chrome.unfocusedShadowRadius == doctest::Approx(14.f));
+  CHECK(chrome.unfocusedShadowOffset.x == doctest::Approx(-1.f));
+  CHECK(chrome.unfocusedShadowOffset.y == doctest::Approx(4.f));
   CHECK(chrome.windowCornerRadius.topLeft == doctest::Approx(6.f));
   CHECK(chrome.windowCornerRadius.topRight == doctest::Approx(7.f));
   CHECK(chrome.windowCornerRadius.bottomRight == doctest::Approx(8.f));
