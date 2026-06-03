@@ -325,10 +325,27 @@ void putColor(float out[4], Color c, float opacity = 1.f) {
   out[3] = c.a * opacity;
 }
 
+std::uint64_t mixHashWord(std::uint64_t value) {
+  value += 0x9e3779b97f4a7c15ULL;
+  value = (value ^ (value >> 30u)) * 0xbf58476d1ce4e5b9ULL;
+  value = (value ^ (value >> 27u)) * 0x94d049bb133111ebULL;
+  return value ^ (value >> 31u);
+}
+
 void hashBytes(std::uint64_t &h, void const *data, std::size_t size) {
   auto const *bytes = static_cast<std::uint8_t const *>(data);
-  for (std::size_t i = 0; i < size; ++i) {
-    h ^= bytes[i];
+  while (size >= sizeof(std::uint64_t)) {
+    std::uint64_t word = 0;
+    std::memcpy(&word, bytes, sizeof(word));
+    h ^= mixHashWord(word);
+    h *= 1099511628211ULL;
+    bytes += sizeof(word);
+    size -= sizeof(word);
+  }
+  if (size > 0) {
+    std::uint64_t tail = 0;
+    std::memcpy(&tail, bytes, size);
+    h ^= mixHashWord(tail ^ size);
     h *= 1099511628211ULL;
   }
 }
@@ -2014,7 +2031,7 @@ public:
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.rects.size());
     target.rects.push_back(inst);
-    appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
+    appendSignedDrawOp(target, makeDrawOp(DrawOp::Kind::Rect, nullptr, first, 1));
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
   }
 
@@ -2155,7 +2172,7 @@ public:
       } else {
         batches_.push_back(ImageBatch{atlas, first, count});
       }
-      appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
+      appendSignedDrawOp(target, makeDrawOp(DrawOp::Kind::Image, atlas, first, count));
       debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
     }
   }
@@ -2211,7 +2228,7 @@ public:
     }
     DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
     op.premultipliedAlpha = imagePremultipliedAlpha_;
-    appendDrawOp(target.ops, op);
+    appendSignedDrawOp(target, op);
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }
 
@@ -2258,7 +2275,7 @@ public:
       op.blurCacheClip = cacheBounds;
       op.hasBlurCacheClip = true;
     }
-    appendDrawOp(target.ops, op);
+    appendSignedDrawOp(target, op);
   }
 
   bool drawBackdropBlurFrame(Rect const& frame,
@@ -2316,7 +2333,7 @@ public:
       op.blurCacheClip = cacheBounds;
       op.hasBlurCacheClip = true;
     }
-    appendDrawOp(target.ops, op);
+    appendSignedDrawOp(target, op);
     return true;
   }
 
@@ -2554,6 +2571,11 @@ private:
     return op;
   }
 
+  void appendSignedDrawOp(RecordingTarget& target, DrawOp op) const {
+    op.geometrySignature = drawOpGeometrySignature(op, target.rects, target.quads, target.pathVerts);
+    appendDrawOp(target.ops, op);
+  }
+
   static bool sameRect(Rect a, Rect b) {
     constexpr float eps = 1e-4f;
     return std::abs(a.x - b.x) <= eps &&
@@ -2579,8 +2601,20 @@ private:
   static void appendDrawOp(std::vector<DrawOp> &ops, DrawOp op) {
     if (!ops.empty() && canMergeDrawOps(ops.back(), op)) {
       DrawOp &prev = ops.back();
+      std::uint64_t const previousSignature = prev.geometrySignature;
+      std::uint64_t const nextSignature = op.geometrySignature;
       prev.count += op.count;
       prev.blurRadius = std::max(prev.blurRadius, op.blurRadius);
+      if (previousSignature != 0 && nextSignature != 0) {
+        std::uint64_t h = 14695981039346656037ULL;
+        hashValue(h, previousSignature);
+        hashValue(h, nextSignature);
+        hashValue(h, prev.count);
+        hashValue(h, prev.blurRadius);
+        prev.geometrySignature = nonZeroSignature(h);
+      } else {
+        prev.geometrySignature = 0;
+      }
       return;
     }
     ops.push_back(op);
@@ -3516,11 +3550,11 @@ private:
       std::uint32_t const firstVertex = static_cast<std::uint32_t>(target.pathVerts.size());
       target.pathVerts.insert(target.pathVerts.end(), it->second.vertices.begin(), it->second.vertices.end());
       if (!it->second.vertices.empty()) {
-        appendDrawOp(target.ops,
-                     makeDrawOp(DrawOp::Kind::Path,
-                                nullptr,
-                                firstVertex,
-                                static_cast<std::uint32_t>(it->second.vertices.size())));
+        appendSignedDrawOp(target,
+                           makeDrawOp(DrawOp::Kind::Path,
+                                      nullptr,
+                                      firstVertex,
+                                      static_cast<std::uint32_t>(it->second.vertices.size())));
       }
       return;
     }
@@ -3588,7 +3622,7 @@ private:
         pathCacheLru_.erase(lruIt);
       }
       trimPathCache();
-      appendDrawOp(target.ops, makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
+      appendSignedDrawOp(target, makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
     }
   }
 
@@ -3826,6 +3860,21 @@ private:
     return end;
   }
 
+  std::pair<std::uint64_t, std::uint64_t> backdropBlurRunOpCounts(std::size_t start, std::size_t end) const {
+    std::uint64_t ops = 0;
+    std::uint64_t quads = 0;
+    std::size_t const opEnd = std::min(end, ops_.size());
+    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
+      DrawOp const& op = ops_[index];
+      if (op.kind != DrawOp::Kind::BackdropBlur) {
+        continue;
+      }
+      ++ops;
+      quads += op.count;
+    }
+    return {ops, quads};
+  }
+
   float maxBackdropBlurRadius(std::size_t start, std::size_t end) const {
     float radius = 0.f;
     std::size_t const opEnd = std::min(end, ops_.size());
@@ -4032,17 +4081,20 @@ private:
         rebuildBackdropOpPrefixHashes();
       }
       std::size_t const end = backdropBlurRunEnd(start);
+      auto const [opCount, quadCount] = backdropBlurRunOpCounts(start, end);
       float const maxRadius = maxBackdropBlurRadius(start, end);
       float const effectiveRadius = maxRadius * kBackdropBlurRadiusBoost;
       float const blurRadius = (effectiveRadius / static_cast<float>(backdropBlurDownsample())) /
                                std::sqrt(static_cast<float>(kBackdropBlurIterations));
-      runs.push_back(BackdropBlurRun{
+      BackdropBlurRun run{
           .start = start,
           .end = end,
           .horizontalQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f),
           .verticalQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f),
           .clip = backdropBlurRunClip(start, end, effectiveRadius),
-      });
+      };
+      debug::perf::recordBackdropBlurPreparedRun(opCount, quadCount);
+      runs.push_back(run);
       cursor = end;
     }
     return runs;
@@ -4405,9 +4457,9 @@ private:
 
       CachedBackdropBlur &cacheEntry = ensureBackdropBlurCacheEntry(runIndex);
       std::uint64_t const signature = backdropBlurSignature(run, runIndex);
-      Texture *blurTexture = cacheEntry.valid && cacheEntry.signature == signature
-                                 ? &cacheEntry.texture
-                                 : nullptr;
+      bool const cacheHit = cacheEntry.valid && cacheEntry.signature == signature;
+      debug::perf::recordBackdropBlurCacheLookup(cacheHit);
+      Texture *blurTexture = cacheHit ? &cacheEntry.texture : nullptr;
       if (!blurTexture) {
         vkCmdEndRendering(commandBuffer);
         copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout, run.clip);

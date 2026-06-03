@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 
 namespace lambda::debug::perf {
@@ -52,9 +53,16 @@ struct RenderCounters {
   std::uint64_t pathVertices = 0;
   std::uint64_t glyphVertices = 0;
   std::uint64_t backdropBlurRuns = 0;
+  std::uint64_t backdropBlurPreparedRuns = 0;
+  std::uint64_t backdropBlurOps = 0;
+  std::uint64_t backdropBlurQuads = 0;
+  std::uint64_t backdropBlurCacheHits = 0;
+  std::uint64_t backdropBlurCacheMisses = 0;
   std::uint64_t backdropBlurPasses = 0;
   std::uint64_t backdropBlurPixels = 0;
   std::uint64_t backdropCopyPixels = 0;
+  std::uint64_t backdropMaxCopyPixels = 0;
+  std::uint64_t backdropMaxBlurPixels = 0;
   std::uint64_t recorderCapacityGrowths = 0;
   std::uint64_t recorderCapacityGrowthBytes = 0;
 };
@@ -332,6 +340,18 @@ inline bool enabled() {
   return perfEnabled();
 }
 
+inline bool backdropBlurDiagnosticsEnabled() {
+  static bool const enabled = [] {
+    char const* cpuTrace = std::getenv("LAMBDA_WINDOW_MANAGER_CPU_TRACE");
+    return perfEnabled() || debug::envNonZero(cpuTrace);
+  }();
+  return enabled;
+}
+
+inline RenderCounters renderCountersSnapshot() {
+  return detail::counters().render;
+}
+
 inline void recordPreparedPrepareCall() {
   if (!enabled()) {
     return;
@@ -430,8 +450,30 @@ inline void recordRecorderCapacityGrowth(std::uint64_t bytes) {
   render.recorderCapacityGrowthBytes += bytes;
 }
 
+inline void recordBackdropBlurPreparedRun(std::uint64_t ops, std::uint64_t quads) {
+  if (!backdropBlurDiagnosticsEnabled()) {
+    return;
+  }
+  auto& render = detail::counters().render;
+  ++render.backdropBlurPreparedRuns;
+  render.backdropBlurOps += ops;
+  render.backdropBlurQuads += quads;
+}
+
+inline void recordBackdropBlurCacheLookup(bool hit) {
+  if (!backdropBlurDiagnosticsEnabled()) {
+    return;
+  }
+  auto& render = detail::counters().render;
+  if (hit) {
+    ++render.backdropBlurCacheHits;
+  } else {
+    ++render.backdropBlurCacheMisses;
+  }
+}
+
 inline void recordBackdropBlurRun(std::uint64_t copyPixels, std::uint64_t blurPixels, std::uint64_t passes) {
-  if (!enabled()) {
+  if (!backdropBlurDiagnosticsEnabled()) {
     return;
   }
   auto& render = detail::counters().render;
@@ -439,6 +481,8 @@ inline void recordBackdropBlurRun(std::uint64_t copyPixels, std::uint64_t blurPi
   render.backdropCopyPixels += copyPixels;
   render.backdropBlurPixels += blurPixels;
   render.backdropBlurPasses += passes;
+  render.backdropMaxCopyPixels = std::max(render.backdropMaxCopyPixels, copyPixels);
+  render.backdropMaxBlurPixels = std::max(render.backdropMaxBlurPixels, blurPixels);
 }
 
 inline void recordTextLayoutCall() {

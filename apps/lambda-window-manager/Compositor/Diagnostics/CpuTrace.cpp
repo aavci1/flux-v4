@@ -1,6 +1,7 @@
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 
 #include <Lambda/Debug/DebugFlags.hpp>
+#include <Lambda/Debug/PerfCounters.hpp>
 
 #include <dlfcn.h>
 #include <execinfo.h>
@@ -115,6 +116,7 @@ struct CpuTraceState {
   std::uint64_t currentSurfaceCommits = 0;
   std::int32_t currentSurfaceWidth = 0;
   std::int32_t currentSurfaceHeight = 0;
+  debug::perf::RenderCounters renderCounterStart{};
 };
 
 std::mutex &traceMutex() {
@@ -155,6 +157,18 @@ void cpuSamplerSignalHandler(int) {
 std::string symbolName(void *pc) {
   Dl_info info{};
   if (dladdr(pc, &info) == 0 || !info.dli_sname) {
+    if (info.dli_fname && info.dli_fbase) {
+      std::filesystem::path const modulePath(info.dli_fname);
+      auto const moduleBase = reinterpret_cast<std::uintptr_t>(info.dli_fbase);
+      auto const address = reinterpret_cast<std::uintptr_t>(pc);
+      char buffer[96]{};
+      std::snprintf(buffer,
+                    sizeof(buffer),
+                    "%s+0x%zx",
+                    modulePath.filename().string().c_str(),
+                    static_cast<std::size_t>(address - moduleBase));
+      return buffer;
+    }
     char buffer[32]{};
     std::snprintf(buffer, sizeof(buffer), "%p", pc);
     return buffer;
@@ -236,9 +250,42 @@ CpuTraceState &state() {
   static CpuTraceState traceState = [] {
     CpuTraceState result;
     result.cpuStartMs = processCpuMilliseconds();
+    result.renderCounterStart = debug::perf::renderCountersSnapshot();
     return result;
   }();
   return traceState;
+}
+
+std::uint64_t counterDelta(std::uint64_t current, std::uint64_t previous) {
+  return current >= previous ? current - previous : 0;
+}
+
+debug::perf::RenderCounters renderCounterDelta(debug::perf::RenderCounters const& current,
+                                               debug::perf::RenderCounters const& previous) {
+  debug::perf::RenderCounters delta{};
+  for (std::size_t i = 0; i < current.ops.size(); ++i) {
+    delta.ops[i] = counterDelta(current.ops[i], previous.ops[i]);
+    delta.drawCalls[i] = counterDelta(current.drawCalls[i], previous.drawCalls[i]);
+    delta.uploadBytes[i] = counterDelta(current.uploadBytes[i], previous.uploadBytes[i]);
+  }
+  delta.opOrderEntries = counterDelta(current.opOrderEntries, previous.opOrderEntries);
+  delta.pathVertices = counterDelta(current.pathVertices, previous.pathVertices);
+  delta.glyphVertices = counterDelta(current.glyphVertices, previous.glyphVertices);
+  delta.backdropBlurRuns = counterDelta(current.backdropBlurRuns, previous.backdropBlurRuns);
+  delta.backdropBlurPreparedRuns = counterDelta(current.backdropBlurPreparedRuns, previous.backdropBlurPreparedRuns);
+  delta.backdropBlurOps = counterDelta(current.backdropBlurOps, previous.backdropBlurOps);
+  delta.backdropBlurQuads = counterDelta(current.backdropBlurQuads, previous.backdropBlurQuads);
+  delta.backdropBlurCacheHits = counterDelta(current.backdropBlurCacheHits, previous.backdropBlurCacheHits);
+  delta.backdropBlurCacheMisses = counterDelta(current.backdropBlurCacheMisses, previous.backdropBlurCacheMisses);
+  delta.backdropBlurPasses = counterDelta(current.backdropBlurPasses, previous.backdropBlurPasses);
+  delta.backdropBlurPixels = counterDelta(current.backdropBlurPixels, previous.backdropBlurPixels);
+  delta.backdropCopyPixels = counterDelta(current.backdropCopyPixels, previous.backdropCopyPixels);
+  delta.backdropMaxCopyPixels = current.backdropMaxCopyPixels;
+  delta.backdropMaxBlurPixels = current.backdropMaxBlurPixels;
+  delta.recorderCapacityGrowths = counterDelta(current.recorderCapacityGrowths, previous.recorderCapacityGrowths);
+  delta.recorderCapacityGrowthBytes =
+      counterDelta(current.recorderCapacityGrowthBytes, previous.recorderCapacityGrowthBytes);
+  return delta;
 }
 
 std::string defaultTracePath() {
@@ -363,6 +410,7 @@ void resetCounters(CpuTraceState &traceState, CpuTraceClock::time_point now, dou
   traceState.currentSurfaceCommits = 0;
   traceState.currentSurfaceWidth = 0;
   traceState.currentSurfaceHeight = 0;
+  traceState.renderCounterStart = debug::perf::renderCountersSnapshot();
 }
 
 void maybeLog(CpuTraceState &traceState) {
@@ -378,6 +426,14 @@ void maybeLog(CpuTraceState &traceState) {
   double const shmMb = static_cast<double>(traceState.shmBytes) / (1024.0 * 1024.0);
   double const imageMb = static_cast<double>(traceState.imageBytes) / (1024.0 * 1024.0);
   double const fallbackMb = static_cast<double>(traceState.dmabufFallbackBytes) / (1024.0 * 1024.0);
+  debug::perf::RenderCounters const renderCounters =
+      renderCounterDelta(debug::perf::renderCountersSnapshot(), traceState.renderCounterStart);
+  double const blurCopyMpPerFrame =
+      static_cast<double>(renderCounters.backdropCopyPixels) * invFrames / 1'000'000.0;
+  double const blurMpPerFrame =
+      static_cast<double>(renderCounters.backdropBlurPixels) * invFrames / 1'000'000.0;
+  double const blurMaxCopyMp = static_cast<double>(renderCounters.backdropMaxCopyPixels) / 1'000'000.0;
+  double const blurMaxMp = static_cast<double>(renderCounters.backdropMaxBlurPixels) / 1'000'000.0;
 
   if (std::FILE *file = traceFile(traceState)) {
     std::fprintf(
@@ -400,6 +456,8 @@ void maybeLog(CpuTraceState &traceState) {
         "image creates=%llu updates=%llu mb=%.1f mbps=%.1f upload_ms=%.3f "
         "dmabuf imports=%llu failures=%llu import_ms=%.3f fallback_copies=%llu "
         "fallback_failures=%llu fallback_mb=%.1f fallback_ms=%.3f "
+        "blur prepared=%llu ops=%llu quads=%llu cache_hits=%llu cache_misses=%llu "
+        "runs=%llu passes=%llu copy_mp_f=%.2f blur_mp_f=%.2f proc_max_copy_mp=%.2f proc_max_blur_mp=%.2f "
         "surface_draw_cache hits=%llu misses=%llu record_ms=%.3f "
         "commits total=%llu state=%llu shm=%llu dmabuf=%llu empty=%llu other=%llu "
         "hot_surface=%llu hot_commits=%llu hot_size=%dx%d\n",
@@ -449,6 +507,14 @@ void maybeLog(CpuTraceState &traceState) {
         static_cast<unsigned long long>(traceState.dmabufImportFailures), traceState.dmabufImportMs,
         static_cast<unsigned long long>(traceState.dmabufFallbackCopies),
         static_cast<unsigned long long>(traceState.dmabufFallbackFailures), fallbackMb, traceState.dmabufFallbackMs,
+        static_cast<unsigned long long>(renderCounters.backdropBlurPreparedRuns),
+        static_cast<unsigned long long>(renderCounters.backdropBlurOps),
+        static_cast<unsigned long long>(renderCounters.backdropBlurQuads),
+        static_cast<unsigned long long>(renderCounters.backdropBlurCacheHits),
+        static_cast<unsigned long long>(renderCounters.backdropBlurCacheMisses),
+        static_cast<unsigned long long>(renderCounters.backdropBlurRuns),
+        static_cast<unsigned long long>(renderCounters.backdropBlurPasses),
+        blurCopyMpPerFrame, blurMpPerFrame, blurMaxCopyMp, blurMaxMp,
         static_cast<unsigned long long>(traceState.surfaceDrawCacheHits),
         static_cast<unsigned long long>(traceState.surfaceDrawCacheMisses), traceState.surfaceDrawRecordMs,
         static_cast<unsigned long long>(traceState.surfaceCommits),
