@@ -43,6 +43,7 @@ namespace lambda_settings {
 enum class SettingsSection {
   General,
   Appearance,
+  Files,
   Display,
   Input,
   Windows,
@@ -91,10 +92,11 @@ ChromeInsets chromeInsets(WindowChromeMetrics const& chrome) {
   return insets;
 }
 
-std::array<SidebarItem, 9> const& sidebarItems() {
-  static std::array<SidebarItem, 9> const items{{
+std::array<SidebarItem, 10> const& sidebarItems() {
+  static std::array<SidebarItem, 10> const items{{
       {SettingsSection::General, "General", IconName::Settings},
       {SettingsSection::Appearance, "Appearance", IconName::Palette},
+      {SettingsSection::Files, "Files", IconName::FolderOpen},
       {SettingsSection::Display, "Display", IconName::Computer},
       {SettingsSection::Input, "Input", IconName::Keyboard},
       {SettingsSection::Windows, "Windows", IconName::Window},
@@ -163,6 +165,7 @@ int enumIndexForValue(std::vector<std::string> const& values, std::string const&
 std::optional<NumericControlSpec> numericSpecForSetting(SettingSchema const& schema) {
   if (schema.id == "scale") return NumericControlSpec{.min = 1.f, .max = 3.f, .step = 0.25f, .slider = true};
   if (schema.id == "cursor_size") return NumericControlSpec{.min = 16.f, .max = 64.f, .step = 1.f, .slider = true};
+  if (schema.id == "icon_size") return NumericControlSpec{.min = 32.f, .max = 256.f, .step = 4.f, .slider = true};
   if (schema.id == "dock.item_size") return NumericControlSpec{.min = 32.f, .max = 96.f, .step = 1.f, .slider = true};
   if (schema.id == "dock.blur_radius") return NumericControlSpec{.min = 0.f, .max = 160.f, .step = 1.f, .slider = true};
   if (schema.id == "dock.opacity") return NumericControlSpec{.min = 0.f, .max = 1.f, .step = 0.05f, .slider = true};
@@ -344,6 +347,7 @@ Element settingsCard(std::string heading, std::string caption, Element content);
 enum class SettingsSource {
   WindowManager,
   Shell,
+  Files,
 };
 
 struct BoundSetting {
@@ -379,18 +383,22 @@ std::string joinLabels(std::vector<std::string> const& labels) {
 }
 
 std::string savedStatusText(SettingsApplySummary const& wmSummary,
-                            SettingsApplySummary const& shellSummary) {
+                            SettingsApplySummary const& shellSummary,
+                            SettingsApplySummary const& filesSummary) {
   std::vector<std::string> restartLabels = wmSummary.restartRequiredLabels;
   restartLabels.insert(restartLabels.end(),
                        shellSummary.restartRequiredLabels.begin(),
                        shellSummary.restartRequiredLabels.end());
+  restartLabels.insert(restartLabels.end(),
+                       filesSummary.restartRequiredLabels.begin(),
+                       filesSummary.restartRequiredLabels.end());
   if (!restartLabels.empty()) {
     return "Saved; restart required for " + joinLabels(restartLabels);
   }
-  if (wmSummary.hasNextWindow || shellSummary.hasNextWindow) {
+  if (wmSummary.hasNextWindow || shellSummary.hasNextWindow || filesSummary.hasNextWindow) {
     return "Saved; some changes apply to new windows";
   }
-  if (wmSummary.hasHotReload || shellSummary.hasHotReload) {
+  if (wmSummary.hasHotReload || shellSummary.hasHotReload || filesSummary.hasHotReload) {
     return "Saved; live settings will update shortly";
   }
   return "Saved";
@@ -426,6 +434,11 @@ std::vector<SettingSchema> const& cachedShellSettingsSchema() {
   return schema;
 }
 
+std::vector<SettingSchema> const& cachedFilesSettingsSchema() {
+  static std::vector<SettingSchema> const schema = filesSettingsSchema();
+  return schema;
+}
+
 std::map<std::string, std::string> const& cachedWindowManagerSchemaDefaults() {
   static std::map<std::string, std::string> const defaults =
       schemaDefaults(cachedWindowManagerSettingsSchema());
@@ -435,6 +448,12 @@ std::map<std::string, std::string> const& cachedWindowManagerSchemaDefaults() {
 std::map<std::string, std::string> const& cachedShellSchemaDefaults() {
   static std::map<std::string, std::string> const defaults =
       schemaDefaults(cachedShellSettingsSchema());
+  return defaults;
+}
+
+std::map<std::string, std::string> const& cachedFilesSchemaDefaults() {
+  static std::map<std::string, std::string> const defaults =
+      schemaDefaults(cachedFilesSettingsSchema());
   return defaults;
 }
 
@@ -670,11 +689,14 @@ struct SettingEditorRow {
   BoundSetting setting;
   Reactive::Signal<std::map<std::string, std::string>> wmValues;
   Reactive::Signal<std::map<std::string, std::string>> shellValues;
+  Reactive::Signal<std::map<std::string, std::string>> filesValues;
   std::function<void(SettingsSource, std::string, std::string)> setValue;
 
   Element body() const {
     Reactive::Signal<std::map<std::string, std::string>> const valuesSignal =
-        setting.source == SettingsSource::WindowManager ? wmValues : shellValues;
+        setting.source == SettingsSource::WindowManager
+            ? wmValues
+            : (setting.source == SettingsSource::Shell ? shellValues : filesValues);
     SettingSchema const schema = setting.schema;
     std::string const initialValue = settingValue(valuesSignal.peek(), schema);
     auto localValue = useState(initialValue);
@@ -740,6 +762,7 @@ struct SettingEditorRow {
 std::vector<Element> buildSettingRows(std::vector<BoundSetting> settings,
                                       Reactive::Signal<std::map<std::string, std::string>> wmValues,
                                       Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                                      Reactive::Signal<std::map<std::string, std::string>> filesValues,
                                       std::function<void(SettingsSource, std::string, std::string)> setValue) {
   std::vector<Element> rows;
   rows.reserve(settings.size());
@@ -748,6 +771,7 @@ std::vector<Element> buildSettingRows(std::vector<BoundSetting> settings,
         .setting = std::move(setting),
         .wmValues = wmValues,
         .shellValues = shellValues,
+        .filesValues = filesValues,
         .setValue = setValue,
     }});
   }
@@ -758,6 +782,7 @@ Element settingsPage(std::string title,
                      std::vector<SettingsGroup> groups,
                      Reactive::Signal<std::map<std::string, std::string>> wmValues,
                      Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                     Reactive::Signal<std::map<std::string, std::string>> filesValues,
                      std::function<void(SettingsSource, std::string, std::string)> setValue) {
   std::vector<Element> blocks;
   blocks.reserve(groups.size() + 1u);
@@ -766,7 +791,7 @@ Element settingsPage(std::string title,
     blocks.push_back(settingsCard(
         std::move(group.heading),
         std::move(group.caption),
-        rowsList(buildSettingRows(std::move(group.settings), wmValues, shellValues, setValue))));
+        rowsList(buildSettingRows(std::move(group.settings), wmValues, shellValues, filesValues, setValue))));
   }
   return VStack{
       .spacing = 16.f,
@@ -777,14 +802,17 @@ Element settingsPage(std::string title,
 
 Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> wmValues,
                           Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                          Reactive::Signal<std::map<std::string, std::string>> filesValues,
                           Reactive::Signal<std::map<std::string, std::string>> savedWmValues,
                           Reactive::Signal<std::map<std::string, std::string>> savedShellValues,
+                          Reactive::Signal<std::map<std::string, std::string>> savedFilesValues,
                           Reactive::Signal<std::string> statusText,
                           std::function<void()> save,
                           std::function<void()> revert,
                           std::function<void()> reset) {
-  Reactive::Bindable<bool> const dirty{[wmValues, shellValues, savedWmValues, savedShellValues] {
-    return wmValues() != savedWmValues() || shellValues() != savedShellValues();
+  Reactive::Bindable<bool> const dirty{[wmValues, shellValues, filesValues, savedWmValues, savedShellValues, savedFilesValues] {
+    return wmValues() != savedWmValues() || shellValues() != savedShellValues() ||
+           filesValues() != savedFilesValues();
   }};
   Reactive::Bindable<std::string> const status{[dirty, statusText] {
     if (!statusText().empty()) return statusText();
@@ -1087,20 +1115,26 @@ Element aboutPage() {
 Element contentForSection(SettingsSection section,
                           Reactive::Signal<std::map<std::string, std::string>> wmValues,
                           Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                          Reactive::Signal<std::map<std::string, std::string>> filesValues,
                           std::function<void(SettingsSource, std::string, std::string)> setValue) {
   std::vector<SettingSchema> const& wmSchema = cachedWindowManagerSettingsSchema();
   std::vector<SettingSchema> const& shellSchema = cachedShellSettingsSchema();
+  std::vector<SettingSchema> const& filesSchema = cachedFilesSettingsSchema();
   auto wm = [&](std::string const& id) {
     return bindSetting(SettingsSource::WindowManager, wmSchema, id);
   };
   auto shell = [&](std::string const& id) {
     return bindSetting(SettingsSource::Shell, shellSchema, id);
   };
+  auto files = [&](std::string const& id) {
+    return bindSetting(SettingsSource::Files, filesSchema, id);
+  };
 
   switch (section) {
   case SettingsSection::General:
     return genericPage("General", {{"Window Manager config", windowManagerSettingsPath().string()},
                                    {"Shell config", shellSettingsPath().string()},
+                                   {"Files config", filesSettingsPath().string()},
                                    {"Settings writes", "Owner config files"},
                                    {"Unknown keys", "Preserved where practical"}});
   case SettingsSection::Appearance:
@@ -1119,6 +1153,23 @@ Element contentForSection(SettingsSection section,
                                        .settings = {shell("appearance.reduced_motion")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
+                        setValue);
+  case SettingsSection::Files:
+    return settingsPage("Files",
+                        {SettingsGroup{.heading = "Browsing",
+                                       .caption = "Files owned; applies to new Files windows.",
+                                       .settings = {files("show_hidden"),
+                                                    files("show_trash"),
+                                                    files("view_mode"),
+                                                    files("icon_size")}},
+                         SettingsGroup{.heading = "Sorting",
+                                       .caption = "Files owned; applies to new Files windows.",
+                                       .settings = {files("sort_key"),
+                                                    files("sort_ascending")}}},
+                        wmValues,
+                        shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::Display:
     return settingsPage("Display",
@@ -1130,6 +1181,7 @@ Element contentForSection(SettingsSection section,
                                        .settings = {wm("scale")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::Input:
     return settingsPage("Input",
@@ -1143,6 +1195,7 @@ Element contentForSection(SettingsSection section,
                                        .settings = {wm("keybindings.close")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::Windows:
     return settingsPage("Windows",
@@ -1162,6 +1215,7 @@ Element contentForSection(SettingsSection section,
                                                     wm("keybindings.screenshot_active_window")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::DockPanel:
     return settingsPage("Dock & Panel",
@@ -1193,6 +1247,7 @@ Element contentForSection(SettingsSection section,
                                                     shell("quick_settings.modules")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::Notifications:
     return settingsPage("Notifications",
@@ -1207,6 +1262,7 @@ Element contentForSection(SettingsSection section,
                                        .settings = {shell("notifications.history_limit")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::LauncherClipboard:
     return settingsPage("Launcher & Clipboard",
@@ -1224,6 +1280,7 @@ Element contentForSection(SettingsSection section,
                                                     shell("clipboard_history.record_primary_selection")}}},
                         wmValues,
                         shellValues,
+                        filesValues,
                         setValue);
   case SettingsSection::About:
     return aboutPage();
@@ -1239,46 +1296,58 @@ struct SettingsAppRoot {
     auto activeSection = useState(SettingsSection::Appearance);
     auto wmLoad = useState(loadWindowManagerSettingsFile());
     auto shellLoad = useState(loadShellSettingsFile());
+    auto filesLoad = useState(loadFilesSettingsFile());
     auto wmValues = useState(wmLoad().document.values);
     auto shellValues = useState(shellLoad().document.values);
+    auto filesValues = useState(filesLoad().document.values);
     auto savedWmValues = useState(wmLoad().document.values);
     auto savedShellValues = useState(shellLoad().document.values);
-    auto statusText = useState([wmLoad, shellLoad] {
+    auto savedFilesValues = useState(filesLoad().document.values);
+    auto statusText = useState([wmLoad, shellLoad, filesLoad] {
       if (!wmLoad().error.empty()) return wmLoad().error;
       if (!shellLoad().error.empty()) return shellLoad().error;
+      if (!filesLoad().error.empty()) return filesLoad().error;
       return std::string{};
     }());
     auto chrome = useEnvironment<WindowChromeMetricsKey>();
     WindowChromeMetrics const metrics = chrome();
 
-    auto setValue = [wmValues, shellValues](SettingsSource source, std::string id, std::string value) {
+    auto setValue = [wmValues, shellValues, filesValues](SettingsSource source, std::string id, std::string value) {
       if (source == SettingsSource::WindowManager) {
         setSettingValue(wmValues, std::move(id), std::move(value));
-      } else {
+      } else if (source == SettingsSource::Shell) {
         setSettingValue(shellValues, std::move(id), std::move(value));
+      } else {
+        setSettingValue(filesValues, std::move(id), std::move(value));
       }
     };
 
-    auto revert = [wmValues, shellValues, savedWmValues, savedShellValues, statusText] {
+    auto revert = [wmValues, shellValues, filesValues, savedWmValues, savedShellValues, savedFilesValues, statusText] {
       wmValues.set(savedWmValues());
       shellValues.set(savedShellValues());
+      filesValues.set(savedFilesValues());
       statusText.set(std::string{});
     };
 
-    auto reset = [wmValues, shellValues, statusText] {
+    auto reset = [wmValues, shellValues, filesValues, statusText] {
       wmValues.set(cachedWindowManagerSchemaDefaults());
       shellValues.set(cachedShellSchemaDefaults());
+      filesValues.set(cachedFilesSchemaDefaults());
       statusText.set("Defaults staged");
     };
 
-    auto save = [wmLoad, shellLoad, wmValues, shellValues, savedWmValues, savedShellValues, statusText] {
+    auto save = [wmLoad, shellLoad, filesLoad, wmValues, shellValues, filesValues,
+                 savedWmValues, savedShellValues, savedFilesValues, statusText] {
       SettingsApplySummary const wmApplySummary =
           summarizeChangedApplyModes(savedWmValues(), wmValues(), cachedWindowManagerSettingsSchema());
       SettingsApplySummary const shellApplySummary =
           summarizeChangedApplyModes(savedShellValues(), shellValues(), cachedShellSettingsSchema());
+      SettingsApplySummary const filesApplySummary =
+          summarizeChangedApplyModes(savedFilesValues(), filesValues(), cachedFilesSettingsSchema());
       auto wmResult = saveWindowManagerSettingsFile(wmValues(), wmLoad().path);
       auto shellResult = saveShellSettingsFile(shellValues(), shellLoad().path);
-      if (!wmResult.ok || !shellResult.ok) {
+      auto filesResult = saveFilesSettingsFile(filesValues(), filesLoad().path);
+      if (!wmResult.ok || !shellResult.ok || !filesResult.ok) {
         std::string error;
         if (!wmResult.ok) {
           error += "Window Manager: " + wmResult.error;
@@ -1287,12 +1356,17 @@ struct SettingsAppRoot {
           if (!error.empty()) error += " ";
           error += "Shell: " + shellResult.error;
         }
+        if (!filesResult.ok) {
+          if (!error.empty()) error += " ";
+          error += "Files: " + filesResult.error;
+        }
         statusText.set(error.empty() ? std::string{"Save failed"} : error);
         return;
       }
       savedWmValues.set(wmValues());
       savedShellValues.set(shellValues());
-      statusText.set(savedStatusText(wmApplySummary, shellApplySummary));
+      savedFilesValues.set(filesValues());
+      statusText.set(savedStatusText(wmApplySummary, shellApplySummary, filesApplySummary));
     };
 
     return VStack{
@@ -1317,41 +1391,46 @@ struct SettingsAppRoot {
                                            {
                                                Case(SettingsSection::General, [=] {
                                                  return contentForSection(SettingsSection::General,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::Appearance, [=] {
                                                  return contentForSection(SettingsSection::Appearance,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
+                                               }),
+                                               Case(SettingsSection::Files, [=] {
+                                                 return contentForSection(SettingsSection::Files,
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::Display, [=] {
                                                  return contentForSection(SettingsSection::Display,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::Input, [=] {
                                                  return contentForSection(SettingsSection::Input,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::Windows, [=] {
                                                  return contentForSection(SettingsSection::Windows,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::DockPanel, [=] {
                                                  return contentForSection(SettingsSection::DockPanel,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::Notifications, [=] {
                                                  return contentForSection(SettingsSection::Notifications,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::LauncherClipboard, [=] {
                                                  return contentForSection(SettingsSection::LauncherClipboard,
-                                                                          wmValues, shellValues, setValue);
+                                                                          wmValues, shellValues, filesValues, setValue);
                                                }),
                                                Case(SettingsSection::About, [] { return aboutPage(); }),
 	                                           })}.padding(SettingsTheme::kMainPadV, SettingsTheme::kMainPadH,
 	                                                       SettingsTheme::kMainPadV, SettingsTheme::kMainPadH))}
 	                                       .flex(1.f, 1.f, 0.f),
-	                                   settingsActionBar(wmValues, shellValues, savedWmValues, savedShellValues,
+	                                   settingsActionBar(wmValues, shellValues, filesValues,
+	                                                     savedWmValues, savedShellValues, savedFilesValues,
 	                                                     statusText, save, revert, reset))}
 	                               .flex(1.f, 1.f, 0.f))}
 	                       .flex(1.f, 1.f, 0.f))};

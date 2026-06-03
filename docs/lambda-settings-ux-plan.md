@@ -1,11 +1,11 @@
 # Lambda Settings UX plan
 
 **Last updated:** 2026-06-03
-**Status:** Active design and organization plan for `lambda-settings`, integrated with the P2 Settings roadmap.
+**Status:** Implemented visual and organization pass for `lambda-settings`, retained as the reference for future Settings expansion.
 
 ## Purpose
 
-`lambda-settings` already has the important backend pieces: owner-config schemas, validation, TOML round trips, default generation, dirty/revert/reset, and save/error handling. The remaining product gap is that the app reads visually like a config editor or demo surface instead of a mature system settings app.
+`lambda-settings` already has the important backend pieces: owner-config schemas, validation, TOML round trips, default generation, dirty/revert/reset, and save/error handling. The 2026 visual pass moved the app from a config-editor/demo surface toward a mature system settings app with card-backed groups, responsive setting rows, organized navigation, and framework theme tokens.
 
 This plan keeps Settings inside its ownership boundary: Settings edits owner config files and shows truthful system/about status. Window Manager, Shell, Files, Terminal, and shared services remain the runtime authorities.
 
@@ -15,13 +15,14 @@ This plan keeps Settings inside its ownership boundary: Settings edits owner con
 - It reads and writes Window Manager and Shell owner config files directly.
 - Schema metadata exists for the displayed settings and drives editor controls.
 - Writes are atomic and validated; unknown keys are preserved where practical.
-- Current sections expose Appearance, Display, Keyboard, Desktop, Dock & Panel, Notifications, General, and About.
-- The app has a useful skeleton, but its content surface is mostly heading plus transparent divided rows.
-- Several unused showcase-oriented helpers still exist in the view layer, including theme/accent/wallpaper preview code that is not wired through `contentForSection`.
+- Current sections expose General, Appearance, Files, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, and About.
+- Settings groups use reusable `Card` surfaces with quiet captions that clarify ownership/apply behavior where useful.
+- Row layout switches dynamically between wide and compact forms as the window is resized.
+- Save/revert/reset, restart-required status text, and owner-config persistence have been manually validated.
 
 ## Design direction
 
-Use the existing system-settings shell, but make the main content behave like a real settings product:
+Use the existing system-settings shell, and keep future additions aligned with the implemented real settings product:
 
 - Preserve the sidebar plus detail pane structure.
 - Convert every settings group into a reusable `Card` surface.

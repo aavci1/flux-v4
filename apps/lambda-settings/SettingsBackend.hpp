@@ -111,6 +111,7 @@ struct ThemeSelectionStatus {
 
 [[nodiscard]] std::vector<SettingSchema> windowManagerSettingsSchema();
 [[nodiscard]] std::vector<SettingSchema> shellSettingsSchema();
+[[nodiscard]] std::vector<SettingSchema> filesSettingsSchema();
 [[nodiscard]] std::map<std::string, std::string> schemaDefaults(std::vector<SettingSchema> const& schema);
 [[nodiscard]] bool schemaIdsUnique(std::vector<SettingSchema> const& schema);
 [[nodiscard]] SettingsApplySummary summarizeChangedApplyModes(std::map<std::string, std::string> const& saved,
@@ -129,14 +130,21 @@ struct ThemeSelectionStatus {
 [[nodiscard]] SettingsDocument loadShellSettings(std::string_view tomlText);
 [[nodiscard]] std::string writeShellSettings(std::string_view originalToml,
                                              std::map<std::string, std::string> const& updates);
+[[nodiscard]] SettingsDocument loadFilesSettings(std::string_view tomlText);
+[[nodiscard]] std::string writeFilesSettings(std::string_view originalToml,
+                                             std::map<std::string, std::string> const& updates);
 [[nodiscard]] bool atomicWriteFile(std::filesystem::path const& path, std::string_view contents, std::string& error);
 [[nodiscard]] std::filesystem::path windowManagerSettingsPath();
 [[nodiscard]] std::filesystem::path shellSettingsPath();
+[[nodiscard]] std::filesystem::path filesSettingsPath();
 [[nodiscard]] SettingsFileLoadResult loadWindowManagerSettingsFile(std::filesystem::path path = {});
 [[nodiscard]] SettingsFileLoadResult loadShellSettingsFile(std::filesystem::path path = {});
+[[nodiscard]] SettingsFileLoadResult loadFilesSettingsFile(std::filesystem::path path = {});
 [[nodiscard]] SettingsFileSaveResult saveWindowManagerSettingsFile(std::map<std::string, std::string> const& updates,
                                                                    std::filesystem::path path = {});
 [[nodiscard]] SettingsFileSaveResult saveShellSettingsFile(std::map<std::string, std::string> const& updates,
+                                                           std::filesystem::path path = {});
+[[nodiscard]] SettingsFileSaveResult saveFilesSettingsFile(std::map<std::string, std::string> const& updates,
                                                            std::filesystem::path path = {});
 
 [[nodiscard]] std::vector<std::string> discoverThemeNames(std::vector<std::filesystem::path> const& roots);

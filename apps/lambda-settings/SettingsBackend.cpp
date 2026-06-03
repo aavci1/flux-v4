@@ -204,6 +204,16 @@ void setShellTomlValue(toml::table& table, std::string const& key, std::string c
   else if (key == "launcher.show_categories") setBool("launcher", "show_categories");
 }
 
+void setFilesTomlValue(toml::table& table, std::string const& key, std::string const& value) {
+  if (key == "show_hidden" || key == "sort_ascending" || key == "show_trash") {
+    table.insert_or_assign(key, lowerAscii(value) == "true" || value == "1");
+  } else if (key == "view_mode" || key == "sort_key") {
+    table.insert_or_assign(key, value);
+  } else if (key == "icon_size") {
+    table.insert_or_assign(key, static_cast<std::int64_t>(std::strtoll(value.c_str(), nullptr, 10)));
+  }
+}
+
 std::string tomlString(toml::table const& table, char const* key) {
   if (auto value = table[key].value<std::string>()) return *value;
   return {};
@@ -397,6 +407,24 @@ std::vector<SettingSchema> shellSettingsSchema() {
   };
 }
 
+std::vector<SettingSchema> filesSettingsSchema() {
+  return {
+      {.id = "show_hidden", .label = "Show hidden files", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::NextWindow, .defaultValue = "false"},
+      {.id = "view_mode", .label = "Default view", .type = SettingType::Enum,
+       .applyMode = ApplyMode::NextWindow, .enumValues = {"grid", "list"}, .defaultValue = "grid"},
+      {.id = "sort_key", .label = "Sort by", .type = SettingType::Enum,
+       .applyMode = ApplyMode::NextWindow, .enumValues = {"name", "kind", "size", "modified_time"},
+       .defaultValue = "name"},
+      {.id = "sort_ascending", .label = "Sort ascending", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::NextWindow, .defaultValue = "true"},
+      {.id = "icon_size", .label = "Grid icon size", .type = SettingType::Integer,
+       .applyMode = ApplyMode::NextWindow, .defaultValue = "96"},
+      {.id = "show_trash", .label = "Show Trash", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::NextWindow, .defaultValue = "true"},
+  };
+}
+
 std::map<std::string, std::string> schemaDefaults(std::vector<SettingSchema> const& schema) {
   std::map<std::string, std::string> defaults;
   for (auto const& setting : schema) defaults[setting.id] = setting.defaultValue;
@@ -446,7 +474,9 @@ bool validateSettingValue(SettingSchema const& schema, std::string const& value)
   }
   case SettingType::Integer: {
     auto parsed = parseDouble(value);
-    return parsed && std::floor(*parsed) == *parsed;
+    if (!parsed || std::floor(*parsed) != *parsed) return false;
+    if (schema.id == "icon_size") return *parsed >= 32.0 && *parsed <= 256.0;
+    return true;
   }
   case SettingType::Float: {
     auto parsed = parseDouble(value);
@@ -612,6 +642,40 @@ std::string writeShellSettings(std::string_view originalToml,
   return out.str();
 }
 
+SettingsDocument loadFilesSettings(std::string_view tomlText) {
+  SettingsDocument document{.originalToml = std::string(tomlText)};
+  toml::table table;
+  try {
+    table = toml::parse(std::string(tomlText));
+  } catch (...) {
+    return document;
+  }
+  auto setIf = [&](std::string key, std::string value) {
+    if (!value.empty()) document.values[std::move(key)] = std::move(value);
+  };
+  setIf("show_hidden", tomlBool(table, "show_hidden"));
+  setIf("view_mode", tomlString(table, "view_mode"));
+  setIf("sort_key", tomlString(table, "sort_key"));
+  setIf("sort_ascending", tomlBool(table, "sort_ascending"));
+  setIf("icon_size", tomlNumber(table, "icon_size"));
+  setIf("show_trash", tomlBool(table, "show_trash"));
+  return document;
+}
+
+std::string writeFilesSettings(std::string_view originalToml,
+                               std::map<std::string, std::string> const& updates) {
+  toml::table table;
+  try {
+    table = toml::parse(std::string(originalToml));
+  } catch (...) {
+    table = toml::table{};
+  }
+  for (auto const& [key, value] : updates) setFilesTomlValue(table, key, value);
+  std::ostringstream out;
+  out << table;
+  return out.str();
+}
+
 bool atomicWriteFile(std::filesystem::path const& path, std::string_view contents, std::string& error) {
   std::error_code ec;
   std::filesystem::create_directories(path.parent_path(), ec);
@@ -650,6 +714,11 @@ std::filesystem::path windowManagerSettingsPath() {
 std::filesystem::path shellSettingsPath() {
   if (auto env = pathFromEnv("LAMBDA_SHELL_CONFIG"); !env.empty()) return env;
   return configHomeDirectory() / "lambda-shell" / "config.toml";
+}
+
+std::filesystem::path filesSettingsPath() {
+  if (auto env = pathFromEnv("LAMBDA_FILES_CONFIG"); !env.empty()) return env;
+  return configHomeDirectory() / "lambda-files" / "config.toml";
 }
 
 SettingsFileLoadResult loadWindowManagerSettingsFile(std::filesystem::path path) {
@@ -698,6 +767,29 @@ SettingsFileLoadResult loadShellSettingsFile(std::filesystem::path path) {
   return result;
 }
 
+SettingsFileLoadResult loadFilesSettingsFile(std::filesystem::path path) {
+  if (path.empty()) path = filesSettingsPath();
+  SettingsFileLoadResult result{.path = path};
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    std::string const defaults = writeFilesSettings("", nonEmptyDefaults(filesSettingsSchema()));
+    if (!atomicWriteFile(path, defaults, result.error)) return result;
+    result.createdDefault = true;
+    result.document = loadFilesSettings(defaults);
+    return result;
+  }
+
+  std::ifstream in(path);
+  if (!in) {
+    result.error = "Could not read settings file.";
+    return result;
+  }
+  std::string const contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  result.document = loadFilesSettings(contents);
+  result.loaded = true;
+  return result;
+}
+
 SettingsFileSaveResult saveWindowManagerSettingsFile(std::map<std::string, std::string> const& updates,
                                                      std::filesystem::path path) {
   if (path.empty()) path = windowManagerSettingsPath();
@@ -722,6 +814,20 @@ SettingsFileSaveResult saveShellSettingsFile(std::map<std::string, std::string> 
   if (!loaded.error.empty()) return {.path = path, .error = loaded.error};
   std::string error;
   std::string const contents = writeShellSettings(loaded.document.originalToml, updates);
+  if (!atomicWriteFile(path, contents, error)) return {.path = path, .error = error};
+  return {.ok = true, .path = path};
+}
+
+SettingsFileSaveResult saveFilesSettingsFile(std::map<std::string, std::string> const& updates,
+                                             std::filesystem::path path) {
+  if (path.empty()) path = filesSettingsPath();
+  if (auto error = validationError(updates, filesSettingsSchema())) {
+    return {.path = path, .error = *error};
+  }
+  SettingsFileLoadResult loaded = loadFilesSettingsFile(path);
+  if (!loaded.error.empty()) return {.path = path, .error = loaded.error};
+  std::string error;
+  std::string const contents = writeFilesSettings(loaded.document.originalToml, updates);
   if (!atomicWriteFile(path, contents, error)) return {.path = path, .error = error};
   return {.ok = true, .path = path};
 }

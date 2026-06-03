@@ -298,13 +298,16 @@ Current implementation:
 - Writes are atomic and validated; unknown keys are preserved where practical.
 - Appearance edits real Window Manager background/wallpaper/glass and Shell icon/reduced-motion config.
 - Display edits selected output and scale config.
-- Keyboard edits keyboard layout/repeat and screenshot/close shortcuts.
-- Desktop edits animations, hardware cursor, cursor theme/size, idle blank timeout, and screenshot shortcuts.
+- Input edits keyboard layout/repeat and close-window shortcuts.
+- Windows edits animations, hardware cursor, cursor theme/size, idle blank timeout, and screenshot shortcuts.
+- Files edits `lambda-files` preferences for hidden files, default view, sorting, grid icon size, and Trash visibility.
 - Dock & Panel edits Shell dock and quick-settings values.
-- Notifications edits Shell notification and clipboard-history config, while Launcher schema/config exists in the backend but is not yet exposed as its own page.
+- Notifications edits Shell notification config.
+- Launcher & Clipboard edits Shell launcher and clipboard-history config.
 - About/System shows real or explicitly unavailable values.
-- Save/revert/reset/error UX exists; restart-required rows are visible.
-- The app has the right Settings skeleton, but the current content design reads more like a config editor: section headings plus transparent divided rows, bespoke glass colors, and some unused demo-style appearance helpers.
+- Save/revert/reset/error UX exists; restart-required rows and save-status messaging are visible.
+- The app uses card-backed settings groups, stable responsive setting rows, a calmer system footer, framework theme tokens, and navigation organized around user intent.
+- `LAMBDA_DEBUG_LAYOUT=1` validation is usable for Settings after removing measurement-time flex-grow debug noise.
 - The detailed UX plan lives in [lambda-settings-ux-plan.md](lambda-settings-ux-plan.md).
 
 Open gate:
@@ -312,21 +315,12 @@ Open gate:
 - Ensure hot-reloadable changes apply live where the owning process supports them.
 - Keep apply-mode labels accurate: `Applies after Save` versus `Restart required`.
 - Avoid claiming unavailable system providers are live.
-- Convert settings groups into real `Card` surfaces using the framework `Card` component and the visual language already proven in `toggle-demo`/`card-demo`.
-- Update settings rows to use stable internal padding, label/detail hierarchy, quiet secondary text, and right-aligned controls rather than transparent row lists.
-- Reorganize Settings navigation around user intent: General, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, and About.
-- Split Launcher & Clipboard out from Notifications, and expose the Shell launcher settings that already exist in the schema.
-- Rename/reframe Keyboard/Desktop content into clearer Input and Windows pages where appropriate.
-- Extend `SettingsGroup` with optional captions so cards can explain ownership/apply behavior without ad hoc page text.
-- Calm the save footer: keep staged Save/Revert/Reset semantics, but make status placement and reset styling feel like a system footer rather than a demo strip.
-- Replace bespoke glass surface tokens with `ThemeKey`/framework tokens where practical, leaving only app-specific layout constants in `SettingsTheme`.
-- Remove or wire the unused showcase-oriented helpers such as theme/accent/wallpaper preview code; no visible or retained UI should imply fake personalization settings.
-- Add Settings UI later for Files preferences, Terminal preferences, MIME/default-app editing, and shared-service settings after those backends exist.
+- Add Settings UI later for Terminal preferences, MIME/default-app editing, and shared-service settings after those backends exist.
 
 Validation:
 
-- Targeted Settings tests pass for schema, validation, dirty/revert/reset, Window Manager and Shell config round trips, unknown key preservation, atomic write failure, owner config file helpers, shortcut conflict detection, wallpaper path normalization, theme discovery, and system info fixtures.
-- Manual Settings validation must cover launch, scrolling, compact layout, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, and owner-config persistence.
+- Targeted Settings tests pass for schema, validation, dirty/revert/reset, Window Manager, Shell, and Files config round trips, unknown key preservation, atomic write failure, owner config file helpers, shortcut conflict detection, wallpaper path normalization, theme discovery, and system info fixtures.
+- Manual Settings validation has covered launch, scrolling, compact layout, Appearance, Files, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, and owner-config persistence.
 
 Deferred:
 

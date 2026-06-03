@@ -103,6 +103,18 @@ TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
   CHECK(defaults.at("launcher.empty_query") == "recommended");
 }
 
+TEST_CASE("Settings Files schema descriptors are unique and expose defaults") {
+  auto schema = lambda_settings::filesSettingsSchema();
+  CHECK(lambda_settings::schemaIdsUnique(schema));
+  auto defaults = lambda_settings::schemaDefaults(schema);
+  CHECK(defaults.at("show_hidden") == "false");
+  CHECK(defaults.at("view_mode") == "grid");
+  CHECK(defaults.at("sort_key") == "name");
+  CHECK(defaults.at("sort_ascending") == "true");
+  CHECK(defaults.at("icon_size") == "96");
+  CHECK(defaults.at("show_trash") == "true");
+}
+
 TEST_CASE("Settings validation rejects invalid color number enum path and shortcut values") {
   CHECK(lambda_settings::validateSettingValue(schema("color", lambda_settings::SettingType::Color), "#aabbcc"));
   CHECK_FALSE(lambda_settings::validateSettingValue(schema("color", lambda_settings::SettingType::Color), "blue"));
@@ -252,6 +264,42 @@ max_results = 12
   CHECK(emptyQueryWritten);
 }
 
+TEST_CASE("Settings Files config round trip preserves unknown keys") {
+  std::string const input = R"(
+unknown_root = "keep"
+show_hidden = false
+view_mode = "grid"
+sort_key = "name"
+sort_ascending = true
+icon_size = 96
+show_trash = true
+)";
+  auto loaded = lambda_settings::loadFilesSettings(input);
+  CHECK(loaded.values.at("show_hidden") == "false");
+  CHECK(loaded.values.at("view_mode") == "grid");
+  CHECK(loaded.values.at("sort_key") == "name");
+  CHECK(loaded.values.at("sort_ascending") == "true");
+  CHECK(loaded.values.at("icon_size") == "96");
+  CHECK(loaded.values.at("show_trash") == "true");
+
+  std::string output = lambda_settings::writeFilesSettings(input, {
+      {"show_hidden", "true"},
+      {"view_mode", "list"},
+      {"sort_key", "modified_time"},
+      {"sort_ascending", "false"},
+      {"icon_size", "128"},
+      {"show_trash", "false"},
+  });
+  CHECK(output.find("unknown_root") != std::string::npos);
+  CHECK(output.find("show_hidden = true") != std::string::npos);
+  CHECK(output.find("view_mode") != std::string::npos);
+  CHECK(output.find("list") != std::string::npos);
+  CHECK(output.find("modified_time") != std::string::npos);
+  CHECK(output.find("sort_ascending = false") != std::string::npos);
+  CHECK(output.find("icon_size = 128") != std::string::npos);
+  CHECK(output.find("show_trash = false") != std::string::npos);
+}
+
 TEST_CASE("Settings atomic write replaces file and reports errors") {
   auto root = tempRoot("lambda-settings-atomic-test");
   auto path = root / "config.toml";
@@ -291,16 +339,20 @@ TEST_CASE("Settings atomic write failure leaves original file intact") {
 TEST_CASE("Settings file helpers resolve create load and save owner configs") {
   ScopedEnv wmConfig("LAMBDA_WINDOW_MANAGER_CONFIG");
   ScopedEnv shellConfig("LAMBDA_SHELL_CONFIG");
+  ScopedEnv filesConfig("LAMBDA_FILES_CONFIG");
   ScopedEnv xdgConfig("XDG_CONFIG_HOME");
   auto root = tempRoot("lambda-settings-file-helper-test");
   auto wmPath = root / "wm" / "config.toml";
   auto shellPath = root / "shell" / "config.toml";
+  auto filesPath = root / "files" / "config.toml";
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", wmPath.c_str(), 1);
   setenv("LAMBDA_SHELL_CONFIG", shellPath.c_str(), 1);
+  setenv("LAMBDA_FILES_CONFIG", filesPath.c_str(), 1);
   setenv("XDG_CONFIG_HOME", (root / "xdg").c_str(), 1);
 
   CHECK(lambda_settings::windowManagerSettingsPath() == wmPath);
   CHECK(lambda_settings::shellSettingsPath() == shellPath);
+  CHECK(lambda_settings::filesSettingsPath() == filesPath);
 
   auto createdWm = lambda_settings::loadWindowManagerSettingsFile();
   CHECK(createdWm.createdDefault);
@@ -346,6 +398,36 @@ TEST_CASE("Settings file helpers resolve create load and save owner configs") {
   auto invalidShell = lambda_settings::saveShellSettingsFile({{"dock.position", "floating"}});
   CHECK_FALSE(invalidShell.ok);
   CHECK(invalidShell.error.find("Dock position") != std::string::npos);
+
+  auto createdFiles = lambda_settings::loadFilesSettingsFile();
+  CHECK(createdFiles.createdDefault);
+  CHECK(createdFiles.path == filesPath);
+  CHECK(createdFiles.error.empty());
+  CHECK(std::filesystem::exists(filesPath));
+  CHECK(createdFiles.document.values.at("view_mode") == "grid");
+  CHECK(createdFiles.document.values.at("icon_size") == "96");
+
+  auto savedFiles = lambda_settings::saveFilesSettingsFile({
+      {"show_hidden", "true"},
+      {"view_mode", "list"},
+      {"sort_key", "kind"},
+      {"sort_ascending", "false"},
+      {"icon_size", "128"},
+      {"show_trash", "false"},
+  });
+  CHECK(savedFiles.ok);
+  auto loadedFiles = lambda_settings::loadFilesSettingsFile();
+  CHECK(loadedFiles.loaded);
+  CHECK(loadedFiles.document.values.at("show_hidden") == "true");
+  CHECK(loadedFiles.document.values.at("view_mode") == "list");
+  CHECK(loadedFiles.document.values.at("sort_key") == "kind");
+  CHECK(loadedFiles.document.values.at("sort_ascending") == "false");
+  CHECK(loadedFiles.document.values.at("icon_size") == "128");
+  CHECK(loadedFiles.document.values.at("show_trash") == "false");
+
+  auto invalidFiles = lambda_settings::saveFilesSettingsFile({{"icon_size", "12"}});
+  CHECK_FALSE(invalidFiles.ok);
+  CHECK(invalidFiles.error.find("Grid icon size") != std::string::npos);
 
   std::filesystem::remove_all(root);
 }
