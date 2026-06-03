@@ -2122,6 +2122,12 @@ public:
         Point p00 = state_.transform.apply({glyphRect.x, glyphRect.y});
         Point p10 = state_.transform.apply({glyphRect.x + glyphRect.width, glyphRect.y});
         Point p01 = state_.transform.apply({glyphRect.x, glyphRect.y + glyphRect.height});
+        Point const axisX = {p10.x - p00.x, p10.y - p00.y};
+        Point const axisY = {p01.x - p00.x, p01.y - p00.y};
+        p00.x = std::round(p00.x * dpiScaleX_) / dpiScaleX_;
+        p00.y = std::round(p00.y * dpiScaleY_) / dpiScaleY_;
+        p10 = {p00.x + axisX.x, p00.y + axisX.y};
+        p01 = {p00.x + axisY.x, p00.y + axisY.y};
         QuadInstance q{};
         q.rect[0] = 0.f;
         q.rect[1] = 0.f;
