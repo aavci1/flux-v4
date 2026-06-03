@@ -54,6 +54,10 @@ std::optional<int> WaylandServer::snapPreviewWakeDelayMs() const {
   return impl_->snapPreviewWakeDelayMs();
 }
 
+bool WaylandServer::hasPendingFrameCallbacks() const noexcept {
+  return impl_->hasPendingFrameCallbacks();
+}
+
 std::uint64_t WaylandServer::contentSerial() const noexcept {
   return impl_->contentSerial_;
 }

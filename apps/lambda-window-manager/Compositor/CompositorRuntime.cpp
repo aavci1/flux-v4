@@ -1705,7 +1705,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!presenter->atomicPresenter() || !atomicFrameDirty) return false;
       if (forceRender || animationFrameNeededNow || screenshotFlashFrameNeededNow ||
           snapPreviewFrameNeededNow || inputHardwareCursorFrameRequiredNow ||
-          inputRenderRequiredNow || configReloadedNow) {
+          inputRenderRequiredNow || configReloadedNow || wayland.hasPendingFrameCallbacks()) {
         return false;
       }
 

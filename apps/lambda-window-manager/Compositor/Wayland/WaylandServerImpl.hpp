@@ -127,6 +127,7 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
   [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
+  [[nodiscard]] bool hasPendingFrameCallbacks() const noexcept;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
   void consumeSurfaceDamage(std::uint64_t surfaceId, std::uint64_t serial);

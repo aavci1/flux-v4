@@ -212,6 +212,14 @@ bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
   });
 }
 
+bool WaylandServer::Impl::hasPendingFrameCallbacks() const noexcept {
+  return std::any_of(surfaces_.begin(), surfaces_.end(), [this](auto const& surface) {
+    return surface &&
+           !hiddenFullscreenShellPanel(*this, surface.get()) &&
+           (!surface->frameCallbacks.empty() || !surface->pendingFrameCallbacks.empty());
+  });
+}
+
 std::uint64_t dmabufBufferIdForResource(WaylandServer::Impl const& server, wl_resource* resource) {
   auto const found = std::find_if(server.dmabufBuffers_.begin(),
                                   server.dmabufBuffers_.end(),
