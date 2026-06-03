@@ -7,6 +7,10 @@
 #include <Lambda/Graphics/Path.hpp>
 #include <Lambda/Graphics/TextLayoutOptions.hpp>
 
+#if LAMBDA_VULKAN
+#include "Graphics/Vulkan/VulkanCanvas.hpp"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -88,33 +92,38 @@ void drawGlassMaterialFrame(Canvas& canvas,
   float const right = std::max(0.f, frame.x + frame.width - (cutout.x + cutout.width));
   float const bottom = std::max(0.f, frame.y + frame.height - (cutout.y + cutout.height));
   if (blurRadius > 0.f) {
-    if (top > 0.f) {
-      canvas.drawBackdropBlurCached(Rect::sharp(frame.x, frame.y, frame.width, top),
-                                    frame,
-                                    blurRadius,
-                                    Colors::transparent,
-                                    CornerRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f});
-    }
-    if (left > 0.f) {
-      canvas.drawBackdropBlurCached(Rect::sharp(frame.x, cutout.y, left, cutout.height),
-                                    frame,
-                                    blurRadius,
-                                    Colors::transparent,
-                                    CornerRadius{});
-    }
-    if (right > 0.f) {
-      canvas.drawBackdropBlurCached(Rect::sharp(cutout.x + cutout.width, cutout.y, right, cutout.height),
-                                    frame,
-                                    blurRadius,
-                                    Colors::transparent,
-                                    CornerRadius{});
-    }
-    if (bottom > 0.f) {
-      canvas.drawBackdropBlurCached(Rect::sharp(frame.x, cutout.y + cutout.height, frame.width, bottom),
-                                    frame,
-                                    blurRadius,
-                                    Colors::transparent,
-                                    CornerRadius{0.f, 0.f, frameRadius.bottomRight, frameRadius.bottomLeft});
+#if LAMBDA_VULKAN
+    if (!drawVulkanBackdropBlurFrame(&canvas, frame, frameRadius, cutout, blurRadius, Colors::transparent))
+#endif
+    {
+      if (top > 0.f) {
+        canvas.drawBackdropBlurCached(Rect::sharp(frame.x, frame.y, frame.width, top),
+                                      frame,
+                                      blurRadius,
+                                      Colors::transparent,
+                                      CornerRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f});
+      }
+      if (left > 0.f) {
+        canvas.drawBackdropBlurCached(Rect::sharp(frame.x, cutout.y, left, cutout.height),
+                                      frame,
+                                      blurRadius,
+                                      Colors::transparent,
+                                      CornerRadius{});
+      }
+      if (right > 0.f) {
+        canvas.drawBackdropBlurCached(Rect::sharp(cutout.x + cutout.width, cutout.y, right, cutout.height),
+                                      frame,
+                                      blurRadius,
+                                      Colors::transparent,
+                                      CornerRadius{});
+      }
+      if (bottom > 0.f) {
+        canvas.drawBackdropBlurCached(Rect::sharp(frame.x, cutout.y + cutout.height, frame.width, bottom),
+                                      frame,
+                                      blurRadius,
+                                      Colors::transparent,
+                                      CornerRadius{0.f, 0.f, frameRadius.bottomRight, frameRadius.bottomLeft});
+      }
     }
   }
 
@@ -228,7 +237,7 @@ void drawDefaultChrome(Canvas& canvas,
   drawGlassMaterialFrame(canvas,
                          windowFrameRect(surface),
                          frameRadius,
-                         windowVisibleContentRect(surface, chrome.contentInsetWidth),
+                         windowVisibleContentRect(surface, chrome.contentInsetWidth, canvas.dpiScale()),
                          windowVisibleContentCornerRadius(surface, frameRadius, chrome.contentInsetWidth),
                          chrome);
 

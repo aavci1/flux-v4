@@ -6,6 +6,7 @@
 #include <Lambda/Graphics/Styles.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace lambda::compositor {
 
@@ -65,27 +66,38 @@ inline float windowContentChromeInsetWidth(CommittedSurfaceSnapshot const& surfa
   return std::max(0.f, configuredInsetWidth);
 }
 
-inline Rect windowVisibleContentRect(CommittedSurfaceSnapshot const& surface, float configuredInsetWidth) {
+inline Rect windowVisibleContentRect(CommittedSurfaceSnapshot const& surface,
+                                     float configuredInsetWidth,
+                                     float dpiScale = 1.f) {
   Rect const content = windowContentRect(surface);
   float const inset = windowContentChromeInsetWidth(surface, configuredInsetWidth);
   float const clampedInset = std::clamp(inset, 0.f, std::min(content.width * 0.5f, content.height));
-  return Rect::sharp(content.x + clampedInset,
-                     content.y + clampedInset,
-                     std::max(0.f, content.width - clampedInset * 2.f),
-                     std::max(0.f, content.height - clampedInset * 2.f));
+  float const left = content.x + clampedInset;
+  float const top = content.y + clampedInset;
+  float const right = content.x + content.width - clampedInset;
+  float const bottom = content.y + content.height - clampedInset;
+  float const scale = std::max(1.f, dpiScale);
+  if (clampedInset <= 0.f || scale <= 1.f) {
+    return Rect::sharp(left, top, std::max(0.f, right - left), std::max(0.f, bottom - top));
+  }
+  float const overlap = 1.f / scale;
+  float const snappedLeft = std::floor(left * scale) / scale;
+  float const snappedTop = std::floor(top * scale) / scale;
+  float const snappedRight = std::ceil(right * scale) / scale + overlap;
+  float const snappedBottom = std::ceil(bottom * scale) / scale + overlap;
+  return Rect::sharp(snappedLeft,
+                     snappedTop,
+                     std::max(0.f, snappedRight - snappedLeft),
+                     std::max(0.f, snappedBottom - snappedTop));
 }
 
 inline CornerRadius windowVisibleContentCornerRadius(CommittedSurfaceSnapshot const& surface,
                                                     CornerRadius const& frameRadius,
                                                     float configuredInsetWidth) {
-  float const inset = windowContentChromeInsetWidth(surface, configuredInsetWidth);
-  CornerRadius const contentRadius = windowContentCornerRadius(surface, frameRadius);
-  return CornerRadius{
-      std::max(0.f, contentRadius.topLeft - inset),
-      std::max(0.f, contentRadius.topRight - inset),
-      std::max(0.f, contentRadius.bottomRight - inset),
-      std::max(0.f, contentRadius.bottomLeft - inset),
-  };
+  (void)surface;
+  (void)frameRadius;
+  (void)configuredInsetWidth;
+  return CornerRadius{};
 }
 
 inline WindowShadowLayerGeometry windowShadowLayerGeometry(Rect const& frameRect,

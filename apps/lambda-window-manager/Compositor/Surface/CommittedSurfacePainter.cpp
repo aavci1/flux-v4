@@ -465,7 +465,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   float const titleBarHeight = windowExternalTitleBarHeight(surface);
   bool const cutoutChrome = windowUsesCutoutChrome(surface);
   CornerRadius const windowCorners = chrome.windowCornerRadius;
-  CornerRadius const contentCorners = windowContentCornerRadius(surface, windowCorners);
+  CornerRadius const contentCorners{};
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
   float const openProgress = animationsEnabled
@@ -514,8 +514,8 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                         ? static_cast<float>(surface.destinationHeight)
                                         : windowHeight;
   Rect const fullContentRect = windowContentRect(surface);
-  Rect const visibleContentRect = windowVisibleContentRect(surface, chrome.contentInsetWidth);
-  CornerRadius const visibleContentCorners = windowVisibleContentCornerRadius(surface, windowCorners, chrome.contentInsetWidth);
+  Rect const visibleContentRect = windowVisibleContentRect(surface, chrome.contentInsetWidth, canvas.dpiScale());
+  CornerRadius const visibleContentCorners{};
   bool const systemExternalChrome = !cutoutChrome && windowExternalTitleBarHeight(surface) > 0.f;
   if (!systemExternalChrome) {
     drawSurfaceBackgroundBlur(canvas, surface, visibleContentRect, visibleContentCorners);

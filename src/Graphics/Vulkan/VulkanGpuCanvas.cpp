@@ -2248,33 +2248,9 @@ public:
     if (!state_.clip.intersects(bounds))
       return;
 
-    Point p00 = state_.transform.apply({rect.x, rect.y});
-    Point p10 = state_.transform.apply({rect.x + rect.width, rect.y});
-    Point p01 = state_.transform.apply({rect.x, rect.y + rect.height});
-    QuadInstance q{};
-    q.rect[0] = 0.f;
-    q.rect[1] = 0.f;
-    q.rect[2] = rect.width;
-    q.rect[3] = rect.height;
-    q.axisX[0] = p00.x;
-    q.axisX[1] = p00.y;
-    q.axisX[2] = p10.x - p00.x;
-    q.axisX[3] = p10.y - p00.y;
-    q.axisY[0] = p01.x - p00.x;
-    q.axisY[1] = p01.y - p00.y;
-    q.uv[0] = p00.x / std::max(1.f, static_cast<float>(width_));
-    q.uv[1] = p00.y / std::max(1.f, static_cast<float>(height_));
-    q.uv[2] = p10.x / std::max(1.f, static_cast<float>(width_));
-    q.uv[3] = p01.y / std::max(1.f, static_cast<float>(height_));
-    putColor(q.color, tint, state_.opacity);
-    CornerRadius cr = clampRadii(corners, rect.width, rect.height);
-    q.radii[0] = cr.topLeft;
-    q.radii[1] = cr.topRight;
-    q.radii[2] = cr.bottomRight;
-    q.radii[3] = cr.bottomLeft;
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
-    target.quads.push_back(q);
+    appendBackdropBlurQuadInstance(target, rect, tint, corners);
     DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, 1);
     op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
     Rect const cacheBounds = transformedBounds(cacheRect);
@@ -2283,6 +2259,65 @@ public:
       op.hasBlurCacheClip = true;
     }
     appendDrawOp(target.ops, op);
+  }
+
+  bool drawBackdropBlurFrame(Rect const& frame,
+                             CornerRadius const& frameRadius,
+                             Rect const& cutout,
+                             float radius,
+                             Color tint) {
+    if (radius <= 0.f || frame.width <= 0.f || frame.height <= 0.f) {
+      return false;
+    }
+    if (!state_.clip.intersects(transformedBounds(frame))) {
+      return true;
+    }
+
+    float const left = std::clamp(cutout.x - frame.x, 0.f, frame.width);
+    float const top = std::clamp(cutout.y - frame.y, 0.f, frame.height);
+    float const right = std::clamp(frame.x + frame.width - (cutout.x + cutout.width), 0.f, frame.width);
+    float const bottom = std::clamp(frame.y + frame.height - (cutout.y + cutout.height), 0.f, frame.height);
+
+    RecordingTarget target = recordingTarget();
+    std::uint32_t const first = static_cast<std::uint32_t>(target.quads.size());
+    if (top > 0.f) {
+      appendBackdropBlurQuadInstance(target,
+                                     Rect::sharp(frame.x, frame.y, frame.width, top),
+                                     tint,
+                                     CornerRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f});
+    }
+    if (left > 0.f && cutout.height > 0.f) {
+      appendBackdropBlurQuadInstance(target,
+                                     Rect::sharp(frame.x, cutout.y, left, cutout.height),
+                                     tint,
+                                     CornerRadius{});
+    }
+    if (right > 0.f && cutout.height > 0.f) {
+      appendBackdropBlurQuadInstance(target,
+                                     Rect::sharp(cutout.x + cutout.width, cutout.y, right, cutout.height),
+                                     tint,
+                                     CornerRadius{});
+    }
+    if (bottom > 0.f) {
+      appendBackdropBlurQuadInstance(target,
+                                     Rect::sharp(frame.x, cutout.y + cutout.height, frame.width, bottom),
+                                     tint,
+                                     CornerRadius{0.f, 0.f, frameRadius.bottomRight, frameRadius.bottomLeft});
+    }
+
+    std::uint32_t const count = static_cast<std::uint32_t>(target.quads.size()) - first;
+    if (count == 0) {
+      return true;
+    }
+    DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, count);
+    op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
+    Rect const cacheBounds = transformedBounds(frame);
+    if (cacheBounds.width > 0.f && cacheBounds.height > 0.f) {
+      op.blurCacheClip = cacheBounds;
+      op.hasBlurCacheClip = true;
+    }
+    appendDrawOp(target.ops, op);
+    return true;
   }
 
   bool drawCalloutMaterial(Rect const &bounds,
@@ -2451,6 +2486,37 @@ private:
     return RecordingTarget{ops_, quads_, rects_, pathVerts_};
   }
 
+  void appendBackdropBlurQuadInstance(RecordingTarget& target,
+                                      Rect const& rect,
+                                      Color tint,
+                                      CornerRadius const& corners) const {
+    Point p00 = state_.transform.apply({rect.x, rect.y});
+    Point p10 = state_.transform.apply({rect.x + rect.width, rect.y});
+    Point p01 = state_.transform.apply({rect.x, rect.y + rect.height});
+    QuadInstance q{};
+    q.rect[0] = 0.f;
+    q.rect[1] = 0.f;
+    q.rect[2] = rect.width;
+    q.rect[3] = rect.height;
+    q.axisX[0] = p00.x;
+    q.axisX[1] = p00.y;
+    q.axisX[2] = p10.x - p00.x;
+    q.axisX[3] = p10.y - p00.y;
+    q.axisY[0] = p01.x - p00.x;
+    q.axisY[1] = p01.y - p00.y;
+    q.uv[0] = p00.x / std::max(1.f, static_cast<float>(width_));
+    q.uv[1] = p00.y / std::max(1.f, static_cast<float>(height_));
+    q.uv[2] = p10.x / std::max(1.f, static_cast<float>(width_));
+    q.uv[3] = p01.y / std::max(1.f, static_cast<float>(height_));
+    putColor(q.color, tint, state_.opacity);
+    CornerRadius cr = clampRadii(corners, rect.width, rect.height);
+    q.radii[0] = cr.topLeft;
+    q.radii[1] = cr.topRight;
+    q.radii[2] = cr.bottomRight;
+    q.radii[3] = cr.bottomLeft;
+    target.quads.push_back(q);
+  }
+
   void registerCanvas() {
     std::lock_guard lock(gCanvasRegistryMutex);
     gCanvases.push_back(this);
@@ -2501,6 +2567,8 @@ private:
            a.texture == b.texture &&
            a.first + a.count == b.first &&
            sameRect(a.clip, b.clip) &&
+           a.hasBlurCacheClip == b.hasBlurCacheClip &&
+           (!a.hasBlurCacheClip || sameRect(a.blurCacheClip, b.blurCacheClip)) &&
            a.externalStorageDescriptor == b.externalStorageDescriptor &&
            a.externalVertexBuffer == b.externalVertexBuffer &&
            a.premultipliedAlpha == b.premultipliedAlpha &&
@@ -5375,6 +5443,16 @@ bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
 bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan ? vulkan->setTransparentSurface(enabled) : false;
+}
+
+bool drawVulkanBackdropBlurFrame(Canvas* canvas,
+                                 Rect const& frame,
+                                 CornerRadius const& frameRadius,
+                                 Rect const& cutout,
+                                 float radius,
+                                 Color tint) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->drawBackdropBlurFrame(frame, frameRadius, cutout, radius, tint);
 }
 
 bool drawVulkanCalloutMaterial(Canvas* canvas,
