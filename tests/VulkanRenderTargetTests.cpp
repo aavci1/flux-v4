@@ -793,7 +793,7 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
   CHECK(capturedChannel(pixels, width, 40, 32, 2) < 180);
 }
 
-TEST_CASE("Compositor explicit glass material matches system and integrated titlebar paths") {
+TEST_CASE("Compositor system chrome material stays independent from client glass material") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();
 
@@ -901,7 +901,8 @@ TEST_CASE("Compositor explicit glass material matches system and integrated titl
   std::memcpy(pixels.data(), mapped, pixels.size());
   vkUnmapMemory(vk.device(), readback.memory);
 
-  CHECK(colorDelta(pixels, width, 44, 30, 44, 58) <= 30);
+  CHECK(colorDelta(pixels, width, 44, 30, 44, 58) > 60);
+  CHECK(colorDelta(pixels, width, 44, 30, 208, 48) > 60);
   CHECK(colorDelta(pixels, width, 44, 58, 208, 48) <= 6);
 }
 
