@@ -47,6 +47,16 @@ enum class CpuSurfaceCommitKind : std::uint8_t {
   Other,
 };
 
+enum class CpuSurfaceDrawCacheBlockReason : std::uint8_t {
+  Backend,
+  Clip,
+  Callout,
+  Material,
+  Sizing,
+  TransientChrome,
+  OpeningAnimation,
+};
+
 bool cpuTraceEnabled() noexcept;
 char const *cpuTracePath() noexcept;
 void initializeCpuSampler() noexcept;
@@ -62,6 +72,7 @@ void recordCpuDispatch(double milliseconds);
 void recordCpuLoopDecision(CpuLoopDecisionTrace const &decision);
 void recordWaylandDispatch(bool contentChanged);
 void recordSurfaceDrawCache(bool hit, double recordMilliseconds);
+void recordSurfaceDrawCacheBlock(CpuSurfaceDrawCacheBlockReason reason);
 void recordSurfaceCommit(std::uint64_t surfaceId, CpuSurfaceCommitKind kind, std::int32_t width, std::int32_t height);
 void recordShmCopy(std::size_t bytes, double milliseconds);
 void recordSurfaceImageUpload(std::size_t bytes, double milliseconds, bool created);

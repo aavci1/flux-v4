@@ -108,6 +108,13 @@ struct CpuTraceState {
   std::uint64_t surfaceDrawCacheHits = 0;
   std::uint64_t surfaceDrawCacheMisses = 0;
   double surfaceDrawRecordMs = 0.0;
+  std::uint64_t surfaceDrawCacheBlockBackend = 0;
+  std::uint64_t surfaceDrawCacheBlockClip = 0;
+  std::uint64_t surfaceDrawCacheBlockCallout = 0;
+  std::uint64_t surfaceDrawCacheBlockMaterial = 0;
+  std::uint64_t surfaceDrawCacheBlockSizing = 0;
+  std::uint64_t surfaceDrawCacheBlockTransientChrome = 0;
+  std::uint64_t surfaceDrawCacheBlockOpeningAnimation = 0;
   std::uint64_t hottestSurfaceId = 0;
   std::uint64_t hottestSurfaceCommits = 0;
   std::int32_t hottestSurfaceWidth = 0;
@@ -285,6 +292,18 @@ debug::perf::RenderCounters renderCounterDelta(debug::perf::RenderCounters const
   delta.recorderCapacityGrowths = counterDelta(current.recorderCapacityGrowths, previous.recorderCapacityGrowths);
   delta.recorderCapacityGrowthBytes =
       counterDelta(current.recorderCapacityGrowthBytes, previous.recorderCapacityGrowthBytes);
+  delta.vulkanRecordNs = counterDelta(current.vulkanRecordNs, previous.vulkanRecordNs);
+  delta.vulkanDrawOpsNs = counterDelta(current.vulkanDrawOpsNs, previous.vulkanDrawOpsNs);
+  delta.vulkanStackedBlurNs = counterDelta(current.vulkanStackedBlurNs, previous.vulkanStackedBlurNs);
+  delta.vulkanPathTessellateNs =
+      counterDelta(current.vulkanPathTessellateNs, previous.vulkanPathTessellateNs);
+  delta.vulkanDrawOpsCalls = counterDelta(current.vulkanDrawOpsCalls, previous.vulkanDrawOpsCalls);
+  delta.vulkanDrawOpsVisited = counterDelta(current.vulkanDrawOpsVisited, previous.vulkanDrawOpsVisited);
+  delta.vulkanDrawOpsSubmitted = counterDelta(current.vulkanDrawOpsSubmitted, previous.vulkanDrawOpsSubmitted);
+  delta.vulkanScissorChanges = counterDelta(current.vulkanScissorChanges, previous.vulkanScissorChanges);
+  delta.vulkanStackedOps = counterDelta(current.vulkanStackedOps, previous.vulkanStackedOps);
+  delta.vulkanPathTessellations =
+      counterDelta(current.vulkanPathTessellations, previous.vulkanPathTessellations);
   return delta;
 }
 
@@ -402,6 +421,13 @@ void resetCounters(CpuTraceState &traceState, CpuTraceClock::time_point now, dou
   traceState.surfaceDrawCacheHits = 0;
   traceState.surfaceDrawCacheMisses = 0;
   traceState.surfaceDrawRecordMs = 0.0;
+  traceState.surfaceDrawCacheBlockBackend = 0;
+  traceState.surfaceDrawCacheBlockClip = 0;
+  traceState.surfaceDrawCacheBlockCallout = 0;
+  traceState.surfaceDrawCacheBlockMaterial = 0;
+  traceState.surfaceDrawCacheBlockSizing = 0;
+  traceState.surfaceDrawCacheBlockTransientChrome = 0;
+  traceState.surfaceDrawCacheBlockOpeningAnimation = 0;
   traceState.hottestSurfaceId = 0;
   traceState.hottestSurfaceCommits = 0;
   traceState.hottestSurfaceWidth = 0;
@@ -434,6 +460,17 @@ void maybeLog(CpuTraceState &traceState) {
       static_cast<double>(renderCounters.backdropBlurPixels) * invFrames / 1'000'000.0;
   double const blurMaxCopyMp = static_cast<double>(renderCounters.backdropMaxCopyPixels) / 1'000'000.0;
   double const blurMaxMp = static_cast<double>(renderCounters.backdropMaxBlurPixels) / 1'000'000.0;
+  auto const nsPerFrameMs = [&](std::uint64_t ns) {
+    return static_cast<double>(ns) * invFrames / 1'000'000.0;
+  };
+  double const vulkanDrawOpsCallsPerFrame =
+      static_cast<double>(renderCounters.vulkanDrawOpsCalls) * invFrames;
+  double const vulkanVisitedOpsPerFrame =
+      static_cast<double>(renderCounters.vulkanDrawOpsVisited) * invFrames;
+  double const vulkanSubmittedOpsPerFrame =
+      static_cast<double>(renderCounters.vulkanDrawOpsSubmitted) * invFrames;
+  double const vulkanScissorsPerFrame =
+      static_cast<double>(renderCounters.vulkanScissorChanges) * invFrames;
 
   if (std::FILE *file = traceFile(traceState)) {
     std::fprintf(
@@ -457,8 +494,13 @@ void maybeLog(CpuTraceState &traceState) {
         "dmabuf imports=%llu failures=%llu import_ms=%.3f fallback_copies=%llu "
         "fallback_failures=%llu fallback_mb=%.1f fallback_ms=%.3f "
         "blur prepared=%llu ops=%llu quads=%llu cache_hits=%llu cache_misses=%llu "
-        "runs=%llu passes=%llu copy_mp_f=%.2f blur_mp_f=%.2f proc_max_copy_mp=%.2f proc_max_blur_mp=%.2f "
+        "runs=%llu passes=%llu copy_mp_f=%.2f blur_mp_f=%.2f "
+        "proc_max_copy_mp=%.2f proc_max_blur_mp=%.2f "
+        "vulkan_ms record=%.3f draw_ops=%.3f stacked_blur=%.3f path_tess=%.3f "
+        "vulkan_ops calls=%.2f/f visited=%.1f/f submitted=%.1f/f scissors=%.1f/f "
+        "stacked_ops=%llu path_tess_count=%llu "
         "surface_draw_cache hits=%llu misses=%llu record_ms=%.3f "
+        "surface_draw_block backend=%llu clip=%llu callout=%llu material=%llu sizing=%llu transient=%llu opening=%llu "
         "commits total=%llu state=%llu shm=%llu dmabuf=%llu empty=%llu other=%llu "
         "hot_surface=%llu hot_commits=%llu hot_size=%dx%d\n",
         seconds, cpuPercent, static_cast<unsigned long long>(traceState.loops),
@@ -515,8 +557,23 @@ void maybeLog(CpuTraceState &traceState) {
         static_cast<unsigned long long>(renderCounters.backdropBlurRuns),
         static_cast<unsigned long long>(renderCounters.backdropBlurPasses),
         blurCopyMpPerFrame, blurMpPerFrame, blurMaxCopyMp, blurMaxMp,
+        nsPerFrameMs(renderCounters.vulkanRecordNs),
+        nsPerFrameMs(renderCounters.vulkanDrawOpsNs),
+        nsPerFrameMs(renderCounters.vulkanStackedBlurNs),
+        nsPerFrameMs(renderCounters.vulkanPathTessellateNs),
+        vulkanDrawOpsCallsPerFrame, vulkanVisitedOpsPerFrame,
+        vulkanSubmittedOpsPerFrame, vulkanScissorsPerFrame,
+        static_cast<unsigned long long>(renderCounters.vulkanStackedOps),
+        static_cast<unsigned long long>(renderCounters.vulkanPathTessellations),
         static_cast<unsigned long long>(traceState.surfaceDrawCacheHits),
         static_cast<unsigned long long>(traceState.surfaceDrawCacheMisses), traceState.surfaceDrawRecordMs,
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockBackend),
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockClip),
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockCallout),
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockMaterial),
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockSizing),
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockTransientChrome),
+        static_cast<unsigned long long>(traceState.surfaceDrawCacheBlockOpeningAnimation),
         static_cast<unsigned long long>(traceState.surfaceCommits),
         static_cast<unsigned long long>(traceState.surfaceStateCommits),
         static_cast<unsigned long long>(traceState.surfaceShmCommits),
@@ -722,6 +779,36 @@ void recordSurfaceDrawCache(bool hit, double recordMilliseconds) {
     ++traceState.surfaceDrawCacheMisses;
   }
   traceState.surfaceDrawRecordMs += recordMilliseconds;
+}
+
+void recordSurfaceDrawCacheBlock(CpuSurfaceDrawCacheBlockReason reason) {
+  if (!cpuTraceEnabled())
+    return;
+  std::scoped_lock lock(traceMutex());
+  auto &traceState = state();
+  switch (reason) {
+  case CpuSurfaceDrawCacheBlockReason::Backend:
+    ++traceState.surfaceDrawCacheBlockBackend;
+    break;
+  case CpuSurfaceDrawCacheBlockReason::Clip:
+    ++traceState.surfaceDrawCacheBlockClip;
+    break;
+  case CpuSurfaceDrawCacheBlockReason::Callout:
+    ++traceState.surfaceDrawCacheBlockCallout;
+    break;
+  case CpuSurfaceDrawCacheBlockReason::Material:
+    ++traceState.surfaceDrawCacheBlockMaterial;
+    break;
+  case CpuSurfaceDrawCacheBlockReason::Sizing:
+    ++traceState.surfaceDrawCacheBlockSizing;
+    break;
+  case CpuSurfaceDrawCacheBlockReason::TransientChrome:
+    ++traceState.surfaceDrawCacheBlockTransientChrome;
+    break;
+  case CpuSurfaceDrawCacheBlockReason::OpeningAnimation:
+    ++traceState.surfaceDrawCacheBlockOpeningAnimation;
+    break;
+  }
 }
 
 void recordSurfaceCommit(std::uint64_t surfaceId, CpuSurfaceCommitKind kind, std::int32_t width, std::int32_t height) {

@@ -1733,6 +1733,7 @@ public:
                                   VkImageView targetView, VkImageLayout initialLayout,
                                   VkImageLayout finalLayout,
                                   RenderTargetRecordStats* stats = nullptr) {
+    auto const recordStart = std::chrono::steady_clock::now();
     bool const traceResize = stats && detail::resizeTraceEnabled();
     auto const phaseStart = [&] {
       return traceResize ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -1748,7 +1749,7 @@ public:
     uploadAtlasIfNeeded();
     if (stats) stats->atlasMs = phaseMs(start);
     start = phaseStart();
-    auto backdropRuns = prepareBackdropBlurRuns();
+    std::vector<BackdropBlurRun> backdropRuns = prepareBackdropBlurRuns();
     if (stats) {
       stats->backdropPrepareMs = phaseMs(start);
       stats->backdropRuns = backdropRuns.size();
@@ -1783,6 +1784,7 @@ public:
     }
     if (stats) stats->drawRecordMs = phaseMs(start);
     transition(commandBuffer, targetImage, targetLayout, finalLayout);
+    debug::perf::recordVulkanRecordDuration(std::chrono::steady_clock::now() - recordStart);
   }
 
   void presentRenderTarget() {
@@ -3578,6 +3580,8 @@ private:
         }
       }
     };
+    auto const tessellateStart = std::chrono::steady_clock::now();
+    bool tessellated = false;
     if (!fill.isNone()) {
       Color fc{};
       if (representativeFillColor(fill, &fc)) {
@@ -3588,6 +3592,7 @@ private:
             nonempty.push_back(sp);
         }
         if (!nonempty.empty()) {
+          tessellated = true;
           append(PathFlattener::tessellateFillContours(nonempty, fc, static_cast<float>(width_),
                                                        static_cast<float>(height_),
                                                        PathFlattener::tessWindingFromFillRule(fill.fillRule)),
@@ -3604,11 +3609,15 @@ private:
         float const s = (sx > 0.f || sy > 0.f) ? (sx + sy) * 0.5f : 1.f;
         for (auto const &sp : subpaths) {
           if (sp.size() >= 2) {
+            tessellated = true;
             append(PathFlattener::tessellateStroke(sp, stroke.width * s, sc, static_cast<float>(width_),
                                                    static_cast<float>(height_), stroke.join, stroke.cap));
           }
         }
       }
+    }
+    if (tessellated) {
+      debug::perf::recordVulkanPathTessellation(std::chrono::steady_clock::now() - tessellateStart);
     }
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(target.pathVerts.size()) - firstVertex;
     if (vertexCount > 0) {
@@ -4447,12 +4456,15 @@ private:
                                       VkImageLayout &targetLayout,
                                       VkClearValue const &clear,
                                       std::vector<BackdropBlurRun> const &runs) {
+    auto const start = std::chrono::steady_clock::now();
+    std::uint64_t replayedOps = 0;
     beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
     std::size_t cursor = 0;
     for (std::size_t runIndex = 0; runIndex < runs.size(); ++runIndex) {
       BackdropBlurRun const &run = runs[runIndex];
       if (run.start > cursor) {
         drawOps(commandBuffer, cursor, run.start);
+        replayedOps += run.start - cursor;
       }
 
       CachedBackdropBlur &cacheEntry = ensureBackdropBlurCacheEntry(runIndex);
@@ -4467,13 +4479,16 @@ private:
         beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_LOAD);
       }
       drawOps(commandBuffer, run.start, run.end, blurTexture);
+      replayedOps += run.end - run.start;
       cursor = run.end;
     }
 
     if (cursor < ops_.size()) {
       drawOps(commandBuffer, cursor, ops_.size());
+      replayedOps += ops_.size() - cursor;
     }
     vkCmdEndRendering(commandBuffer);
+    debug::perf::recordVulkanStackedBlur(std::chrono::steady_clock::now() - start, replayedOps);
   }
 
   bool hasBackdropBlurOps() const {
@@ -4491,21 +4506,32 @@ private:
 
   void drawOps(VkCommandBuffer commandBuffer, std::size_t start = 0,
                std::size_t end = std::numeric_limits<std::size_t>::max(),
-               Texture *backdropSource = nullptr) {
+               Texture *backdropSource = nullptr,
+               VkExtent2D renderExtent = {}) {
+    auto const recordStart = std::chrono::steady_clock::now();
     std::size_t const opEnd = std::min(end, ops_.size());
+    if (renderExtent.width == 0 || renderExtent.height == 0) {
+      renderExtent = currentFramebufferExtent();
+    }
     bool hasScissor = false;
     Rect currentScissor{};
     VulkanCommandState commandState{};
+    std::uint64_t visited = 0;
+    std::uint64_t submitted = 0;
+    std::uint64_t scissorChanges = 0;
     for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
       DrawOp const &op = ops_[index];
+      ++visited;
       if (op.clip.width <= 0.f || op.clip.height <= 0.f) {
         continue;
       }
       if (!hasScissor || !sameRect(currentScissor, op.clip)) {
-        setViewportScissor(commandBuffer, op.clip);
+        setViewportScissor(commandBuffer, op.clip, renderExtent);
         currentScissor = op.clip;
         hasScissor = true;
+        ++scissorChanges;
       }
+      ++submitted;
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         drawRectRange(commandBuffer, commandState, op.first, op.count, op.externalStorageDescriptor,
@@ -4533,6 +4559,10 @@ private:
         break;
       }
     }
+    debug::perf::recordVulkanDrawOps(std::chrono::steady_clock::now() - recordStart,
+                                     visited,
+                                     submitted,
+                                     scissorChanges);
   }
 
   void beginColorRendering(VkCommandBuffer commandBuffer, VkImageView view, VkExtent2D extent,
