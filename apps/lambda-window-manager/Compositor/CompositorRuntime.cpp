@@ -1087,10 +1087,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                             wayland.logicalOutputHeight(),
                             static_cast<unsigned long long>(wayland.contentSerial()));
     };
-    auto commitScheduledSceneDamage = [&](AtomicReadyFrame& frame) {
-      if (!frame.sceneDamageStateValid) return;
-      surfaceRenderState.sceneDamage = std::move(frame.sceneDamageState);
-      frame.sceneDamageStateValid = false;
+    auto commitScheduledSceneState = [&](AtomicReadyFrame& frame) {
+      if (!frame.sceneGraphStateValid) return;
+      surfaceRenderState.sceneGraph = std::move(frame.sceneGraphState);
+      frame.sceneGraphStateValid = false;
     };
     auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
       if (!presenter->atomicPresenter() || !frame.ready) return false;
@@ -1189,7 +1189,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         wayland.sendPresentationFeedbacks(monotonicMilliseconds(),
                                           frame.timing,
                                           lastAtomicScheduledFrameSurfaceIds);
-        commitScheduledSceneDamage(frame);
+        commitScheduledSceneState(frame);
         frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
         forceRender = false;
@@ -1286,7 +1286,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         wayland.sendPresentationFeedbacks(monotonicMilliseconds(),
                                           frame.timing,
                                           lastAtomicScheduledFrameSurfaceIds);
-        commitScheduledSceneDamage(frame);
+        commitScheduledSceneState(frame);
         frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
         forceRender = false;
@@ -1373,7 +1373,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.sendPresentationFeedbacks(monotonicMilliseconds(),
                                         frame.timing,
                                         lastAtomicScheduledFrameSurfaceIds);
-      commitScheduledSceneDamage(frame);
+      commitScheduledSceneState(frame);
       frame = AtomicReadyFrame{};
       if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
       forceRender = false;
@@ -1827,19 +1827,30 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
 
       auto const traceStart = diagnostics::cpuTraceNow();
-      SceneDamageState nextDamageState = surfaceRenderState.sceneDamage;
       std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
       if (!appliedConfig.config.hardwareCursorEnabled || !hardwareCursorAvailable) {
         softwareCursorSnapshot = wayland.cursorSurface();
       }
       auto const committedSurfaces = wayland.committedSurfaces();
-      SceneDamageResult const damage = updateSceneDamage(nextDamageState,
-                                                         committedSurfaces,
-                                                         softwareCursorSnapshot,
-                                                         wayland.logicalOutputWidth(),
-                                                         wayland.logicalOutputHeight(),
-                                                         false);
-      if (!damage.empty()) {
+      CompositorSceneFramePlan scenePlan =
+          buildCompositorSceneFrame(surfaceRenderState.sceneGraph,
+                                    CompositorSceneFrameInput{
+                                        .wayland = wayland,
+                                        .output = output,
+                                        .atomicPresenter = presenter->atomicPresenter(),
+                                        .chrome = appliedConfig.config.chrome,
+                                        .surfaceVisuals = surfaceRenderState.surfaceVisuals,
+                                        .surfaces = committedSurfaces,
+                                        .softwareCursor = softwareCursorSnapshot,
+                                        .frameTime = SteadyClock::now(),
+                                        .logicalOutputWidth = wayland.logicalOutputWidth(),
+                                        .logicalOutputHeight = wayland.logicalOutputHeight(),
+                                        .dpiScale = canvas ? canvas->dpiScale() : 1.f,
+                                        .animationsEnabled = appliedConfig.config.animationsEnabled,
+                                        .forceFullDamage = false,
+                                        .selectScanout = false,
+                                    });
+      if (!scenePlan.damage.empty()) {
         diagnostics::recordCpuAtomicLoop({
             .emptyDamageChecks = 1,
             .emptyDamageSkips = 0,
@@ -1848,7 +1859,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         return false;
       }
 
-      surfaceRenderState.sceneDamage = std::move(nextDamageState);
+      surfaceRenderState.sceneGraph = std::move(scenePlan.nextState);
       atomicFrameDirty = false;
       lastKnownContentSerial = wayland.contentSerial();
       LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-skip empty=1 surfaces=%zu contentSerial=%llu\n",

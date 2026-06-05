@@ -1,0 +1,105 @@
+#pragma once
+
+#include "Compositor/Chrome/ChromeConfig.hpp"
+#include "Compositor/SceneDamage.hpp"
+#include "Compositor/Surface/CommittedSurfacePainter.hpp"
+#include "Compositor/WaylandServer.hpp"
+
+#include <Lambda/Platform/Linux/KmsOutput.hpp>
+
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <unordered_map>
+#include <vector>
+
+namespace lambda::compositor {
+
+enum class CompositorSceneNodeKind : std::uint8_t {
+  Background,
+  WindowShadow,
+  WindowChrome,
+  WindowContent,
+  SoftwareCursor,
+};
+
+struct CompositorSceneNodeSnapshot {
+  std::uint64_t id = 0;
+  std::uint64_t surfaceId = 0;
+  CompositorSceneNodeKind kind = CompositorSceneNodeKind::Background;
+  CommittedSurfaceSnapshot::RegionRect bounds{};
+  std::uint64_t signature = 0;
+  bool primaryPlane = true;
+};
+
+struct CompositorSceneGraphState {
+  bool initialized = false;
+  std::int32_t outputWidth = 0;
+  std::int32_t outputHeight = 0;
+  std::vector<CompositorSceneNodeSnapshot> nodes;
+  std::vector<CommittedSurfaceSnapshot> surfaces;
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, std::uint64_t> rejectedScanoutSignaturesBySurface;
+  std::uint64_t primaryReuseSignature = 0;
+  std::uint64_t primaryReuseOverlaySurfaceId = 0;
+  bool primaryReuseSignatureValid = false;
+};
+
+struct CompositorHardwareScanoutSelection {
+  std::size_t surfaceIndex = 0;
+  std::uint64_t signature = 0;
+  platform::KmsAtomicPresenter::OverlayCandidate candidate{};
+};
+
+struct CompositorSceneFramePlan {
+  SceneDamageResult damage;
+  CompositorSceneGraphState nextState;
+  std::vector<std::uint64_t> frameCallbackSurfaceIds;
+  std::optional<CompositorHardwareScanoutSelection> scanout;
+  std::uint64_t primaryReuseSignatureForScanout = 0;
+  bool primaryReuseMatchesScanout = false;
+};
+
+struct CompositorSceneFrameInput {
+  WaylandServer& wayland;
+  platform::KmsOutput const& output;
+  platform::KmsAtomicPresenter* atomicPresenter = nullptr;
+  ChromeConfig const& chrome;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> const& surfaceVisuals;
+  std::vector<CommittedSurfaceSnapshot> const& surfaces;
+  std::optional<CommittedSurfaceSnapshot> const& softwareCursor;
+  std::chrono::steady_clock::time_point frameTime{};
+  std::int32_t logicalOutputWidth = 0;
+  std::int32_t logicalOutputHeight = 0;
+  float dpiScale = 1.f;
+  bool animationsEnabled = true;
+  bool forceFullDamage = false;
+  bool selectScanout = true;
+};
+
+[[nodiscard]] CompositorSceneFramePlan
+buildCompositorSceneFrame(CompositorSceneGraphState const& previous,
+                          CompositorSceneFrameInput const& input);
+
+void rejectCompositorSceneScanout(CompositorSceneGraphState& state,
+                                  CompositorHardwareScanoutSelection const& selection);
+
+void rememberCompositorScenePrimaryReuse(CompositorSceneGraphState& state,
+                                         std::uint64_t overlaySurfaceId,
+                                         std::uint64_t primaryReuseSignature);
+
+void clearCompositorScenePrimaryReuse(CompositorSceneGraphState& state);
+
+[[nodiscard]] bool compositorSceneScanoutCoversOutput(CompositorHardwareScanoutSelection const& selection,
+                                                      platform::KmsOutput const& output);
+
+[[nodiscard]] platform::KmsAtomicPresenter::OverlayCandidate
+duplicateCompositorSceneOverlayCandidate(platform::KmsAtomicPresenter::OverlayCandidate const& candidate);
+
+void closeCompositorSceneOverlayCandidate(platform::KmsAtomicPresenter::OverlayCandidate& candidate) noexcept;
+
+[[nodiscard]] std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate>
+ownCompositorSceneOverlayCandidate(platform::KmsAtomicPresenter::OverlayCandidate candidate);
+
+} // namespace lambda::compositor
