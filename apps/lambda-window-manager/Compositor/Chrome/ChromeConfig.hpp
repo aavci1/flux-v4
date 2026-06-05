@@ -33,6 +33,7 @@ struct ChromeConfig {
   float titleTextFontSize = 11.5f;
   float titleTextFontWeight = 600.f;
   CornerRadius windowCornerRadius = CornerRadius{14.f};
+  // Legacy config name: this is the external frame/ring outset, not an inset applied to client content.
   float contentInsetWidth = 4.f;
   std::int32_t resizeGripSize = 4;
   GlassEffectConfig glass{};

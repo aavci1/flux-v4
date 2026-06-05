@@ -225,7 +225,7 @@ RegionRect surfaceShadowBounds(CommittedSurfaceSnapshot const& surface, ChromeCo
   };
   if (shadow.isNone()) return {};
   WindowShadowLayerGeometry const layer =
-      windowShadowLayerGeometry(windowFrameRect(surface),
+      windowShadowLayerGeometry(windowFrameRect(surface, chrome.contentInsetWidth),
                                 chrome.windowCornerRadius,
                                 shadow,
                                 std::max(0.f, shadow.radius + 1.f));
@@ -331,7 +331,7 @@ void appendSurfaceNodes(std::vector<CompositorSceneNodeSnapshot>& nodes,
         .id = nodeId(surface.id, CompositorSceneNodeKind::WindowChrome),
         .surfaceId = surface.id,
         .kind = CompositorSceneNodeKind::WindowChrome,
-        .bounds = rectFromRect(windowFrameRect(surface)),
+        .bounds = rectFromRect(windowFrameRect(surface, chrome.contentInsetWidth)),
         .signature = chromeNodeSignature(surface, chrome),
         .primaryPlane = true,
     });
@@ -667,9 +667,10 @@ std::uint64_t scanoutCandidateSignature(CommittedSurfaceSnapshot const& surface,
 
 bool coveredByLaterSurface(std::vector<CommittedSurfaceSnapshot> const& surfaces,
                            std::size_t index,
-                           RegionRect content) {
+                           RegionRect content,
+                           ChromeConfig const& chrome) {
   for (std::size_t j = index + 1; j < surfaces.size(); ++j) {
-    if (rectsOverlap(content, rectFromRect(windowFrameRect(surfaces[j])))) return true;
+    if (rectsOverlap(content, rectFromRect(windowFrameRect(surfaces[j], chrome.contentInsetWidth)))) return true;
   }
   return false;
 }
@@ -739,7 +740,7 @@ selectHardwareScanoutSurface(CompositorSceneGraphState const& previous,
     CommittedSurfaceSnapshot const& surface = input.surfaces[i];
     RegionRect const visible = surfaceVisibleContentRect(surface, input.chrome, input.dpiScale);
     if (!surfaceEligibleForHardwareScanoutPlane(surface, input, visible)) continue;
-    if (coveredByLaterSurface(input.surfaces, i, visible)) continue;
+    if (coveredByLaterSurface(input.surfaces, i, visible, input.chrome)) continue;
 
     std::uint64_t const modifier = surface.dmabufPlanes.empty() ||
                                            surface.dmabufPlanes.front().modifier == DRM_FORMAT_MOD_INVALID

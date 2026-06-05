@@ -110,10 +110,11 @@ ChromeButton chromeButtonAt(WaylandServer::Impl const* server,
                             std::int32_t frameWidth) {
   if (!surface || !serverSideDecorated(server, surface)) return ChromeButton::None;
   auto const& chrome = server->chromeConfig_;
-  float const windowX = static_cast<float>(surface->windowX);
-  float const windowY = static_cast<float>(surface->windowY);
-  float const width = static_cast<float>(std::max(0, frameWidth));
   float const titleBarHeight = static_cast<float>(chrome.titleBarHeight);
+  float const frameOutset = !cutoutMode && titleBarHeight > 0.f ? std::max(0.f, chrome.contentInsetWidth) : 0.f;
+  float const windowX = static_cast<float>(surface->windowX) - frameOutset;
+  float const windowY = static_cast<float>(surface->windowY);
+  float const width = static_cast<float>(std::max(0, frameWidth)) + frameOutset * 2.f;
   float const top = windowY - (cutoutMode ? 0.f : titleBarHeight);
   ChromeControlRects const rects = chromeControlRects(chrome, windowX, top, width, titleBarHeight);
   auto contains = [&](Rect const& rect) {
@@ -148,8 +149,14 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
     width = committedWidth;
     height = committedHeight;
   }
-  ChromeButton const hovered =
-      chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode, width);
+  ChromeButton hovered = ChromeButton::None;
+  if (decorated) {
+    auto chromeContext =
+        wm::topChromeHitContext(const_cast<WaylandServer::Impl*>(server), server->pointerX_, server->pointerY_);
+    if (chromeContext && chromeContext->surface == surface) {
+      hovered = chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode, width);
+    }
+  }
   bool const cropToWindowGeometry = canCropToXdgWindowGeometry(surface);
   std::int32_t const bufferScale = std::max(1, surface->bufferState.scale);
   WindowGeometry const& xdgWindowGeometry = surface->xdgRoleState.windowGeometry;

@@ -467,11 +467,9 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   visual.lastSnapshot = surface;
   visual.hasLastSnapshot = true;
 
-  float const windowX = static_cast<float>(surface.x);
-  float const windowY = static_cast<float>(surface.y);
   float const windowWidth = static_cast<float>(surface.width);
   float const windowHeight = static_cast<float>(surface.height);
-  float const titleBarHeight = windowExternalTitleBarHeight(surface);
+  Rect const frameRect = windowFrameRect(surface, chrome.contentInsetWidth);
   bool const cutoutChrome = windowUsesCutoutChrome(surface);
   CornerRadius const windowCorners = chrome.windowCornerRadius;
   CornerRadius const contentCorners{};
@@ -482,8 +480,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                  : 1.f;
   float const openScale = 0.965f + 0.035f * openProgress;
   float const openOpacity = openProgress;
-  float const outerHeight = windowHeight + titleBarHeight;
-  Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
+  Point const pivot{frameRect.x + frameRect.width * 0.5f, frameRect.y + frameRect.height * 0.5f};
   canvas.save();
   if (auto const windowClip = reservedWindowClip(surface)) {
     canvas.clipRect(*windowClip);

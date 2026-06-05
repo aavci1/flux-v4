@@ -205,7 +205,7 @@ std::optional<ActiveWindowScreenshotTarget> focusedWindowScreenshotTarget(Waylan
                                                                          ChromeConfig const& chrome) {
   for (auto const& surface : wayland.committedSurfaces()) {
     if (!surface.focused || surface.width <= 0 || surface.height <= 0) continue;
-    Rect const frame = windowFrameRect(surface);
+    Rect const frame = windowFrameRect(surface, chrome.contentInsetWidth);
     ScreenshotRegion const region{
         .x = static_cast<std::int32_t>(std::lround(frame.x)),
         .y = static_cast<std::int32_t>(std::lround(frame.y)),

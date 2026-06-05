@@ -388,15 +388,22 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
 
     bool const decorated = surfaceServerSideDecorated(server, surface);
     bool const cutouts = surfaceUsesCutouts(server, surface);
-    float const frameTop = contentTop - static_cast<float>(externalTitleBarHeight(server, surface));
+    std::int32_t const titleBarHeight = externalTitleBarHeight(server, surface);
+    float const frameOutset = decorated && !cutouts && titleBarHeight > 0
+                                  ? std::max(0.f, server ? server->chromeConfig_.contentInsetWidth : 0.f)
+                                  : 0.f;
+    float const frameLeft = contentLeft - frameOutset;
+    float const frameRight = contentRight + frameOutset;
+    float const frameTop = contentTop - static_cast<float>(titleBarHeight);
+    float const frameBottom = contentBottom + frameOutset;
     CornerRadius const cornerRadius = server ? server->chromeConfig_.windowCornerRadius : CornerRadius{14.f};
-    if (!roundedRectContainsPoint(x, y, contentLeft, frameTop, contentRight, contentBottom, cornerRadius)) continue;
+    if (!roundedRectContainsPoint(x, y, frameLeft, frameTop, frameRight, frameBottom, cornerRadius)) continue;
     return ChromeHitContext{
         .surface = surface,
-        .left = contentLeft,
+        .left = frameLeft,
         .top = frameTop,
-        .right = contentRight,
-        .bottom = contentBottom,
+        .right = frameRight,
+        .bottom = frameBottom,
         .contentTop = contentTop,
         .cornerRadius = cornerRadius,
         .serverSideDecorated = decorated,

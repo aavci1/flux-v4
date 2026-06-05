@@ -32,6 +32,16 @@ TEST_CASE("window frame geometry includes system titlebar") {
         lambda::CornerRadius{0.f, 0.f, 8.f, 9.f});
 }
 
+TEST_CASE("window frame geometry keeps chrome outset outside content") {
+  auto surface = decoratedSurface();
+
+  CHECK(lambda::compositor::windowContentRect(surface) == lambda::Rect::sharp(40.f, 100.f, 640.f, 480.f));
+  CHECK(lambda::compositor::windowTitleBarRect(surface, 4.f) == lambda::Rect::sharp(36.f, 68.f, 648.f, 32.f));
+  CHECK(lambda::compositor::windowFrameRect(surface, 4.f) == lambda::Rect::sharp(36.f, 68.f, 648.f, 516.f));
+  CHECK(lambda::compositor::windowVisibleContentRect(surface, 4.f) ==
+        lambda::Rect::sharp(40.f, 100.f, 640.f, 480.f));
+}
+
 TEST_CASE("window frame geometry treats cutout and undecorated windows as content frames") {
   auto cutout = decoratedSurface();
   cutout.cutoutsBound = true;

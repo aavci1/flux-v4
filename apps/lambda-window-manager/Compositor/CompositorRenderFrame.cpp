@@ -332,8 +332,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   bool const forceFullSceneDamage =
       snapPreview.has_value() ||
       screenshotOverlay.has_value() ||
-      ctx.screenshotFlashOpacity > 0.001f ||
-      !ctx.surfaceRenderState.closingSurfaces.empty();
+      ctx.screenshotFlashOpacity > 0.001f;
   CompositorSceneFramePlan scenePlan =
       buildCompositorSceneFrame(ctx.surfaceRenderState.sceneGraph,
                                 CompositorSceneFrameInput{
@@ -350,8 +349,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                     .dpiScale = ctx.canvas.dpiScale(),
                                     .animationsEnabled = ctx.appliedConfig.config.animationsEnabled,
                                     .forceFullDamage = forceFullSceneDamage,
-                                    .selectScanout = atomicPresenter && !snapPreview && !screenshotOverlay &&
-                                                     ctx.surfaceRenderState.closingSurfaces.empty(),
+                                    .selectScanout = atomicPresenter && !snapPreview && !screenshotOverlay,
                                 });
   std::vector<std::uint64_t> const& frameCallbackSurfaceIds = scenePlan.frameCallbackSurfaceIds;
   SceneDamageResult const& sceneDamage = scenePlan.damage;
@@ -432,7 +430,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   liveSurfaceIds.reserve(committedSurfaces.size());
   std::uint64_t overlaySurfaceId = 0;
   std::optional<CompositorHardwareScanoutSelection> pendingOverlay = std::move(scenePlan.scanout);
-  if (atomicPresenter && !snapPreview && !screenshotOverlay && ctx.surfaceRenderState.closingSurfaces.empty()) {
+  if (atomicPresenter && !snapPreview && !screenshotOverlay) {
     overlaySurfaceId = pendingOverlay ? pendingOverlay->candidate.surfaceId : 0;
     if (!pendingOverlay) {
       atomicPresenter->clearPreparedOverlayCandidate();
@@ -647,11 +645,6 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     atomicFrameProfile.surfaceMs += surfaceMs;
     ctx.frameProfile.surfaceMs += surfaceMs;
     phaseStart = profileNow();
-    captureClosingSurfaces(ctx.surfaceRenderState,
-                           liveSurfaceIds,
-                           frameTime,
-                           ctx.appliedConfig.config.animationsEnabled);
-    drawClosingSurfaces(ctx.canvas, ctx.surfaceRenderState, frameTime);
     if (screenshotOverlay) {
       drawScreenshotSelectionOverlay(ctx.canvas, ctx.wayland, *screenshotOverlay);
     }

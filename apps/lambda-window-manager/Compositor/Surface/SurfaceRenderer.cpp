@@ -22,14 +22,6 @@
 namespace lambda::compositor {
 namespace {
 
-float clamp01(float value) { return std::clamp(value, 0.f, 1.f); }
-
-float easeOutCubic(float value) {
-  float const t = clamp01(value);
-  float const inverse = 1.f - t;
-  return 1.f - inverse * inverse * inverse;
-}
-
 using TraceClock = std::chrono::steady_clock;
 
 double elapsedMilliseconds(TraceClock::time_point start) {
@@ -265,30 +257,6 @@ void drawPlainClientSurface(Canvas &canvas, CommittedSurfaceSnapshot const &surf
 }
 
 } // namespace
-
-void drawSurfaceImage(Canvas &canvas, CommittedSurfaceSnapshot const &surface, Image &image, float opacity,
-                      float scale) {
-  float const windowX = static_cast<float>(surface.x);
-  float const windowY = static_cast<float>(surface.y);
-  float const windowWidth = static_cast<float>(surface.width);
-  float const windowHeight = static_cast<float>(surface.height);
-  float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
-  float const outerHeight = windowHeight + titleBarHeight;
-  Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
-  canvas.save();
-  canvas.setOpacity(canvas.opacity() * opacity);
-  if (scale != 1.f) {
-    canvas.translate(pivot.x, pivot.y);
-    canvas.scale(scale);
-    canvas.translate(-pivot.x, -pivot.y);
-  }
-  float const sourceWidth = surface.sourceWidth > 0.f ? surface.sourceWidth : static_cast<float>(image.size().width);
-  float const sourceHeight =
-      surface.sourceHeight > 0.f ? surface.sourceHeight : static_cast<float>(image.size().height);
-  canvas.drawImage(image, Rect::sharp(surface.sourceX, surface.sourceY, sourceWidth, sourceHeight),
-                   Rect::sharp(windowX, windowY, windowWidth, windowHeight));
-  canvas.restore();
-}
 
 void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceSnapshot const &surface,
                        CachedClientImage &cached) {
@@ -560,42 +528,8 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
                                animationsEnabled);
 }
 
-void captureClosingSurfaces(SurfaceRenderState &state, std::unordered_set<std::uint64_t> const &liveSurfaceIds,
-                            std::chrono::steady_clock::time_point frameTime, bool animationsEnabled) {
-  for (auto const &[surfaceId, visual] : state.surfaceVisuals) {
-    if (liveSurfaceIds.contains(surfaceId))
-      continue;
-    auto cached = state.clientImages.find(surfaceId);
-    if (!animationsEnabled || !visual.hasLastSnapshot || cached == state.clientImages.end() || !cached->second.image) {
-      continue;
-    }
-    state.closingSurfaces[surfaceId] = ClosingSurfaceVisual{
-        .snapshot = visual.lastSnapshot,
-        .image = cached->second.image,
-        .closedAt = frameTime,
-    };
-  }
-}
-
-void drawClosingSurfaces(Canvas &canvas, SurfaceRenderState &state, std::chrono::steady_clock::time_point frameTime) {
-  for (auto it = state.closingSurfaces.begin(); it != state.closingSurfaces.end();) {
-    float const closeMs = static_cast<float>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - it->second.closedAt).count());
-    float const progress = clamp01(closeMs / 120.f);
-    if (progress >= 1.f || !it->second.image) {
-      it = state.closingSurfaces.erase(it);
-      continue;
-    }
-    float const eased = easeOutCubic(progress);
-    drawSurfaceImage(canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
-    ++it;
-  }
-}
-
 bool hasActiveSurfaceAnimations(SurfaceRenderState const &state, std::chrono::steady_clock::time_point frameTime,
                                 bool animationsEnabled) {
-  if (!state.closingSurfaces.empty())
-    return true;
   if (!animationsEnabled)
     return false;
 

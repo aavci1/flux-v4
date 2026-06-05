@@ -31,19 +31,28 @@ inline Rect windowContentRect(CommittedSurfaceSnapshot const& surface) {
                      static_cast<float>(surface.height));
 }
 
-inline Rect windowFrameRect(CommittedSurfaceSnapshot const& surface) {
-  float const titleBarHeight = windowExternalTitleBarHeight(surface);
-  return Rect::sharp(static_cast<float>(surface.x),
-                     static_cast<float>(surface.y) - titleBarHeight,
-                     static_cast<float>(surface.width),
-                     static_cast<float>(surface.height) + titleBarHeight);
+inline float windowFrameOutsetWidth(CommittedSurfaceSnapshot const& surface, float configuredOutsetWidth) {
+  if (!surface.serverSideDecorated || windowUsesCutoutChrome(surface) || windowExternalTitleBarHeight(surface) <= 0.f) {
+    return 0.f;
+  }
+  return std::max(0.f, configuredOutsetWidth);
 }
 
-inline Rect windowTitleBarRect(CommittedSurfaceSnapshot const& surface) {
+inline Rect windowFrameRect(CommittedSurfaceSnapshot const& surface, float configuredOutsetWidth = 0.f) {
   float const titleBarHeight = windowExternalTitleBarHeight(surface);
-  return Rect::sharp(static_cast<float>(surface.x),
+  float const outset = windowFrameOutsetWidth(surface, configuredOutsetWidth);
+  return Rect::sharp(static_cast<float>(surface.x) - outset,
                      static_cast<float>(surface.y) - titleBarHeight,
-                     static_cast<float>(surface.width),
+                     static_cast<float>(surface.width) + outset * 2.f,
+                     static_cast<float>(surface.height) + titleBarHeight + outset);
+}
+
+inline Rect windowTitleBarRect(CommittedSurfaceSnapshot const& surface, float configuredOutsetWidth = 0.f) {
+  float const titleBarHeight = windowExternalTitleBarHeight(surface);
+  float const outset = windowFrameOutsetWidth(surface, configuredOutsetWidth);
+  return Rect::sharp(static_cast<float>(surface.x) - outset,
+                     static_cast<float>(surface.y) - titleBarHeight,
+                     static_cast<float>(surface.width) + outset * 2.f,
                      titleBarHeight);
 }
 
@@ -60,10 +69,9 @@ inline CornerRadius windowContentCornerRadius(CommittedSurfaceSnapshot const& su
 }
 
 inline float windowContentChromeInsetWidth(CommittedSurfaceSnapshot const& surface, float configuredInsetWidth) {
-  if (!surface.serverSideDecorated || windowUsesCutoutChrome(surface) || windowExternalTitleBarHeight(surface) <= 0.f) {
-    return 0.f;
-  }
-  return std::max(0.f, configuredInsetWidth);
+  (void)surface;
+  (void)configuredInsetWidth;
+  return 0.f;
 }
 
 inline Rect windowVisibleContentRect(CommittedSurfaceSnapshot const& surface,

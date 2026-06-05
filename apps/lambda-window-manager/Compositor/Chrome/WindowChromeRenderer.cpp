@@ -149,10 +149,12 @@ void drawGlassMaterialFrame(Canvas& canvas,
 void drawControls(Canvas& canvas,
                   CommittedSurfaceSnapshot const& surface,
                   ChromeConfig const& chrome,
+                  float frameLeft,
+                  float frameWidth,
                   float titleTop,
                   float titleBarHeight) {
-  float const windowX = static_cast<float>(surface.x);
-  float const windowWidth = static_cast<float>(surface.width);
+  float const windowX = frameLeft;
+  float const windowWidth = frameWidth;
   ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome, titleBarHeight);
   ChromeControlRects const rects = chromeControlRects(chrome, windowX, titleTop, windowWidth, titleBarHeight);
   float const buttonSize = metrics.buttonSize;
@@ -226,20 +228,25 @@ void drawDefaultChrome(Canvas& canvas,
                        TextSystem& textSystem,
                        CommittedSurfaceSnapshot const& surface,
                        ChromeConfig const& chrome) {
-  float const windowX = static_cast<float>(surface.x);
-  float const windowWidth = static_cast<float>(surface.width);
-  Rect const titleRect = windowTitleBarRect(surface);
+  Rect const titleRect = windowTitleBarRect(surface, chrome.contentInsetWidth);
+  float const windowX = titleRect.x;
+  float const windowWidth = titleRect.width;
   float const titleBarHeight = titleRect.height;
   if (titleBarHeight <= 0.f) return;
 
   float const titleTop = titleRect.y;
   CornerRadius const frameRadius = chrome.windowCornerRadius;
   drawGlassMaterialFrame(canvas,
-                         windowFrameRect(surface),
+                         windowFrameRect(surface, chrome.contentInsetWidth),
                          frameRadius,
                          windowVisibleContentRect(surface, chrome.contentInsetWidth, canvas.dpiScale()),
                          windowVisibleContentCornerRadius(surface, frameRadius, chrome.contentInsetWidth),
                          chrome);
+  canvas.drawRect(titleRect,
+                  windowTitleBarCornerRadius(frameRadius),
+                  FillStyle::solid(Color{0.f, 0.f, 0.f, surface.focused ? 0.13f : 0.09f}),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
 
   float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
   float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
@@ -263,27 +270,17 @@ void drawDefaultChrome(Canvas& canvas,
         .maxLines = 1,
     };
     Color const titleColor = withOpacity(chrome.titleTextColor, surface.focused ? 1.f : 0.6f);
-    auto titleLayout =
-        textSystem.layout(surface.title,
-                          titleFont,
-                          titleColor,
-                          Rect::sharp(titleLeft,
-                                      titleTop,
-                                      titleWidth,
-                                      titleBarHeight),
-                          titleOptions);
+    Rect const titleBounds = Rect::sharp(titleLeft, titleTop, titleWidth, titleBarHeight);
+    auto titleLayout = textSystem.layout(surface.title, titleFont, titleColor, titleBounds, titleOptions);
     if (titleLayout) {
       canvas.save();
-      canvas.clipRect(Rect::sharp(titleLeft,
-                                  titleTop,
-                                  titleWidth,
-                                  titleBarHeight));
+      canvas.clipRect(titleBounds);
       canvas.drawTextLayout(*titleLayout, {0.f, 0.f});
       canvas.restore();
     }
   }
 
-  drawControls(canvas, surface, chrome, titleTop, titleBarHeight);
+  drawControls(canvas, surface, chrome, titleRect.x, titleRect.width, titleTop, titleBarHeight);
 }
 
 } // namespace
@@ -294,7 +291,13 @@ void drawWindowChrome(Canvas& canvas,
                       ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
   if (windowUsesCutoutChrome(surface)) {
-    drawControls(canvas, surface, chrome, static_cast<float>(surface.y), static_cast<float>(chrome.titleBarHeight));
+    drawControls(canvas,
+                 surface,
+                 chrome,
+                 static_cast<float>(surface.x),
+                 static_cast<float>(surface.width),
+                 static_cast<float>(surface.y),
+                 static_cast<float>(chrome.titleBarHeight));
     return;
   }
   drawDefaultChrome(canvas, textSystem, surface, chrome);
@@ -303,7 +306,7 @@ void drawWindowChrome(Canvas& canvas,
 void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
 
-  Rect const frameRect = windowFrameRect(surface);
+  Rect const frameRect = windowFrameRect(surface, chrome.contentInsetWidth);
   ShadowStyle const shadow = windowShadow(chrome, surface.focused);
   if (shadow.isNone()) return;
 
@@ -348,7 +351,7 @@ void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
   StrokeStyle const border = visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth);
   if (border.isNone()) return;
 
-  Rect const frameRect = windowFrameRect(surface);
+  Rect const frameRect = windowFrameRect(surface, chrome.contentInsetWidth);
   canvas.drawRect(frameRect,
                   chrome.windowCornerRadius,
                   FillStyle::none(),

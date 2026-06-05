@@ -41,21 +41,11 @@ struct CachedClientImage {
   std::int32_t recordedY = 0;
 };
 
-struct ClosingSurfaceVisual {
-  CommittedSurfaceSnapshot snapshot{};
-  std::shared_ptr<Image> image;
-  std::chrono::steady_clock::time_point closedAt{};
-};
-
 struct SurfaceRenderState {
   std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
   std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
-  std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
   CompositorSceneGraphState sceneGraph;
 };
-
-void drawSurfaceImage(Canvas &canvas, CommittedSurfaceSnapshot const &surface, Image &image, float opacity,
-                      float scale);
 
 void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceSnapshot const &surface,
                        CachedClientImage &cached);
@@ -64,11 +54,6 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
                           CommittedSurfaceSnapshot const &surface, SurfaceVisualState &visual,
                           CachedClientImage &cached, std::chrono::steady_clock::time_point frameTime,
                           ChromeConfig const &chrome, bool animationsEnabled);
-
-void captureClosingSurfaces(SurfaceRenderState &state, std::unordered_set<std::uint64_t> const &liveSurfaceIds,
-                            std::chrono::steady_clock::time_point frameTime, bool animationsEnabled);
-
-void drawClosingSurfaces(Canvas &canvas, SurfaceRenderState &state, std::chrono::steady_clock::time_point frameTime);
 
 [[nodiscard]] bool hasActiveSurfaceAnimations(SurfaceRenderState const &state,
                                               std::chrono::steady_clock::time_point frameTime, bool animationsEnabled);
