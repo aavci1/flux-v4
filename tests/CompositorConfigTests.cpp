@@ -217,6 +217,9 @@ TEST_CASE("compositor config parses chrome section") {
   file << "opacity = 0.05\n";
   file << "tint_color = \"#ffffff80\"\n";
   file << "border_color = \"#ffffff90\"\n";
+  file << "contrast_color = \"#102030\"\n";
+  file << "focused_contrast_opacity = 0.22\n";
+  file << "unfocused_contrast_opacity = 0.16\n";
   file << "[chrome.window_corner_radius]\n";
   file << "top_left = 6\n";
   file << "top_right = 7\n";
@@ -249,6 +252,11 @@ TEST_CASE("compositor config parses chrome section") {
   CHECK(chrome.windowCornerRadius.bottomRight == doctest::Approx(8.f));
   CHECK(chrome.windowCornerRadius.bottomLeft == doctest::Approx(9.f));
   CHECK(chrome.glass.tintColor.a == doctest::Approx(128.f / 255.f));
+  CHECK(chrome.glass.contrastColor.r == doctest::Approx(16.f / 255.f));
+  CHECK(chrome.glass.contrastColor.g == doctest::Approx(32.f / 255.f));
+  CHECK(chrome.glass.contrastColor.b == doctest::Approx(48.f / 255.f));
+  CHECK(chrome.glass.focusedContrastOpacity == doctest::Approx(0.22f));
+  CHECK(chrome.glass.unfocusedContrastOpacity == doctest::Approx(0.16f));
   CHECK(chrome.closeHoverBackground.r == doctest::Approx(1.f));
   REQUIRE(loaded.config.darkChrome);
   CHECK(loaded.config.darkChrome->titleTextColor.r == doctest::Approx(230.f / 255.f));

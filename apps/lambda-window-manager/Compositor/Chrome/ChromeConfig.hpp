@@ -13,6 +13,9 @@ struct GlassEffectConfig {
   Color tintColor = Color{221.f * (1.f / 255.f), 1.f, 1.f, 1.f};
   Color borderColor = Color{1.f, 1.f, 1.f, 102.f * (1.f / 255.f)};
   float opacity = 0.05f;
+  Color contrastColor = Colors::black;
+  float focusedContrastOpacity = 0.18f;
+  float unfocusedContrastOpacity = 0.13f;
 };
 
 struct ChromeConfig {

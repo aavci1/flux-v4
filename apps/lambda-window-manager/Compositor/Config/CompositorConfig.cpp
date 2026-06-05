@@ -460,6 +460,9 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
     parseGlassColor("tint_color", chrome.glass.tintColor);
     parseGlassColor("border_color", chrome.glass.borderColor);
     parseGlassFloat("opacity", chrome.glass.opacity, 0.f, 1.f);
+    parseGlassColor("contrast_color", chrome.glass.contrastColor);
+    parseGlassFloat("focused_contrast_opacity", chrome.glass.focusedContrastOpacity, 0.f, 1.f);
+    parseGlassFloat("unfocused_contrast_opacity", chrome.glass.unfocusedContrastOpacity, 0.f, 1.f);
   };
 
   parseIntField("title_bar_height", chrome.titleBarHeight, 16, 120);
@@ -630,6 +633,9 @@ base_color = "#ddddff"
 tint_color = "#ddffff"
 border_color = "#ffffff66"
 opacity = 0.05
+contrast_color = "#000000"
+focused_contrast_opacity = 0.18
+unfocused_contrast_opacity = 0.13
 
 [keybindings]
 close = "super+q"

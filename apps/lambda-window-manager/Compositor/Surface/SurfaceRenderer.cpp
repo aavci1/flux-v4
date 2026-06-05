@@ -91,6 +91,9 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashColor(hash, chrome.glass.baseColor);
   hashColor(hash, chrome.glass.tintColor);
   hashColor(hash, chrome.glass.borderColor);
+  hashColor(hash, chrome.glass.contrastColor);
+  hashValue(hash, chrome.glass.focusedContrastOpacity);
+  hashValue(hash, chrome.glass.unfocusedContrastOpacity);
   hashColor(hash, chrome.closeGlyphColor);
   hashColor(hash, chrome.closeGlyphHoverColor);
   hashColor(hash, chrome.closeHoverBackground);

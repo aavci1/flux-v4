@@ -247,6 +247,9 @@ std::uint64_t chromeConfigSignature(ChromeConfig const& chrome) {
   hashColor(seed, chrome.glass.baseColor);
   hashColor(seed, chrome.glass.tintColor);
   hashColor(seed, chrome.glass.borderColor);
+  hashColor(seed, chrome.glass.contrastColor);
+  hashValue(seed, chrome.glass.focusedContrastOpacity);
+  hashValue(seed, chrome.glass.unfocusedContrastOpacity);
   hashColor(seed, chrome.titleTextColor);
   hashValue(seed, chrome.titleTextFontSize);
   hashValue(seed, chrome.titleTextFontWeight);
@@ -610,7 +613,9 @@ bool surfaceEligibleForHardwareScanoutPlane(CommittedSurfaceSnapshot const& surf
       surface.dmabufPlanes.empty() || surface.dmabufPlanes.size() > 4) {
     return false;
   }
-  if (windowUsesCutoutChrome(surface) || surface.activeSizing || surface.pacingSizing ||
+  bool const hasExternalGlassChrome =
+      windowExternalTitleBarHeight(surface) > 0.f && input.chrome.glass.blurRadius > 0.f;
+  if (hasExternalGlassChrome || windowUsesCutoutChrome(surface) || surface.activeSizing || surface.pacingSizing ||
       surface.geometryAnimationGrowing || surface.windowClipTop > 0 || surface.windowClipBottom > 0 ||
       !surface.backgroundBlurRects.empty()) {
     return false;

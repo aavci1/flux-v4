@@ -79,7 +79,8 @@ void drawGlassMaterialFrame(Canvas& canvas,
                             CornerRadius const& frameRadius,
                             Rect const& cutout,
                             CornerRadius const& cutoutRadius,
-                            ChromeConfig const& chrome) {
+                            ChromeConfig const& chrome,
+                            float contrastOpacity) {
   if (frame.width <= 0.f || frame.height <= 0.f) return;
   if (cutout.width <= 0.f || cutout.height <= 0.f) {
     drawGlassMaterialRect(canvas, frame, frameRadius, chrome);
@@ -141,6 +142,13 @@ void drawGlassMaterialFrame(Canvas& canvas,
   Color const tintColor = withOpacity(chrome.glass.tintColor, chrome.glass.opacity);
   if (tintColor.a > 0.f) {
     FillStyle fill = FillStyle::solid(tintColor);
+    fill.fillRule = FillRule::EvenOdd;
+    canvas.drawPath(glassFrame, fill, StrokeStyle::none(), ShadowStyle::none());
+  }
+
+  Color const contrast = withOpacity(chrome.glass.contrastColor, contrastOpacity);
+  if (contrast.a > 0.f) {
+    FillStyle fill = FillStyle::solid(contrast);
     fill.fillRule = FillRule::EvenOdd;
     canvas.drawPath(glassFrame, fill, StrokeStyle::none(), ShadowStyle::none());
   }
@@ -241,12 +249,8 @@ void drawDefaultChrome(Canvas& canvas,
                          frameRadius,
                          windowVisibleContentRect(surface, chrome.contentInsetWidth, canvas.dpiScale()),
                          windowVisibleContentCornerRadius(surface, frameRadius, chrome.contentInsetWidth),
-                         chrome);
-  canvas.drawRect(titleRect,
-                  windowTitleBarCornerRadius(frameRadius),
-                  FillStyle::solid(Color{0.f, 0.f, 0.f, surface.focused ? 0.13f : 0.09f}),
-                  StrokeStyle::none(),
-                  ShadowStyle::none());
+                         chrome,
+                         surface.focused ? chrome.glass.focusedContrastOpacity : chrome.glass.unfocusedContrastOpacity);
 
   float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
   float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);

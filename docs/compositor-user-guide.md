@@ -208,6 +208,9 @@ base_color = "#ffffff80"
 tint_color = "#dbf5ff8f"
 border_color = "#ffffff9e"
 opacity = 1.0
+contrast_color = "#000000"
+focused_contrast_opacity = 0.18
+unfocused_contrast_opacity = 0.13
 
 [keybindings]
 close = "super+q"
@@ -235,6 +238,8 @@ Normal-window glass is client-requested. Lambda apps that use `WindowBackground:
 glass material descriptor to the compositor, including blur radius, base color, tint, border color, and opacity.
 The compositor does not synthesize default glass for windows that did not request it.
 `[chrome.glass]` configures compositor chrome previews and layer-shell chrome styling, not normal-window glass.
+The contrast color and opacity values add a single frame-shaped readability layer behind white title text and controls,
+so transparent title bars stay legible on light backgrounds without drawing a separate titlebar strip.
 `window_border_color` / `window_border_width` control the subtle rounded outline around the window frame.
 Clients that use `ext-background-effect-v1` request their own explicit blur regions and material values.
 
