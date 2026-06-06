@@ -197,6 +197,21 @@ std::uint32_t refreshRateMilliHz(drmModeModeInfo const& mode) {
   return 60'000u;
 }
 
+bool modesHaveSameTiming(drmModeModeInfo const& lhs, drmModeModeInfo const& rhs) noexcept {
+  return lhs.clock == rhs.clock &&
+         lhs.hdisplay == rhs.hdisplay &&
+         lhs.hsync_start == rhs.hsync_start &&
+         lhs.hsync_end == rhs.hsync_end &&
+         lhs.htotal == rhs.htotal &&
+         lhs.hskew == rhs.hskew &&
+         lhs.vdisplay == rhs.vdisplay &&
+         lhs.vsync_start == rhs.vsync_start &&
+         lhs.vsync_end == rhs.vsync_end &&
+         lhs.vtotal == rhs.vtotal &&
+         lhs.vscan == rhs.vscan &&
+         lhs.flags == rhs.flags;
+}
+
 std::chrono::nanoseconds frameInterval(std::uint32_t refreshMilliHz) {
   if (refreshMilliHz == 0) refreshMilliHz = 60'000u;
   return std::chrono::nanoseconds(1'000'000'000'000ll / refreshMilliHz);
@@ -680,6 +695,7 @@ public:
                      "lambda-window-manager: atomic KMS render fence mode: async CPU wait-before-commit\n");
       }
       createModeBlob();
+      syncModeStateFromKernel();
       gbm_ = gbm_create_device(fd_);
       if (!gbm_) throw std::runtime_error("gbm_create_device failed for KMS atomic presenter");
       lambda::VulkanContext::instance().ensureInitialized();
@@ -1520,13 +1536,15 @@ public:
                             damageBlob);
       recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       std::uint32_t flags = DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT;
-      if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
+      bool const modesetCommit = !modesetDone_;
+      if (modesetCommit) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
           .presentId = nextPresentId_++,
           .scheduledMonotonicNsec = monotonicNanoseconds(),
           .renderSubmittedMonotonicNsec = buffer.renderSubmittedNsec,
           .renderReadyMonotonicNsec = buffer.renderReadyNsec,
           .usedRenderFence = useRenderFence,
+          .usedModeset = modesetCommit,
       };
       std::uint64_t const commitStartNsec = monotonicNanoseconds();
       pendingTiming_.commitStartMonotonicNsec = commitStartNsec;
@@ -1643,11 +1661,30 @@ public:
 
   int eventFd() const noexcept { return fd_; }
 
+  void syncModeStateFromKernel() noexcept {
+    modesetDone_ = currentKernelModeMatchesTarget();
+    clearPreparedOverlayCandidate();
+    clearPreparedDirectScanout();
+  }
+
 private:
   struct PlaneFormatSupport {
     std::uint32_t format = 0;
     std::vector<std::uint64_t> modifiers;
   };
+
+  bool currentKernelModeMatchesTarget() const noexcept {
+    if (fd_ < 0 || connector_.crtcId == 0 || connector_.connectorId == 0) return false;
+    if (connectorCrtcId_ != 0 &&
+        propertyValue(fd_, connector_.connectorId, DRM_MODE_OBJECT_CONNECTOR, "CRTC_ID") != connector_.crtcId) {
+      return false;
+    }
+    drmModeCrtc* crtc = drmModeGetCrtc(fd_, connector_.crtcId);
+    if (!crtc) return false;
+    bool const matches = crtc->mode_valid && modesHaveSameTiming(crtc->mode, connector_.mode);
+    drmModeFreeCrtc(crtc);
+    return matches;
+  }
 
   struct PlaneCapabilities {
     std::uint32_t possibleCrtcs = 0;
@@ -3456,6 +3493,10 @@ bool KmsAtomicPresenter::hasPendingPageFlip() const noexcept {
 
 int KmsAtomicPresenter::eventFd() const noexcept {
   return impl_ ? impl_->eventFd() : -1;
+}
+
+void KmsAtomicPresenter::syncModeStateFromKernel() noexcept {
+  if (impl_) impl_->syncModeStateFromKernel();
 }
 
 std::string const& KmsOutput::name() const noexcept {

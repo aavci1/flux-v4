@@ -86,6 +86,7 @@ public:
     std::uint64_t eventDispatchEndMonotonicNsec = 0;
     std::uint64_t commitDurationNsec = 0;
     bool usedRenderFence = false;
+    bool usedModeset = false;
   };
 
   ~KmsAtomicPresenter();
@@ -128,6 +129,7 @@ public:
   [[nodiscard]] std::optional<PageFlipTiming> dispatchPageFlipEvents();
   [[nodiscard]] bool hasPendingPageFlip() const noexcept;
   [[nodiscard]] int eventFd() const noexcept;
+  void syncModeStateFromKernel() noexcept;
 
 private:
   class Impl;

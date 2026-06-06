@@ -1077,6 +1077,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       auto const resumeStart = SteadyClock::now();
       diagnostics::crashLog("vt-resume begin");
       applyOutputScale(true);
+      if (auto* atomicPresenter = presenter->atomicPresenter()) {
+        atomicPresenter->syncModeStateFromKernel();
+      }
       LAMBDA_WINDOW_MANAGER_TRACE_TIMING("vt-resume-total", resumeStart);
       vtAcquireFramePending = true;
       forceRender = true;
@@ -1628,7 +1631,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
                   "commit=%.3fms scheduledToCommit=%.3fms commitReturnToFlip=%.3fms "
                   "eventDelay=%.3fms eventHandle=%.3fms scheduledDelta=%.3fms "
-                  "renderFence=%d ageSurface=%llu commitToFlip=%.3fms "
+                  "renderFence=%d modeset=%d ageSurface=%llu commitToFlip=%.3fms "
                   "inputToFlip=%.3fms configureToFlip=%.3fms\n",
                   flip->presentId,
                   flip->hardware ? 1 : 0,
@@ -1653,20 +1656,29 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                       ? static_cast<double>(flip->scheduledMonotonicNsec - completedScheduledNsec) / 1'000'000.0
                       : 0.0,
                   flip->usedRenderFence ? 1 : 0,
+                  flip->usedModeset ? 1 : 0,
                   static_cast<unsigned long long>(completedProfile.maxAgeSurfaceId),
                   commitToFlipMs,
                   inputToFlipMs,
                   configureToFlipMs);
+      if (flip->usedModeset && (queueNsec > 100'000'000ull || flip->commitDurationNsec > 50'000'000ull)) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: slow KMS modeset id=%u queue=%.3fms commit=%.3fms\n",
+                     flip->presentId,
+                     static_cast<double>(queueNsec) / 1'000'000.0,
+                     static_cast<double>(flip->commitDurationNsec) / 1'000'000.0);
+      }
       if (queueNsec > 100'000'000ull || flip->commitDurationNsec > 50'000'000ull ||
           flipEventDispatchDelayMs > 100.0) {
         diagnostics::crashLog("slow-flip-complete id=%u seq=%llu queue=%.3fms commit=%.3fms "
-                              "eventDelay=%.3fms interval=%.3fms",
+                              "eventDelay=%.3fms interval=%.3fms modeset=%d",
                               flip->presentId,
                               static_cast<unsigned long long>(flip->sequence),
                               static_cast<double>(queueNsec) / 1'000'000.0,
                               static_cast<double>(flip->commitDurationNsec) / 1'000'000.0,
                               flipEventDispatchDelayMs,
-                              static_cast<double>(intervalNsec) / 1'000'000.0);
+                              static_cast<double>(intervalNsec) / 1'000'000.0,
+                              flip->usedModeset ? 1 : 0);
       }
       diagnostics::recordCpuAtomicLoop({
           .dispatchFlipCalls = 1,
@@ -2051,6 +2063,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           loopStats.maybeLog();
           continue;
         }
+        discardAllQueuedAtomicFrames();
         handleVtResume();
         wasVtForeground = true;
       }
