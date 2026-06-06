@@ -153,6 +153,46 @@ inline WaylandServer::Impl::Surface* previousFocusedToplevelFromOrders(
   }
   return nullptr;
 }
+inline std::vector<WaylandServer::Impl::Surface*> focusCycleListFromOrders(
+    std::vector<WaylandServer::Impl::Surface*> const& focusOrder,
+    std::vector<std::unique_ptr<WaylandServer::Impl::Surface>> const& surfaces,
+    WaylandServer::Impl::Surface* current) {
+  std::vector<WaylandServer::Impl::Surface*> cycle;
+  auto append = [&](WaylandServer::Impl::Surface* surface) {
+    if (!surfaceFocusableInOrder(surface)) return;
+    if (std::find(cycle.begin(), cycle.end(), surface) != cycle.end()) return;
+    cycle.push_back(surface);
+  };
+  for (auto it = focusOrder.rbegin(); it != focusOrder.rend(); ++it) {
+    append(*it);
+  }
+  for (auto it = surfaces.rbegin(); it != surfaces.rend(); ++it) {
+    append(it->get());
+  }
+  if (surfaceFocusableInOrder(current)) {
+    auto found = std::find(cycle.begin(), cycle.end(), current);
+    if (found == cycle.end()) {
+      cycle.insert(cycle.begin(), current);
+    } else if (found != cycle.begin()) {
+      cycle.erase(found);
+      cycle.insert(cycle.begin(), current);
+    }
+  }
+  return cycle;
+}
+inline std::size_t advancedFocusCycleIndex(std::size_t index, std::size_t size, bool forward) {
+  if (size == 0) return 0;
+  return forward ? (index + 1u) % size : (index + size - 1u) % size;
+}
+inline bool shortcutBindingMatches(ShortcutBinding const& binding,
+                                   bool metaDown,
+                                   bool ctrlDown,
+                                   bool altDown,
+                                   bool shiftDown) {
+  if (binding.meta != metaDown || binding.ctrl != ctrlDown || binding.alt != altDown) return false;
+  if (binding.action == ShortcutAction::CycleFocus && !binding.shift) return true;
+  return binding.shift == shiftDown;
+}
 inline bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
   return lambda_shell::shellAppIdMatches(requested, actual) ||
          lambda_shell::shellAppIdMatches(actual, requested);
@@ -265,7 +305,9 @@ WaylandServer::Impl::Surface* previousFocusedToplevel(WaylandServer::Impl* serve
                                                       WaylandServer::Impl::Surface* current);
 WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server);
 bool closeFocusedToplevel(WaylandServer::Impl* server);
-bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs);
+bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs, bool forward);
+void clearFocusCycle(WaylandServer::Impl* server);
+bool focusCycleActive(WaylandServer::Impl const* server);
 
 void clearSnapPreview(WaylandServer::Impl* server);
 void resetDragSnapState(WaylandServer::Impl* server);

@@ -34,18 +34,21 @@ bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool
   if (key == KEY_LEFTMETA || key == KEY_RIGHTMETA) {
     changed = server->metaDown_ != pressed;
     server->metaDown_ = pressed;
+    if (!pressed) clearFocusCycle(server);
     if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return true;
   }
   if (key == KEY_LEFTCTRL || key == KEY_RIGHTCTRL) {
     changed = server->ctrlDown_ != pressed;
     server->ctrlDown_ = pressed;
+    if (!pressed) clearFocusCycle(server);
     if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return false;
   }
   if (key == KEY_LEFTALT) {
     changed = server->altDown_ != pressed;
     server->altDown_ = pressed;
+    if (!pressed) clearFocusCycle(server);
     if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return false;
   }
@@ -63,11 +66,10 @@ bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool
 namespace lambda::compositor::wm {
 
 bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bool pressed, std::uint32_t timeMs) {
-  if (!pressed) return false;
+  if (!pressed) return focusCycleActive(server) && key == KEY_TAB;
   for (auto const& binding : server->shortcutBindings_) {
     if (binding.key != key) continue;
-    if (binding.meta != server->metaDown_ || binding.ctrl != server->ctrlDown_ ||
-        binding.alt != server->altDown_ || binding.shift != server->shiftDown_) {
+    if (!shortcutBindingMatches(binding, server->metaDown_, server->ctrlDown_, server->altDown_, server->shiftDown_)) {
       continue;
     }
 
@@ -75,7 +77,7 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
     case WaylandServer::ShortcutAction::CloseFocused:
       return closeFocusedToplevel(server);
     case WaylandServer::ShortcutAction::CycleFocus:
-      return cycleFocus(server, timeMs);
+      return cycleFocus(server, timeMs, !server->shiftDown_);
     case WaylandServer::ShortcutAction::SnapLeft:
       snapFocusedToplevel(server, true);
       return true;

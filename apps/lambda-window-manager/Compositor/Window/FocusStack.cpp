@@ -124,11 +124,45 @@ bool closeFocusedToplevel(WaylandServer::Impl* server) {
   return true;
 }
 
-bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs) {
-  WaylandServer::Impl::Surface* target = previousFocusedToplevel(server, server->keyboardFocus_);
-  if (!target || target == server->keyboardFocus_) return false;
-  lambda::compositor::focusSurface(server, target, timeMs);
-  return true;
+bool focusCycleActive(WaylandServer::Impl const* server) {
+  return server && !server->focusCycleList_.empty();
+}
+
+void clearFocusCycle(WaylandServer::Impl* server) {
+  if (!server) return;
+  server->focusCycleList_.clear();
+  server->focusCycleIndex_ = 0;
+}
+
+bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs, bool forward) {
+  if (!server) return false;
+  if (server->focusCycleList_.empty()) {
+    server->focusCycleList_ =
+        focusCycleListFromOrders(server->focusOrder_, server->surfaces_, server->keyboardFocus_);
+    auto current = std::find(server->focusCycleList_.begin(),
+                             server->focusCycleList_.end(),
+                             server->keyboardFocus_);
+    server->focusCycleIndex_ =
+        current == server->focusCycleList_.end()
+            ? 0u
+            : static_cast<std::size_t>(std::distance(server->focusCycleList_.begin(), current));
+  }
+  if (server->focusCycleList_.size() < 2u) {
+    clearFocusCycle(server);
+    return false;
+  }
+
+  std::size_t remaining = server->focusCycleList_.size();
+  while (remaining-- > 0u) {
+    server->focusCycleIndex_ =
+        advancedFocusCycleIndex(server->focusCycleIndex_, server->focusCycleList_.size(), forward);
+    WaylandServer::Impl::Surface* target = server->focusCycleList_[server->focusCycleIndex_];
+    if (!surfaceFocusableInOrder(target)) continue;
+    lambda::compositor::focusSurface(server, target, timeMs);
+    return true;
+  }
+  clearFocusCycle(server);
+  return false;
 }
 
 } // namespace lambda::compositor::wm

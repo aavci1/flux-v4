@@ -158,6 +158,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   }
   bool const hadToplevel = surfaceIsXdgToplevel(surface);
   bool const activatePrevious = keyboardFocus_ == surface && hadToplevel;
+  wm::clearFocusCycle(this);
   removeSurfaceFromFocusOrder(this, surface);
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
   detachPointerButtonGrabSurface(this, surface);
@@ -327,6 +328,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   bool const hadToplevel = surfaceIsXdgToplevel(surface);
   bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
   if (surfaceIsXdgToplevel(surface)) {
+    wm::clearFocusCycle(this);
     removeSurfaceFromFocusOrder(this, surface);
     if (pointerFocus_ == surface) pointerFocus_ = nullptr;
     detachPointerButtonGrabSurface(this, surface);

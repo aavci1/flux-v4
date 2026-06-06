@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
+#include <linux/input-event-codes.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,6 +94,78 @@ TEST_CASE("focus order helpers skip minimized windows and fall back to stacking 
   focusOrder.clear();
   surfaces[2]->minimized = false;
   CHECK(lambda::compositor::wm::mostRecentToplevelFromOrders(focusOrder, surfaces) == surfaces[2].get());
+}
+
+TEST_CASE("focus cycle list remains stable while focus order mutates") {
+  auto first = testSurface(1);
+  auto second = testSurface(2);
+  auto third = testSurface(3);
+  std::vector<std::unique_ptr<lambda::compositor::WaylandServer::Impl::Surface>> surfaces;
+  surfaces.push_back(std::move(first));
+  surfaces.push_back(std::move(second));
+  surfaces.push_back(std::move(third));
+
+  std::vector<lambda::compositor::WaylandServer::Impl::Surface*> focusOrder{
+      surfaces[0].get(),
+      surfaces[1].get(),
+      surfaces[2].get(),
+  };
+  auto cycle = lambda::compositor::wm::focusCycleListFromOrders(focusOrder, surfaces, surfaces[2].get());
+  REQUIRE(cycle.size() == 3);
+  CHECK(cycle[0] == surfaces[2].get());
+  CHECK(cycle[1] == surfaces[1].get());
+  CHECK(cycle[2] == surfaces[0].get());
+
+  std::size_t index = 0;
+  index = lambda::compositor::wm::advancedFocusCycleIndex(index, cycle.size(), true);
+  CHECK(cycle[index] == surfaces[1].get());
+
+  focusOrder = {
+      surfaces[0].get(),
+      surfaces[2].get(),
+      surfaces[1].get(),
+  };
+  index = lambda::compositor::wm::advancedFocusCycleIndex(index, cycle.size(), true);
+  CHECK(cycle[index] == surfaces[0].get());
+}
+
+TEST_CASE("focus cycle list supports reverse cycling and excludes minimized windows") {
+  auto first = testSurface(1);
+  auto second = testSurface(2, true);
+  auto third = testSurface(3);
+  std::vector<std::unique_ptr<lambda::compositor::WaylandServer::Impl::Surface>> surfaces;
+  surfaces.push_back(std::move(first));
+  surfaces.push_back(std::move(second));
+  surfaces.push_back(std::move(third));
+
+  std::vector<lambda::compositor::WaylandServer::Impl::Surface*> focusOrder{
+      surfaces[0].get(),
+      surfaces[1].get(),
+      surfaces[2].get(),
+  };
+  auto cycle = lambda::compositor::wm::focusCycleListFromOrders(focusOrder, surfaces, surfaces[2].get());
+  REQUIRE(cycle.size() == 2);
+  CHECK(cycle[0] == surfaces[2].get());
+  CHECK(cycle[1] == surfaces[0].get());
+  CHECK(lambda::compositor::wm::advancedFocusCycleIndex(0, cycle.size(), false) == 1);
+}
+
+TEST_CASE("cycle focus shortcut treats shift as reverse direction for existing bindings") {
+  lambda::compositor::ShortcutBinding cycle{
+      .action = lambda::compositor::ShortcutAction::CycleFocus,
+      .key = KEY_TAB,
+      .meta = true,
+  };
+  CHECK(lambda::compositor::wm::shortcutBindingMatches(cycle, true, false, false, false));
+  CHECK(lambda::compositor::wm::shortcutBindingMatches(cycle, true, false, false, true));
+
+  lambda::compositor::ShortcutBinding close{
+      .action = lambda::compositor::ShortcutAction::CloseFocused,
+      .key = KEY_Q,
+      .meta = true,
+  };
+  CHECK(lambda::compositor::wm::shortcutBindingMatches(close, true, false, false, false));
+  CHECK_FALSE(lambda::compositor::wm::shortcutBindingMatches(close, true, false, false, true));
 }
 
 TEST_CASE("presentation eligibility excludes minimized toplevels and dismissed popups") {

@@ -634,6 +634,7 @@ void WaylandServer::Impl::resetKeyboardState(std::uint32_t) {
   ctrlDown_ = false;
   altDown_ = false;
   shiftDown_ = false;
+  wm::clearFocusCycle(this);
   wm::sendKeyboardModifiers(this);
 }
 

@@ -342,6 +342,8 @@ struct WaylandServer::Impl {
   bool ctrlDown_ = false;
   bool altDown_ = false;
   bool shiftDown_ = false;
+  std::vector<Surface*> focusCycleList_;
+  std::size_t focusCycleIndex_ = 0;
   std::optional<ScreenshotRequest> screenshotRequest_;
   ScreenshotSelectionState screenshotSelection_;
   std::vector<ShortcutBinding> shortcutBindings_;

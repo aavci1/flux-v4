@@ -128,6 +128,20 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   CHECK(snapLeft->alt);
   CHECK_FALSE(snapLeft->meta);
 
+  auto cycleForward =
+      std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
+        return binding.action == lambda::compositor::WaylandServer::ShortcutAction::CycleFocus &&
+               binding.key == KEY_TAB && binding.meta && !binding.shift;
+      });
+  CHECK(cycleForward != config.shortcutBindings.end());
+
+  auto cycleBackward =
+      std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
+        return binding.action == lambda::compositor::WaylandServer::ShortcutAction::CycleFocus &&
+               binding.key == KEY_TAB && binding.meta && binding.shift;
+      });
+  CHECK(cycleBackward != config.shortcutBindings.end());
+
   std::filesystem::remove(path);
 }
 

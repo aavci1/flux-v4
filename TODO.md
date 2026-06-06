@@ -13,7 +13,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-007 | Bug | Minimized windows and dock previews are not wired across Window Manager and Shell | Medium | P2 |
 | TODO-008 | Bug | Live resize can stretch stale window content | Medium | P1 |
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
-| TODO-011 | Bug | Super+Tab window cycler only cycles through two windows | High | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
 | TODO-015 | Feature | Add visual Super+Tab window switcher overlay | N/A | P2 |
@@ -68,16 +67,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Keep system `mimeapps.list` support for installed apps, but local Flux app associations should work in a build-tree/development run without writing desktop files to the user's system.
 - [ ] [Auto] Add or update tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
 - [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, and SVG files from Files.
-
-## TODO-011: Super+Tab window cycler only cycles through two windows
-
-- [ ] [Manual] The window manager can only cycle through two apps with Super+Tab.
-- [ ] [Auto] When Super+Tab starts, build a stable ordered list of eligible windows and cycle through that list until the switcher interaction ends.
-- [ ] [Auto] Order the cycle list by most-recently-used window order.
-- [ ] [Auto] Exclude minimized windows from the cycle list.
-- [ ] [Auto + Manual] Super+Tab should cycle forward; Shift+Super+Tab should cycle backward.
-- [ ] [Auto + Manual] On Super release, activate the selected window. If cancellation is supported, return focus to the original window without changing the active window.
-- [ ] [Auto + Manual] Verify with at least three open non-minimized windows that repeated Super+Tab visits every window in MRU order, wraps correctly, and Shift+Super+Tab cycles backward.
 
 ## TODO-013: Add Editor file watcher with reload prompt
 

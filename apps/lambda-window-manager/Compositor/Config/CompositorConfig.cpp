@@ -181,6 +181,7 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
   return {
       {.action = Action::CloseFocused, .key = KEY_Q, .meta = true},
       {.action = Action::CycleFocus, .key = KEY_TAB, .meta = true},
+      {.action = Action::CycleFocus, .key = KEY_TAB, .meta = true, .shift = true},
       {.action = Action::SnapLeft, .key = KEY_LEFT, .meta = true},
       {.action = Action::SnapRight, .key = KEY_RIGHT, .meta = true},
       {.action = Action::Maximize, .key = KEY_UP, .meta = true},

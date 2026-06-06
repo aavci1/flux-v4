@@ -133,6 +133,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   shortcutBindings_ = {
       {.action = ShortcutAction::CloseFocused, .key = KEY_Q, .meta = true},
       {.action = ShortcutAction::CycleFocus, .key = KEY_TAB, .meta = true},
+      {.action = ShortcutAction::CycleFocus, .key = KEY_TAB, .meta = true, .shift = true},
       {.action = ShortcutAction::SnapLeft, .key = KEY_LEFT, .meta = true},
       {.action = ShortcutAction::SnapRight, .key = KEY_RIGHT, .meta = true},
       {.action = ShortcutAction::Maximize, .key = KEY_UP, .meta = true},
