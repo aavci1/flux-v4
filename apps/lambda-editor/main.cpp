@@ -10,6 +10,7 @@
 #include <Lambda/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -83,20 +84,128 @@ constexpr Shortcut ctrlShortcut(KeyCode key, Modifiers extra = Modifiers::None) 
   return Shortcut{key, Modifiers::Ctrl | extra};
 }
 
+constexpr float kCommandPaletteRowHeight = 52.f;
+constexpr float kCommandPaletteRowSpacing = 4.f;
+constexpr float kCommandPaletteListHeight = 360.f;
+
+void registerCommandDescriptor(Window* window, std::string name, CommandDescriptor descriptor) {
+  if (!window) {
+    return;
+  }
+  window->registerCommand(std::move(name), std::move(descriptor));
+}
+
+void registerStandardTextCommandDescriptors(Window* window) {
+  auto textCommand = [window](std::string name,
+                             std::string title,
+                             std::string category,
+                             Shortcut shortcut,
+                             std::string description = {}) {
+    registerCommandDescriptor(window, std::move(name), CommandDescriptor{
+        .title = std::move(title),
+        .description = std::move(description),
+        .category = std::move(category),
+        .icon = IconName::Keyboard,
+        .shortcut = shortcut,
+    });
+  };
+
+  textCommand("edit.deleteBackward", "Delete Backward", "Edit",
+              Shortcut{keys::Delete, Modifiers::None});
+  textCommand("edit.deleteForward", "Delete Forward", "Edit",
+              Shortcut{keys::ForwardDelete, Modifiers::None});
+  textCommand("edit.deleteWordBackward", "Delete Word Backward", "Edit",
+              ctrlShortcut(keys::Delete));
+  textCommand("edit.deleteWordForward", "Delete Word Forward", "Edit",
+              ctrlShortcut(keys::ForwardDelete));
+  textCommand("edit.pastePlainText", "Paste as Plain Text", "Edit",
+              ctrlShortcut(keys::V, Modifiers::Shift));
+  textCommand("edit.selectLine", "Select Line", "Selection",
+              ctrlShortcut(keys::L));
+  textCommand("edit.deleteLine", "Delete Line", "Edit",
+              ctrlShortcut(keys::K, Modifiers::Shift));
+  textCommand("edit.insertLineBelow", "Insert Line Below", "Edit",
+              ctrlShortcut(keys::Return));
+  textCommand("edit.insertLineAbove", "Insert Line Above", "Edit",
+              ctrlShortcut(keys::Return, Modifiers::Shift));
+  textCommand("edit.moveLineUp", "Move Line Up", "Edit",
+              Shortcut{keys::UpArrow, Modifiers::Alt});
+  textCommand("edit.moveLineDown", "Move Line Down", "Edit",
+              Shortcut{keys::DownArrow, Modifiers::Alt});
+  textCommand("edit.copyLineUp", "Copy Line Up", "Edit",
+              Shortcut{keys::UpArrow, Modifiers::Alt | Modifiers::Shift});
+  textCommand("edit.copyLineDown", "Copy Line Down", "Edit",
+              Shortcut{keys::DownArrow, Modifiers::Alt | Modifiers::Shift});
+
+  textCommand("cursor.left", "Move Cursor Left", "Cursor",
+              Shortcut{keys::LeftArrow, Modifiers::None});
+  textCommand("cursor.right", "Move Cursor Right", "Cursor",
+              Shortcut{keys::RightArrow, Modifiers::None});
+  textCommand("cursor.up", "Move Cursor Up", "Cursor",
+              Shortcut{keys::UpArrow, Modifiers::None});
+  textCommand("cursor.down", "Move Cursor Down", "Cursor",
+              Shortcut{keys::DownArrow, Modifiers::None});
+  textCommand("cursor.wordLeft", "Move Cursor Word Left", "Cursor",
+              ctrlShortcut(keys::LeftArrow));
+  textCommand("cursor.wordRight", "Move Cursor Word Right", "Cursor",
+              ctrlShortcut(keys::RightArrow));
+  textCommand("cursor.lineStart", "Move Cursor to Line Start", "Cursor",
+              Shortcut{keys::Home, Modifiers::None});
+  textCommand("cursor.lineEnd", "Move Cursor to Line End", "Cursor",
+              Shortcut{keys::End, Modifiers::None});
+  textCommand("cursor.documentStart", "Move Cursor to Document Start", "Cursor",
+              ctrlShortcut(keys::Home));
+  textCommand("cursor.documentEnd", "Move Cursor to Document End", "Cursor",
+              ctrlShortcut(keys::End));
+
+  textCommand("selection.left", "Select Left", "Selection",
+              Shortcut{keys::LeftArrow, Modifiers::Shift});
+  textCommand("selection.right", "Select Right", "Selection",
+              Shortcut{keys::RightArrow, Modifiers::Shift});
+  textCommand("selection.up", "Select Up", "Selection",
+              Shortcut{keys::UpArrow, Modifiers::Shift});
+  textCommand("selection.down", "Select Down", "Selection",
+              Shortcut{keys::DownArrow, Modifiers::Shift});
+  textCommand("selection.wordLeft", "Select Word Left", "Selection",
+              ctrlShortcut(keys::LeftArrow, Modifiers::Shift));
+  textCommand("selection.wordRight", "Select Word Right", "Selection",
+              ctrlShortcut(keys::RightArrow, Modifiers::Shift));
+  textCommand("selection.lineStart", "Select to Line Start", "Selection",
+              Shortcut{keys::Home, Modifiers::Shift});
+  textCommand("selection.lineEnd", "Select to Line End", "Selection",
+              Shortcut{keys::End, Modifiers::Shift});
+  textCommand("selection.documentStart", "Select to Document Start", "Selection",
+              ctrlShortcut(keys::Home, Modifiers::Shift));
+  textCommand("selection.documentEnd", "Select to Document End", "Selection",
+              ctrlShortcut(keys::End, Modifiers::Shift));
+}
+
 struct ToolbarButton {
+  std::string commandId;
   IconName icon;
-  std::string tooltip;
-  std::function<void()> onTap;
-  Reactive::Bindable<bool> disabled{false};
 
   Element body() const {
-    useTooltip(TooltipConfig{.text = tooltip, .placement = PopoverPlacement::Below});
+    Runtime* runtime = Runtime::current();
+    Window* window = runtime ? &runtime->window() : nullptr;
+    CommandDescriptor const* descriptor = nullptr;
+    if (Application::hasInstance()) {
+      auto const& descriptors = Application::instance().commandDescriptors();
+      auto it = descriptors.find(commandId);
+      if (it != descriptors.end()) {
+        descriptor = &it->second;
+      }
+    }
+    std::string const title = descriptor ? descriptor->displayTitle() : commandId;
+    IconName const resolvedIcon = descriptor && descriptor->icon ? *descriptor->icon : icon;
+    useTooltip(TooltipConfig{.text = title, .placement = PopoverPlacement::Below});
     Reactive::Signal<bool> hovered = useHover();
     auto theme = useEnvironment<ThemeKey>();
-    auto disabledBinding = disabled;
-    auto handleTap = [onTap = onTap, disabledBinding] {
-      if (!disabledBinding.evaluate() && onTap) {
-        onTap();
+    auto disabledBinding = [window, commandId = commandId] {
+      return !window || !window->isCommandEnabled(commandId);
+    };
+    auto handleTap = [window, commandId = commandId] {
+      if (window && window->isCommandEnabled(commandId)) {
+        window->dispatchCommand(commandId);
       }
     };
     auto handleKey = [handleTap](KeyCode key, Modifiers) {
@@ -113,27 +222,25 @@ struct ToolbarButton {
                 .size(42.f, 42.f)
                 .cornerRadius(CornerRadius{7.f})
                 .fill([hovered, theme, disabledBinding] {
-                  if (disabledBinding.evaluate()) {
+                  if (disabledBinding()) {
                     return FillStyle::solid(Colors::transparent);
                   }
                   return FillStyle::solid(hovered() ? theme().hoveredControlBackgroundColor
                                                     : Colors::transparent);
                 }),
             Icon{
-                .name = icon,
+                .name = resolvedIcon,
                 .size = 26.f,
                 .weight = 430.f,
                 .color = [disabledBinding] {
-                  return disabledBinding.evaluate() ? Color::secondary() : Color::primary();
+                  return disabledBinding() ? Color::secondary() : Color::primary();
                 },
             })}
         .size(42.f, 42.f)
         .cursor([disabledBinding] {
-          return disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
+          return disabledBinding() ? Cursor::Inherit : Cursor::Hand;
         })
-        .focusable([disabledBinding] {
-          return !disabledBinding.evaluate();
-        })
+        .focusable(false)
         .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleKey})
         .onTap(std::function<void()>{handleTap});
   }
@@ -161,6 +268,439 @@ Element toolbarGroup(std::vector<Element> items) {
   };
 }
 
+std::string lowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return value;
+}
+
+std::string keyLabel(KeyCode key) {
+  switch (key) {
+  case keys::A: return "A";
+  case keys::B: return "B";
+  case keys::C: return "C";
+  case keys::D: return "D";
+  case keys::E: return "E";
+  case keys::F: return "F";
+  case keys::G: return "G";
+  case keys::H: return "H";
+  case keys::I: return "I";
+  case keys::J: return "J";
+  case keys::K: return "K";
+  case keys::L: return "L";
+  case keys::M: return "M";
+  case keys::N: return "N";
+  case keys::O: return "O";
+  case keys::P: return "P";
+  case keys::Q: return "Q";
+  case keys::R: return "R";
+  case keys::S: return "S";
+  case keys::T: return "T";
+  case keys::U: return "U";
+  case keys::V: return "V";
+  case keys::W: return "W";
+  case keys::X: return "X";
+  case keys::Y: return "Y";
+  case keys::Z: return "Z";
+  case keys::Digit0: return "0";
+  case keys::Minus: return "-";
+  case keys::Equal: return "=";
+  case keys::Return: return "Enter";
+  case keys::Escape: return "Esc";
+  case keys::Tab: return "Tab";
+  case keys::Delete: return "Backspace";
+  case keys::ForwardDelete: return "Delete";
+  case keys::LeftArrow: return "Left";
+  case keys::RightArrow: return "Right";
+  case keys::UpArrow: return "Up";
+  case keys::DownArrow: return "Down";
+  case keys::Home: return "Home";
+  case keys::End: return "End";
+  case keys::F3: return "F3";
+  default: return {};
+  }
+}
+
+std::string shortcutLabel(std::string const& commandId, Shortcut shortcut) {
+  if (commandId == "app.commandPalette") {
+    return {};
+  }
+  if (!shortcut.matches(shortcut.key, shortcut.modifiers)) {
+    return {};
+  }
+  std::vector<std::string> parts;
+  if (any(shortcut.modifiers & Modifiers::Ctrl)) parts.push_back("Ctrl");
+  if (any(shortcut.modifiers & Modifiers::Shift)) parts.push_back("Shift");
+  if (any(shortcut.modifiers & Modifiers::Alt)) parts.push_back("Alt");
+  if (any(shortcut.modifiers & Modifiers::Meta)) parts.push_back("Super");
+  std::string key = keyLabel(shortcut.key);
+  if (key.empty()) {
+    return {};
+  }
+  parts.push_back(std::move(key));
+  std::string out;
+  for (std::size_t i = 0; i < parts.size(); ++i) {
+    if (i > 0) out += "+";
+    out += parts[i];
+  }
+  return out;
+}
+
+struct CommandPaletteItem {
+  std::string id;
+  std::string title;
+  std::string category;
+  std::string description;
+  std::string shortcut;
+  std::optional<IconName> icon;
+  bool enabled = false;
+
+  bool operator==(CommandPaletteItem const&) const = default;
+};
+
+bool commandMatchesQuery(CommandPaletteItem const& item, std::string const& query) {
+  if (query.empty()) {
+    return true;
+  }
+  std::string const q = lowerAscii(query);
+  return lowerAscii(item.title).find(q) != std::string::npos ||
+         lowerAscii(item.category).find(q) != std::string::npos ||
+         lowerAscii(item.description).find(q) != std::string::npos ||
+         lowerAscii(item.id).find(q) != std::string::npos;
+}
+
+std::vector<CommandPaletteItem> buildCommandPaletteItems(Runtime* runtime,
+                                                         std::optional<ComponentKey> const& targetKey,
+                                                         std::string const& query) {
+  std::vector<CommandPaletteItem> items;
+  if (!Application::hasInstance()) {
+    return items;
+  }
+  auto const& descriptors = Application::instance().commandDescriptors();
+  items.reserve(descriptors.size());
+  for (auto const& [id, descriptor] : descriptors) {
+    if (!descriptor.paletteVisible) {
+      continue;
+    }
+    std::string title = descriptor.displayTitle();
+    if (title.empty()) {
+      title = id;
+    }
+    ComponentKey const effectiveTarget = targetKey.value_or(ComponentKey{});
+    CommandPaletteItem item{
+        .id = id,
+        .title = std::move(title),
+        .category = descriptor.category,
+        .description = descriptor.description,
+        .shortcut = shortcutLabel(id, descriptor.shortcut),
+        .icon = descriptor.icon,
+        .enabled = runtime &&
+                   runtime->isCommandCurrentlyEnabledFrom(effectiveTarget, id),
+    };
+    if (commandMatchesQuery(item, query)) {
+      items.push_back(std::move(item));
+    }
+  }
+  std::sort(items.begin(), items.end(), [](CommandPaletteItem const& lhs,
+                                           CommandPaletteItem const& rhs) {
+    if (lhs.category != rhs.category) {
+      return lhs.category < rhs.category;
+    }
+    if (lhs.title != rhs.title) {
+      return lhs.title < rhs.title;
+    }
+    return lhs.id < rhs.id;
+  });
+  return items;
+}
+
+int firstCommandPaletteIndex(std::vector<CommandPaletteItem> const& items) {
+  return items.empty() ? -1 : 0;
+}
+
+int clampedCommandPaletteIndex(std::vector<CommandPaletteItem> const& items, int index) {
+  if (items.empty()) {
+    return -1;
+  }
+  return std::clamp(index, 0, static_cast<int>(items.size()) - 1);
+}
+
+void ensureCommandPaletteIndexVisible(Signal<Point> const& scrollOffset, int index) {
+  if (index < 0) {
+    scrollOffset.set(Point{});
+    return;
+  }
+  float const stride = kCommandPaletteRowHeight + kCommandPaletteRowSpacing;
+  float const rowTop = static_cast<float>(index) * stride;
+  float const rowBottom = rowTop + kCommandPaletteRowHeight;
+  float nextY = scrollOffset.peek().y;
+  if (rowTop < nextY) {
+    nextY = rowTop;
+  } else if (rowBottom > nextY + kCommandPaletteListHeight) {
+    nextY = rowBottom - kCommandPaletteListHeight;
+  }
+  nextY = std::max(0.f, nextY);
+  if (std::abs(nextY - scrollOffset.peek().y) > 0.1f) {
+    scrollOffset.set(Point{0.f, nextY});
+  }
+}
+
+bool runCommandPaletteItem(std::vector<CommandPaletteItem> const& items,
+                           int index,
+                           Signal<bool> const& open,
+                           Signal<std::optional<ComponentKey>> const& targetKey) {
+  Runtime* runtime = Runtime::current();
+  if (!runtime || index < 0 || index >= static_cast<int>(items.size())) {
+    return false;
+  }
+  CommandPaletteItem const& item = items[static_cast<std::size_t>(index)];
+  if (!item.enabled) {
+    return false;
+  }
+  ComponentKey const effectiveTarget = targetKey.peek().value_or(ComponentKey{});
+  if (!runtime->dispatchCommandFrom(effectiveTarget, item.id)) {
+    return false;
+  }
+  open.set(false);
+  return true;
+}
+
+struct CommandPaletteRow {
+  CommandPaletteItem item;
+  Reactive::Signal<bool> open;
+  Reactive::Signal<std::optional<ComponentKey>> targetKey;
+  Reactive::Signal<int> selectedIndex;
+  Reactive::Signal<std::size_t> index;
+
+  Element body() const {
+    Reactive::Signal<bool> hovered = useHover();
+    auto theme = useEnvironment<ThemeKey>();
+    auto isSelected = [selectedIndex = selectedIndex, index = index] {
+      return selectedIndex.peek() == static_cast<int>(index.peek());
+    };
+    auto activate = [items = std::vector<CommandPaletteItem>{item},
+                     open = open,
+                     targetKey = targetKey] {
+      runCommandPaletteItem(items, 0, open, targetKey);
+    };
+    auto selectThis = [selectedIndex = selectedIndex, index = index] {
+      selectedIndex.set(static_cast<int>(index.peek()));
+    };
+    return HStack{
+        .spacing = 10.f,
+        .alignment = Alignment::Center,
+        .children = children(
+            Icon{
+                .name = item.icon.value_or(IconName::Terminal),
+                .size = 22.f,
+                .weight = 430.f,
+                .color = [item = item] {
+                  return item.enabled ? Color::primary() : Color::secondary();
+                },
+            },
+            VStack{
+                .spacing = 2.f,
+                .alignment = Alignment::Stretch,
+                .children = children(
+                    Text{
+                        .text = item.title,
+                        .font = Font{.size = 14.f, .weight = 520.f},
+                        .color = [item = item] {
+                          return item.enabled ? Color::primary() : Color::secondary();
+                        },
+                        .verticalAlignment = VerticalAlignment::Center,
+                    },
+                    Text{
+                        .text = item.category.empty() ? item.id : item.category,
+                        .font = Font{.size = 11.f, .weight = 430.f},
+                        .color = Color::secondary(),
+                        .verticalAlignment = VerticalAlignment::Center,
+                    })}.flex(1.f, 1.f, 0.f),
+            Text{
+                .text = item.shortcut,
+                .font = Font{.size = 12.f, .weight = 500.f},
+                .color = Color::secondary(),
+                .verticalAlignment = VerticalAlignment::Center,
+            })}
+        .height(52.f)
+        .padding(6.f, 10.f, 6.f, 10.f)
+        .cornerRadius(CornerRadius{7.f})
+        .fill([hovered, theme, isSelected, item = item] {
+          if (isSelected()) {
+            return FillStyle::solid(theme().selectedContentBackgroundColor);
+          }
+          if (item.enabled && hovered()) {
+            return FillStyle::solid(theme().hoveredControlBackgroundColor);
+          }
+          return FillStyle::solid(Colors::transparent);
+        })
+        .cursor([item = item] {
+          return item.enabled ? Cursor::Hand : Cursor::Inherit;
+        })
+        .focusable(item.enabled)
+        .onKeyDown(std::function<void(KeyCode, Modifiers)>{
+            [activate](KeyCode key, Modifiers) {
+              if (key == keys::Return || key == keys::Space) {
+                activate();
+              }
+            }})
+        .onPointerEnter(std::function<void()>{selectThis})
+        .onTap(std::function<void()>{[selectThis, activate] {
+          selectThis();
+          activate();
+        }});
+  }
+};
+
+struct CommandPalette {
+  Reactive::Signal<bool> open;
+  Reactive::Signal<std::string> query;
+  Reactive::Signal<std::vector<CommandPaletteItem>> items;
+  Reactive::Signal<std::optional<ComponentKey>> targetKey;
+  Reactive::Signal<int> selectedIndex;
+  Reactive::Signal<Point> scrollOffset;
+  Reactive::Signal<int> focusGeneration;
+  std::function<void()> refresh;
+
+  Element body() const {
+    auto theme = useEnvironment<ThemeKey>();
+    auto close = [open = open] {
+      open.set(false);
+    };
+    auto runFirst = [items = items, open = open, targetKey = targetKey,
+                     selectedIndex = selectedIndex] {
+      Runtime* runtime = Runtime::current();
+      if (!runtime) {
+        return;
+      }
+      if (runCommandPaletteItem(items.peek(), selectedIndex.peek(), open, targetKey)) {
+        return;
+      }
+      for (int i = 0; i < static_cast<int>(items.peek().size()); ++i) {
+        if (runCommandPaletteItem(items.peek(), i, open, targetKey)) {
+          return;
+        }
+      }
+    };
+    auto moveSelection = [items = items, selectedIndex = selectedIndex,
+                          scrollOffset = scrollOffset](int delta) {
+      std::vector<CommandPaletteItem> const currentItems = items.peek();
+      if (currentItems.empty()) {
+        selectedIndex.set(-1);
+        scrollOffset.set(Point{});
+        return;
+      }
+      int const current = selectedIndex.peek() < 0 ? 0 : selectedIndex.peek();
+      int const next = clampedCommandPaletteIndex(currentItems, current + delta);
+      selectedIndex.set(next);
+      ensureCommandPaletteIndexVisible(scrollOffset, next);
+    };
+    TextInput::Style searchStyle = compactInputStyle();
+    searchStyle.font = Font{.size = 15.f, .weight = 440.f};
+    auto commandList = Element{ScrollView{
+        .axis = ScrollAxis::Vertical,
+        .scrollOffset = scrollOffset,
+        .children = children(Element{For<CommandPaletteItem>(
+            items,
+            [](CommandPaletteItem const& item) {
+              return item.id;
+            },
+            [open = open, targetKey = targetKey, selectedIndex = selectedIndex](
+                CommandPaletteItem const& item,
+                Reactive::Signal<std::size_t> index) {
+              return Element{CommandPaletteRow{
+                  .item = item,
+                  .open = open,
+                  .targetKey = targetKey,
+                  .selectedIndex = selectedIndex,
+                  .index = index,
+              }};
+            },
+            4.f,
+            Alignment::Stretch)})}}
+        .height(kCommandPaletteListHeight);
+    auto panel = VStack{
+        .spacing = 8.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Element{AutoFocusTextInput{
+                        .input = TextInput{
+                            .value = query,
+                            .placeholder = "Run command",
+                            .style = searchStyle,
+                            .onChange = [refresh = refresh](std::string const&) {
+                              if (refresh) {
+                                refresh();
+                              }
+                            },
+                            .onSubmit = [runFirst](std::string const&) {
+                              runFirst();
+                            },
+                            .onEscape = [close](std::string const&) {
+                              close();
+                            },
+                            .onPreviewKeyDown = [moveSelection](KeyCode key, Modifiers modifiers) {
+                              if (modifiers != Modifiers::None) {
+                                return false;
+                              }
+                              if (key == keys::DownArrow) {
+                                moveSelection(1);
+                                return true;
+                              }
+                              if (key == keys::UpArrow) {
+                                moveSelection(-1);
+                                return true;
+                              }
+                              if (key == keys::PageDown) {
+                                moveSelection(6);
+                                return true;
+                              }
+                              if (key == keys::PageUp) {
+                                moveSelection(-6);
+                                return true;
+                              }
+                              return false;
+                            },
+                            .onPreviewCommand = [moveSelection](std::string const& commandId) {
+                              if (commandId == "cursor.down") {
+                                moveSelection(1);
+                                return true;
+                              }
+                              if (commandId == "cursor.up") {
+                                moveSelection(-1);
+                                return true;
+                              }
+                              return false;
+                            },
+                        },
+                        .focusGeneration = focusGeneration,
+                    }}
+                .height(42.f),
+            std::move(commandList))}
+        .width(560.f)
+        .padding(10.f)
+        .cornerRadius(CornerRadius{8.f})
+        .fill(FillStyle::solid(Color::windowBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .shadow(ShadowStyle{
+            .radius = 24.f,
+            .offset = {0.f, 12.f},
+            .color = Color{0.f, 0.f, 0.f, 0.24f},
+        })
+        .padding(88.f, 0.f, 0.f, 0.f);
+    auto backdrop = Rectangle{}
+        .fill(FillStyle::solid(Color{0.f, 0.f, 0.f, 0.22f}))
+        .onTap(std::function<void()>{close});
+    std::vector<Element> overlayChildren = children(std::move(backdrop), std::move(panel));
+    return Element{ZStack{
+        .horizontalAlignment = Alignment::Center,
+        .verticalAlignment = Alignment::Start,
+        .children = std::move(overlayChildren),
+    }};
+  }
+};
+
 struct LambdaEditor {
   EditorDocument initialDocument = EditorDocument::untitled();
   std::string initialStatus;
@@ -187,8 +727,18 @@ struct LambdaEditor {
     auto findQuery = useState(std::string{});
     auto replaceValue = useState(std::string{});
     auto gotoLineValue = useState(std::string{});
+    auto findCaseSensitive = useState(false);
+    auto findWholeWord = useState(false);
+    auto findRegex = useState(false);
     auto wordWrap = useState(true);
     auto fontSize = useState(14.f);
+    auto commandPaletteOpen = useState(false);
+    auto commandPaletteQuery = useState(std::string{});
+    auto commandPaletteItems = useState(std::vector<CommandPaletteItem>{});
+    auto commandPaletteTargetKey = useState(std::optional<ComponentKey>{});
+    auto commandPaletteSelectedIndex = useState(-1);
+    auto commandPaletteScrollOffset = useState(Point{});
+    auto commandPaletteFocusGeneration = useState(0);
 
     auto refreshHistoryState = [history, canUndo, canRedo] {
       canUndo.set(history.peek()->canUndo());
@@ -359,6 +909,17 @@ struct LambdaEditor {
       clipboardHasText.set(true);
       applySnapshot(insertAtSelection(text.peek(), selection.peek(), *clipboard), true, "Pasted text.");
     };
+    auto selectAll = [text, selection, status] {
+      selection.set(detail::selectAllSelection(text.peek()));
+      status.set("Selected all text.");
+    };
+    auto currentFindOptions = [findCaseSensitive, findWholeWord, findRegex] {
+      return FindOptions{
+          .caseSensitive = findCaseSensitive.peek(),
+          .wholeWord = findWholeWord.peek(),
+          .regex = findRegex.peek(),
+      };
+    };
     auto requestPanelFocus = [panelFocusGeneration] {
       panelFocusGeneration.set(panelFocusGeneration.peek() + 1);
     };
@@ -382,21 +943,31 @@ struct LambdaEditor {
       activePanel.set(EditorPanel::None);
       status.set("Ready");
     };
-    auto findNext = [text, selection, findQuery, status] {
+    auto findNext = [text, selection, findQuery, currentFindOptions, status] {
       if (std::optional<detail::TextEditSelection> match =
-              findNextMatch(text.peek(), findQuery.peek(), selection.peek(), true)) {
+              findNextMatch(text.peek(), findQuery.peek(), selection.peek(), true, currentFindOptions())) {
         selection.set(*match);
         status.set("Match found.");
       } else {
         status.set("No match.");
       }
     };
-    auto replaceOne = [text, selection, findQuery, replaceValue, applySnapshot, findNext, status] {
+    auto findPrevious = [text, selection, findQuery, currentFindOptions, status] {
+      if (std::optional<detail::TextEditSelection> match =
+              findPreviousMatch(text.peek(), findQuery.peek(), selection.peek(), true, currentFindOptions())) {
+        selection.set(*match);
+        status.set("Match found.");
+      } else {
+        status.set("No match.");
+      }
+    };
+    auto replaceOne = [text, selection, findQuery, replaceValue, currentFindOptions,
+                       applySnapshot, findNext, status] {
       if (findQuery.peek().empty()) {
         status.set("Enter text to replace.");
         return;
       }
-      if (selectedText(text.peek(), selection.peek()) != findQuery.peek()) {
+      if (!selectionMatches(text.peek(), selection.peek(), findQuery.peek(), currentFindOptions())) {
         findNext();
         return;
       }
@@ -404,12 +975,13 @@ struct LambdaEditor {
                     true,
                     "Replaced match.");
     };
-    auto replaceAll = [text, findQuery, replaceValue, applySnapshot, status] {
+    auto replaceAll = [text, findQuery, replaceValue, currentFindOptions, applySnapshot, status] {
       if (findQuery.peek().empty()) {
         status.set("Enter text to replace.");
         return;
       }
-      EditorSnapshot snapshot = replaceAllMatches(text.peek(), findQuery.peek(), replaceValue.peek());
+      EditorSnapshot snapshot =
+          replaceAllMatches(text.peek(), findQuery.peek(), replaceValue.peek(), currentFindOptions());
       if (snapshot.text == text.peek()) {
         status.set("No match.");
         return;
@@ -431,6 +1003,21 @@ struct LambdaEditor {
       wordWrap.set(next);
       status.set(next ? "Word wrap on." : "Word wrap off.");
     };
+    auto toggleFindCaseSensitive = [findCaseSensitive, status] {
+      bool const next = !findCaseSensitive.peek();
+      findCaseSensitive.set(next);
+      status.set(next ? "Find case-sensitive." : "Find case-insensitive.");
+    };
+    auto toggleFindWholeWord = [findWholeWord, status] {
+      bool const next = !findWholeWord.peek();
+      findWholeWord.set(next);
+      status.set(next ? "Find whole words." : "Find any occurrence.");
+    };
+    auto toggleFindRegex = [findRegex, status] {
+      bool const next = !findRegex.peek();
+      findRegex.set(next);
+      status.set(next ? "Find regex enabled." : "Find regex disabled.");
+    };
     auto zoomOut = [fontSize, status] {
       float const next = std::max(10.f, fontSize.peek() - 1.f);
       fontSize.set(next);
@@ -441,82 +1028,196 @@ struct LambdaEditor {
       fontSize.set(next);
       status.set("Zoom " + std::to_string(static_cast<int>(next)) + " pt.");
     };
-    useWindowAction("file.new", newFile, ActionDescriptor{
-        .label = "New",
+    auto zoomReset = [fontSize, status] {
+      fontSize.set(14.f);
+      status.set("Zoom 14 pt.");
+    };
+    auto refreshCommandPalette = [runtime, commandPaletteQuery, commandPaletteItems,
+                                  commandPaletteTargetKey, commandPaletteSelectedIndex,
+                                  commandPaletteScrollOffset] {
+      std::vector<CommandPaletteItem> nextItems =
+          buildCommandPaletteItems(runtime, commandPaletteTargetKey.peek(), commandPaletteQuery.peek());
+      commandPaletteSelectedIndex.set(firstCommandPaletteIndex(nextItems));
+      commandPaletteScrollOffset.set(Point{});
+      commandPaletteItems.set(std::move(nextItems));
+    };
+    auto openCommandPalette = [commandPaletteOpen, commandPaletteQuery, commandPaletteItems,
+                               commandPaletteTargetKey, commandPaletteSelectedIndex,
+                               commandPaletteScrollOffset, commandPaletteFocusGeneration, runtime] {
+      std::optional<ComponentKey> target = runtime ? runtime->focusTargetKey() : std::nullopt;
+      std::vector<CommandPaletteItem> nextItems = buildCommandPaletteItems(runtime, target, "");
+      commandPaletteQuery.set("");
+      commandPaletteTargetKey.set(target);
+      commandPaletteSelectedIndex.set(firstCommandPaletteIndex(nextItems));
+      commandPaletteScrollOffset.set(Point{});
+      commandPaletteItems.set(std::move(nextItems));
+      commandPaletteOpen.set(true);
+      commandPaletteFocusGeneration.set(commandPaletteFocusGeneration.peek() + 1);
+    };
+
+    registerStandardTextCommandDescriptors(window);
+
+    useWindowCommand("app.commandPalette", openCommandPalette, CommandDescriptor{
+        .title = "Command Palette",
+        .description = "Find and run editor commands.",
+        .category = "Application",
+        .icon = IconName::KeyboardCommandKey,
+        .shortcut = ctrlShortcut(keys::P, Modifiers::Shift),
+        .paletteVisible = false,
+        .isEnabled = [] { return true; },
+    });
+    useWindowCommand("file.new", newFile, CommandDescriptor{
+        .title = "New",
+        .category = "File",
+        .icon = IconName::NoteAdd,
         .shortcut = ctrlShortcut(keys::N),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("file.open", openFile, ActionDescriptor{
-        .label = "Open",
+    useWindowCommand("file.open", openFile, CommandDescriptor{
+        .title = "Open",
+        .category = "File",
+        .icon = IconName::FileOpen,
         .shortcut = ctrlShortcut(keys::O),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("file.save", saveFile, ActionDescriptor{
-        .label = "Save",
+    useWindowCommand("file.save", saveFile, CommandDescriptor{
+        .title = "Save",
+        .category = "File",
+        .icon = IconName::Save,
         .shortcut = ctrlShortcut(keys::S),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("file.saveAs", saveFileAs, ActionDescriptor{
-        .label = "Save As",
+    useWindowCommand("file.saveAs", saveFileAs, CommandDescriptor{
+        .title = "Save As",
+        .category = "File",
+        .icon = IconName::SaveAs,
         .shortcut = ctrlShortcut(keys::S, Modifiers::Shift),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("edit.undo", undo, ActionDescriptor{
-        .label = "Undo",
+    useWindowCommand("edit.undo", undo, CommandDescriptor{
+        .title = "Undo",
+        .category = "Edit",
+        .icon = IconName::Undo,
         .shortcut = ctrlShortcut(keys::Z),
         .isEnabled = [canUndo] { return canUndo.peek(); },
     });
-    useWindowAction("edit.redo", redo, ActionDescriptor{
-        .label = "Redo",
+    useWindowCommand("edit.redo", redo, CommandDescriptor{
+        .title = "Redo",
+        .category = "Edit",
+        .icon = IconName::Redo,
         .shortcut = ctrlShortcut(keys::Z, Modifiers::Shift),
         .isEnabled = [canRedo] { return canRedo.peek(); },
     });
-    useWindowAction("edit.cut", cutSelection, ActionDescriptor{
-        .label = "Cut",
+    useWindowCommand("edit.cut", cutSelection, CommandDescriptor{
+        .title = "Cut",
+        .category = "Edit",
+        .icon = IconName::ContentCut,
         .shortcut = ctrlShortcut(keys::X),
         .isEnabled = [selection] { return selection.peek().hasSelection(); },
     });
-    useWindowAction("edit.copy", copySelection, ActionDescriptor{
-        .label = "Copy",
+    useWindowCommand("edit.copy", copySelection, CommandDescriptor{
+        .title = "Copy",
+        .category = "Edit",
+        .icon = IconName::ContentCopy,
         .shortcut = ctrlShortcut(keys::C),
         .isEnabled = [selection] { return selection.peek().hasSelection(); },
     });
-    useWindowAction("edit.paste", pasteClipboard, ActionDescriptor{
-        .label = "Paste",
+    useWindowCommand("edit.paste", pasteClipboard, CommandDescriptor{
+        .title = "Paste",
+        .category = "Edit",
+        .icon = IconName::ContentPaste,
         .shortcut = ctrlShortcut(keys::V),
         .isEnabled = [clipboardHasText] {
           return clipboardHasText.peek() ||
                  (Application::hasInstance() && Application::instance().clipboard().hasText());
         },
     });
-    useWindowAction("editor.find", showFind, ActionDescriptor{
-        .label = "Find",
+    useWindowCommand("edit.selectAll", selectAll, CommandDescriptor{
+        .title = "Select All",
+        .category = "Edit",
+        .icon = IconName::SelectAll,
+        .shortcut = ctrlShortcut(keys::A),
+        .isEnabled = [] { return true; },
+    });
+    useWindowCommand("editor.find", showFind, CommandDescriptor{
+        .title = "Find",
+        .category = "Navigate",
+        .icon = IconName::Search,
         .shortcut = ctrlShortcut(keys::F),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("editor.replace", showReplace, ActionDescriptor{
-        .label = "Replace",
+    useWindowCommand("editor.findNext", findNext, CommandDescriptor{
+        .title = "Find Next",
+        .category = "Navigate",
+        .icon = IconName::Search,
+        .shortcut = Shortcut{keys::F3, Modifiers::None},
+        .isEnabled = [findQuery] { return !findQuery.peek().empty(); },
+    });
+    useWindowCommand("editor.findPrevious", findPrevious, CommandDescriptor{
+        .title = "Find Previous",
+        .category = "Navigate",
+        .icon = IconName::Search,
+        .shortcut = Shortcut{keys::F3, Modifiers::Shift},
+        .isEnabled = [findQuery] { return !findQuery.peek().empty(); },
+    });
+    useWindowCommand("editor.replace", showReplace, CommandDescriptor{
+        .title = "Replace",
+        .category = "Navigate",
+        .icon = IconName::FindReplace,
         .shortcut = ctrlShortcut(keys::H),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("editor.goToLine", showGoToLine, ActionDescriptor{
-        .label = "Go To Line",
+    useWindowCommand("editor.goToLine", showGoToLine, CommandDescriptor{
+        .title = "Go To Line",
+        .category = "Navigate",
+        .icon = IconName::MoreHoriz,
         .shortcut = ctrlShortcut(keys::G),
         .isEnabled = [] { return true; },
     });
-    useWindowAction("view.wordWrap", toggleWordWrap, ActionDescriptor{
-        .label = "Word Wrap",
+    useWindowCommand("editor.toggleFindCaseSensitive", toggleFindCaseSensitive, CommandDescriptor{
+        .title = "Toggle Find Case Sensitive",
+        .category = "Navigate",
+        .icon = IconName::TextFields,
         .isEnabled = [] { return true; },
     });
-    useWindowAction("view.zoomOut", zoomOut, ActionDescriptor{
-        .label = "Zoom Out",
+    useWindowCommand("editor.toggleFindWholeWord", toggleFindWholeWord, CommandDescriptor{
+        .title = "Toggle Find Whole Word",
+        .category = "Navigate",
+        .icon = IconName::TextFieldsAlt,
+        .isEnabled = [] { return true; },
+    });
+    useWindowCommand("editor.toggleFindRegex", toggleFindRegex, CommandDescriptor{
+        .title = "Toggle Find Regex",
+        .category = "Navigate",
+        .icon = IconName::RegularExpression,
+        .isEnabled = [] { return true; },
+    });
+    useWindowCommand("view.wordWrap", toggleWordWrap, CommandDescriptor{
+        .title = "Word Wrap",
+        .category = "View",
+        .icon = IconName::WrapText,
+        .isEnabled = [] { return true; },
+    });
+    useWindowCommand("view.zoomOut", zoomOut, CommandDescriptor{
+        .title = "Zoom Out",
+        .category = "View",
+        .icon = IconName::ZoomOut,
         .shortcut = ctrlShortcut(keys::Minus),
         .isEnabled = [fontSize] { return fontSize.peek() > 10.f; },
     });
-    useWindowAction("view.zoomIn", zoomIn, ActionDescriptor{
-        .label = "Zoom In",
+    useWindowCommand("view.zoomIn", zoomIn, CommandDescriptor{
+        .title = "Zoom In",
+        .category = "View",
+        .icon = IconName::ZoomIn,
         .shortcut = ctrlShortcut(keys::Equal),
         .isEnabled = [fontSize] { return fontSize.peek() < 32.f; },
+    });
+    useWindowCommand("view.zoomReset", zoomReset, CommandDescriptor{
+        .title = "Reset Zoom",
+        .category = "View",
+        .icon = IconName::RestartAlt,
+        .shortcut = ctrlShortcut(keys::Digit0),
+        .isEnabled = [fontSize] { return fontSize.peek() != 14.f; },
     });
 
     TextInput::Style editorStyle = TextInput::Style::plain();
@@ -680,85 +1381,57 @@ struct LambdaEditor {
           return editorArea(false);
         })}.flex(1.f, 1.f, 0.f);
 
-    return VStack{
-               .spacing = 0.f,
-               .alignment = Alignment::Stretch,
-               .children = children(
-                   HStack{
+    auto mainContent = VStack{
+        .spacing = 0.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            HStack{
                        .spacing = 8.f,
                        .alignment = Alignment::Center,
                        .children = children(
                            toolbarGroup(children(
-                               ToolbarButton{.icon = IconName::NoteAdd,
-                                             .tooltip = "New",
-                                             .onTap = newFile},
-                               ToolbarButton{.icon = IconName::FileOpen,
-                                             .tooltip = "Open",
-                                             .onTap = openFile},
-                               ToolbarButton{.icon = IconName::Save,
-                                             .tooltip = "Save",
-                                             .onTap = saveFile},
-                               ToolbarButton{.icon = IconName::SaveAs,
-                                             .tooltip = "Save As",
-                                             .onTap = saveFileAs})),
+                               ToolbarButton{.commandId = "file.new",
+                                             .icon = IconName::NoteAdd},
+                               ToolbarButton{.commandId = "file.open",
+                                             .icon = IconName::FileOpen},
+                               ToolbarButton{.commandId = "file.save",
+                                             .icon = IconName::Save},
+                               ToolbarButton{.commandId = "file.saveAs",
+                                             .icon = IconName::SaveAs})),
                            toolbarDivider(),
                            toolbarGroup(children(
-                               ToolbarButton{.icon = IconName::Undo,
-                                             .tooltip = "Undo",
-                                             .onTap = undo,
-                                             .disabled = [canUndo] { return !canUndo(); }},
-                               ToolbarButton{.icon = IconName::Redo,
-                                             .tooltip = "Redo",
-                                             .onTap = redo,
-                                             .disabled = [canRedo] { return !canRedo(); }})),
+                               ToolbarButton{.commandId = "edit.undo",
+                                             .icon = IconName::Undo},
+                               ToolbarButton{.commandId = "edit.redo",
+                                             .icon = IconName::Redo})),
                            toolbarDivider(),
                            toolbarGroup(children(
-                               ToolbarButton{.icon = IconName::ContentCut,
-                                             .tooltip = "Cut",
-                                             .onTap = cutSelection,
-                                             .disabled = [selection] {
-                                               return !selection().hasSelection();
-                                             }},
-                               ToolbarButton{.icon = IconName::ContentCopy,
-                                             .tooltip = "Copy",
-                                             .onTap = copySelection,
-                                             .disabled = [selection] {
-                                               return !selection().hasSelection();
-                                             }},
-                               ToolbarButton{.icon = IconName::ContentPaste,
-                                             .tooltip = "Paste",
-                                             .onTap = pasteClipboard,
-                                             .disabled = [clipboardHasText] {
-                                               return !clipboardHasText() &&
-                                                      (!Application::hasInstance() ||
-                                                       !Application::instance().clipboard().hasText());
-                                             }})),
+                               ToolbarButton{.commandId = "edit.cut",
+                                             .icon = IconName::ContentCut},
+                               ToolbarButton{.commandId = "edit.copy",
+                                             .icon = IconName::ContentCopy},
+                               ToolbarButton{.commandId = "edit.paste",
+                                             .icon = IconName::ContentPaste})),
                            toolbarDivider(),
                            toolbarGroup(children(
-                               ToolbarButton{.icon = IconName::Search,
-                                             .tooltip = "Find",
-                                             .onTap = showFind},
-                               ToolbarButton{.icon = IconName::FindReplace,
-                                             .tooltip = "Replace",
-                                             .onTap = showReplace},
-                               ToolbarButton{.icon = IconName::MoreHoriz,
-                                             .tooltip = "Go To Line",
-                                             .onTap = showGoToLine})),
+                               ToolbarButton{.commandId = "editor.find",
+                                             .icon = IconName::Search},
+                               ToolbarButton{.commandId = "editor.replace",
+                                             .icon = IconName::FindReplace},
+                               ToolbarButton{.commandId = "editor.goToLine",
+                                             .icon = IconName::MoreHoriz})),
                            toolbarDivider(),
                            toolbarGroup(children(
-                               ToolbarButton{.icon = IconName::WrapText,
-                                             .tooltip = "Word Wrap",
-                                             .onTap = toggleWordWrap})),
+                               ToolbarButton{.commandId = "view.wordWrap",
+                                             .icon = IconName::WrapText})),
                            toolbarDivider(),
                            toolbarGroup(children(
-                               ToolbarButton{.icon = IconName::ZoomOut,
-                                             .tooltip = "Zoom Out",
-                                             .onTap = zoomOut,
-                                             .disabled = [fontSize] { return fontSize() <= 10.f; }},
-                               ToolbarButton{.icon = IconName::ZoomIn,
-                                             .tooltip = "Zoom In",
-                                             .onTap = zoomIn,
-                                             .disabled = [fontSize] { return fontSize() >= 32.f; }})),
+                               ToolbarButton{.commandId = "view.zoomOut",
+                                             .icon = IconName::ZoomOut},
+                               ToolbarButton{.commandId = "view.zoomReset",
+                                             .icon = IconName::RestartAlt},
+                               ToolbarButton{.commandId = "view.zoomIn",
+                                             .icon = IconName::ZoomIn})),
                            Spacer{})}
                        .height(56.f)
                        .padding(5.f, theme().space3, 5.f, theme().space3)
@@ -788,6 +1461,28 @@ struct LambdaEditor {
                        .padding(8.f, theme().space3, 8.f, theme().space3)
                        .fill(FillStyle::solid(Color::windowBackground()))
                        .stroke(StrokeStyle::solid(Color::separator(), 1.f)))};
+
+    return ZStack{
+        .horizontalAlignment = Alignment::Stretch,
+        .verticalAlignment = Alignment::Stretch,
+        .children = children(
+            std::move(mainContent),
+            Show(
+                commandPaletteOpen,
+                [commandPaletteOpen, commandPaletteQuery, commandPaletteItems,
+                 commandPaletteTargetKey, commandPaletteSelectedIndex, commandPaletteScrollOffset,
+                 commandPaletteFocusGeneration, refreshCommandPalette] {
+                  return CommandPalette{
+                      .open = commandPaletteOpen,
+                      .query = commandPaletteQuery,
+                      .items = commandPaletteItems,
+                      .targetKey = commandPaletteTargetKey,
+                      .selectedIndex = commandPaletteSelectedIndex,
+                      .scrollOffset = commandPaletteScrollOffset,
+                      .focusGeneration = commandPaletteFocusGeneration,
+                      .refresh = refreshCommandPalette,
+                  };
+                }))};
   }
 };
 
@@ -805,7 +1500,13 @@ int main(int argc, char* argv[]) {
       .title = "Lambda Editor",
       .resizable = true,
   });
-  window.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
+  window.registerCommand("app.quit", {
+      .title = "Quit",
+      .category = "Application",
+      .shortcut = shortcuts::Quit,
+      .paletteVisible = false,
+      .isEnabled = [] { return true; },
+  });
   window.setView<LambdaEditor>({
       .initialDocument = initial.ok ? std::move(initial.document) : EditorDocument::untitled(),
       .initialStatus = initial.status,

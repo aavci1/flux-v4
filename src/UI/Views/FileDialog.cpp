@@ -778,6 +778,7 @@ Element FileDialog::body() const {
                   ActionDescriptor{
                       .label = "Cancel",
                       .shortcut = Shortcut{keys::Escape, Modifiers::None},
+                      .paletteVisible = false,
                       .isEnabled = [] { return true; },
                   });
   auto cancelReplace = [overwriteConfirmPath, status] {

@@ -5,7 +5,7 @@
 /// Part of the Lambda public API.
 
 
-#include <Lambda/UI/Action.hpp>
+#include <Lambda/UI/Command.hpp>
 #include <Lambda/UI/EnvironmentBinding.hpp>
 #include <Lambda/Core/Identity.hpp>
 
@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include <Lambda/UI/Cursor.hpp>
 #include <Lambda/Core/Geometry.hpp>
@@ -273,20 +274,25 @@ public:
   OverlayManager& overlayManager();
   OverlayManager const& overlayManager() const;
 
-  /// Registers an action descriptor. Must be called before the first build or during window setup —
-  /// descriptors are static for the window lifetime. Calling again for the same name replaces it.
-  void registerAction(std::string name, ActionDescriptor descriptor);
+  /// Registers a command descriptor with the application. Must be called before the first build or
+  /// during setup; calling again for the same name replaces it.
+  void registerCommand(std::string name, CommandDescriptor descriptor);
+  void registerAction(std::string name, ActionDescriptor descriptor) {
+    registerCommand(std::move(name), std::move(descriptor));
+  }
 
   /// True if \p name is registered and descriptor + handler enabled checks pass (for menus/toolbars).
   ///
-  /// During an active `body()` pass, handler state is read from the **committed** action registry (the
+  /// During an active `body()` pass, handler state is read from the **committed** command registry (the
   /// previous rebuild). The in-flight build buffer is not swapped until rebuild completes, so enabled
   /// UI can lag by one frame (e.g. clipboard or selection); the next reactive pass corrects it.
-  bool isActionEnabled(std::string const& name) const;
+  bool isCommandEnabled(std::string const& name) const;
+  bool isActionEnabled(std::string const& name) const { return isCommandEnabled(name); }
 
-  /// Dispatches a named action through the same focused-view first, then window-action ordering used
+  /// Dispatches a named command through the same focused-view first, then window-handler ordering used
   /// for shortcuts. Returns true if an enabled handler fired.
-  bool dispatchAction(std::string const& name);
+  bool dispatchCommand(std::string const& name);
+  bool dispatchAction(std::string const& name) { return dispatchCommand(name); }
 
   /// Sets the root view component (declarative UI). Creates internal state on first call.
   /// Definition in `<Lambda/UI/WindowUI.hpp>` (include that header in TUs that call `setView`).
@@ -322,7 +328,8 @@ private:
 
   EnvironmentBinding& environmentBindingMut();
 
-  std::unordered_map<std::string, ActionDescriptor> const& actionDescriptors() const;
+  std::unordered_map<std::string, CommandDescriptor> const& commandDescriptors() const;
+  std::unordered_map<std::string, ActionDescriptor> const& actionDescriptors() const { return commandDescriptors(); }
 
   std::string const& restoreId() const;
   WindowState currentWindowState() const;

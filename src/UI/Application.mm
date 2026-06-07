@@ -213,6 +213,7 @@ struct Application::Impl {
   std::unordered_map<std::string, std::function<void()>> menuHandlers_;
   std::unordered_map<std::string, std::function<bool()>> menuEnabled_;
   std::unordered_map<platform::ShortcutKey, std::string, platform::ShortcutKeyHash> menuShortcuts_;
+  std::unordered_map<std::string, CommandDescriptor> commandDescriptors_;
   std::uint64_t nextMenuHandlerId_ = 1;
   mutable bool windowStatesLoaded_ = false;
   mutable std::unordered_map<std::string, WindowState> windowStates_;
@@ -472,14 +473,31 @@ void Application::setMenuBar(MenuBar menu) {
   }
   d->menuBar_ = std::move(menu);
   d->platformApp_->setMenuBar(d->menuBar_, [this](std::string const& actionName) {
-    return dispatchAction(actionName);
+    return dispatchCommand(actionName);
   });
   d->platformApp_->revalidateMenuItems([this](std::string const& actionName) {
-    return isActionEnabled(actionName);
+    return isCommandEnabled(actionName);
   });
 }
 
-bool Application::dispatchAction(std::string const& name) {
+void Application::registerCommand(std::string name, CommandDescriptor descriptor) {
+  if (descriptor.id.empty()) {
+    descriptor.id = name;
+  }
+  if (descriptor.title.empty() && !descriptor.label.empty()) {
+    descriptor.title = descriptor.label;
+  }
+  if (descriptor.label.empty() && !descriptor.title.empty()) {
+    descriptor.label = descriptor.title;
+  }
+  d->commandDescriptors_[std::move(name)] = std::move(descriptor);
+}
+
+std::unordered_map<std::string, CommandDescriptor> const& Application::commandDescriptors() const {
+  return d->commandDescriptors_;
+}
+
+bool Application::dispatchCommand(std::string const& name) {
   if (name == "app.quit") {
     quit();
     return true;
@@ -499,14 +517,14 @@ bool Application::dispatchAction(std::string const& name) {
   }
 
   for (auto it = d->windows_.rbegin(); it != d->windows_.rend(); ++it) {
-    if (*it && (*it)->dispatchAction(name)) {
+    if (*it && (*it)->dispatchCommand(name)) {
       return true;
     }
   }
   return false;
 }
 
-bool Application::isActionEnabled(std::string const& name) const {
+bool Application::isCommandEnabled(std::string const& name) const {
   auto enabled = d->menuEnabled_.find(name);
   if (enabled != d->menuEnabled_.end() && enabled->second && !enabled->second()) {
     return false;
@@ -515,14 +533,14 @@ bool Application::isActionEnabled(std::string const& name) const {
     return true;
   }
   for (auto it = d->windows_.rbegin(); it != d->windows_.rend(); ++it) {
-    if (*it && (*it)->isActionEnabled(name)) {
+    if (*it && (*it)->isCommandEnabled(name)) {
       return true;
     }
   }
   return false;
 }
 
-bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const {
+bool Application::isCommandShortcutClaimed(KeyCode key, Modifiers modifiers) const {
   platform::ShortcutKey const shortcut{.key = key, .modifiers = modifiers};
   if (d->menuShortcuts_.contains(shortcut)) {
     return true;
@@ -531,12 +549,12 @@ bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const 
   return shortcuts.contains(shortcut);
 }
 
-bool Application::dispatchActionForShortcut(KeyCode key, Modifiers modifiers) {
+bool Application::dispatchCommandForShortcut(KeyCode key, Modifiers modifiers) {
   auto it = d->menuShortcuts_.find(platform::ShortcutKey{.key = key, .modifiers = modifiers});
   if (it == d->menuShortcuts_.end()) {
     return false;
   }
-  return dispatchAction(it->second);
+  return dispatchCommand(it->second);
 }
 
 void Application::setName(std::string name) {

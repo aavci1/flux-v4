@@ -93,7 +93,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 ## TODO-015: Add a cross-window command registry and command palette
 
 - [ ] [Auto + Manual] Use `lambda-editor` as the first pilot app/window for the command registry and command palette.
-- [ ] [Auto + Manual] Use `Ctrl+P` as the v1 command palette shortcut for the focused editor window. This does not currently clash with an existing Flux shortcut, but revisit before any compositor-global implementation because `Ctrl+P` can be meaningful in terminal/readline-style contexts.
+- [ ] [Auto + Manual] Use `Ctrl+Shift+P` as the v1 command palette shortcut for the focused editor window. Do not show the command palette command itself inside the command palette.
 - [ ] [Auto] Keep v1 window-scoped only; do not include app-level, Shell-level, compositor-level, or cross-window/global command scopes in the first implementation.
 - [ ] [Auto] Give each command a stable public ID so future user keybinding configuration can refer to commands without depending on display titles.
 - [ ] [Auto] Use namespaced command IDs for standard and app commands, such as `edit.copy`, `edit.cut`, `edit.paste`, `edit.selectAll`, `file.open`, and `editor.find`, instead of plain unscoped names.

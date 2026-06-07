@@ -13,6 +13,7 @@
 #include <Lambda/UI/Detail/PrimitiveForwards.hpp>
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Input.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/Views/TextEditUtils.hpp>
 
@@ -115,6 +116,10 @@ struct TextInput : ViewModifiers<TextInput> {
     std::function<void(std::string const &)> onSubmit;
     /// Called when Escape is pressed while the control is focused.
     std::function<void(std::string const &)> onEscape;
+    /// Called before built-in key handling. Return true to consume the key.
+    std::function<bool(KeyCode, Modifiers)> onPreviewKeyDown;
+    /// Called before built-in semantic command handling. Return true to consume the command.
+    std::function<bool(std::string const&)> onPreviewCommand;
 
     bool operator==(TextInput const& other) const {
         bool const sameSelection =
@@ -131,7 +136,9 @@ struct TextInput : ViewModifiers<TextInput> {
                static_cast<bool>(onChange) == static_cast<bool>(other.onChange) &&
                static_cast<bool>(onEdit) == static_cast<bool>(other.onEdit) &&
                static_cast<bool>(onSubmit) == static_cast<bool>(other.onSubmit) &&
-               static_cast<bool>(onEscape) == static_cast<bool>(other.onEscape);
+               static_cast<bool>(onEscape) == static_cast<bool>(other.onEscape) &&
+               static_cast<bool>(onPreviewKeyDown) == static_cast<bool>(other.onPreviewKeyDown) &&
+               static_cast<bool>(onPreviewCommand) == static_cast<bool>(other.onPreviewCommand);
     }
 
     Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;

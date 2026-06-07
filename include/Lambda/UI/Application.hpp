@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -140,10 +141,21 @@ public:
   Clipboard& clipboard();
 
   void setMenuBar(MenuBar menu);
-  bool dispatchAction(std::string const& name);
-  bool isActionEnabled(std::string const& name) const;
-  bool isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const;
-  bool dispatchActionForShortcut(KeyCode key, Modifiers modifiers);
+  void registerCommand(std::string name, CommandDescriptor descriptor);
+  [[nodiscard]] std::unordered_map<std::string, CommandDescriptor> const& commandDescriptors() const;
+  bool dispatchCommand(std::string const& name);
+  bool isCommandEnabled(std::string const& name) const;
+  bool isCommandShortcutClaimed(KeyCode key, Modifiers modifiers) const;
+  bool dispatchCommandForShortcut(KeyCode key, Modifiers modifiers);
+
+  bool dispatchAction(std::string const& name) { return dispatchCommand(name); }
+  bool isActionEnabled(std::string const& name) const { return isCommandEnabled(name); }
+  bool isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const {
+    return isCommandShortcutClaimed(key, modifiers);
+  }
+  bool dispatchActionForShortcut(KeyCode key, Modifiers modifiers) {
+    return dispatchCommandForShortcut(key, modifiers);
+  }
 
   void setName(std::string name);
   std::string name() const;

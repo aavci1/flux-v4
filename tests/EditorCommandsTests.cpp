@@ -80,3 +80,52 @@ TEST_CASE("Editor commands find replace and go to line") {
   CHECK(lambda_editor::lineSelection(text, 20) == caret(static_cast<int>(text.size())));
   CHECK(lambda_editor::lineNumberForSelection(text, caret(8)) == 3);
 }
+
+TEST_CASE("Editor commands find previous and find options") {
+  std::string text = "one One alone stone\nTwo two";
+
+  auto previous = lambda_editor::findPreviousMatch(text, "one", range(14, 19), true);
+  REQUIRE(previous.has_value());
+  CHECK(*previous == range(10, 13));
+
+  auto insensitive = lambda_editor::findNextMatch(
+      text, "one", caret(0), true, lambda_editor::FindOptions{.caseSensitive = false});
+  REQUIRE(insensitive.has_value());
+  CHECK(*insensitive == range(0, 3));
+
+  auto secondInsensitive = lambda_editor::findNextMatch(
+      text, "one", *insensitive, true, lambda_editor::FindOptions{.caseSensitive = false});
+  REQUIRE(secondInsensitive.has_value());
+  CHECK(*secondInsensitive == range(4, 7));
+
+  auto wholeWord = lambda_editor::findNextMatch(
+      text, "one", range(4, 7), true, lambda_editor::FindOptions{.caseSensitive = false, .wholeWord = true});
+  REQUIRE(wholeWord.has_value());
+  CHECK(*wholeWord == range(0, 3));
+
+  auto regex = lambda_editor::findNextMatch(
+      text, "T[a-z]+", caret(0), true, lambda_editor::FindOptions{.caseSensitive = true, .regex = true});
+  REQUIRE(regex.has_value());
+  CHECK(*regex == range(20, 23));
+
+  CHECK(lambda_editor::selectionMatches(
+      text, range(4, 7), "one", lambda_editor::FindOptions{.caseSensitive = false}));
+}
+
+TEST_CASE("Editor commands replace all respects find options") {
+  std::string text = "one One alone stone";
+
+  lambda_editor::EditorSnapshot insensitive =
+      lambda_editor::replaceAllMatches(text, "one", "1", lambda_editor::FindOptions{.caseSensitive = false});
+  CHECK(insensitive.text == "1 1 al1 st1");
+
+  lambda_editor::EditorSnapshot wholeWord =
+      lambda_editor::replaceAllMatches(text, "one", "1",
+                                       lambda_editor::FindOptions{.caseSensitive = false, .wholeWord = true});
+  CHECK(wholeWord.text == "1 1 alone stone");
+
+  lambda_editor::EditorSnapshot regex =
+      lambda_editor::replaceAllMatches("abc 123 def 456", "[0-9]+", "#",
+                                       lambda_editor::FindOptions{.caseSensitive = true, .regex = true});
+  CHECK(regex.text == "abc # def #");
+}

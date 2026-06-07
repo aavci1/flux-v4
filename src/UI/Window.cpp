@@ -174,7 +174,7 @@ struct Window::Impl {
   /// Declared before `runtime_` so the ring outlives `~Runtime` if teardown ever touches the overlay buffer.
   TextCacheRingBuffer textCacheRing_{};
   std::unique_ptr<Runtime> runtime_;
-  std::unordered_map<std::string, ActionDescriptor> actions_;
+  std::unordered_map<std::string, CommandDescriptor> commandDescriptors_;
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
   Reactive::Signal<WindowChromeMetrics> chromeMetricsSignal_{WindowChromeMetrics{}};
   EnvironmentBinding windowEnvironmentBinding_{};
@@ -510,13 +510,27 @@ OverlayManager& Window::overlayManager() { return d->overlayMgr_; }
 
 OverlayManager const& Window::overlayManager() const { return d->overlayMgr_; }
 
-void Window::registerAction(std::string name, ActionDescriptor descriptor) {
-  d->actions_[std::move(name)] = std::move(descriptor);
+void Window::registerCommand(std::string name, CommandDescriptor descriptor) {
+  if (Application::hasInstance()) {
+    Application::instance().registerCommand(name, descriptor);
+  }
+  if (descriptor.id.empty()) {
+    descriptor.id = name;
+  }
+  if (descriptor.title.empty() && !descriptor.label.empty()) {
+    descriptor.title = descriptor.label;
+  }
+  if (descriptor.label.empty() && !descriptor.title.empty()) {
+    descriptor.label = descriptor.title;
+  }
+  d->commandDescriptors_[std::move(name)] = std::move(descriptor);
 }
 
-bool Window::isActionEnabled(std::string const& name) const {
-  auto it = d->actions_.find(name);
-  if (it == d->actions_.end()) {
+bool Window::isCommandEnabled(std::string const& name) const {
+  auto const& descriptors =
+      Application::hasInstance() ? Application::instance().commandDescriptors() : d->commandDescriptors_;
+  auto it = descriptors.find(name);
+  if (it == descriptors.end()) {
     return false;
   }
   if (it->second.isEnabled && !it->second.isEnabled()) {
@@ -525,15 +539,15 @@ bool Window::isActionEnabled(std::string const& name) const {
   if (!d->runtime_) {
     return true;
   }
-  return d->runtime_->isActionCurrentlyEnabled(name);
+  return d->runtime_->isCommandCurrentlyEnabled(name);
 }
 
-bool Window::dispatchAction(std::string const& name) {
-  return d->runtime_ && d->runtime_->dispatchAction(name);
+bool Window::dispatchCommand(std::string const& name) {
+  return d->runtime_ && d->runtime_->dispatchCommand(name);
 }
 
-std::unordered_map<std::string, ActionDescriptor> const& Window::actionDescriptors() const {
-  return d->actions_;
+std::unordered_map<std::string, CommandDescriptor> const& Window::commandDescriptors() const {
+  return d->commandDescriptors_;
 }
 
 std::string const& Window::restoreId() const {

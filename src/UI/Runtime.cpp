@@ -81,7 +81,7 @@ void focusSingleTargetOnWindowFocus(RuntimeInputState& input, Window& window);
 struct Runtime::Impl {
   Window& window;
   std::unique_ptr<MountRoot> root;
-  ActionRegistry actions;
+  CommandRegistry commands;
   RuntimeInputState input;
   std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 
@@ -123,7 +123,7 @@ Runtime::~Runtime() {
 }
 
 void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
-  d->actions.beginRebuild();
+  d->commands.beginRebuild();
   d->root = std::make_unique<MountRoot>(
       std::move(holder), Application::instance().textSystem(), d->window.environmentBinding(),
       d->window.getSize(), [handle = d->window.handle()] {
@@ -148,26 +148,41 @@ void Runtime::beginShutdown(scenegraph::SceneGraph* sceneGraph) {
   d->root.reset();
 }
 
-bool Runtime::isActionCurrentlyEnabled(std::string const& name) const {
+bool Runtime::isCommandCurrentlyEnabled(std::string const& name) const {
   ComponentKey const focusedKey = d->input.focusTarget
       ? d->input.focusTarget->stableTargetKey
       : ComponentKey{};
-  return d->actions.isHandlerEnabled(focusedKey, name, d->window.actionDescriptors());
+  return isCommandCurrentlyEnabledFrom(focusedKey, name);
 }
 
-bool Runtime::dispatchAction(std::string const& name) {
+bool Runtime::isCommandCurrentlyEnabledFrom(ComponentKey const& focusedKey,
+                                            std::string const& name) const {
+  if (Application::hasInstance()) {
+    return d->commands.isHandlerEnabled(focusedKey, name, Application::instance().commandDescriptors());
+  }
+  return d->commands.isHandlerEnabled(focusedKey, name, d->window.commandDescriptors());
+}
+
+bool Runtime::dispatchCommand(std::string const& name) {
   ComponentKey const focusedKey = d->input.focusTarget
       ? d->input.focusTarget->stableTargetKey
       : ComponentKey{};
-  return d->actions.dispatchAction(focusedKey, name, d->window.actionDescriptors());
+  return dispatchCommandFrom(focusedKey, name);
 }
 
-ActionRegistry& Runtime::actionRegistry() noexcept {
-  return d->actions;
+bool Runtime::dispatchCommandFrom(ComponentKey const& focusedKey, std::string const& name) {
+  if (Application::hasInstance()) {
+    return d->commands.dispatchCommand(focusedKey, name, Application::instance().commandDescriptors());
+  }
+  return d->commands.dispatchCommand(focusedKey, name, d->window.commandDescriptors());
 }
 
-ActionRegistry const& Runtime::actionRegistry() const noexcept {
-  return d->actions;
+CommandRegistry& Runtime::commandRegistry() noexcept {
+  return d->commands;
+}
+
+CommandRegistry const& Runtime::commandRegistry() const noexcept {
+  return d->commands;
 }
 
 std::optional<Rect> Runtime::lastTapAnchor() const noexcept {
@@ -741,14 +756,19 @@ void Runtime::handleInput(InputEvent const& event) {
 
   bool const menuOwnsShortcut = event.kind == InputEvent::Kind::KeyDown &&
                                 Application::hasInstance() &&
-                                Application::instance().isMenuShortcutClaimed(event.key, event.modifiers);
-  if (menuOwnsShortcut && Application::instance().dispatchActionForShortcut(event.key, event.modifiers)) {
+                                Application::instance().isCommandShortcutClaimed(event.key, event.modifiers);
+  if (menuOwnsShortcut) {
+    Application::instance().dispatchCommandForShortcut(event.key, event.modifiers);
     return;
   }
-  if (event.kind == InputEvent::Kind::KeyDown && !menuOwnsShortcut &&
-      d->actions.dispatchShortcut(focusedActionKey(d->input), event.key, event.modifiers,
-                                  d->window.actionDescriptors())) {
-    return;
+  if (event.kind == InputEvent::Kind::KeyDown && !menuOwnsShortcut) {
+    auto const& descriptors = Application::hasInstance()
+        ? Application::instance().commandDescriptors()
+        : d->window.commandDescriptors();
+    if (d->commands.dispatchShortcut(focusedActionKey(d->input), event.key, event.modifiers,
+                                     descriptors)) {
+      return;
+    }
   }
 
   if (event.kind == InputEvent::Kind::KeyDown ||

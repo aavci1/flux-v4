@@ -3,7 +3,7 @@
 #include <Lambda/Core/Identity.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/Core/Geometry.hpp>
-#include <Lambda/UI/ActionRegistry.hpp>
+#include <Lambda/UI/CommandRegistry.hpp>
 
 #include <memory>
 #include <optional>
@@ -33,10 +33,16 @@ public:
 
   bool wantsTextInput() const noexcept { return true; }
   bool textCacheOverlayEnabled() const noexcept { return false; }
-  bool isActionCurrentlyEnabled(std::string const& name) const;
-  bool dispatchAction(std::string const& name);
-  ActionRegistry& actionRegistry() noexcept;
-  ActionRegistry const& actionRegistry() const noexcept;
+  bool isCommandCurrentlyEnabled(std::string const& name) const;
+  bool isCommandCurrentlyEnabledFrom(ComponentKey const& focusedKey, std::string const& name) const;
+  bool dispatchCommand(std::string const& name);
+  bool dispatchCommandFrom(ComponentKey const& focusedKey, std::string const& name);
+  CommandRegistry& commandRegistry() noexcept;
+  CommandRegistry const& commandRegistry() const noexcept;
+  bool isActionCurrentlyEnabled(std::string const& name) const { return isCommandCurrentlyEnabled(name); }
+  bool dispatchAction(std::string const& name) { return dispatchCommand(name); }
+  ActionRegistry& actionRegistry() noexcept { return commandRegistry(); }
+  ActionRegistry const& actionRegistry() const noexcept { return commandRegistry(); }
   std::optional<Rect> lastTapAnchor() const noexcept;
   std::uint32_t lastTapSerial() const noexcept;
   std::optional<Rect> hoverAnchor() const noexcept;

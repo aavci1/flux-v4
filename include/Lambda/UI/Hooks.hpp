@@ -434,47 +434,63 @@ inline Rect useBounds() {
   return bounds;
 }
 
-inline void useViewAction(std::string const& name, std::function<void()> handler,
-                          std::function<bool()> isEnabled = {}) {
+inline void useViewCommand(std::string const& name, std::function<void()> handler,
+                           std::function<bool()> isEnabled = {}) {
   Runtime* runtime = Runtime::current();
   if (!runtime) {
     return;
   }
   Reactive::detail::ScopeState* scope = Reactive::detail::sCurrentOwner;
   ComponentKey const key = scope ? ComponentKey::fromScope(scope) : ComponentKey{};
-  ActionId const id = runtime->actionRegistry().registerViewClaim(
+  CommandId const id = runtime->commandRegistry().registerViewHandler(
       key, name, std::move(handler), std::move(isEnabled));
   Reactive::onCleanup([runtime, id] {
-    runtime->actionRegistry().unregister(id);
+    runtime->commandRegistry().unregister(id);
+  });
+}
+
+inline void useViewAction(std::string const& name, std::function<void()> handler,
+                          std::function<bool()> isEnabled = {}) {
+  useViewCommand(name, std::move(handler), std::move(isEnabled));
+}
+
+inline void useWindowCommand(std::string const& name, std::function<void()> handler,
+                             std::function<bool()> isEnabled = {}) {
+  Runtime* runtime = Runtime::current();
+  if (!runtime) {
+    return;
+  }
+  CommandId const id = runtime->commandRegistry().registerWindowHandler(
+      name, std::move(handler), std::move(isEnabled));
+  Reactive::onCleanup([runtime, id] {
+    runtime->commandRegistry().unregister(id);
   });
 }
 
 inline void useWindowAction(std::string const& name, std::function<void()> handler,
                             std::function<bool()> isEnabled = {}) {
-  Runtime* runtime = Runtime::current();
-  if (!runtime) {
-    return;
-  }
-  ActionId const id = runtime->actionRegistry().registerWindowAction(
-      name, std::move(handler), std::move(isEnabled));
-  Reactive::onCleanup([runtime, id] {
-    runtime->actionRegistry().unregister(id);
-  });
+  useWindowCommand(name, std::move(handler), std::move(isEnabled));
 }
 
-inline void useWindowAction(std::string const& name, std::function<void()> handler,
-                            ActionDescriptor descriptor) {
+inline void useWindowCommand(std::string const& name, std::function<void()> handler,
+                             CommandDescriptor descriptor) {
   Runtime* runtime = Runtime::current();
   if (!runtime) {
     return;
   }
   std::function<bool()> isEnabled = descriptor.isEnabled;
-  runtime->window().registerAction(name, std::move(descriptor));
-  ActionId const id = runtime->actionRegistry().registerWindowAction(
+  descriptor.isEnabled = {};
+  runtime->window().registerCommand(name, std::move(descriptor));
+  CommandId const id = runtime->commandRegistry().registerWindowHandler(
       name, std::move(handler), std::move(isEnabled));
   Reactive::onCleanup([runtime, id] {
-    runtime->actionRegistry().unregister(id);
+    runtime->commandRegistry().unregister(id);
   });
+}
+
+inline void useWindowAction(std::string const& name, std::function<void()> handler,
+                            ActionDescriptor descriptor) {
+  useWindowCommand(name, std::move(handler), std::move(descriptor));
 }
 
 } // namespace lambda

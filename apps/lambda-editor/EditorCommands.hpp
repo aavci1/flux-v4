@@ -16,6 +16,14 @@ struct EditorSnapshot {
   bool operator==(EditorSnapshot const&) const = default;
 };
 
+struct FindOptions {
+  bool caseSensitive = true;
+  bool wholeWord = false;
+  bool regex = false;
+
+  bool operator==(FindOptions const&) const = default;
+};
+
 class EditorEditHistory {
 public:
   void reset(EditorSnapshot snapshot);
@@ -45,13 +53,25 @@ private:
 findNextMatch(std::string const& text,
               std::string const& query,
               lambda::detail::TextEditSelection selection,
-              bool wrap);
+              bool wrap,
+              FindOptions options = {});
+[[nodiscard]] std::optional<lambda::detail::TextEditSelection>
+findPreviousMatch(std::string const& text,
+                  std::string const& query,
+                  lambda::detail::TextEditSelection selection,
+                  bool wrap,
+                  FindOptions options = {});
+[[nodiscard]] bool selectionMatches(std::string const& text,
+                                    lambda::detail::TextEditSelection selection,
+                                    std::string const& query,
+                                    FindOptions options = {});
 [[nodiscard]] EditorSnapshot replaceSelection(std::string const& text,
                                               lambda::detail::TextEditSelection selection,
                                               std::string_view replacement);
 [[nodiscard]] EditorSnapshot replaceAllMatches(std::string const& text,
                                                std::string const& query,
-                                               std::string_view replacement);
+                                               std::string_view replacement,
+                                               FindOptions options = {});
 [[nodiscard]] lambda::detail::TextEditSelection lineSelection(std::string const& text,
                                                               int oneBasedLine);
 [[nodiscard]] int lineNumberForSelection(std::string const& text,

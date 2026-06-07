@@ -108,6 +108,14 @@ TextEditMutation eraseSelectionOrChar(std::string const &text, TextEditSelection
 TextEditMutation eraseWord(std::string const &text, TextEditSelection const &selection, bool forward) noexcept;
 TextEditMutation eraseToLineBoundary(std::string const &text, TextEditSelection const &selection,
                                      bool forward) noexcept;
+TextEditSelection selectCurrentLine(std::string const &text, TextEditSelection const &selection) noexcept;
+TextEditMutation eraseCurrentLine(std::string const &text, TextEditSelection const &selection) noexcept;
+TextEditMutation insertLineAdjacent(std::string const &text, TextEditSelection const &selection,
+                                    bool above, int maxLength = 0);
+TextEditMutation moveCurrentLine(std::string const &text, TextEditSelection const &selection,
+                                 int direction) noexcept;
+TextEditMutation copyCurrentLine(std::string const &text, TextEditSelection const &selection,
+                                 int direction, int maxLength = 0);
 
 /// Binary search over sorted `byteStart`. Returns index of the line containing `byteOffset`, clamped.
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept;

@@ -11,6 +11,11 @@
 
 namespace {
 
+struct ByteRange {
+    int start = 0;
+    int end = 0;
+};
+
 bool utf8DecodeAt(std::string const &s, int i, char32_t &outCp, int &outLen) {
     int const n = static_cast<int>(s.size());
     if (i < 0 || i >= n) {
@@ -118,6 +123,50 @@ int utf8ClampImpl(std::string const &s, int pos) {
         return p + len;
     }
     return p;
+}
+
+int lineStartForByte(std::string const &text, int byte) {
+    int const size = static_cast<int>(text.size());
+    byte = std::clamp(byte, 0, size);
+    for (int i = byte - 1; i >= 0; --i) {
+        if (text[static_cast<std::size_t>(i)] == '\n') {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+int lineEndIncludingNewline(std::string const &text, int byte) {
+    int const size = static_cast<int>(text.size());
+    byte = std::clamp(byte, 0, size);
+    for (int i = byte; i < size; ++i) {
+        if (text[static_cast<std::size_t>(i)] == '\n') {
+            return i + 1;
+        }
+    }
+    return size;
+}
+
+ByteRange lineRangeForSelection(std::string const &text,
+                                lambda::detail::TextEditSelection selection) {
+    int const size = static_cast<int>(text.size());
+    lambda::detail::TextEditSelection const clamped =
+        lambda::detail::clampSelection(text, selection);
+    auto const [orderedStart, orderedEnd] = clamped.ordered();
+    int const endProbe = orderedEnd > orderedStart ? std::max(0, orderedEnd - 1) : orderedEnd;
+    return ByteRange{
+        .start = lineStartForByte(text, orderedStart),
+        .end = size == 0 ? 0 : lineEndIncludingNewline(text, endProbe),
+    };
+}
+
+lambda::detail::TextEditSelection shiftSelection(std::string const &text,
+                                                 lambda::detail::TextEditSelection selection,
+                                                 int delta) {
+    return lambda::detail::clampSelection(text, lambda::detail::TextEditSelection{
+        .caretByte = selection.caretByte + delta,
+        .anchorByte = selection.anchorByte + delta,
+    });
 }
 
 int utf8PrevWordImpl(std::string const &s, int pos) {
@@ -825,6 +874,138 @@ TextEditMutation eraseToLineBoundary(std::string const &text, TextEditSelection 
     mutation.selection = TextEditSelection {.caretByte = start, .anchorByte = start};
     mutation.valueChanged = true;
     return mutation;
+}
+
+TextEditSelection selectCurrentLine(std::string const &text,
+                                    TextEditSelection const &selection) noexcept {
+    ByteRange const range = lineRangeForSelection(text, selection);
+    return TextEditSelection{
+        .caretByte = range.end,
+        .anchorByte = range.start,
+    };
+}
+
+TextEditMutation eraseCurrentLine(std::string const &text,
+                                  TextEditSelection const &selection) noexcept {
+    TextEditMutation mutation {};
+    mutation.text = text;
+    ByteRange const range = lineRangeForSelection(text, selection);
+    if (range.start >= range.end) {
+        mutation.selection = TextEditSelection{.caretByte = range.start, .anchorByte = range.start};
+        return mutation;
+    }
+
+    mutation.text.erase(static_cast<std::size_t>(range.start),
+                        static_cast<std::size_t>(range.end - range.start));
+    int const caret = std::min(range.start, static_cast<int>(mutation.text.size()));
+    mutation.selection = TextEditSelection{.caretByte = caret, .anchorByte = caret};
+    mutation.valueChanged = true;
+    return mutation;
+}
+
+TextEditMutation insertLineAdjacent(std::string const &text,
+                                    TextEditSelection const &selection,
+                                    bool above,
+                                    int maxLength) {
+    ByteRange const range = lineRangeForSelection(text, selection);
+    int const insertAt = above ? range.start : range.end;
+    TextEditSelection insertionPoint{.caretByte = insertAt, .anchorByte = insertAt};
+    TextEditMutation mutation = insertText(text, insertionPoint, "\n", maxLength);
+    if (!mutation.valueChanged) {
+        return mutation;
+    }
+
+    int const caret = above ? insertAt : insertAt + 1;
+    mutation.selection = TextEditSelection{.caretByte = caret, .anchorByte = caret};
+    return mutation;
+}
+
+TextEditMutation moveCurrentLine(std::string const &text,
+                                 TextEditSelection const &selection,
+                                 int direction) noexcept {
+    TextEditMutation mutation {};
+    mutation.text = text;
+
+    if (text.empty() || direction == 0) {
+        mutation.selection = clampSelection(text, selection);
+        return mutation;
+    }
+
+    ByteRange const range = lineRangeForSelection(text, selection);
+    if (range.start >= range.end) {
+        mutation.selection = clampSelection(text, selection);
+        return mutation;
+    }
+
+    if (direction < 0) {
+        if (range.start <= 0) {
+            mutation.selection = clampSelection(text, selection);
+            return mutation;
+        }
+        int const previousStart = lineStartForByte(text, range.start - 1);
+        std::string const moving = text.substr(static_cast<std::size_t>(range.start),
+                                               static_cast<std::size_t>(range.end - range.start));
+        std::string const previous = text.substr(static_cast<std::size_t>(previousStart),
+                                                 static_cast<std::size_t>(range.start - previousStart));
+        mutation.text.replace(static_cast<std::size_t>(previousStart),
+                              static_cast<std::size_t>(range.end - previousStart),
+                              moving + previous);
+        mutation.selection = shiftSelection(mutation.text, selection, previousStart - range.start);
+        mutation.valueChanged = true;
+        return mutation;
+    }
+
+    if (range.end >= static_cast<int>(text.size())) {
+        mutation.selection = clampSelection(text, selection);
+        return mutation;
+    }
+    int const nextEnd = lineEndIncludingNewline(text, range.end);
+    if (nextEnd <= range.end) {
+        mutation.selection = clampSelection(text, selection);
+        return mutation;
+    }
+    std::string const moving = text.substr(static_cast<std::size_t>(range.start),
+                                           static_cast<std::size_t>(range.end - range.start));
+    std::string const next = text.substr(static_cast<std::size_t>(range.end),
+                                         static_cast<std::size_t>(nextEnd - range.end));
+    mutation.text.replace(static_cast<std::size_t>(range.start),
+                          static_cast<std::size_t>(nextEnd - range.start),
+                          next + moving);
+    mutation.selection = shiftSelection(mutation.text, selection, nextEnd - range.end);
+    mutation.valueChanged = true;
+    return mutation;
+}
+
+TextEditMutation copyCurrentLine(std::string const &text,
+                                 TextEditSelection const &selection,
+                                 int direction,
+                                 int maxLength) {
+    TextEditMutation mutation {};
+    mutation.text = text;
+
+    ByteRange const range = lineRangeForSelection(text, selection);
+    if (range.start >= range.end) {
+        mutation.selection = clampSelection(text, selection);
+        return mutation;
+    }
+
+    std::string const copied = text.substr(static_cast<std::size_t>(range.start),
+                                           static_cast<std::size_t>(range.end - range.start));
+    int const insertAt = direction < 0 ? range.start : range.end;
+    TextEditMutation inserted =
+        insertText(text, TextEditSelection{.caretByte = insertAt, .anchorByte = insertAt},
+                   copied, maxLength);
+    if (!inserted.valueChanged) {
+        return inserted;
+    }
+
+    if (direction < 0) {
+        inserted.selection = clampSelection(inserted.text, selection);
+    } else {
+        inserted.selection = shiftSelection(inserted.text, selection,
+                                            static_cast<int>(copied.size()));
+    }
+    return inserted;
 }
 
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept {

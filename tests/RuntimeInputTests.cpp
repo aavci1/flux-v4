@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <functional>
 #include <utility>
 
 namespace {
@@ -203,16 +204,22 @@ struct ControlledTextInputRoot {
   lambda::Reactive::Signal<std::string>* text = nullptr;
   lambda::Reactive::Signal<lambda::detail::TextEditSelection>* selection = nullptr;
   int* editCount = nullptr;
+  bool multiline = false;
+  std::function<bool(lambda::KeyCode, lambda::Modifiers)> onPreviewKeyDown;
+  std::function<bool(std::string const&)> onPreviewCommand;
 
   lambda::Element body() const {
     return lambda::TextInput{
         .value = *text,
         .selection = *selection,
         .placeholder = "Controlled",
+        .multiline = multiline,
         .onEdit = [editCount = editCount](
                       std::string const&, lambda::detail::TextEditSelection) {
           ++*editCount;
         },
+        .onPreviewKeyDown = onPreviewKeyDown,
+        .onPreviewCommand = onPreviewCommand,
     };
   }
 };
@@ -739,6 +746,113 @@ TEST_CASE("controlled text input handles Ctrl+A and reports edit selection") {
   CHECK(text.get() == "x");
   CHECK(selection.get().anchorByte == 1);
   CHECK(selection.get().caretByte == 1);
+  CHECK(editCount == 1);
+}
+
+TEST_CASE("controlled text input handles registered semantic edit commands") {
+  RuntimeHarness harness;
+  harness.window.registerCommand("edit.deleteWordBackward", lambda::CommandDescriptor{
+      .title = "Delete Word Backward",
+      .shortcut = lambda::Shortcut{lambda::keys::Delete, lambda::Modifiers::Ctrl},
+  });
+  harness.window.registerCommand("selection.lineStart", lambda::CommandDescriptor{
+      .title = "Select to Line Start",
+      .shortcut = lambda::Shortcut{lambda::keys::Home, lambda::Modifiers::Shift},
+  });
+
+  lambda::Reactive::Signal<std::string> text{"hello world"};
+  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
+      lambda::detail::TextEditSelection{.caretByte = 11, .anchorByte = 11}};
+  int editCount = 0;
+  harness.setRoot(ControlledTextInputRoot{
+      .text = &text,
+      .selection = &selection,
+      .editCount = &editCount,
+  });
+
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::Delete, lambda::Modifiers::Ctrl);
+
+  CHECK(text.get() == "hello ");
+  CHECK(selection.get().caretByte == 6);
+  CHECK(selection.get().anchorByte == 6);
+  CHECK(editCount == 1);
+
+  harness.keyDown(lambda::keys::Home, lambda::Modifiers::Shift);
+
+  CHECK(selection.get().caretByte == 0);
+  CHECK(selection.get().anchorByte == 6);
+}
+
+TEST_CASE("controlled text input preview hooks consume raw keys and semantic commands") {
+  RuntimeHarness harness;
+  harness.window.registerCommand("cursor.right", lambda::CommandDescriptor{
+      .title = "Move Cursor Right",
+      .shortcut = lambda::Shortcut{lambda::keys::RightArrow, lambda::Modifiers::None},
+  });
+
+  lambda::Reactive::Signal<std::string> text{"abc"};
+  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
+      lambda::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0}};
+  int editCount = 0;
+  int previewKeyCount = 0;
+  int previewCommandCount = 0;
+  harness.setRoot(ControlledTextInputRoot{
+      .text = &text,
+      .selection = &selection,
+      .editCount = &editCount,
+      .onPreviewKeyDown = [&previewKeyCount](lambda::KeyCode key, lambda::Modifiers) {
+        if (key == lambda::keys::PageDown) {
+          ++previewKeyCount;
+          return true;
+        }
+        return false;
+      },
+      .onPreviewCommand = [&previewCommandCount](std::string const& commandId) {
+        if (commandId == "cursor.right") {
+          ++previewCommandCount;
+          return true;
+        }
+        return false;
+      },
+  });
+
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::RightArrow);
+  harness.keyDown(lambda::keys::PageDown);
+
+  CHECK(previewCommandCount == 1);
+  CHECK(previewKeyCount == 1);
+  CHECK(selection.get().caretByte == 0);
+  CHECK(selection.get().anchorByte == 0);
+  CHECK(editCount == 0);
+}
+
+TEST_CASE("multiline text input handles registered line edit commands") {
+  RuntimeHarness harness;
+  harness.window.registerCommand("edit.deleteLine", lambda::CommandDescriptor{
+      .title = "Delete Line",
+      .shortcut = lambda::Shortcut{lambda::keys::K,
+                                   lambda::Modifiers::Ctrl | lambda::Modifiers::Shift},
+  });
+
+  lambda::Reactive::Signal<std::string> text{"one\ntwo\nthree"};
+  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
+      lambda::detail::TextEditSelection{.caretByte = 5, .anchorByte = 5}};
+  int editCount = 0;
+  harness.setRoot(ControlledTextInputRoot{
+      .text = &text,
+      .selection = &selection,
+      .editCount = &editCount,
+      .multiline = true,
+  });
+
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::K, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift);
+
+  CHECK(text.get() == "one\nthree");
+  CHECK(selection.get().caretByte == 4);
+  CHECK(selection.get().anchorByte == 4);
   CHECK(editCount == 1);
 }
 

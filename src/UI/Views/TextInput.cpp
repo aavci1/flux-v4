@@ -1,5 +1,7 @@
 #include <Lambda/UI/Views/TextInput.hpp>
 
+#include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/Detail/Runtime.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
 #include <Lambda/Reactive/Animation.hpp>
@@ -321,6 +323,15 @@ void applyTextMutation(Signal<std::string> const& valueState,
   }
 }
 
+std::string selectedInputText(std::string const& text,
+                              detail::TextEditSelection selection) {
+  auto const [start, end] = detail::clampSelection(text, selection).ordered();
+  if (start >= end) {
+    return {};
+  }
+  return text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
+}
+
 } // namespace
 
 Size TextInput::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
@@ -408,8 +419,314 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   auto onEditHandler = onEdit;
   auto onSubmitHandler = onSubmit;
   auto onEscapeHandler = onEscape;
+  auto onPreviewKeyDownHandler = onPreviewKeyDown;
+  auto onPreviewCommandHandler = onPreviewCommand;
   bool const isDisabled = disabled;
   auto draggingSelection = std::make_shared<bool>(false);
+  if (Runtime* runtime = Runtime::current()) {
+    auto registerTextCommand = [runtime, &ctx, targetKey = interaction->stableTargetKey_,
+                                onPreviewCommandHandler](
+                                   std::string commandId,
+                                   std::function<void()> handler,
+                                   std::function<bool()> isEnabled = {}) {
+      std::string const registeredCommandId = commandId;
+      auto commandHandler = [registeredCommandId, onPreviewCommandHandler,
+                             handler = std::move(handler)] {
+        if (onPreviewCommandHandler && onPreviewCommandHandler(registeredCommandId)) {
+          return;
+        }
+        handler();
+      };
+      CommandId const id = runtime->commandRegistry().registerViewHandler(
+          targetKey, commandId, std::move(commandHandler), std::move(isEnabled));
+      ctx.owner().onCleanup([runtime, id] {
+        runtime->commandRegistry().unregister(id);
+      });
+    };
+    auto setSelection = [valueState, selectionState](detail::TextEditSelection next) {
+      detail::TextEditSelection const clamped = detail::clampSelection(valueState.peek(), next);
+      if (!sameSelection(selectionState.peek(), clamped)) {
+        selectionState = clamped;
+      }
+    };
+    auto applyMutation = [valueState, selectionState, onChangeHandler, onEditHandler](
+                             detail::TextEditMutation mutation) {
+      applyTextMutation(valueState, selectionState, mutation, onChangeHandler, onEditHandler);
+    };
+    auto moveHorizontal = [valueState, selectionState, setSelection](int direction,
+                                                                    bool byWord,
+                                                                    bool extendSelection) {
+      std::string const& text = valueState.peek();
+      detail::TextEditSelection const current = selectionState.peek();
+      setSelection(byWord ? detail::moveSelectionByWord(text, current, direction, extendSelection)
+                          : detail::moveSelectionByChar(text, current, direction, extendSelection));
+    };
+    auto moveVertical = [valueState, selectionState, layoutResult, acceptsMultiline, setSelection](
+                            int direction,
+                            bool extendSelection) {
+      std::string const& text = valueState.peek();
+      detail::TextEditSelection const current = selectionState.peek();
+      int const byte = acceptsMultiline && layoutResult && !layoutResult->empty()
+                           ? detail::moveCaretVertically(*layoutResult, text, current.caretByte, direction)
+                           : (direction < 0 ? 0 : static_cast<int>(text.size()));
+      setSelection(detail::moveSelectionToByte(text, current, byte, extendSelection));
+    };
+    auto moveLineBoundary = [valueState, selectionState, setSelection](bool end,
+                                                                      bool extendSelection) {
+      std::string const& text = valueState.peek();
+      setSelection(detail::moveSelectionToLineBoundary(text, selectionState.peek(), end, extendSelection));
+    };
+    auto moveDocumentBoundary = [valueState, selectionState, setSelection](bool end,
+                                                                          bool extendSelection) {
+      std::string const& text = valueState.peek();
+      setSelection(detail::moveSelectionToDocumentBoundary(text, selectionState.peek(), end, extendSelection));
+    };
+    auto pasteTextCommand = [valueState, selectionState, lengthLimit, onChangeHandler,
+                             onEditHandler, isDisabled] {
+      if (isDisabled || !Application::hasInstance()) {
+        return;
+      }
+      std::optional<std::string> clipboard = Application::instance().clipboard().readText();
+      if (!clipboard || clipboard->empty()) {
+        return;
+      }
+      applyTextMutation(valueState, selectionState,
+                        detail::insertText(valueState.peek(), selectionState.peek(),
+                                           *clipboard, lengthLimit),
+                        onChangeHandler, onEditHandler);
+    };
+    auto clipboardHasText = [isDisabled] {
+      return !isDisabled && Application::hasInstance() &&
+             Application::instance().clipboard().hasText();
+    };
+    registerTextCommand("edit.selectAll",
+                        [valueState, selectionState, isDisabled] {
+                          if (!isDisabled) {
+                            selectionState = detail::selectAllSelection(valueState.peek());
+                          }
+                        },
+                        [isDisabled] {
+                          return !isDisabled;
+                        });
+    registerTextCommand("edit.copy",
+                        [valueState, selectionState] {
+                          std::string selected = selectedInputText(valueState.peek(), selectionState.peek());
+                          if (!selected.empty() && Application::hasInstance()) {
+                            Application::instance().clipboard().writeText(std::move(selected));
+                          }
+                        },
+                        [valueState, selectionState, isDisabled] {
+                          return !isDisabled && !selectedInputText(valueState.peek(), selectionState.peek()).empty();
+                        });
+    registerTextCommand("edit.cut",
+                        [valueState, selectionState, onChangeHandler, onEditHandler, isDisabled] {
+                          if (isDisabled) {
+                            return;
+                          }
+                          std::string selected = selectedInputText(valueState.peek(), selectionState.peek());
+                          if (selected.empty()) {
+                            return;
+                          }
+                          if (Application::hasInstance()) {
+                            Application::instance().clipboard().writeText(std::move(selected));
+                          }
+                          applyTextMutation(valueState, selectionState,
+                                            detail::insertText(valueState.peek(), selectionState.peek(), ""),
+                                            onChangeHandler, onEditHandler);
+                        },
+                        [valueState, selectionState, isDisabled] {
+                          return !isDisabled && !selectedInputText(valueState.peek(), selectionState.peek()).empty();
+                        });
+    registerTextCommand("edit.paste", pasteTextCommand, clipboardHasText);
+    registerTextCommand("edit.pastePlainText", pasteTextCommand, clipboardHasText);
+    registerTextCommand("edit.deleteBackward",
+                        [valueState, selectionState, applyMutation, isDisabled] {
+                          if (!isDisabled) {
+                            applyMutation(detail::eraseSelectionOrChar(valueState.peek(), selectionState.peek(), false));
+                          }
+                        },
+                        [valueState, selectionState, isDisabled] {
+                          detail::TextEditSelection const selection =
+                              detail::clampSelection(valueState.peek(), selectionState.peek());
+                          return !isDisabled && (selection.hasSelection() || selection.caretByte > 0);
+                        });
+    registerTextCommand("edit.deleteForward",
+                        [valueState, selectionState, applyMutation, isDisabled] {
+                          if (!isDisabled) {
+                            applyMutation(detail::eraseSelectionOrChar(valueState.peek(), selectionState.peek(), true));
+                          }
+                        },
+                        [valueState, selectionState, isDisabled] {
+                          detail::TextEditSelection const selection =
+                              detail::clampSelection(valueState.peek(), selectionState.peek());
+                          return !isDisabled && (selection.hasSelection() ||
+                                                 selection.caretByte < static_cast<int>(valueState.peek().size()));
+                        });
+    registerTextCommand("edit.deleteWordBackward",
+                        [valueState, selectionState, applyMutation, isDisabled] {
+                          if (!isDisabled) {
+                            applyMutation(detail::eraseWord(valueState.peek(), selectionState.peek(), false));
+                          }
+                        },
+                        [valueState, selectionState, isDisabled] {
+                          detail::TextEditSelection const selection =
+                              detail::clampSelection(valueState.peek(), selectionState.peek());
+                          return !isDisabled && (selection.hasSelection() || selection.caretByte > 0);
+                        });
+    registerTextCommand("edit.deleteWordForward",
+                        [valueState, selectionState, applyMutation, isDisabled] {
+                          if (!isDisabled) {
+                            applyMutation(detail::eraseWord(valueState.peek(), selectionState.peek(), true));
+                          }
+                        },
+                        [valueState, selectionState, isDisabled] {
+                          detail::TextEditSelection const selection =
+                              detail::clampSelection(valueState.peek(), selectionState.peek());
+                          return !isDisabled && (selection.hasSelection() ||
+                                                 selection.caretByte < static_cast<int>(valueState.peek().size()));
+                        });
+    registerTextCommand("edit.selectLine",
+                        [valueState, selectionState, isDisabled] {
+                          if (!isDisabled) {
+                            selectionState = detail::selectCurrentLine(valueState.peek(), selectionState.peek());
+                          }
+                        },
+                        [valueState, isDisabled] {
+                          return !isDisabled && !valueState.peek().empty();
+                        });
+    registerTextCommand("edit.deleteLine",
+                        [valueState, selectionState, applyMutation, isDisabled] {
+                          if (!isDisabled) {
+                            applyMutation(detail::eraseCurrentLine(valueState.peek(), selectionState.peek()));
+                          }
+                        },
+                        [valueState, isDisabled] {
+                          return !isDisabled && !valueState.peek().empty();
+                        });
+    registerTextCommand("edit.insertLineAbove",
+                        [valueState, selectionState, lengthLimit, applyMutation, acceptsMultiline, isDisabled] {
+                          if (!isDisabled && acceptsMultiline) {
+                            applyMutation(detail::insertLineAdjacent(valueState.peek(), selectionState.peek(),
+                                                                     true, lengthLimit));
+                          }
+                        },
+                        [acceptsMultiline, isDisabled] {
+                          return !isDisabled && acceptsMultiline;
+                        });
+    registerTextCommand("edit.insertLineBelow",
+                        [valueState, selectionState, lengthLimit, applyMutation, acceptsMultiline, isDisabled] {
+                          if (!isDisabled && acceptsMultiline) {
+                            applyMutation(detail::insertLineAdjacent(valueState.peek(), selectionState.peek(),
+                                                                     false, lengthLimit));
+                          }
+                        },
+                        [acceptsMultiline, isDisabled] {
+                          return !isDisabled && acceptsMultiline;
+                        });
+    registerTextCommand("edit.moveLineUp",
+                        [valueState, selectionState, applyMutation, acceptsMultiline, isDisabled] {
+                          if (!isDisabled && acceptsMultiline) {
+                            applyMutation(detail::moveCurrentLine(valueState.peek(), selectionState.peek(), -1));
+                          }
+                        },
+                        [valueState, selectionState, acceptsMultiline, isDisabled] {
+                          detail::TextEditSelection const selection =
+                              detail::clampSelection(valueState.peek(), selectionState.peek());
+                          return !isDisabled && acceptsMultiline && selection.caretByte > 0;
+                        });
+    registerTextCommand("edit.moveLineDown",
+                        [valueState, selectionState, applyMutation, acceptsMultiline, isDisabled] {
+                          if (!isDisabled && acceptsMultiline) {
+                            applyMutation(detail::moveCurrentLine(valueState.peek(), selectionState.peek(), 1));
+                          }
+                        },
+                        [valueState, selectionState, acceptsMultiline, isDisabled] {
+                          detail::TextEditSelection const selection =
+                              detail::clampSelection(valueState.peek(), selectionState.peek());
+                          return !isDisabled && acceptsMultiline &&
+                                 selection.caretByte < static_cast<int>(valueState.peek().size());
+                        });
+    registerTextCommand("edit.copyLineUp",
+                        [valueState, selectionState, lengthLimit, applyMutation, acceptsMultiline, isDisabled] {
+                          if (!isDisabled && acceptsMultiline) {
+                            applyMutation(detail::copyCurrentLine(valueState.peek(), selectionState.peek(),
+                                                                  -1, lengthLimit));
+                          }
+                        },
+                        [valueState, acceptsMultiline, isDisabled] {
+                          return !isDisabled && acceptsMultiline && !valueState.peek().empty();
+                        });
+    registerTextCommand("edit.copyLineDown",
+                        [valueState, selectionState, lengthLimit, applyMutation, acceptsMultiline, isDisabled] {
+                          if (!isDisabled && acceptsMultiline) {
+                            applyMutation(detail::copyCurrentLine(valueState.peek(), selectionState.peek(),
+                                                                  1, lengthLimit));
+                          }
+                        },
+                        [valueState, acceptsMultiline, isDisabled] {
+                          return !isDisabled && acceptsMultiline && !valueState.peek().empty();
+                        });
+    registerTextCommand("cursor.left",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(-1, false, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.right",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(1, false, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.wordLeft",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(-1, true, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.wordRight",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(1, true, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.up",
+                        [moveVertical, isDisabled] { if (!isDisabled) moveVertical(-1, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.down",
+                        [moveVertical, isDisabled] { if (!isDisabled) moveVertical(1, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.lineStart",
+                        [moveLineBoundary, isDisabled] { if (!isDisabled) moveLineBoundary(false, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.lineEnd",
+                        [moveLineBoundary, isDisabled] { if (!isDisabled) moveLineBoundary(true, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.documentStart",
+                        [moveDocumentBoundary, isDisabled] { if (!isDisabled) moveDocumentBoundary(false, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("cursor.documentEnd",
+                        [moveDocumentBoundary, isDisabled] { if (!isDisabled) moveDocumentBoundary(true, false); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.left",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(-1, false, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.right",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(1, false, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.wordLeft",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(-1, true, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.wordRight",
+                        [moveHorizontal, isDisabled] { if (!isDisabled) moveHorizontal(1, true, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.up",
+                        [moveVertical, isDisabled] { if (!isDisabled) moveVertical(-1, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.down",
+                        [moveVertical, isDisabled] { if (!isDisabled) moveVertical(1, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.lineStart",
+                        [moveLineBoundary, isDisabled] { if (!isDisabled) moveLineBoundary(false, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.lineEnd",
+                        [moveLineBoundary, isDisabled] { if (!isDisabled) moveLineBoundary(true, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.documentStart",
+                        [moveDocumentBoundary, isDisabled] { if (!isDisabled) moveDocumentBoundary(false, true); },
+                        [isDisabled] { return !isDisabled; });
+    registerTextCommand("selection.documentEnd",
+                        [moveDocumentBoundary, isDisabled] { if (!isDisabled) moveDocumentBoundary(true, true); },
+                        [isDisabled] { return !isDisabled; });
+  }
 
   interaction->onPointerDown = [selectionState, valueState, layoutResult, frameSize, resolvedStyle,
                                 draggingSelection, isDisabled](Point point, MouseButton button) {
@@ -444,8 +761,12 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   };
   interaction->onKeyDown = [valueState, selectionState, layoutResult, acceptsMultiline, lengthLimit,
                             onChangeHandler, onEditHandler, onSubmitHandler, onEscapeHandler,
+                            onPreviewKeyDownHandler,
                             isDisabled](KeyCode key, Modifiers modifiers) {
     if (isDisabled) {
+      return;
+    }
+    if (onPreviewKeyDownHandler && onPreviewKeyDownHandler(key, modifiers)) {
       return;
     }
     bool const shift = any(modifiers & Modifiers::Shift);

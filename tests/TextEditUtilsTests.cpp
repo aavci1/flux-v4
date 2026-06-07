@@ -155,6 +155,41 @@ TEST_CASE("TextEditUtils: eraseToLineBoundary deletes to start and end of line")
     CHECK(forward.selection.caretByte == 1);
 }
 
+TEST_CASE("TextEditUtils: line commands select delete insert move and copy lines") {
+    TextEditSelection selected = selectCurrentLine("one\ntwo\nthree", TextEditSelection {.caretByte = 5, .anchorByte = 5});
+    CHECK(selected.anchorByte == 4);
+    CHECK(selected.caretByte == 8);
+
+    TextEditMutation deleted = eraseCurrentLine("one\ntwo\nthree", TextEditSelection {.caretByte = 5, .anchorByte = 5});
+    CHECK(deleted.text == "one\nthree");
+    CHECK(deleted.selection.caretByte == 4);
+
+    TextEditMutation insertedAbove =
+        insertLineAdjacent("one\ntwo", TextEditSelection {.caretByte = 5, .anchorByte = 5}, true);
+    CHECK(insertedAbove.text == "one\n\ntwo");
+    CHECK(insertedAbove.selection.caretByte == 4);
+
+    TextEditMutation insertedBelow =
+        insertLineAdjacent("one\ntwo", TextEditSelection {.caretByte = 5, .anchorByte = 5}, false);
+    CHECK(insertedBelow.text == "one\ntwo\n");
+    CHECK(insertedBelow.selection.caretByte == 8);
+
+    TextEditMutation movedUp =
+        moveCurrentLine("one\ntwo\nthree", TextEditSelection {.caretByte = 5, .anchorByte = 5}, -1);
+    CHECK(movedUp.text == "two\none\nthree");
+    CHECK(movedUp.selection.caretByte == 1);
+
+    TextEditMutation movedDown =
+        moveCurrentLine("one\ntwo\nthree", TextEditSelection {.caretByte = 1, .anchorByte = 1}, 1);
+    CHECK(movedDown.text == "two\none\nthree");
+    CHECK(movedDown.selection.caretByte == 5);
+
+    TextEditMutation copiedDown =
+        copyCurrentLine("one\ntwo", TextEditSelection {.caretByte = 1, .anchorByte = 1}, 1);
+    CHECK(copiedDown.text == "one\none\ntwo");
+    CHECK(copiedDown.selection.caretByte == 5);
+}
+
 TEST_CASE("TextEditUtils: lineIndexForByte") {
     std::vector<LineMetrics> lines;
     LineMetrics a {};

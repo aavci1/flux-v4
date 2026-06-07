@@ -47,7 +47,7 @@ set(LAMBDA_UI_SOURCES
   UI/Window.cpp
   UI/WindowRender.cpp
   UI/MeasureContext.cpp
-  UI/ActionRegistry.cpp
+  UI/CommandRegistry.cpp
   UI/InputFieldChrome.cpp
   UI/InputFieldLayout.cpp
   UI/Detail/TraversalContext.cpp

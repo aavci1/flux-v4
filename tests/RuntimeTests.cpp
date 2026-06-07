@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
 
+#include <Lambda/UI/CommandRegistry.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/UI/Shortcut.hpp>
-#include <Lambda/UI/ActionRegistry.hpp>
 
 #include "Platform/Linux/Common/XkbState.hpp"
 
@@ -12,16 +12,16 @@ TEST_CASE("runtime tests are parked for the v5 mount runtime rewrite") {
   CHECK(true);
 }
 
-TEST_CASE("action registry unregisters window actions by id") {
-  lambda::ActionRegistry registry;
+TEST_CASE("command registry unregisters window commands by id") {
+  lambda::CommandRegistry registry;
   int fired = 0;
-  lambda::ActionId const id = registry.registerWindowAction("demo.save", [&] {
+  lambda::CommandId const id = registry.registerWindowHandler("demo.save", [&] {
     ++fired;
   });
 
-  std::unordered_map<std::string, lambda::ActionDescriptor> descriptors;
-  descriptors.emplace("demo.save", lambda::ActionDescriptor{
-      .label = "Save",
+  std::unordered_map<std::string, lambda::CommandDescriptor> descriptors;
+  descriptors.emplace("demo.save", lambda::CommandDescriptor{
+      .title = "Save",
       .shortcut = lambda::shortcuts::Save,
   });
 
@@ -34,16 +34,16 @@ TEST_CASE("action registry unregisters window actions by id") {
   CHECK(fired == 1);
 }
 
-TEST_CASE("action registry unregisters view claims by id") {
-  lambda::ActionRegistry registry;
+TEST_CASE("command registry unregisters view handlers by id") {
+  lambda::CommandRegistry registry;
   int fired = 0;
-  lambda::ActionId const id = registry.registerViewClaim({}, "demo.save", [&] {
+  lambda::CommandId const id = registry.registerViewHandler({}, "demo.save", [&] {
     ++fired;
   });
 
-  std::unordered_map<std::string, lambda::ActionDescriptor> descriptors;
-  descriptors.emplace("demo.save", lambda::ActionDescriptor{
-      .label = "Save",
+  std::unordered_map<std::string, lambda::CommandDescriptor> descriptors;
+  descriptors.emplace("demo.save", lambda::CommandDescriptor{
+      .title = "Save",
       .shortcut = lambda::shortcuts::Save,
   });
 
@@ -87,8 +87,8 @@ TEST_CASE("component keys minted from scopes are non-empty and stable") {
   CHECK(firstKey != secondKey);
 }
 
-TEST_CASE("view claims registered with scope keys only fire for the focused scope") {
-  lambda::ActionRegistry registry;
+TEST_CASE("view command handlers registered with scope keys only fire for the focused scope") {
+  lambda::CommandRegistry registry;
   int firstFired = 0;
   int secondFired = 0;
   int otherScope = 0;
@@ -98,16 +98,16 @@ TEST_CASE("view claims registered with scope keys only fire for the focused scop
   lambda::ComponentKey const secondKey = lambda::ComponentKey::fromScope(&secondScope);
   lambda::ComponentKey const otherKey = lambda::ComponentKey::fromScope(&otherScope);
 
-  registry.registerViewClaim(firstKey, "demo.save", [&] {
+  registry.registerViewHandler(firstKey, "demo.save", [&] {
     ++firstFired;
   });
-  registry.registerViewClaim(secondKey, "demo.save", [&] {
+  registry.registerViewHandler(secondKey, "demo.save", [&] {
     ++secondFired;
   });
 
-  std::unordered_map<std::string, lambda::ActionDescriptor> descriptors;
-  descriptors.emplace("demo.save", lambda::ActionDescriptor{
-      .label = "Save",
+  std::unordered_map<std::string, lambda::CommandDescriptor> descriptors;
+  descriptors.emplace("demo.save", lambda::CommandDescriptor{
+      .title = "Save",
       .shortcut = lambda::shortcuts::Save,
   });
 
@@ -124,23 +124,78 @@ TEST_CASE("view claims registered with scope keys only fire for the focused scop
   CHECK(secondFired == 1);
 }
 
-TEST_CASE("view claims registered with scope keys still match focused descendants") {
-  lambda::ActionRegistry registry;
+TEST_CASE("view command handlers registered with scope keys still match focused descendants") {
+  lambda::CommandRegistry registry;
   int fired = 0;
   int scope = 0;
   lambda::ComponentKey const scopeKey = lambda::ComponentKey::fromScope(&scope);
   lambda::ComponentKey const focusedLeaf{scopeKey, lambda::LocalId::fromString("leaf")};
 
-  registry.registerViewClaim(scopeKey, "demo.save", [&] {
+  registry.registerViewHandler(scopeKey, "demo.save", [&] {
     ++fired;
   });
 
-  std::unordered_map<std::string, lambda::ActionDescriptor> descriptors;
-  descriptors.emplace("demo.save", lambda::ActionDescriptor{
-      .label = "Save",
+  std::unordered_map<std::string, lambda::CommandDescriptor> descriptors;
+  descriptors.emplace("demo.save", lambda::CommandDescriptor{
+      .title = "Save",
       .shortcut = lambda::shortcuts::Save,
   });
 
   CHECK(registry.dispatchShortcut(focusedLeaf, lambda::keys::S, lambda::Modifiers::Meta, descriptors));
   CHECK(fired == 1);
+}
+
+TEST_CASE("same-scope view command handlers use the last registration") {
+  lambda::CommandRegistry registry;
+  int firstFired = 0;
+  int secondFired = 0;
+  int scope = 0;
+  lambda::ComponentKey const scopeKey = lambda::ComponentKey::fromScope(&scope);
+
+  registry.registerViewHandler(scopeKey, "demo.save", [&] {
+    ++firstFired;
+  });
+  registry.registerViewHandler(scopeKey, "demo.save", [&] {
+    ++secondFired;
+  });
+
+  std::unordered_map<std::string, lambda::CommandDescriptor> descriptors;
+  descriptors.emplace("demo.save", lambda::CommandDescriptor{
+      .title = "Save",
+      .shortcut = lambda::shortcuts::Save,
+  });
+
+  CHECK(registry.dispatchShortcut(scopeKey, lambda::keys::S, lambda::Modifiers::Meta, descriptors));
+  CHECK(firstFired == 0);
+  CHECK(secondFired == 1);
+}
+
+TEST_CASE("disabled focused command handler consumes shortcut before bubbling") {
+  lambda::CommandRegistry registry;
+  int viewFired = 0;
+  int windowFired = 0;
+  int scope = 0;
+  lambda::ComponentKey const scopeKey = lambda::ComponentKey::fromScope(&scope);
+
+  registry.registerViewHandler(scopeKey,
+                               "demo.save",
+                               [&] {
+                                 ++viewFired;
+                               },
+                               [] {
+                                 return false;
+                               });
+  registry.registerWindowHandler("demo.save", [&] {
+    ++windowFired;
+  });
+
+  std::unordered_map<std::string, lambda::CommandDescriptor> descriptors;
+  descriptors.emplace("demo.save", lambda::CommandDescriptor{
+      .title = "Save",
+      .shortcut = lambda::shortcuts::Save,
+  });
+
+  CHECK(registry.dispatchShortcut(scopeKey, lambda::keys::S, lambda::Modifiers::Meta, descriptors));
+  CHECK(viewFired == 0);
+  CHECK(windowFired == 0);
 }
