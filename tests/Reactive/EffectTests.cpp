@@ -154,6 +154,40 @@ TEST_CASE("Reactive Effect flushes shallower graph dependencies first") {
   CHECK(order == std::vector<int>{1, 2});
 }
 
+TEST_CASE("Reactive Effect flush survives signal writes from a running effect") {
+  // Regression: an effect writing a signal mid-flush re-entered flushEffects
+  // through the nested BatchGuard and invalidated the flush queue iteration.
+  Signal<int> source(0);
+  Signal<int> derived(0);
+
+  Effect writer([&] {
+    derived.set(source.get() * 10);
+  });
+
+  std::vector<int> watcherRuns(8, 0);
+  std::vector<Effect> watchers;
+  watchers.reserve(watcherRuns.size());
+  for (std::size_t i = 0; i < watcherRuns.size(); ++i) {
+    watchers.emplace_back([&watcherRuns, &source, i] {
+      (void)source.get();
+      ++watcherRuns[i];
+    });
+  }
+
+  std::vector<int> observed;
+  Effect reader([&] {
+    observed.push_back(derived.get());
+  });
+
+  source.set(1);
+  source.set(2);
+
+  CHECK(observed == std::vector<int>{0, 10, 20});
+  for (int runs : watcherRuns) {
+    CHECK(runs == 3);
+  }
+}
+
 TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   Signal<int> trigger(0);
   lambda::Animated<float> readAnimation{0.f};

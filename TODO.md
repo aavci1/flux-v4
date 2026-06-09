@@ -16,6 +16,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
 | TODO-015 | Feature | Add a cross-window command registry and command palette | N/A | P2 |
+| TODO-016 | Bug | useAutoFocus cannot focus targets inside nested child components | Medium | P2 |
+| TODO-017 | Bug | Overlay rebuild test trips stack-use-after-scope under ASan | Medium | P2 |
 
 ## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
 
@@ -118,3 +120,17 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Design the API so it can later grow from per-window commands into app-level, Shell-level, compositor-level, and individual-view command scopes without rewriting the initial command metadata model.
 - [ ] [Auto + Manual] Add focused tests for command registration/unregistration, command lookup, command invocation, enabled/visibility filtering, shortcut dispatch, and toolbar/palette binding behavior.
 - [ ] [Manual] Verify manually with a representative app that commands can be invoked from the palette, toolbar buttons, and shortcuts while staying synchronized as app state changes.
+
+## TODO-016: useAutoFocus cannot focus targets inside nested child components
+
+- [ ] [Auto] `useAutoFocus` requests focus with `ComponentKey::fromScope(hookScope)` and `Runtime::requestFocus` matches targets via `stableTargetKey_.hasPrefix(key)`, but stable target keys only carry the nearest body scope id: `HookInteractionSignalScope` builds its key fresh from `fromScope(owner)` instead of extending the parent scope key on the stack.
+- [ ] [Auto] As a result, focusable targets mounted inside nested child components (their own `body()` scopes) can never match the hook's scope key. Only focusables mounted directly in the same body scope work (the current `lambda-editor` usage).
+- [ ] [Auto] The test "auto focus requests first focusable target inside hook scope" in `tests/RuntimeInputTests.cpp` documents the expected nested behavior and is currently marked `doctest::may_fail`; remove the decorator when fixing.
+- [ ] [Auto] A fix likely needs hierarchical scope keys (extend the parent key in `HookInteractionSignalScope`) plus stable accumulation across `For`/`Show` remounts (capture the parent key at view creation and re-push it during reconcile), since `stableTargetKey_` equality is also used for focus restore, hover tracking, command registry prefix walks, and overlay anchors. Scope this carefully before implementing.
+- [ ] [Auto] This was masked until the FileDialogTests segfault (fixed) aborted the suite before `RuntimeInputTests.cpp` ran.
+
+## TODO-017: Overlay rebuild test trips stack-use-after-scope under ASan
+
+- [ ] [Auto] `tests/RuntimeInputTests.cpp` "overlay rebuild relayouts mounted content without remounting state" aborts with AddressSanitizer stack-use-after-scope in `StatefulOverlayProbe::body()`'s `onCleanup` lambda (`++*cleanups` reading a dead stack int) when a scope is disposed after the probe's stack captures are gone.
+- [ ] [Auto] Reproduce with `-DCMAKE_BUILD_TYPE=Debug -DLAMBDA_ENABLE_ASAN=ON` and `--test-case="overlay rebuild relayouts mounted content without remounting state"`. The test passes in Release because the read goes unnoticed.
+- [ ] [Auto] Determine whether the late cleanup is a framework scope-disposal ordering bug (cleanup running after unmount should not outlive the owning mount) or a test lifetime bug, and fix accordingly.

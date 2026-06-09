@@ -135,6 +135,7 @@ struct ScopeState {
 inline thread_local Computation* sCurrentObserver = nullptr;
 inline thread_local ScopeState* sCurrentOwner = nullptr;
 inline thread_local int sBatchDepth = 0;
+inline thread_local bool sFlushingEffects = false;
 inline thread_local std::vector<EffectState*> sEffectQueue;
 inline thread_local std::vector<EffectState*> sEffectFlushQueue;
 
@@ -841,6 +842,13 @@ inline void scheduleEffect(EffectState* effect) {
 }
 
 inline void flushEffects() {
+  // Effects can write signals while running; the nested BatchGuard then
+  // re-enters flushEffects and would clobber sEffectFlushQueue mid-iteration.
+  // Bail out and let the outer flush loop drain newly scheduled effects.
+  if (sFlushingEffects) {
+    return;
+  }
+  sFlushingEffects = true;
   [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
   while (!sEffectQueue.empty()) {
     sEffectFlushQueue.clear();
@@ -855,6 +863,7 @@ inline void flushEffects() {
       }
     }
   }
+  sFlushingEffects = false;
 }
 
 } // namespace detail

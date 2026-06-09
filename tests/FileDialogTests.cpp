@@ -28,6 +28,13 @@ struct ScopedTempDir {
     auto const stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     path = std::filesystem::temp_directory_path() / (prefix + "-" + std::to_string(stamp));
     std::filesystem::create_directories(path);
+    // FileDialog canonicalizes directories (e.g. /var -> /private/var on
+    // macOS); canonicalize here so accepted paths compare equal.
+    std::error_code ec;
+    auto const canonical = std::filesystem::weakly_canonical(path, ec);
+    if (!ec && !canonical.empty()) {
+      path = canonical;
+    }
   }
 
   ~ScopedTempDir() {
@@ -135,11 +142,15 @@ bool hasTapInteraction(lambda::scenegraph::Interaction const& interaction) {
 }
 
 void dispatchTap(lambda::scenegraph::Interaction const& interaction) {
+  // Copy the handler before invoking: tapping a row can navigate and unmount
+  // the node that owns the handler, destroying the closure mid-call.
   auto const& data = lambda::interactionData(interaction);
   if (data.onTapWithModifiers) {
-    data.onTapWithModifiers(lambda::MouseButton::Left, lambda::Modifiers::None);
+    auto handler = data.onTapWithModifiers;
+    handler(lambda::MouseButton::Left, lambda::Modifiers::None);
   } else if (data.onTap) {
-    data.onTap(lambda::MouseButton::Left);
+    auto handler = data.onTap;
+    handler(lambda::MouseButton::Left);
   }
 }
 

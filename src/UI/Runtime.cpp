@@ -912,14 +912,22 @@ void Runtime::handleInput(InputEvent const& event) {
         released.onTapWithModifiers(event.button, event.modifiers);
       }
     } else if (auto hit = hitWindow(d->window, point)) {
-      if (hit->interaction && hit->interaction->onPointerUp) {
-        hit->interaction->onPointerUp(hit->localPoint, event.button);
-      }
-      if (hit->interaction && hit->interaction->onTap) {
-        hit->interaction->onTap(event.button);
-      }
-      if (hit->interaction && hit->interaction->onTapWithModifiers) {
-        hit->interaction->onTapWithModifiers(event.button, event.modifiers);
+      if (hit->interaction) {
+        // Copy handlers before dispatch: a handler may unmount the hit node,
+        // destroying the interaction (and the running closure) mid-call.
+        auto onPointerUp = hit->interaction->onPointerUp;
+        auto onTap = hit->interaction->onTap;
+        auto onTapWithModifiers = hit->interaction->onTapWithModifiers;
+        Point const localPoint = hit->localPoint;
+        if (onPointerUp) {
+          onPointerUp(localPoint, event.button);
+        }
+        if (onTap) {
+          onTap(event.button);
+        }
+        if (onTapWithModifiers) {
+          onTapWithModifiers(event.button, event.modifiers);
+        }
       }
     }
     updateHoverForPoint(d->input, d->window, point);
