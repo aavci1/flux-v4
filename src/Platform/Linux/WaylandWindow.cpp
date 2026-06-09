@@ -1,6 +1,7 @@
 #include "UI/Platform/WindowFactory.hpp"
 #include "UI/Platform/Application.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
+#include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
@@ -907,10 +908,13 @@ public:
 
   std::unique_ptr<Canvas> createCanvas(::lambda::Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
-    configureVulkanCanvasRuntime(Application::instance().platformApp().requiredVulkanInstanceExtensions(),
-                                 Application::instance().cacheDir());
+    auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
+    if (!provider) {
+      throw std::runtime_error("Wayland platform application does not provide Vulkan surfaces");
+    }
+    configureVulkanCanvasRuntime(provider->requiredInstanceExtensions(), Application::instance().cacheDir());
     VkInstance instance = ensureSharedVulkanInstance();
-    VkSurfaceKHR surface = Application::instance().platformApp().createVulkanSurface(instance, &nativeSurface_);
+    VkSurfaceKHR surface = provider->createSurface(instance, &nativeSurface_);
     auto canvas = createVulkanCanvas(surface,
                                      handle_,
                                      Application::instance().textSystem(),
@@ -1600,12 +1604,14 @@ private:
       return false;
     }
     try {
-      configureVulkanCanvasRuntime(Application::instance().platformApp().requiredVulkanInstanceExtensions(),
-                                   Application::instance().cacheDir());
+      auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
+      if (!provider) {
+        throw std::runtime_error("Wayland platform application does not provide Vulkan surfaces");
+      }
+      configureVulkanCanvasRuntime(provider->requiredInstanceExtensions(), Application::instance().cacheDir());
       state.nativeSurface = WaylandNativeSurface{state.shared->display, state.surface};
       VkInstance instance = ensureSharedVulkanInstance();
-      VkSurfaceKHR vkSurface = Application::instance().platformApp().createVulkanSurface(instance,
-                                                                                        &state.nativeSurface);
+      VkSurfaceKHR vkSurface = provider->createSurface(instance, &state.nativeSurface);
       state.canvas = createVulkanCanvas(vkSurface,
                                         handle_,
                                         Application::instance().textSystem(),

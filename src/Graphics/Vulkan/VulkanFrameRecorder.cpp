@@ -53,7 +53,8 @@ VulkanFrameRecorder::VulkanFrameRecorder(VulkanFrameRecorder &&other) noexcept
       descriptorPool(std::exchange(other.descriptorPool, VK_NULL_HANDLE)),
       rootClip(other.rootClip),
       glyphAtlasGeneration(std::exchange(other.glyphAtlasGeneration, 0)),
-      geometrySignaturesPrepared(std::exchange(other.geometrySignaturesPrepared, false)) {}
+      geometrySignaturesPrepared(std::exchange(other.geometrySignaturesPrepared, false)),
+      replayable(std::exchange(other.replayable, true)) {}
 
 VulkanFrameRecorder &VulkanFrameRecorder::operator=(VulkanFrameRecorder &&other) noexcept {
   if (this == &other) {
@@ -81,6 +82,7 @@ VulkanFrameRecorder &VulkanFrameRecorder::operator=(VulkanFrameRecorder &&other)
   rootClip = other.rootClip;
   glyphAtlasGeneration = std::exchange(other.glyphAtlasGeneration, 0);
   geometrySignaturesPrepared = std::exchange(other.geometrySignaturesPrepared, false);
+  replayable = std::exchange(other.replayable, true);
   return *this;
 }
 
@@ -120,6 +122,7 @@ void VulkanFrameRecorder::clear() {
   rootClip = {};
   glyphAtlasGeneration = 0;
   geometrySignaturesPrepared = false;
+  replayable = true;
 }
 
 } // namespace lambda

@@ -9,6 +9,7 @@
 #include <Lambda/Graphics/TextSystem.hpp>
 #include <Lambda/Graphics/TextLayout.hpp>
 
+#include "Graphics/CanvasGeometry.hpp"
 #include "Graphics/Metal/GlyphAtlas.hpp"
 #include "Graphics/Metal/MetalImage.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
@@ -149,76 +150,7 @@ bool representativeFillColor(FillStyle const& fs, Color* out) {
   return false;
 }
 
-Rect boundsOfTransformedRect(Rect const& r, Mat3 const& m) {
-  Point p0 = m.apply({r.x, r.y});
-  Point p1 = m.apply({r.x + r.width, r.y});
-  Point p2 = m.apply({r.x, r.y + r.height});
-  Point p3 = m.apply({r.x + r.width, r.y + r.height});
-  float minX = std::min({p0.x, p1.x, p2.x, p3.x});
-  float minY = std::min({p0.y, p1.y, p2.y, p3.y});
-  float maxX = std::max({p0.x, p1.x, p2.x, p3.x});
-  float maxY = std::max({p0.y, p1.y, p2.y, p3.y});
-  return Rect::sharp(minX, minY, maxX - minX, maxY - minY);
-}
-
 bool intersects(Rect const& a, Rect const& b) { return a.intersects(b); }
-
-Rect intersectRects(Rect const& a, Rect const& b) {
-  const float x0 = std::max(a.x, b.x);
-  const float y0 = std::max(a.y, b.y);
-  const float x1 = std::min(a.x + a.width, b.x + b.width);
-  const float y1 = std::min(a.y + a.height, b.y + b.height);
-  if (x1 <= x0 || y1 <= y0) {
-    return Rect::sharp(0, 0, 0, 0);
-  }
-  return Rect::sharp(x0, y0, x1 - x0, y1 - y0);
-}
-
-/// When `vis` is the axis-aligned bbox of (roundRect ∩ clip), corners on cut edges must be sharp — the
-/// SDF round-rect assumes `vis` is the full shape, not a truncated round-rect (see Path::rect).
-CornerRadius cornerRadiiAfterAxisAlignedClip(Rect const& full, Rect const& vis, CornerRadius const& cr) {
-  constexpr float eps = 1e-3f;
-  CornerRadius out = cr;
-  if (vis.x > full.x + eps) {
-    out.topLeft = 0.f;
-    out.bottomLeft = 0.f;
-  }
-  if (vis.x + vis.width < full.x + full.width - eps) {
-    out.topRight = 0.f;
-    out.bottomRight = 0.f;
-  }
-  if (vis.y > full.y + eps) {
-    out.topLeft = 0.f;
-    out.topRight = 0.f;
-  }
-  if (vis.y + vis.height < full.y + full.height - eps) {
-    out.bottomLeft = 0.f;
-    out.bottomRight = 0.f;
-  }
-  return out;
-}
-
-void clampRoundRectCornerRadii(float w, float h, CornerRadius& r) {
-  if (w <= 0.f || h <= 0.f) {
-    return;
-  }
-  const float maxR = std::min(w, h) * 0.5f;
-  r.topLeft = std::min(r.topLeft, maxR);
-  r.topRight = std::min(r.topRight, maxR);
-  r.bottomRight = std::min(r.bottomRight, maxR);
-  r.bottomLeft = std::min(r.bottomLeft, maxR);
-  auto fixEdge = [](float& a, float& b, float len) {
-    if (a + b > len && len > 0.f) {
-      const float s = len / (a + b);
-      a *= s;
-      b *= s;
-    }
-  };
-  fixEdge(r.topLeft, r.topRight, w);
-  fixEdge(r.bottomLeft, r.bottomRight, w);
-  fixEdge(r.topLeft, r.bottomLeft, h);
-  fixEdge(r.topRight, r.bottomRight, h);
-}
 
 float averageLinearScale(Mat3 const& m) {
   float const sx = std::hypot(m.m[0], m.m[1]);

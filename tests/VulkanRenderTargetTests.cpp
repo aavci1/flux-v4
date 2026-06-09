@@ -497,6 +497,48 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   CHECK(translatedPixels[oldLeftEdge + 0] < 32);
 }
 
+TEST_CASE("VulkanFrameRecorder rejects captured image texture replay") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  constexpr std::uint32_t width = 64;
+  constexpr std::uint32_t height = 64;
+  FreeTypeTextSystem textSystem;
+  VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
+  VulkanRenderTargetSpec spec{
+      .image = targetImage.image,
+      .view = targetImage.view,
+      .format = targetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  };
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(spec, textSystem);
+  REQUIRE(canvas);
+  std::shared_ptr<Image> image = loadImage(imageFixturePath().string(), vk.device());
+  REQUIRE(image);
+
+  canvas->resize(static_cast<int>(width), static_cast<int>(height));
+  canvas->beginFrame();
+  canvas->clear(Colors::black);
+
+  VulkanFrameRecorder recorded;
+  REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
+  Size const imageSize = image->size();
+  canvas->drawImage(*image,
+                    lambda::Rect{0.f, 0.f, imageSize.width, imageSize.height},
+                    lambda::Rect{8.f, 8.f, 24.f, 24.f},
+                    CornerRadius{},
+                    1.f);
+  endRecordedOpsCaptureForCanvas(canvas.get());
+
+  CHECK_FALSE(recorded.replayable);
+  CHECK(recorded.ops.size() == 1);
+  CHECK_FALSE(prepareRecordedOpsForCanvas(canvas.get(), &recorded));
+  CHECK_FALSE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+}
+
 TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();
@@ -1068,6 +1110,67 @@ TEST_CASE("Vulkan RenderTarget preserves rounded rect geometry when clipped by t
   CHECK(capturedChannel(pixels, target.pixelW, 56, 76, 2) >= 180);
   CHECK(capturedChannel(pixels, target.pixelW, 56, 76, 1) <= 80);
   CHECK(capturedChannel(pixels, target.pixelW, 56, 76, 0) <= 80);
+}
+
+TEST_CASE("Vulkan frame capture preserves transformed and rounded clip geometry") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 240, 160, 1.f};
+  VulkanRenderTargetSpec spec{
+      .image = target.targetImage.image,
+      .view = target.targetImage.view,
+      .format = target.targetImage.format,
+      .width = target.pixelW,
+      .height = target.pixelH,
+      .initialLayout = target.layout,
+      .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(spec, textSystem);
+  REQUIRE(canvas);
+
+  canvas->resize(target.logicalW, target.logicalH);
+  canvas->updateDpiScale(target.dpiScale, target.dpiScale);
+  canvas->beginFrame();
+  canvas->clear(Colors::white);
+
+  canvas->save();
+  canvas->translate(72.f, 68.f);
+  canvas->rotate(0.32f);
+  canvas->clipRect(Rect::sharp(-48.f, -30.f, 96.f, 60.f), CornerRadius{14.f, 14.f, 14.f, 14.f});
+  canvas->drawRect(Rect::sharp(-66.f, -44.f, 132.f, 88.f),
+                   CornerRadius{},
+                   FillStyle::linearGradient(Colors::red, Colors::blue, Point{0.f, 0.f}, Point{1.f, 0.f}),
+                   StrokeStyle::none());
+  canvas->restore();
+
+  canvas->clipRect(Rect::sharp(148.f, 38.f, 66.f, 58.f), CornerRadius{20.f, 20.f, 20.f, 20.f});
+  canvas->drawRect(Rect::sharp(132.f, 24.f, 104.f, 86.f),
+                   CornerRadius{},
+                   FillStyle::linearGradient(Colors::green, Colors::blue, Point{0.f, 0.f}, Point{1.f, 0.f}),
+                   StrokeStyle::none());
+
+  REQUIRE(requestNextFrameCaptureForCanvas(canvas.get()));
+  canvas->present();
+  target.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  std::vector<std::uint8_t> pixels;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+  CHECK(width == target.pixelW);
+  CHECK(height == target.pixelH);
+  REQUIRE(pixels.size() == static_cast<std::size_t>(width) * height * 4u);
+
+  CHECK(colorDelta(pixels, width, 72, 68, 8, 8) > 140);
+  CHECK(capturedChannel(pixels, width, 8, 8, 0) >= 240);
+  CHECK(capturedChannel(pixels, width, 8, 8, 1) >= 240);
+  CHECK(capturedChannel(pixels, width, 8, 8, 2) >= 240);
+  CHECK(capturedChannel(pixels, width, 151, 41, 0) >= 240);
+  CHECK(capturedChannel(pixels, width, 151, 41, 1) >= 240);
+  CHECK(capturedChannel(pixels, width, 151, 41, 2) >= 240);
+  CHECK(colorDelta(pixels, width, 174, 66, 8, 8) > 120);
 }
 
 TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the viewport") {

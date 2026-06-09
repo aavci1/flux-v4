@@ -198,6 +198,7 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
   target_sources(lambda PRIVATE
     UI/Application.cpp
     Graphics/Linux/FreeTypeTextSystem.cpp
+    Graphics/Vulkan/VulkanAllocator.cpp
     Graphics/Vulkan/VulkanContext.cpp
     Graphics/Vulkan/VulkanFrameRecorder.cpp
     Graphics/Vulkan/VulkanGpuCanvas.cpp
@@ -224,6 +225,7 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
   target_sources(lambda PRIVATE
     UI/Application.cpp
     Graphics/Linux/FreeTypeTextSystem.cpp
+    Graphics/Vulkan/VulkanAllocator.cpp
     Graphics/Vulkan/VulkanContext.cpp
     Graphics/Vulkan/VulkanFrameRecorder.cpp
     Graphics/Vulkan/VulkanGpuCanvas.cpp

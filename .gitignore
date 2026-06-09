@@ -1,6 +1,8 @@
 # Build
 /build/
 /build-asan/
+/build-asan-kms/
+/build-kms/
 /build-review/
 /build-debug/
 /build-release/

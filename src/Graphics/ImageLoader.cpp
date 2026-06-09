@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -37,6 +38,25 @@
 namespace lambda {
 
 namespace {
+
+#ifndef NDEBUG
+void logLoadImageFailure(std::string_view path) {
+  std::error_code ec;
+  std::filesystem::path fsPath{std::string(path)};
+  char const* reason = "decode failed";
+  if (!std::filesystem::exists(fsPath, ec)) {
+    reason = ec ? "path check failed" : "file does not exist";
+  } else if (!std::filesystem::is_regular_file(fsPath, ec)) {
+    reason = ec ? "file type check failed" : "not a regular file";
+  } else if (std::filesystem::file_size(fsPath, ec) == 0) {
+    reason = ec ? "file size check failed" : "empty file";
+  }
+  std::fprintf(stderr, "Lambda image loader: failed to load '%.*s': %s\n",
+               static_cast<int>(path.size()),
+               path.data(),
+               reason);
+}
+#endif
 
 bool isSvgPath(std::filesystem::path const& path) {
   std::string extension = path.extension().string();
@@ -340,6 +360,9 @@ std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, voi
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path);
   if (!decoded) {
+#ifndef NDEBUG
+    logLoadImageFailure(path);
+#endif
     return nullptr;
   }
   return imageFromDecodedRgba(*decoded, gpuDevice);
@@ -348,6 +371,9 @@ std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::uint32_t maxLongEdge) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path, maxLongEdge);
   if (!decoded) {
+#ifndef NDEBUG
+    logLoadImageFailure(path);
+#endif
     return nullptr;
   }
   return imageFromDecodedRgba(*decoded, gpuDevice);

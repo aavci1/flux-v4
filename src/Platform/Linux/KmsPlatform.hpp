@@ -2,6 +2,7 @@
 
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
+#include "Platform/Linux/GpuSurfaceProvider.hpp"
 
 #include <Lambda/Platform/Linux/KmsOutput.hpp>
 #include <Lambda/UI/Events.hpp>
@@ -43,7 +44,7 @@ struct KmsConnector {
   std::string name;
 };
 
-class KmsApplication final : public platform::Application {
+class KmsApplication final : public platform::Application, public platform::GpuSurfaceProvider {
 public:
   KmsApplication();
   ~KmsApplication() override;
@@ -59,8 +60,9 @@ public:
   std::string userDataDir() const override;
   std::string cacheDir() const override;
   std::vector<std::string> availableOutputs() const override;
-  std::span<char const* const> requiredVulkanInstanceExtensions() const override;
-  VkSurfaceKHR createVulkanSurface(VkInstance instance, void* nativeHandle) override;
+  platform::GpuSurfaceProvider* gpuSurfaceProvider() override { return this; }
+  std::span<char const* const> requiredInstanceExtensions() const override;
+  VkSurfaceKHR createSurface(VkInstance instance, void* nativeHandle) override;
 
   std::unique_ptr<platform::Window> createWindow(WindowConfig const& config);
   int drmFd() const noexcept { return drmFd_; }

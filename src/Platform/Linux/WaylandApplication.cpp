@@ -1,6 +1,8 @@
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include <vulkan/vulkan.h>
 
+#include "Graphics/Vulkan/VulkanCheck.hpp"
+#include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "UI/Platform/Application.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
@@ -15,12 +17,6 @@
 
 namespace lambda {
 namespace {
-
-void vkCheck(VkResult result, char const* what) {
-  if (result != VK_SUCCESS) {
-    throw std::runtime_error(std::string(what) + " failed");
-  }
-}
 
 std::string envOr(std::string const& name, std::string fallback) {
   if (char const* value = std::getenv(name.c_str())) {
@@ -49,7 +45,7 @@ std::string appDir(std::string const& base, std::string const& appName) {
   return path.string();
 }
 
-class WaylandApplication final : public platform::Application {
+class WaylandApplication final : public platform::Application, public platform::GpuSurfaceProvider {
 public:
   void initialize() override {}
 
@@ -95,7 +91,11 @@ public:
     return linux_platform::availableWaylandOutputs();
   }
 
-  std::span<char const* const> requiredVulkanInstanceExtensions() const override {
+  platform::GpuSurfaceProvider* gpuSurfaceProvider() override {
+    return this;
+  }
+
+  std::span<char const* const> requiredInstanceExtensions() const override {
     static constexpr char const* exts[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
         VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
@@ -103,7 +103,7 @@ public:
     return exts;
   }
 
-  VkSurfaceKHR createVulkanSurface(VkInstance instance, void* nativeHandle) override {
+  VkSurfaceKHR createSurface(VkInstance instance, void* nativeHandle) override {
     auto* native = static_cast<WaylandNativeSurface*>(nativeHandle);
     if (!native || !native->display || !native->surface) {
       throw std::runtime_error("Invalid Wayland Vulkan surface handle");

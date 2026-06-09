@@ -41,6 +41,7 @@ struct VulkanFrameRecorder {
   Rect rootClip{};
   std::uint64_t glyphAtlasGeneration = 0;
   bool geometrySignaturesPrepared = false;
+  bool replayable = true;
 
   VulkanFrameRecorder() = default;
   ~VulkanFrameRecorder();

@@ -38,9 +38,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             ninja-build pkg-config \
             libwayland-dev wayland-protocols \
-            libxkbcommon-dev libvulkan-dev glslang-tools \
+            libxkbcommon-dev libvulkan-dev glslang-tools mesa-vulkan-drivers \
             libfreetype-dev libfontconfig-dev libharfbuzz-dev zlib1g-dev \
-            libdrm-dev libinput-dev libudev-dev
+            libdrm-dev libinput-dev libudev-dev librsvg2-dev
 
       - name: Configure
         run: >-
@@ -52,9 +52,19 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # Headless runners have no Wayland display or Vulkan device, so only the
-      # display-independent reactive suite runs here. The full lambda_tests
-      # suite runs on macOS above and locally on Linux hardware.
+      - name: Vulkan shader headers
+        run: cmake --build build --target lambda_vulkan_shaders_check
+
+      - name: Vulkan tests (lavapipe)
+        run: |
+          if [ -f /usr/share/vulkan/icd.d/lvp_icd.x86_64.json ]; then
+            VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+              ./build/tests/lambda_tests --test-case="*Vulkan*"
+          else
+            echo "lavapipe ICD not found; skipping Vulkan tests"
+          fi
+
+      # Keep the display-independent reactive suite as a fast Linux smoke test.
       - name: Reactive tests
         run: ./build/tests/lambda_reactive_tests
 

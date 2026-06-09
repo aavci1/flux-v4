@@ -236,14 +236,16 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
     }
 #endif
 #if LAMBDA_VULKAN
-    VulkanFrameRecorder recorded;
-    if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
-        node.render(*this);
-        endRecordedOpsCaptureForCanvas(&canvas_);
-        prepareRecordedOpsForCanvas(&canvas_, &recorded);
-        if (recordedOpsContainClipState(recorded)) {
-            // Local replay retags cached ops with the caller's current clip. Until it can merge
-            // recorded and caller clips, keep internally clipped leaves on the live render path.
+        VulkanFrameRecorder recorded;
+        if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
+            node.render(*this);
+            endRecordedOpsCaptureForCanvas(&canvas_);
+            if (!prepareRecordedOpsForCanvas(&canvas_, &recorded)) {
+                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+            }
+            if (recordedOpsContainClipState(recorded)) {
+                // Local replay retags cached ops with the caller's current clip. Until it can merge
+                // recorded and caller clips, keep internally clipped leaves on the live render path.
             return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
         }
         return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
@@ -439,7 +441,9 @@ struct SceneRenderer::Impl {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
             endRecordedOpsCaptureForCanvas(canvas);
-            prepareRecordedOpsForCanvas(canvas, &recorded);
+            if (!prepareRecordedOpsForCanvas(canvas, &recorded)) {
+                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+            }
             if (recordedOpsContainClipState(recorded)) {
                 // Group captures include clips from descendants. Replaying them as one local
                 // display list would drop those nested clips, so let the normal traversal render it.

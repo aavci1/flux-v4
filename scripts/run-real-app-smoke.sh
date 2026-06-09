@@ -137,11 +137,20 @@ add_missing() {
 }
 
 lambda_exe() {
-  if [[ "$1" == "lambda-shell" ]]; then
-    printf "%s/%s" "$BUILD_DIR" "$1"
-  else
-    printf "%s/demos/%s" "$BUILD_DIR" "$1"
-  fi
+  local name="$1"
+  local candidates=(
+    "$BUILD_DIR/apps/$name/$name"
+    "$BUILD_DIR/$name"
+    "$BUILD_DIR/demos/$name"
+  )
+  local path
+  for path in "${candidates[@]}"; do
+    if [[ -x "$path" ]]; then
+      printf "%s" "$path"
+      return
+    fi
+  done
+  printf "%s/apps/%s/%s" "$BUILD_DIR" "$name" "$name"
 }
 
 lambda_cmd() {

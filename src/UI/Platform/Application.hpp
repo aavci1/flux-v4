@@ -5,19 +5,13 @@
 
 #include <functional>
 #include <memory>
-#include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
-#ifndef VK_VERSION_1_0
-struct VkInstance_T;
-using VkInstance = VkInstance_T*;
-struct VkSurfaceKHR_T;
-using VkSurfaceKHR = VkSurfaceKHR_T*;
-#endif
-
 namespace lambda::platform {
+
+class GpuSurfaceProvider;
 
 struct ShortcutKey {
   KeyCode key = 0;
@@ -50,8 +44,7 @@ public:
   virtual std::string userDataDir() const = 0;
   virtual std::string cacheDir() const = 0;
   virtual std::vector<std::string> availableOutputs() const { return {}; }
-  virtual std::span<char const* const> requiredVulkanInstanceExtensions() const { return {}; }
-  virtual VkSurfaceKHR createVulkanSurface(VkInstance, void*) { return nullptr; }
+  virtual GpuSurfaceProvider* gpuSurfaceProvider() { return nullptr; }
 };
 
 std::unique_ptr<Application> createApplication();

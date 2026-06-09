@@ -5,6 +5,7 @@
 #include <Lambda/Graphics/VulkanContext.hpp>
 
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "Platform/Linux/KmsPlatform.hpp"
 
 #include <algorithm>
@@ -222,38 +223,6 @@ std::uint64_t monotonicNowNsec() {
   clock_gettime(CLOCK_MONOTONIC, &now);
   return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
          static_cast<std::uint64_t>(now.tv_nsec);
-}
-
-char const* vkResultName(VkResult result) {
-  switch (result) {
-  case VK_SUCCESS: return "VK_SUCCESS";
-  case VK_NOT_READY: return "VK_NOT_READY";
-  case VK_TIMEOUT: return "VK_TIMEOUT";
-  case VK_EVENT_SET: return "VK_EVENT_SET";
-  case VK_EVENT_RESET: return "VK_EVENT_RESET";
-  case VK_INCOMPLETE: return "VK_INCOMPLETE";
-  case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
-  case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-  case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
-  case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
-  case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
-  case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
-  case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
-  case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
-  case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
-  case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
-  case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-  case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
-  case VK_ERROR_UNKNOWN: return "VK_ERROR_UNKNOWN";
-  default: return "VK_ERROR";
-  }
-}
-
-void vkCheck(VkResult result, char const* what) {
-  if (result != VK_SUCCESS) {
-    throw std::runtime_error(std::string(what) + " failed: " + vkResultName(result) +
-                             " (" + std::to_string(static_cast<int>(result)) + ")");
-  }
 }
 
 std::uint32_t cursorDimension(int fd, std::uint64_t cap) {
@@ -728,10 +697,11 @@ public:
 
   ~Impl() { cleanup(); }
 
-  void cleanup() {
-    if (canvas_) canvas_.reset();
-    VkDevice device = lambda::VulkanContext::instance().device();
-    if (device) vkDeviceWaitIdle(device);
+	  void cleanup() {
+	    if (canvas_) canvas_.reset();
+	    VkDevice device = lambda::VulkanContext::instance().device();
+	    // Intentional presenter teardown wait before destroying KMS buffers.
+	    if (device) vkDeviceWaitIdle(device);
     destroyOverlayFramebuffers();
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
@@ -2565,9 +2535,10 @@ private:
     }
   }
 
-  void destroyBuffers() {
-    VkDevice device = lambda::VulkanContext::instance().device();
-    if (device) vkDeviceWaitIdle(device);
+	  void destroyBuffers() {
+	    VkDevice device = lambda::VulkanContext::instance().device();
+	    // Intentional output-buffer teardown wait before freeing scanout images.
+	    if (device) vkDeviceWaitIdle(device);
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
@@ -3526,7 +3497,9 @@ std::uint32_t KmsOutput::cursorHeight() const noexcept {
 
 VkSurfaceKHR KmsOutput::createVulkanSurface(VkInstance instance) const {
   if (!impl_ || !impl_->device_ || !impl_->device_->app_) throw std::runtime_error("Invalid KMS output");
-  return impl_->device_->app_->createVulkanSurface(instance, &impl_->connector_);
+  auto* provider = impl_->device_->app_->gpuSurfaceProvider();
+  if (!provider) throw std::runtime_error("KMS application does not provide Vulkan surfaces");
+  return provider->createSurface(instance, &impl_->connector_);
 }
 
 KmsOutput::VblankTiming KmsOutput::waitForVblank() const {
@@ -3723,8 +3696,12 @@ int KmsDevice::fd() const noexcept {
 
 std::span<char const* const> KmsDevice::requiredVulkanInstanceExtensions() const {
   static std::vector<char const*> empty;
-  return impl_ && impl_->app_ ? impl_->app_->requiredVulkanInstanceExtensions()
-                              : std::span<char const* const>(empty.data(), empty.size());
+  if (!impl_ || !impl_->app_) {
+    return std::span<char const* const>(empty.data(), empty.size());
+  }
+  auto* provider = impl_->app_->gpuSurfaceProvider();
+  return provider ? provider->requiredInstanceExtensions()
+                  : std::span<char const* const>(empty.data(), empty.size());
 }
 
 std::filesystem::path KmsDevice::cacheDir() const {

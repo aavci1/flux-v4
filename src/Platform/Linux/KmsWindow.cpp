@@ -171,9 +171,13 @@ void KmsWindow::show() {
 }
 
 std::unique_ptr<Canvas> KmsWindow::createCanvas(::lambda::Window&) {
-  configureVulkanCanvasRuntime(app_.requiredVulkanInstanceExtensions(), app_.cacheDir());
+  auto* provider = app_.gpuSurfaceProvider();
+  if (!provider) {
+    throw std::runtime_error("KMS application does not provide Vulkan surfaces");
+  }
+  configureVulkanCanvasRuntime(provider->requiredInstanceExtensions(), app_.cacheDir());
   VkInstance instance = ensureSharedVulkanInstance();
-  VkSurfaceKHR surface = app_.createVulkanSurface(instance, &connector_);
+  VkSurfaceKHR surface = provider->createSurface(instance, &connector_);
   auto canvas = createVulkanCanvas(surface, handle_, Application::instance().textSystem());
   canvas->updateDpiScale(1.f, 1.f);
   canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));

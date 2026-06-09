@@ -13,7 +13,7 @@ add_failure() {
 
 is_allowed_header_only_class() {
   case "$1" in
-    Animation|AnimationBase|AnimationClipState|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|PreparedRenderOps|Renderer|Scope|ScopedTimer|ShowView|Signal|SmallFn|SmallVector|SwitchView)
+    Animation|AnimationBase|AnimationClipState|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|Interaction|PreparedRenderOps|Renderer|Scope|ScopedTimer|ScopedWindowCreationModalParent|ShowView|Signal|SmallFn|SmallVector|SwitchView)
       return 0
       ;;
   esac
@@ -22,7 +22,7 @@ is_allowed_header_only_class() {
 
 is_allowed_forward_without_direct_instantiation() {
   case "$1" in
-    GestureTracker|PreparedRenderOps|Renderer|TextSystem)
+    GestureTracker|Interaction|PreparedRenderOps|Renderer|TextSystem)
       return 0
       ;;
   esac
@@ -31,12 +31,12 @@ is_allowed_forward_without_direct_instantiation() {
 
 has_definition() {
   local type="$1"
-  rg -q "(^|[[:space:]])(class|struct)[[:space:]]+${type}([^A-Za-z0-9_]|$).*\\{" include src
+  rg -q "(^|[[:space:]])(class|struct)[[:space:]]+([A-Za-z0-9_]+::)*${type}([^A-Za-z0-9_]|$).*\\{" include src
 }
 
 has_direct_instantiation() {
   local type="$1"
-  rg -q "make_unique<${type}\\b|make_shared<${type}\\b|new[[:space:]]+${type}\\b|:[[:space:]]+${type}\\b|[[:space:]]${type}\\{|[[:space:]]${type}\\(" include src
+  rg -q "make_unique<([A-Za-z0-9_]+::)*${type}\\b|make_shared<([A-Za-z0-9_]+::)*${type}\\b|new[[:space:]]+([A-Za-z0-9_]+::)*${type}\\b|:[^{;]*([A-Za-z0-9_]+::)*${type}\\b|[[:space:]]([A-Za-z0-9_]+::)*${type}\\{|[[:space:]]([A-Za-z0-9_]+::)*${type}\\(" include src
 }
 
 has_out_of_class_implementation() {
@@ -66,7 +66,7 @@ fi
 rm -f /tmp/lambda-stale-symbols.$$
 
 while IFS= read -r source; do
-  if ! rg -q "$(basename "$source")" CMakeLists.txt; then
+  if ! rg -q --fixed-strings "$(basename "$source")" -g CMakeLists.txt .; then
     add_failure "implementation source is not listed in CMakeLists.txt: $source"
   fi
 done < <(find src -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.mm' \) | sort)

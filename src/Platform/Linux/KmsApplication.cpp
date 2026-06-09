@@ -1,5 +1,6 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
+#include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "UI/Platform/WindowFactory.hpp"
 
 #include <Lambda/Debug/DebugFlags.hpp>
@@ -135,12 +136,6 @@ void libinputLog(libinput*, libinput_log_priority priority, char const* format, 
 std::int64_t monotonicMillis() {
   using namespace std::chrono;
   return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-}
-
-void vkCheck(VkResult result, char const* what) {
-  if (result != VK_SUCCESS) {
-    throw std::runtime_error(std::string(what) + " failed");
-  }
 }
 
 std::string envOr(std::string const& name, std::string fallback) {
@@ -308,31 +303,6 @@ bool instanceExtensionAvailable(char const* name) {
   return std::any_of(props.begin(), props.end(), [&](VkExtensionProperties const& prop) {
     return std::strcmp(prop.extensionName, name) == 0;
   });
-}
-
-char const* vkResultName(VkResult result) {
-  switch (result) {
-  case VK_SUCCESS: return "VK_SUCCESS";
-  case VK_NOT_READY: return "VK_NOT_READY";
-  case VK_TIMEOUT: return "VK_TIMEOUT";
-  case VK_EVENT_SET: return "VK_EVENT_SET";
-  case VK_EVENT_RESET: return "VK_EVENT_RESET";
-  case VK_INCOMPLETE: return "VK_INCOMPLETE";
-  case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
-  case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-  case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
-  case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
-  case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
-  case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
-  case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
-  case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
-  case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
-  case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
-  case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-  case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
-  case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
-  default: return "VkResult";
-  }
 }
 
 VkDisplayPropertiesKHR drmMappedDisplayProperties(VkDisplayKHR display, KmsConnector const& connector) {
@@ -727,7 +697,7 @@ std::vector<std::string> KmsApplication::availableOutputs() const {
   return outputs;
 }
 
-std::span<char const* const> KmsApplication::requiredVulkanInstanceExtensions() const {
+std::span<char const* const> KmsApplication::requiredInstanceExtensions() const {
   static std::vector<char const*> exts = [] {
     std::vector<char const*> result{
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -745,7 +715,7 @@ std::span<char const* const> KmsApplication::requiredVulkanInstanceExtensions() 
   return exts;
 }
 
-VkSurfaceKHR KmsApplication::createVulkanSurface(VkInstance instance, void* nativeHandle) {
+VkSurfaceKHR KmsApplication::createSurface(VkInstance instance, void* nativeHandle) {
   auto* connector = static_cast<KmsConnector*>(nativeHandle);
   if (!connector) throw std::runtime_error("Invalid KMS Vulkan surface handle");
 
