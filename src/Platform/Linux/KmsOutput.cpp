@@ -2854,19 +2854,22 @@ private:
         createOffscreenTarget(buffer);
       }
       allocateCommandBuffer(buffer);
+      if (useAsyncRenderFence_) {
+        buffer.renderFinished = createExportableSemaphore();
+      }
       VkImage renderImage = directScanoutRender_ ? buffer.image : buffer.offscreenImage;
       VkImageView renderView = directScanoutRender_ ? buffer.view : buffer.offscreenView;
-    buffer.spec = VulkanRenderTargetSpec{
-        .image = renderImage,
-        .view = renderView,
-        .format = VK_FORMAT_B8G8R8A8_UNORM,
-        .width = connector_.mode.hdisplay,
-        .height = connector_.mode.vdisplay,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        .preserveContents = false,
-        .commandBuffer = buffer.commandBuffer,
-    };
+      buffer.spec = VulkanRenderTargetSpec{
+          .image = renderImage,
+          .view = renderView,
+          .format = VK_FORMAT_B8G8R8A8_UNORM,
+          .width = connector_.mode.hdisplay,
+          .height = connector_.mode.vdisplay,
+          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          .finalLayout = directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+          .preserveContents = false,
+          .commandBuffer = buffer.commandBuffer,
+      };
       std::fprintf(stderr,
                    "lambda-window-manager: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",
                    gbm_bo_get_width(buffer.bo),
@@ -3019,57 +3022,57 @@ private:
     buffer.commandBufferRecording = true;
   }
 
-	  void finishRenderCommandBuffer(Buffer& buffer) {
-	    KmsTraceScope trace(KmsTraceBucket::FinishCommand);
-	    if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
-	    if (!directScanoutRender_) {
-	      bool const regionCopy = buffer.partialFrame &&
-	                              buffer.primaryContentsValid &&
-	                              !buffer.scanoutCopyRects.empty();
-	      transitionImage(buffer.commandBuffer,
-	                      buffer.image,
-	                      regionCopy ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
-	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	                      regionCopy ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_2_NONE,
-	                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-	                      regionCopy ? VK_ACCESS_2_MEMORY_READ_BIT : VK_ACCESS_2_NONE,
-	                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
-	      std::vector<VkImageCopy> copies;
-	      if (regionCopy) {
-	        copies.reserve(buffer.scanoutCopyRects.size());
-	        for (KmsAtomicPresenter::DamageRect const& rect : buffer.scanoutCopyRects) {
-	          std::optional<KmsAtomicPresenter::DamageRect> clipped = clippedDamageRect(rect);
-	          if (!clipped) continue;
-	          VkImageCopy copy{};
-	          copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	          copy.srcSubresource.layerCount = 1;
-	          copy.srcOffset = {clipped->x, clipped->y, 0};
-	          copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	          copy.dstSubresource.layerCount = 1;
-	          copy.dstOffset = {clipped->x, clipped->y, 0};
-	          copy.extent = {clipped->width, clipped->height, 1};
-	          copies.push_back(copy);
-	        }
-	      }
-	      if (copies.empty()) {
-	        VkImageCopy copy{};
-	        copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	        copy.srcSubresource.layerCount = 1;
-	        copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	        copy.dstSubresource.layerCount = 1;
-	        copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
-	        copies.push_back(copy);
-	      }
-	      vkCmdCopyImage(buffer.commandBuffer,
-	                     buffer.offscreenImage,
-	                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-	                     buffer.image,
-	                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	                     static_cast<std::uint32_t>(copies.size()),
-	                     copies.data());
-	      transitionImage(buffer.commandBuffer,
-	                      buffer.image,
-	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+  void finishRenderCommandBuffer(Buffer& buffer) {
+    KmsTraceScope trace(KmsTraceBucket::FinishCommand);
+    if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
+    if (!directScanoutRender_) {
+      bool const regionCopy = buffer.partialFrame &&
+                              buffer.primaryContentsValid &&
+                              !buffer.scanoutCopyRects.empty();
+      transitionImage(buffer.commandBuffer,
+                      buffer.image,
+                      regionCopy ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                      regionCopy ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_2_NONE,
+                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                      regionCopy ? VK_ACCESS_2_MEMORY_READ_BIT : VK_ACCESS_2_NONE,
+                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
+      std::vector<VkImageCopy> copies;
+      if (regionCopy) {
+        copies.reserve(buffer.scanoutCopyRects.size());
+        for (KmsAtomicPresenter::DamageRect const& rect : buffer.scanoutCopyRects) {
+          std::optional<KmsAtomicPresenter::DamageRect> clipped = clippedDamageRect(rect);
+          if (!clipped) continue;
+          VkImageCopy copy{};
+          copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+          copy.srcSubresource.layerCount = 1;
+          copy.srcOffset = {clipped->x, clipped->y, 0};
+          copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+          copy.dstSubresource.layerCount = 1;
+          copy.dstOffset = {clipped->x, clipped->y, 0};
+          copy.extent = {clipped->width, clipped->height, 1};
+          copies.push_back(copy);
+        }
+      }
+      if (copies.empty()) {
+        VkImageCopy copy{};
+        copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.srcSubresource.layerCount = 1;
+        copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.dstSubresource.layerCount = 1;
+        copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+        copies.push_back(copy);
+      }
+      vkCmdCopyImage(buffer.commandBuffer,
+                     buffer.offscreenImage,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     buffer.image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     static_cast<std::uint32_t>(copies.size()),
+                     copies.data());
+      transitionImage(buffer.commandBuffer,
+                      buffer.image,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                       VK_IMAGE_LAYOUT_GENERAL,
                       VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                       VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -3089,10 +3092,33 @@ private:
     submit.pCommandBufferInfos = &commandBufferInfo;
     submit.signalSemaphoreInfoCount = buffer.renderFinished ? 1u : 0u;
     submit.pSignalSemaphoreInfos = buffer.renderFinished ? &signalSemaphore : nullptr;
+    VkFence fallbackFence = VK_NULL_HANDLE;
+    if (!buffer.renderFinished) {
+      VkFenceCreateInfo fenceInfo{};
+      fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+      vkCheck(vkCreateFence(lambda::VulkanContext::instance().device(), &fenceInfo, nullptr, &fallbackFence),
+              "vkCreateFence atomic KMS render fallback");
+    }
     std::uint64_t const submitStart = kmsTraceStart();
-    vkCheck(vkQueueSubmit2(lambda::VulkanContext::instance().queue(), 1, &submit, VK_NULL_HANDLE),
-            "vkQueueSubmit2 atomic KMS presenter");
+    try {
+      vkCheck(vkQueueSubmit2(lambda::VulkanContext::instance().queue(), 1, &submit, fallbackFence),
+              "vkQueueSubmit2 atomic KMS presenter");
+    } catch (...) {
+      if (fallbackFence) vkDestroyFence(lambda::VulkanContext::instance().device(), fallbackFence, nullptr);
+      throw;
+    }
     recordKmsTraceSince(KmsTraceBucket::QueueSubmit, submitStart);
+    if (fallbackFence) {
+      if (!renderFenceFallbackLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS render semaphore missing; waiting on per-frame fence\n");
+        renderFenceFallbackLogged_ = true;
+      }
+      VkResult const waitResult =
+          vkWaitForFences(lambda::VulkanContext::instance().device(), 1, &fallbackFence, VK_TRUE, UINT64_MAX);
+      vkDestroyFence(lambda::VulkanContext::instance().device(), fallbackFence, nullptr);
+      vkCheck(waitResult, "vkWaitForFences atomic KMS render fallback");
+    }
   }
 
   VkSemaphore createExportableSemaphore() {
@@ -3349,6 +3375,7 @@ private:
   bool directScanoutTestFailureLogged_ = false;
   bool damageClipFailureLogged_ = false;
   bool atomicCommitBusyLogged_ = false;
+  bool renderFenceFallbackLogged_ = false;
   bool useRenderInFence_ = false;
   bool useAsyncRenderFence_ = false;
   bool directScanoutRenderForced_ = false;

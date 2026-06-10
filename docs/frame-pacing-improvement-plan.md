@@ -92,12 +92,12 @@ Verification on Linux (KMS TTY):
 
 What to do:
 
-- [ ] [Auto] Guarantee `renderFinished` exists by the time `prepareFrame()` returns (create it eagerly with the buffer); replace the `vkQueueWaitIdle` fallback with a logged error + per-buffer fence wait so a misconfigured driver degrades per-buffer instead of device-wide.
-- [ ] [Auto] Gate the swapchain-extent `fprintf` behind `detail::resizeTraceEnabled()` like the other resize traces.
+- [x] [Auto] Guarantee `renderFinished` exists by the time `prepareFrame()` returns (create it eagerly with the buffer); replace the `vkQueueWaitIdle` fallback with a logged error + per-buffer fence wait so a misconfigured driver degrades per-buffer instead of device-wide.
+- [x] [Auto] Gate the swapchain-extent `fprintf` behind `detail::resizeTraceEnabled()` like the other resize traces.
 
 Verification:
 
-- [ ] [Auto] Grep: no `vkQueueWaitIdle` outside `endImmediate` teardown comments; no unconditional stderr writes in the resize path.
+- [x] [Auto] Grep: no `vkQueueWaitIdle` outside `endImmediate` teardown comments; no unconditional stderr writes in the resize path.
 - [ ] [Manual] Resize a Wayland window continuously — stderr stays quiet without `LAMBDA_RESIZE_TRACE`.
 
 ---
