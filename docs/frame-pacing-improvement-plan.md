@@ -54,15 +54,15 @@ That is a synchronous submit plus a full queue drain on the hot path, before the
 
 What to do:
 
-- [ ] [Auto + Manual] Add an atlas-upload path that records the staging-buffer copy and layout transitions into the **frame** command buffer, following the existing `recordPendingTextureUploads` pattern (`VulkanImages.inc:186-205`): stage pixels into a `Buffer`, queue a `PendingTextureUpload`-style job for the atlas texture, retire the staging buffer through `pendingBufferDestroys_` with `kMaxFramesInFlight + 1`.
-- [ ] [Auto] The atlas is sampled by draws in the same frame — record the copy before the main render pass begins (same place `recordPendingTextureUploads` runs) with a transfer→shader-read barrier.
-- [ ] [Auto] Same treatment for imported-image layout transitions: `transitionImmediate` in `ensureImageTexture` (`VulkanImages.inc:17` and `:320-324`) stalls the queue on first draw of an external image. Record the transition into the frame command buffer via a pre-pass barrier batch instead.
-- [ ] [Auto] After this, `endImmediate()` should have no callers on the per-frame path. Keep it for genuine one-off initialization, and add a comment stating it must not be called from `beginFrame`/`present`.
+- [x] [Auto] Add an atlas-upload path that records the staging-buffer copy and layout transitions into the **frame** command buffer, following the existing `recordPendingTextureUploads` pattern (`VulkanImages.inc:186-205`): stage pixels into a `Buffer`, queue a `PendingTextureUpload`-style job for the atlas texture, retire the staging buffer through `pendingBufferDestroys_` with `kMaxFramesInFlight + 1`.
+- [x] [Auto] The atlas is sampled by draws in the same frame — record the copy before the main render pass begins (same place `recordPendingTextureUploads` runs) with a transfer→shader-read barrier.
+- [x] [Auto] Same treatment for imported-image layout transitions: `transitionImmediate` in `ensureImageTexture` (`VulkanImages.inc:17` and `:320-324`) stalls the queue on first draw of an external image. Record the transition into the frame command buffer via a pre-pass barrier batch instead.
+- [x] [Auto] After this, `endImmediate()` should have no callers on the per-frame path. Keep it for genuine one-off initialization, and add a comment stating it must not be called from `beginFrame`/`present`.
 
 Verification on Linux:
 
 - [ ] `LAMBDA_RESIZE_TRACE=1` — the `atlasMs` phase in `vulkan-present-detail` should drop to ~0 on frames that add new glyphs (type rapidly in `lambda-terminal` / `lambda-editor` with a cold atlas).
-- [ ] `./build/tests/lambda_tests --test-case="*Vulkan*,Compositor*"` (lavapipe OK) — glyph text test (`Vulkan RenderTarget renders glyph atlas text`) still passes.
+- [x] `./build/tests/lambda_tests --test-case="*Vulkan*,Compositor*"` (lavapipe OK) — glyph text test (`Vulkan RenderTarget renders glyph atlas text`) still passes.
 - [ ] Validation layers report no missing-barrier or layout errors while scrolling text-heavy content.
 
 ## FP-2: Composite partial-damage frames once, not once per damage rect
