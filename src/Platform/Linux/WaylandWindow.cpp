@@ -99,6 +99,7 @@ struct WaylandPopoverSurfaceState {
   wl_surface* surface = nullptr;
   xdg_surface* xdgSurface = nullptr;
   xdg_popup* popup = nullptr;
+  wl_callback* frameCallback = nullptr;
   WaylandNativeSurface nativeSurface{};
   std::unique_ptr<Canvas> canvas;
   std::unique_ptr<TransientPopoverHost> host;
@@ -112,6 +113,8 @@ struct WaylandPopoverSurfaceState {
   int dispatchDepth = 0;
   bool committed = false;
   bool grabbed = false;
+  bool redrawRequested = false;
+  bool rendering = false;
   bool closeAfterEvent = false;
   bool closing = false;
 };
@@ -666,6 +669,7 @@ WaylandPopoverSurfaceState::~WaylandPopoverSurfaceState() {
   }
   canvas.reset();
   if (canSendWaylandRequests(shared)) {
+    if (frameCallback) wl_callback_destroy(frameCallback);
     if (popup) xdg_popup_destroy(popup);
     if (xdgSurface) xdg_surface_destroy(xdgSurface);
     if (surface) wl_surface_destroy(surface);
@@ -1206,7 +1210,7 @@ public:
         .useNativeShell = false,
         .requestRedraw = [this, id] {
           if (WaylandPopoverSurfaceState* popoverState = popoverForId(id)) {
-            renderPopover(*popoverState);
+            requestPopoverRedraw(*popoverState);
           }
         },
         .requestDismiss = [this, id] {
@@ -1629,11 +1633,41 @@ private:
     if (state.closing || !state.host || !ensurePopoverCanvas(state)) {
       return;
     }
-    state.canvas->resize(state.width, state.height);
-    state.canvas->beginFrame();
-    state.host->render(*state.canvas);
-    state.canvas->present();
+    state.redrawRequested = false;
+    state.rendering = true;
+    try {
+      state.canvas->resize(state.width, state.height);
+      state.canvas->beginFrame();
+      state.host->render(*state.canvas);
+      state.canvas->present();
+      state.rendering = false;
+    } catch (...) {
+      state.rendering = false;
+      throw;
+    }
     flushWaylandDisplay(shared_, "popover render");
+    if (state.redrawRequested && state.committed) {
+      requestPopoverFrame(state);
+    }
+  }
+
+  void requestPopoverFrame(WaylandPopoverSurfaceState& state) {
+    if (state.closing || state.rendering || state.frameCallback || !state.committed || !state.surface ||
+        !canSendWaylandRequests(shared_)) {
+      return;
+    }
+    state.frameCallback = wl_surface_frame(state.surface);
+    wl_callback_add_listener(state.frameCallback, &popoverFrameCallbackListener_, &state);
+    wl_surface_commit(state.surface);
+    flushWaylandDisplay(shared_, "popover frame request");
+  }
+
+  void requestPopoverRedraw(WaylandPopoverSurfaceState& state) {
+    if (state.closing || !state.host) {
+      return;
+    }
+    state.redrawRequested = true;
+    requestPopoverFrame(state);
   }
 
   void dispatchPopoverPointerMove(WaylandPopoverSurfaceState& state, Point point) {
@@ -1644,7 +1678,7 @@ private:
     state.host->pointerMove(point);
     bool const shouldRender = !state.closeAfterEvent;
     if (shouldRender) {
-      renderPopover(state);
+      requestPopoverRedraw(state);
     }
     finishPopoverEvent(state);
   }
@@ -1663,7 +1697,7 @@ private:
     }
     bool const shouldRender = !state.closeAfterEvent;
     if (shouldRender) {
-      renderPopover(state);
+      requestPopoverRedraw(state);
     }
     finishPopoverEvent(state);
   }
@@ -1676,7 +1710,7 @@ private:
     state.host->scroll(state.pointerPos, delta);
     bool const shouldRender = !state.closeAfterEvent;
     if (shouldRender) {
-      renderPopover(state);
+      requestPopoverRedraw(state);
     }
     finishPopoverEvent(state);
   }
@@ -1693,7 +1727,7 @@ private:
     }
     bool const shouldRender = !state.closeAfterEvent;
     if (shouldRender) {
-      renderPopover(state);
+      requestPopoverRedraw(state);
     }
     finishPopoverEvent(state);
   }
@@ -1706,7 +1740,7 @@ private:
     state.host->textInput(text);
     bool const shouldRender = !state.closeAfterEvent;
     if (shouldRender) {
-      renderPopover(state);
+      requestPopoverRedraw(state);
     }
     finishPopoverEvent(state);
   }
@@ -1820,6 +1854,9 @@ private:
       state->host->mount(Size{static_cast<float>(state->width), static_cast<float>(state->height)});
       state->owner->renderPopover(*state);
       state->committed = true;
+      if (state->redrawRequested) {
+        state->owner->requestPopoverFrame(*state);
+      }
       if (!state->grabbed && state->popup && state->shared && state->shared->seat &&
           state->grabSerial != 0) {
         xdg_popup_grab(state->popup, state->shared->seat, state->grabSerial);
@@ -1840,6 +1877,22 @@ private:
   }
 
   static void popoverRepositioned(void*, xdg_popup*, std::uint32_t) {}
+
+  static void popoverFrameDone(void* data, wl_callback* callback, std::uint32_t) {
+    auto* state = static_cast<WaylandPopoverSurfaceState*>(data);
+    if (!state) {
+      if (callback) wl_callback_destroy(callback);
+      return;
+    }
+    if (state->frameCallback == callback) {
+      state->frameCallback = nullptr;
+    }
+    wl_callback_destroy(callback);
+    if (!state->redrawRequested || state->closing || state->closeAfterEvent || !state->owner) {
+      return;
+    }
+    state->owner->renderPopover(*state);
+  }
 
   static void frameDone(void* data, wl_callback* callback, std::uint32_t) {
     auto* self = static_cast<WaylandWindow*>(data);
@@ -2493,17 +2546,18 @@ private:
 
   static inline wl_callback_listener frameCallbackListener_{frameDone};
   static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
-	                                                    surfacePreferredBufferTransform};
-	  static inline wp_fractional_scale_v1_listener fractionalScaleListener_{fractionalPreferredScale};
-	  static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
+                                                    surfacePreferredBufferTransform};
+  static inline wp_fractional_scale_v1_listener fractionalScaleListener_{fractionalPreferredScale};
+  static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
   static inline xdg_surface_listener popupXdgSurfaceListener_{popupXdgSurfaceConfigure};
   static inline xdg_popup_listener popupListener_{popupConfigure, popupDone, popupRepositioned};
   static inline xdg_surface_listener popoverXdgSurfaceListener_{popoverXdgSurfaceConfigure};
   static inline xdg_popup_listener popoverListener_{popoverConfigure, popoverDone, popoverRepositioned};
-	  static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
-	                                                       topCapabilities};
-	  static inline zwlr_layer_surface_v1_listener layerSurfaceListener_{layerConfigure, layerClosed};
-	  static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
+  static inline wl_callback_listener popoverFrameCallbackListener_{popoverFrameDone};
+  static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
+                                                       topCapabilities};
+  static inline zwlr_layer_surface_v1_listener layerSurfaceListener_{layerConfigure, layerClosed};
+  static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
   static inline xx_cutouts_v1_listener cutoutsListener_{cutoutBox, cutoutCorner, cutoutsConfigure};
   static constexpr float kClientTitlebarHeight = 48.f;
   static constexpr float kCompositorControlReserveWidth = 96.f;

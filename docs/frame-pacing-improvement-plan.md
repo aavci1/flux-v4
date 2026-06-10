@@ -153,7 +153,7 @@ Verification on Linux (KMS TTY):
 
 What to do:
 
-- [ ] [Auto] Route popover redraws through `requestAnimationFrame()` / the shared redraw coalescing used by the main surface (a per-popover `redrawRequested` flag drained by the same frame pump).
+- [x] [Auto] Route popover redraws through `requestAnimationFrame()` / the shared redraw coalescing used by the main surface (a per-popover `redrawRequested` flag drained by the same frame pump). Linux Wayland popovers now coalesce redraws through a per-popover `wl_surface_frame` callback; the first configured paint remains immediate.
 - [ ] [Manual] Verify menu/tooltip popovers still feel instant (first paint may render immediately; only subsequent updates need pacing).
 
 ---
