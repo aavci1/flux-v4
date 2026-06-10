@@ -506,19 +506,6 @@ std::uint64_t damageArea(SceneDamageResult const& damage) {
   return area;
 }
 
-bool sceneUsesBackdropSampling(std::vector<CommittedSurfaceSnapshot> const& surfaces, ChromeConfig const& chrome) {
-  bool const chromeSamplesBackdrop = chrome.glass.blurRadius > 0.f;
-  for (CommittedSurfaceSnapshot const& surface : surfaces) {
-    if (chromeSamplesBackdrop && windowExternalTitleBarHeight(surface) > 0.f) {
-      return true;
-    }
-    if (!surface.backgroundBlurRects.empty() && surface.backgroundEffect.blurRadius > 0.f) {
-      return true;
-    }
-  }
-  return false;
-}
-
 std::vector<platform::KmsAtomicPresenter::DamageRect>
 physicalDamageRects(SceneDamageResult const& damage,
                     platform::KmsOutput const& output,
@@ -948,7 +935,6 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       atomicPresenter &&
       !renderAheadFrame &&
       !pendingOverlay &&
-      !sceneUsesBackdropSampling(committedSurfaces, ctx.appliedConfig.config.chrome) &&
       !sceneDamage.fullOutput &&
       !sceneDamage.empty();
   std::vector<platform::KmsAtomicPresenter::DamageRect> physicalDamage =

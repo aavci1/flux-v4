@@ -18,6 +18,7 @@ using RegionRect = CommittedSurfaceSnapshot::RegionRect;
 
 constexpr std::size_t kMaxDamageRects = 96;
 constexpr std::uint64_t kDamageMergeAreaSlackDivisor = 5;
+constexpr std::uint64_t kBackdropDamageFullOutputAreaPercent = 80;
 
 std::uint64_t kindBits(CompositorSceneNodeKind kind) {
   return static_cast<std::uint64_t>(kind);
@@ -141,6 +142,14 @@ std::uint64_t rectArea(RegionRect const& rect) {
   return static_cast<std::uint64_t>(rect.width) * static_cast<std::uint64_t>(rect.height);
 }
 
+std::uint64_t damageArea(SceneDamageResult const& damage) {
+  std::uint64_t area = 0;
+  for (RegionRect const& rect : damage.rects) {
+    area += rectArea(rect);
+  }
+  return area;
+}
+
 bool damageRectsMergeable(RegionRect const& a, RegionRect const& b) {
   RegionRect const merged = unionRect(a, b);
   std::uint64_t const combinedArea = rectArea(a) + rectArea(b);
@@ -222,6 +231,13 @@ void inflateDamageForBackdropSampling(SceneDamageResult& damage,
         return;
       }
     }
+  }
+  std::uint64_t const outputArea = static_cast<std::uint64_t>(outputWidth) *
+                                  static_cast<std::uint64_t>(outputHeight);
+  if (outputArea > 0 &&
+      damageArea(normalized) * 100u >= outputArea * kBackdropDamageFullOutputAreaPercent) {
+    makeFullDamage(damage, outputWidth, outputHeight);
+    return;
   }
   damage.rects = std::move(normalized.rects);
 }

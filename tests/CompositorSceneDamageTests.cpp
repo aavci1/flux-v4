@@ -299,6 +299,108 @@ TEST_CASE("scene graph damage merges adjacent rects before the max rect fallback
   CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 0, .y = 0, .width = 800, .height = 10}));
 }
 
+TEST_CASE("scene graph damage with backdrop blur keeps small updates partial") {
+  lambda::compositor::ChromeConfig chrome;
+  chrome.glass.blurRadius = 32.f;
+  chrome.focusedShadowRadius = 0.f;
+  chrome.unfocusedShadowRadius = 0.f;
+  auto first = surface(78, 100, 120, 200, 100, 1);
+  first.serverSideDecorated = true;
+  first.focused = true;
+  first.titleBarHeight = chrome.titleBarHeight;
+  std::vector<CommittedSurfaceSnapshot> surfaces{first};
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> visuals;
+
+  CompositorSceneGraphState state;
+  auto initial = lambda::compositor::buildCompositorSceneFrame(
+      state,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  auto next = first;
+  next.serial = 2;
+  next.bufferDamageRects.push_back(RegionRect{.x = 20, .y = 20, .width = 10, .height = 10});
+  surfaces = {next};
+  auto damagePlan = lambda::compositor::buildCompositorSceneFrame(
+      initial.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  CHECK_FALSE(damagePlan.damage.fullOutput);
+  REQUIRE(damagePlan.damage.rects.size() == 1);
+  CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 70, .y = 90, .width = 110, .height = 110}));
+}
+
+TEST_CASE("scene graph damage with backdrop blur falls back when expanded damage is large") {
+  lambda::compositor::ChromeConfig chrome;
+  chrome.glass.blurRadius = 220.f;
+  chrome.focusedShadowRadius = 0.f;
+  chrome.unfocusedShadowRadius = 0.f;
+  auto first = surface(79, 380, 260, 100, 100, 1);
+  first.serverSideDecorated = true;
+  first.focused = true;
+  first.titleBarHeight = chrome.titleBarHeight;
+  std::vector<CommittedSurfaceSnapshot> surfaces{first};
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> visuals;
+
+  CompositorSceneGraphState state;
+  auto initial = lambda::compositor::buildCompositorSceneFrame(
+      state,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  auto next = first;
+  next.serial = 2;
+  next.bufferDamageRects.push_back(RegionRect{.x = 10, .y = 10, .width = 20, .height = 20});
+  surfaces = {next};
+  auto damagePlan = lambda::compositor::buildCompositorSceneFrame(
+      initial.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  CHECK(damagePlan.damage.fullOutput);
+  REQUIRE(damagePlan.damage.rects.size() == 1);
+  CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 0, .y = 0, .width = 800, .height = 600}));
+}
+
 TEST_CASE("scene damage for chrome hover is constrained to control bounds") {
   lambda::compositor::ChromeConfig chrome;
   chrome.glass.blurRadius = 0.f;
