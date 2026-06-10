@@ -140,13 +140,14 @@ void updateImageTextureRegionFor(VulkanImage const* image,
                                  std::uint32_t y,
                                  std::uint32_t width,
                                  std::uint32_t height,
-                                 void const* pixels) {
+                                 void const* pixels,
+                                 std::uint32_t sourceBytesPerRow) {
   if (!image || !pixels)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
   for (::lambda::VulkanCanvas* canvas : gCanvases) {
     if (canvas)
-      canvas->updateImageTextureRegion(image, x, y, width, height, pixels);
+      canvas->updateImageTextureRegion(image, x, y, width, height, pixels, sourceBytesPerRow);
   }
 }
 

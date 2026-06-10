@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <unistd.h>
 #include <vector>
@@ -205,7 +206,8 @@ bool updateDamagedImageRegions(Canvas& canvas,
 
   auto const updateStart = diagnostics::cpuTraceNow();
   std::size_t uploadedBytes = 0;
-  std::vector<std::uint8_t> regionPixels;
+  std::size_t const sourceStride = static_cast<std::size_t>(bufferWidth) * 4u;
+  if (sourceStride > std::numeric_limits<std::uint32_t>::max()) return false;
   for (auto const& damageRect : damage) {
     std::int32_t const left = std::clamp(damageRect.x, 0, bufferWidth);
     std::int32_t const top = std::clamp(damageRect.y, 0, bufferHeight);
@@ -216,24 +218,24 @@ bool updateDamagedImageRegions(Canvas& canvas,
     if (width <= 0 || height <= 0) continue;
 
     std::size_t const rowBytes = static_cast<std::size_t>(width) * 4u;
-    regionPixels.resize(rowBytes * static_cast<std::size_t>(height));
-    std::size_t const sourceStride = static_cast<std::size_t>(bufferWidth) * 4u;
-    for (std::int32_t row = 0; row < height; ++row) {
-      auto const* src = pixels.data() + (static_cast<std::size_t>(top + row) * sourceStride) +
-                        static_cast<std::size_t>(left) * 4u;
-      auto* dst = regionPixels.data() + static_cast<std::size_t>(row) * rowBytes;
-      std::memcpy(dst, src, rowBytes);
+    std::size_t const sourceOffset =
+        static_cast<std::size_t>(top) * sourceStride + static_cast<std::size_t>(left) * 4u;
+    std::size_t const sourceBytes = sourceStride * static_cast<std::size_t>(height - 1) + rowBytes;
+    if (sourceOffset > pixels.size() || sourceBytes > pixels.size() - sourceOffset) {
+      return false;
     }
+    std::span<std::uint8_t const> regionPixels{pixels.data() + sourceOffset, sourceBytes};
     if (!image.updatePixelsRegion(regionPixels,
                                   pixelFormat,
                                   static_cast<std::uint32_t>(left),
                                   static_cast<std::uint32_t>(top),
                                   static_cast<std::uint32_t>(width),
                                   static_cast<std::uint32_t>(height),
-                                  canvas.gpuDevice())) {
+                                  canvas.gpuDevice(),
+                                  static_cast<std::uint32_t>(sourceStride))) {
       return false;
     }
-    uploadedBytes += regionPixels.size();
+    uploadedBytes += rowBytes * static_cast<std::size_t>(height);
   }
   if (uploadedBytes == 0) return false;
   diagnostics::recordSurfaceImageUpload(uploadedBytes,

@@ -143,7 +143,8 @@
                                 std::uint32_t y,
                                 std::uint32_t width,
                                 std::uint32_t height,
-                                void const* pixels) {
+                                void const* pixels,
+                                std::uint32_t sourceBytesPerRow = 0) {
     if (!pixels || tex.width <= 0 || tex.height <= 0 || width == 0 || height == 0)
       return;
     if (x > static_cast<std::uint32_t>(tex.width) || y > static_cast<std::uint32_t>(tex.height) ||
@@ -164,8 +165,13 @@
     uploadJob.width = width;
     uploadJob.height = height;
     VkDeviceSize size = static_cast<VkDeviceSize>(width) * height * 4u;
+    std::size_t const rowBytes = static_cast<std::size_t>(width) * 4u;
+    std::size_t const stride = sourceBytesPerRow == 0 ? rowBytes : sourceBytesPerRow;
+    if (stride < rowBytes) {
+      return;
+    }
     ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
+    uploadRows(uploadJob.staging, pixels, rowBytes, height, stride);
     pendingTextureUploads_.push_back(std::move(uploadJob));
   }
 

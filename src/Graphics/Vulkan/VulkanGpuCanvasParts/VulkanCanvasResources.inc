@@ -181,6 +181,36 @@
     vmaUnmapMemory(allocator_, buffer.allocation);
   }
 
+  void uploadRows(Buffer& buffer,
+                  void const* data,
+                  std::size_t rowBytes,
+                  std::uint32_t rowCount,
+                  std::size_t sourceBytesPerRow) {
+    if (!data || rowBytes == 0 || rowCount == 0) {
+      return;
+    }
+    std::size_t const totalBytes = rowBytes * static_cast<std::size_t>(rowCount);
+    auto copyRows = [&](void* mapped) {
+      auto* dst = static_cast<std::uint8_t*>(mapped);
+      auto const* src = static_cast<std::uint8_t const*>(data);
+      for (std::uint32_t row = 0; row < rowCount; ++row) {
+        std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
+                    src + static_cast<std::size_t>(row) * sourceBytesPerRow,
+                    rowBytes);
+      }
+    };
+    if (buffer.mapped) {
+      copyRows(buffer.mapped);
+      vkCheck(vmaFlushAllocation(allocator_, buffer.allocation, 0, totalBytes), "vmaFlushAllocation");
+      return;
+    }
+    void* mapped = nullptr;
+    vkCheck(vmaMapMemory(allocator_, buffer.allocation, &mapped), "vmaMapMemory");
+    copyRows(mapped);
+    vkCheck(vmaFlushAllocation(allocator_, buffer.allocation, 0, totalBytes), "vmaFlushAllocation");
+    vmaUnmapMemory(allocator_, buffer.allocation);
+  }
+
   void destroyBuffer(Buffer &buffer) {
     if (buffer.buffer)
       vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);

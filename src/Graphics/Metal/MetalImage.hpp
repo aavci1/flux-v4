@@ -23,7 +23,8 @@ public:
                           std::uint32_t y,
                           std::uint32_t width,
                           std::uint32_t height,
-                          void* gpuDevice = nullptr) override;
+                          void* gpuDevice = nullptr,
+                          std::uint32_t sourceBytesPerRow = 0) override;
 
   id<MTLTexture> texture() const { return texture_; }
 

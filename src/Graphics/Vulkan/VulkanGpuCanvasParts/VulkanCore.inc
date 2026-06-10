@@ -103,7 +103,8 @@ void updateImageTextureRegionFor(VulkanImage const* image,
                                  std::uint32_t y,
                                  std::uint32_t width,
                                  std::uint32_t height,
-                                 void const* pixels);
+                                 void const* pixels,
+                                 std::uint32_t sourceBytesPerRow = 0);
 struct SharedVulkanCore;
 SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface);
 void releaseSharedVulkanCore();
@@ -253,7 +254,8 @@ struct VulkanImage final : Image {
                           std::uint32_t y,
                           std::uint32_t regionWidth,
                           std::uint32_t regionHeight,
-                          void*) override {
+                          void*,
+                          std::uint32_t sourceBytesPerRow) override {
     if (external || ownsGpuResource || width <= 0 || height <= 0 || regionWidth == 0 || regionHeight == 0) {
       return false;
     }
@@ -265,9 +267,11 @@ struct VulkanImage final : Image {
         regionHeight > static_cast<std::uint32_t>(height) - y) {
       return false;
     }
-    std::size_t const expectedRegionSize =
-        static_cast<std::size_t>(regionWidth) * static_cast<std::size_t>(regionHeight) * 4u;
-    if (newPixels.size() != expectedRegionSize) {
+    std::size_t const srcStride =
+        sourceBytesPerRow == 0 ? static_cast<std::size_t>(regionWidth) * 4u : sourceBytesPerRow;
+    std::size_t const rowBytes = static_cast<std::size_t>(regionWidth) * 4u;
+    if (srcStride < rowBytes ||
+        newPixels.size() < srcStride * static_cast<std::size_t>(regionHeight - 1u) + rowBytes) {
       return false;
     }
     std::size_t const expectedSize = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u;
@@ -275,14 +279,14 @@ struct VulkanImage final : Image {
       return false;
     }
     std::size_t const dstStride = static_cast<std::size_t>(width) * 4u;
-    std::size_t const srcStride = static_cast<std::size_t>(regionWidth) * 4u;
     for (std::uint32_t row = 0; row < regionHeight; ++row) {
       auto* dst = pixels.data() + (static_cast<std::size_t>(y + row) * dstStride) +
                   static_cast<std::size_t>(x) * 4u;
       auto const* src = newPixels.data() + static_cast<std::size_t>(row) * srcStride;
-      std::memcpy(dst, src, srcStride);
+      std::memcpy(dst, src, rowBytes);
     }
-    updateImageTextureRegionFor(this, x, y, regionWidth, regionHeight, newPixels.data());
+    updateImageTextureRegionFor(this, x, y, regionWidth, regionHeight, newPixels.data(),
+                                static_cast<std::uint32_t>(srcStride));
     return true;
   }
 };

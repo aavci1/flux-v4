@@ -310,7 +310,8 @@ bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
                                std::uint32_t,
                                std::uint32_t,
                                std::uint32_t,
-                               void*) {
+                               void*,
+                               std::uint32_t) {
   return false;
 }
 

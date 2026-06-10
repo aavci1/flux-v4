@@ -522,7 +522,8 @@
                                 std::uint32_t y,
                                 std::uint32_t width,
                                 std::uint32_t height,
-                                void const* pixels) {
+                                void const* pixels,
+                                std::uint32_t sourceBytesPerRow = 0) {
     if (!image || image->external || image->ownsGpuResource || !pixels || width == 0 || height == 0) {
       return;
     }
@@ -541,7 +542,7 @@
       return;
     }
     renderTargetFrameCacheValid_ = false;
-    queueTextureRegionUpload(texture, x, y, width, height, pixels);
+    queueTextureRegionUpload(texture, x, y, width, height, pixels, sourceBytesPerRow);
   }
 
 private:

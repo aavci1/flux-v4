@@ -51,7 +51,8 @@ bool MetalImage::updatePixelsRegion(std::span<std::uint8_t const> pixels,
                                     std::uint32_t y,
                                     std::uint32_t width,
                                     std::uint32_t height,
-                                    void*) {
+                                    void*,
+                                    std::uint32_t sourceBytesPerRow) {
   if (!texture_ || width == 0 || height == 0) {
     return false;
   }
@@ -66,12 +67,17 @@ bool MetalImage::updatePixelsRegion(std::span<std::uint8_t const> pixels,
   if (x > imageWidth || y > imageHeight || width > imageWidth - x || height > imageHeight - y) {
     return false;
   }
-  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
-  if (pixels.size() != expectedSize) {
+  std::size_t const rowBytes = static_cast<std::size_t>(width) * 4u;
+  std::size_t const stride = sourceBytesPerRow == 0 ? rowBytes : sourceBytesPerRow;
+  if (stride < rowBytes) {
+    return false;
+  }
+  std::size_t const expectedSize = stride * static_cast<std::size_t>(height - 1u) + rowBytes;
+  if (pixels.size() < expectedSize) {
     return false;
   }
   MTLRegion region = MTLRegionMake2D(x, y, width, height);
-  [texture_ replaceRegion:region mipmapLevel:0 withBytes:pixels.data() bytesPerRow:width * 4u];
+  [texture_ replaceRegion:region mipmapLevel:0 withBytes:pixels.data() bytesPerRow:stride];
   return true;
 }
 
