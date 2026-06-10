@@ -1,16 +1,28 @@
 #include "Compositor/SceneDamage.hpp"
+#ifdef LAMBDA_TESTS_HAVE_COMPOSITOR_SCENE_GRAPH
+#include "Compositor/Chrome/ChromeMetrics.hpp"
+#include "Compositor/Chrome/WindowFrameGeometry.hpp"
+#include "Compositor/SceneGraph/CompositorSceneGraph.hpp"
+#endif
 
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 namespace {
 
 using lambda::compositor::CommittedSurfaceSnapshot;
+#ifdef LAMBDA_TESTS_HAVE_COMPOSITOR_SCENE_GRAPH
+using lambda::compositor::CompositorSceneFrameInput;
+using lambda::compositor::CompositorSceneGraphState;
+using lambda::compositor::SurfaceVisualState;
+#endif
 using lambda::compositor::SceneDamageState;
 using RegionRect = CommittedSurfaceSnapshot::RegionRect;
 
@@ -51,6 +63,23 @@ bool rectEquals(RegionRect actual, RegionRect expected) {
          actual.width == expected.width &&
          actual.height == expected.height;
 }
+
+#ifdef LAMBDA_TESTS_HAVE_COMPOSITOR_SCENE_GRAPH
+bool rectContainedBy(RegionRect inner, RegionRect outer) {
+  return inner.x >= outer.x &&
+         inner.y >= outer.y &&
+         inner.x + inner.width <= outer.x + outer.width &&
+         inner.y + inner.height <= outer.y + outer.height;
+}
+
+RegionRect regionFromRect(lambda::Rect const& rect) {
+  std::int32_t const left = static_cast<std::int32_t>(std::floor(rect.x));
+  std::int32_t const top = static_cast<std::int32_t>(std::floor(rect.y));
+  std::int32_t const right = static_cast<std::int32_t>(std::ceil(rect.x + rect.width));
+  std::int32_t const bottom = static_cast<std::int32_t>(std::ceil(rect.y + rect.height));
+  return RegionRect{.x = left, .y = top, .width = right - left, .height = bottom - top};
+}
+#endif
 
 } // namespace
 
@@ -171,3 +200,79 @@ TEST_CASE("scene damage includes old and new software cursor rectangles") {
   CHECK(containsRect(damage.rects, RegionRect{.x = 20, .y = 30, .width = 16, .height = 16}));
   CHECK(containsRect(damage.rects, RegionRect{.x = 40, .y = 50, .width = 16, .height = 16}));
 }
+
+#ifdef LAMBDA_TESTS_HAVE_COMPOSITOR_SCENE_GRAPH
+TEST_CASE("scene damage for chrome hover is constrained to control bounds") {
+  lambda::compositor::ChromeConfig chrome;
+  chrome.glass.blurRadius = 0.f;
+  chrome.focusedShadowRadius = 0.f;
+  chrome.unfocusedShadowRadius = 0.f;
+  auto first = surface(42, 100, 80, 320, 200, 7);
+  first.serverSideDecorated = true;
+  first.focused = true;
+  first.titleBarHeight = chrome.titleBarHeight;
+  std::vector<CommittedSurfaceSnapshot> surfaces{first};
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> visuals;
+
+  CompositorSceneGraphState state;
+  auto initial = lambda::compositor::buildCompositorSceneFrame(
+      state,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  auto hovered = first;
+  hovered.closeButtonHovered = true;
+  surfaces = {hovered};
+  auto hoverPlan = lambda::compositor::buildCompositorSceneFrame(
+      initial.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  lambda::Rect const titleRect = lambda::compositor::windowTitleBarRect(first, chrome.contentInsetWidth);
+  lambda::compositor::ChromeControlRects const controlRects =
+      lambda::compositor::chromeControlRects(chrome, titleRect.x, titleRect.y, titleRect.width, titleRect.height);
+  float const controlsLeft =
+      std::min({controlRects.minimizeButton.x, controlRects.maximizeButton.x, controlRects.closeButton.x});
+  float const controlsTop =
+      std::min({controlRects.minimizeButton.y, controlRects.maximizeButton.y, controlRects.closeButton.y});
+  float const controlsRight =
+      std::max({controlRects.minimizeButton.x + controlRects.minimizeButton.width,
+                controlRects.maximizeButton.x + controlRects.maximizeButton.width,
+                controlRects.closeButton.x + controlRects.closeButton.width});
+  float const controlsBottom =
+      std::max({controlRects.minimizeButton.y + controlRects.minimizeButton.height,
+                controlRects.maximizeButton.y + controlRects.maximizeButton.height,
+                controlRects.closeButton.y + controlRects.closeButton.height});
+  RegionRect const controlsBounds =
+      regionFromRect(lambda::Rect::sharp(controlsLeft,
+                                         controlsTop,
+                                         controlsRight - controlsLeft,
+                                         controlsBottom - controlsTop));
+  RegionRect const frameBounds =
+      regionFromRect(lambda::compositor::windowFrameRect(first, chrome.contentInsetWidth));
+
+  CHECK_FALSE(hoverPlan.damage.fullOutput);
+  REQUIRE(hoverPlan.damage.rects.size() == 1);
+  CHECK(rectContainedBy(hoverPlan.damage.rects[0], controlsBounds));
+  CHECK_FALSE(rectEquals(hoverPlan.damage.rects[0], frameBounds));
+}
+#endif

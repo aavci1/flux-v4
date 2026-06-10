@@ -295,6 +295,15 @@ void drawWindowChrome(Canvas& canvas,
                       ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
   if (windowUsesCutoutChrome(surface)) {
+    drawWindowChromeControls(canvas, surface, chrome);
+    return;
+  }
+  drawDefaultChrome(canvas, textSystem, surface, chrome);
+}
+
+void drawWindowChromeControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  if (!surface.serverSideDecorated) return;
+  if (windowUsesCutoutChrome(surface)) {
     drawControls(canvas,
                  surface,
                  chrome,
@@ -304,7 +313,9 @@ void drawWindowChrome(Canvas& canvas,
                  static_cast<float>(chrome.titleBarHeight));
     return;
   }
-  drawDefaultChrome(canvas, textSystem, surface, chrome);
+  Rect const titleRect = windowTitleBarRect(surface, chrome.contentInsetWidth);
+  if (titleRect.height <= 0.f) return;
+  drawControls(canvas, surface, chrome, titleRect.x, titleRect.width, titleRect.y, titleRect.height);
 }
 
 void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {

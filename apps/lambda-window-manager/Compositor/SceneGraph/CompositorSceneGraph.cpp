@@ -1,5 +1,6 @@
 #include "Compositor/SceneGraph/CompositorSceneGraph.hpp"
 
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Chrome/WindowFrameGeometry.hpp"
 #include "Compositor/Surface/CommittedSurfaceSnapshotState.hpp"
 
@@ -284,9 +285,30 @@ std::uint64_t contentNodeSignature(CommittedSurfaceSnapshot const& surface) {
 }
 
 std::uint64_t chromeNodeSignature(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  CommittedSurfaceSnapshot stable = surface;
+  stable.closeButtonHovered = false;
+  stable.closeButtonPressed = false;
+  stable.maximizeButtonHovered = false;
+  stable.maximizeButtonPressed = false;
+  stable.minimizeButtonHovered = false;
+  stable.minimizeButtonPressed = false;
   std::uint64_t seed = 0xb492b66fbe98f273ull;
   SignatureVisitor const visit{seed};
-  visitCommittedSurfaceFrameVisualState(surface, visit);
+  visitCommittedSurfaceFrameVisualState(stable, visit);
+  hashValue(seed, chromeConfigSignature(chrome));
+  return seed;
+}
+
+std::uint64_t chromeControlsNodeSignature(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  std::uint64_t seed = 0x5a06e3ad0e4f9b5dull;
+  hashValue(seed, surface.closeButtonHovered);
+  hashValue(seed, surface.closeButtonPressed);
+  hashValue(seed, surface.maximizeButtonHovered);
+  hashValue(seed, surface.maximizeButtonPressed);
+  hashValue(seed, surface.minimizeButtonHovered);
+  hashValue(seed, surface.minimizeButtonPressed);
+  hashValue(seed, surface.focused);
+  hashValue(seed, surface.fullscreen);
   hashValue(seed, chromeConfigSignature(chrome));
   return seed;
 }
@@ -299,6 +321,28 @@ std::uint64_t shadowNodeSignature(CommittedSurfaceSnapshot const& surface, Chrom
   hashValue(seed, surface.shadowClipBottom);
   hashValue(seed, chromeConfigSignature(chrome));
   return seed;
+}
+
+RegionRect chromeControlsBounds(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  if (!surface.serverSideDecorated) return {};
+  Rect titleRect = windowUsesCutoutChrome(surface)
+                       ? Rect::sharp(static_cast<float>(surface.x),
+                                     static_cast<float>(surface.y),
+                                     static_cast<float>(surface.width),
+                                     static_cast<float>(chrome.titleBarHeight))
+                       : windowTitleBarRect(surface, chrome.contentInsetWidth);
+  if (titleRect.width <= 0.f || titleRect.height <= 0.f) return {};
+  ChromeControlRects const rects =
+      chromeControlRects(chrome, titleRect.x, titleRect.y, titleRect.width, titleRect.height);
+  float const left = std::min({rects.minimizeButton.x, rects.maximizeButton.x, rects.closeButton.x});
+  float const top = std::min({rects.minimizeButton.y, rects.maximizeButton.y, rects.closeButton.y});
+  float const right = std::max({rects.minimizeButton.x + rects.minimizeButton.width,
+                                rects.maximizeButton.x + rects.maximizeButton.width,
+                                rects.closeButton.x + rects.closeButton.width});
+  float const bottom = std::max({rects.minimizeButton.y + rects.minimizeButton.height,
+                                 rects.maximizeButton.y + rects.maximizeButton.height,
+                                 rects.closeButton.y + rects.closeButton.height});
+  return rectFromRect(Rect::sharp(left, top, right - left, bottom - top));
 }
 
 std::uint64_t cursorNodeSignature(CommittedSurfaceSnapshot const& cursor) {
@@ -338,6 +382,17 @@ void appendSurfaceNodes(std::vector<CompositorSceneNodeSnapshot>& nodes,
         .signature = chromeNodeSignature(surface, chrome),
         .primaryPlane = true,
     });
+    RegionRect const controls = chromeControlsBounds(surface, chrome);
+    if (!rectEmpty(controls)) {
+      nodes.push_back({
+          .id = nodeId(surface.id, CompositorSceneNodeKind::WindowChromeControls),
+          .surfaceId = surface.id,
+          .kind = CompositorSceneNodeKind::WindowChromeControls,
+          .bounds = controls,
+          .signature = chromeControlsNodeSignature(surface, chrome),
+          .primaryPlane = true,
+      });
+    }
   }
 
   nodes.push_back({
@@ -688,7 +743,7 @@ buildHardwareScanoutSelection(CompositorSceneFrameInput const& input,
                               double outputScaleY) {
   if (surfaceIndex >= input.surfaces.size()) return std::nullopt;
   CommittedSurfaceSnapshot const& surface = input.surfaces[surfaceIndex];
-  std::vector<int> fds = input.wayland.duplicateDmabufFds(surface.id);
+  std::vector<int> fds = input.duplicateDmabufFds(surface.id);
   if (fds.size() != surface.dmabufPlanes.size()) {
     for (int fd : fds) {
       if (fd >= 0) close(fd);
@@ -733,10 +788,13 @@ buildHardwareScanoutSelection(CompositorSceneFrameInput const& input,
 std::optional<CompositorHardwareScanoutSelection>
 selectHardwareScanoutSurface(CompositorSceneGraphState const& previous,
                              CompositorSceneFrameInput const& input) {
-  if (!input.selectScanout || !input.atomicPresenter || input.forceFullDamage) return std::nullopt;
+  if (!input.selectScanout || !input.output || !input.atomicPresenter || !input.duplicateDmabufFds ||
+      input.forceFullDamage) {
+    return std::nullopt;
+  }
   if (input.logicalOutputWidth <= 0 || input.logicalOutputHeight <= 0) return std::nullopt;
-  double const outputScaleX = static_cast<double>(input.output.width()) / static_cast<double>(input.logicalOutputWidth);
-  double const outputScaleY = static_cast<double>(input.output.height()) / static_cast<double>(input.logicalOutputHeight);
+  double const outputScaleX = static_cast<double>(input.output->width()) / static_cast<double>(input.logicalOutputWidth);
+  double const outputScaleY = static_cast<double>(input.output->height()) / static_cast<double>(input.logicalOutputHeight);
 
   std::optional<std::size_t> selectedIndex;
   RegionRect selectedVisible{};

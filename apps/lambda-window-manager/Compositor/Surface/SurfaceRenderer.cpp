@@ -2,6 +2,7 @@
 
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Compositor/Surface/CommittedSurfaceSnapshotState.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
@@ -129,6 +130,23 @@ bool hasTransientChromeState(CommittedSurfaceSnapshot const &surface) {
          surface.maximizeButtonPressed ||
          surface.minimizeButtonHovered ||
          surface.minimizeButtonPressed;
+}
+
+CommittedSurfaceSnapshot stableChromeSnapshot(CommittedSurfaceSnapshot surface) {
+  surface.closeButtonHovered = false;
+  surface.closeButtonPressed = false;
+  surface.maximizeButtonHovered = false;
+  surface.maximizeButtonPressed = false;
+  surface.minimizeButtonHovered = false;
+  surface.minimizeButtonPressed = false;
+  return surface;
+}
+
+void drawTransientChromeControls(Canvas& canvas,
+                                 CommittedSurfaceSnapshot const& surface,
+                                 ChromeConfig const& chrome) {
+  if (!hasTransientChromeState(surface)) return;
+  drawWindowChromeControls(canvas, surface, chrome);
 }
 
 std::span<std::uint8_t const> surfacePixelBytes(CommittedSurfaceSnapshot const &surface) {
@@ -462,28 +480,24 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
   bool const cacheClipOk = surface.windowClipTop <= 0 && surface.windowClipBottom <= 0;
   bool const cacheCalloutOk = surface.backgroundEffect.shape != BackgroundEffectShape::Callout;
   bool const cacheSizingOk = !surface.activeSizing && !surface.pacingSizing && !surface.geometryAnimationGrowing;
-  bool const cacheTransientChromeOk = !hasTransientChromeState(surface);
   bool const cacheOpeningOk = surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
   bool const canRecordSurface =
       cacheBackendOk &&
       cacheClipOk &&
       cacheCalloutOk &&
       cacheSizingOk &&
-      cacheTransientChromeOk &&
       cacheOpeningOk;
   if (!canRecordSurface) {
     if (!cacheBackendOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Backend);
     if (!cacheClipOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Clip);
     if (!cacheCalloutOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Callout);
     if (!cacheSizingOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Sizing);
-    if (!cacheTransientChromeOk) {
-      diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::TransientChrome);
-    }
     if (!cacheOpeningOk) {
       diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::OpeningAnimation);
     }
   }
-  std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(surface, cached, *cached.image, chrome) : 0;
+  CommittedSurfaceSnapshot const recordedSurface = stableChromeSnapshot(surface);
+  std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(recordedSurface, cached, *cached.image, chrome) : 0;
   if (canRecordSurface && cached.recordedOps && cached.recordedSignature == signature) {
     canvas.save();
     canvas.translate(static_cast<float>(surface.x - cached.recordedX),
@@ -491,6 +505,7 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     bool const replayed = replayRecordedLocalOpsForCanvas(&canvas, *cached.recordedOps);
     canvas.restore();
     if (replayed) {
+      drawTransientChromeControls(canvas, surface, chrome);
       diagnostics::recordSurfaceDrawCache(true, 0.0);
       visual.lastSnapshot = surface;
       visual.hasLastSnapshot = true;
@@ -502,16 +517,19 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     auto recorder = std::make_unique<VulkanFrameRecorder>();
     if (beginRecordedOpsCaptureForCanvas(&canvas, recorder.get())) {
       auto const recordStart = diagnostics::cpuTraceNow();
-      drawCommittedSurfaceSnapshot(canvas, textSystem, surface, visual, *cached.image, frameTime, chrome,
+      drawCommittedSurfaceSnapshot(canvas, textSystem, recordedSurface, visual, *cached.image, frameTime, chrome,
                                    animationsEnabled);
       endRecordedOpsCaptureForCanvas(&canvas);
       prepareRecordedOpsForCanvas(&canvas, recorder.get());
       double const recordMs = diagnostics::cpuTraceElapsedMilliseconds(recordStart);
       diagnostics::recordSurfaceDrawCache(false, recordMs);
       if (replayRecordedOpsForCanvas(&canvas, *recorder)) {
+        drawTransientChromeControls(canvas, surface, chrome);
+        visual.lastSnapshot = surface;
+        visual.hasLastSnapshot = true;
         cached.recordedSignature = signature;
-        cached.recordedX = surface.x;
-        cached.recordedY = surface.y;
+        cached.recordedX = recordedSurface.x;
+        cached.recordedY = recordedSurface.y;
         cached.recordedOps = std::move(recorder);
         return;
       }

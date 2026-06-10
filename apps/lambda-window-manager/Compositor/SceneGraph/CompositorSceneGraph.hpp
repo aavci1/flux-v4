@@ -3,12 +3,12 @@
 #include "Compositor/Chrome/ChromeConfig.hpp"
 #include "Compositor/SceneDamage.hpp"
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
-#include "Compositor/WaylandServer.hpp"
 
 #include <Lambda/Platform/Linux/KmsOutput.hpp>
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -20,6 +20,7 @@ enum class CompositorSceneNodeKind : std::uint8_t {
   Background,
   WindowShadow,
   WindowChrome,
+  WindowChromeControls,
   WindowContent,
   SoftwareCursor,
 };
@@ -62,9 +63,11 @@ struct CompositorSceneFramePlan {
 };
 
 struct CompositorSceneFrameInput {
-  WaylandServer& wayland;
-  platform::KmsOutput const& output;
+  using DmabufFdDuplicator = std::function<std::vector<int>(std::uint64_t)>;
+
+  platform::KmsOutput const* output = nullptr;
   platform::KmsAtomicPresenter* atomicPresenter = nullptr;
+  DmabufFdDuplicator duplicateDmabufFds;
   ChromeConfig const& chrome;
   std::unordered_map<std::uint64_t, SurfaceVisualState> const& surfaceVisuals;
   std::vector<CommittedSurfaceSnapshot> const& surfaces;

@@ -1850,9 +1850,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       CompositorSceneFramePlan scenePlan =
           buildCompositorSceneFrame(surfaceRenderState.sceneGraph,
                                     CompositorSceneFrameInput{
-                                        .wayland = wayland,
-                                        .output = output,
+                                        .output = &output,
                                         .atomicPresenter = presenter->atomicPresenter(),
+                                        .duplicateDmabufFds = {},
                                         .chrome = appliedConfig.config.chrome,
                                         .surfaceVisuals = surfaceRenderState.surfaceVisuals,
                                         .surfaces = committedSurfaces,

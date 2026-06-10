@@ -618,9 +618,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     CompositorSceneFramePlan scenePlan =
         buildCompositorSceneFrame(ctx.surfaceRenderState.sceneGraph,
                                   CompositorSceneFrameInput{
-                                      .wayland = ctx.wayland,
-                                      .output = ctx.output,
+                                      .output = &ctx.output,
                                       .atomicPresenter = atomicPresenter,
+                                      .duplicateDmabufFds = {},
                                       .chrome = ctx.appliedConfig.config.chrome,
                                       .surfaceVisuals = ctx.surfaceRenderState.surfaceVisuals,
                                       .surfaces = emptySurfaces,
@@ -703,9 +703,11 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   CompositorSceneFramePlan scenePlan =
       buildCompositorSceneFrame(ctx.surfaceRenderState.sceneGraph,
                                 CompositorSceneFrameInput{
-                                    .wayland = ctx.wayland,
-                                    .output = ctx.output,
+                                    .output = &ctx.output,
                                     .atomicPresenter = atomicPresenter,
+                                    .duplicateDmabufFds = [&](std::uint64_t surfaceId) {
+                                      return ctx.wayland.duplicateDmabufFds(surfaceId);
+                                    },
                                     .chrome = ctx.appliedConfig.config.chrome,
                                     .surfaceVisuals = ctx.surfaceRenderState.surfaceVisuals,
                                     .surfaces = committedSurfaces,
