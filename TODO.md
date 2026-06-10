@@ -18,6 +18,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-015 | Feature | Add a cross-window command registry and command palette | N/A | P2 |
 | TODO-016 | Bug | useAutoFocus cannot focus targets inside nested child components | Medium | P2 |
 | TODO-017 | Bug | Overlay rebuild test trips stack-use-after-scope under ASan | Medium | P2 |
+| TODO-019 | Performance | Work through the frame-pacing improvement plan | High | P1 |
 
 ## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
 
@@ -134,3 +135,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] `tests/RuntimeInputTests.cpp` "overlay rebuild relayouts mounted content without remounting state" aborts with AddressSanitizer stack-use-after-scope in `StatefulOverlayProbe::body()`'s `onCleanup` lambda (`++*cleanups` reading a dead stack int) when a scope is disposed after the probe's stack captures are gone.
 - [ ] [Auto] Reproduce with `-DCMAKE_BUILD_TYPE=Debug -DLAMBDA_ENABLE_ASAN=ON` and `--test-case="overlay rebuild relayouts mounted content without remounting state"`. The test passes in Release because the read goes unnoticed.
 - [ ] [Auto] Determine whether the late cleanup is a framework scope-disposal ordering bug (cleanup running after unmount should not outlive the owning mount) or a test lifetime bug, and fix accordingly.
+
+## TODO-019: Work through the frame-pacing improvement plan
+
+- [ ] [Auto + Manual] Execute the prioritized workstreams in [docs/frame-pacing-improvement-plan.md](docs/frame-pacing-improvement-plan.md) (FP-1 through FP-16), produced by the 2026-06 compositor and graphics-stack frame-pacing review.
+- [ ] [Auto] Phases 1-3 and FP-10 through FP-15 require a Linux machine (Wayland and/or KMS from a TTY); FP-14's macOS half and FP-16 can be done on a Mac.
+- [ ] [Auto] Treat each FP item as a self-contained unit: implement, verify with the measurement tooling listed in the plan (`vulkan-present-detail` trace, compositor frame CSV, `debug::perf` counters, validation layers), then delete the FP section from the plan document.
+- [ ] [Auto] When all FP items are done, delete the plan document and this TODO item.
