@@ -24,6 +24,7 @@
 #include "Graphics/Vulkan/generated/rect_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/rect_vert_spv.hpp"
 
+#include <cassert>
 #include <drm_fourcc.h>
 #include <vulkan/vulkan.h>
 #if defined(__clang__) || defined(__GNUC__)
@@ -116,6 +117,7 @@ struct PendingOwnedVulkanImageDestroy {
   VkDeviceMemory importedMemory = VK_NULL_HANDLE;
   bool ownsImportedMemory = false;
   std::uint32_t framesRemaining = 0;
+  std::uint32_t successfulSubmits = 0;
 };
 
 bool deferOwnedVulkanImageDestroy(PendingOwnedVulkanImageDestroy destroy);
@@ -1072,4 +1074,3 @@ VulkanPathVertex makeVulkanPathVertex(PathVertex const &src, FillStyle const *fi
 }
 
 } // namespace
-

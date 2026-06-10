@@ -548,6 +548,7 @@ private:
   struct PendingTextureDestroy {
     std::unique_ptr<Texture> texture;
     std::uint32_t framesRemaining = 0;
+    std::uint32_t successfulSubmits = 0;
   };
 
   struct PendingTextureUpload {
@@ -567,6 +568,7 @@ private:
   struct PendingBufferDestroy {
     Buffer buffer;
     std::uint32_t framesRemaining = 0;
+    std::uint32_t successfulSubmits = 0;
   };
 
   struct CachedBackdropBlur {

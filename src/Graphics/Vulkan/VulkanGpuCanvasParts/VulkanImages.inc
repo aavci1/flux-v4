@@ -36,8 +36,10 @@
     for (auto it = pendingTextureDestroys_.begin(); it != pendingTextureDestroys_.end();) {
       if (!force && it->framesRemaining > 0) {
         --it->framesRemaining;
+        ++it->successfulSubmits;
       }
       if (force || it->framesRemaining == 0) {
+        assert(force || it->successfulSubmits >= kMaxFramesInFlight);
         if (it->texture) {
           destroyTexture(*it->texture);
         }
@@ -52,8 +54,10 @@
     for (auto it = pendingBufferDestroys_.begin(); it != pendingBufferDestroys_.end();) {
       if (!force && it->framesRemaining > 0) {
         --it->framesRemaining;
+        ++it->successfulSubmits;
       }
       if (force || it->framesRemaining == 0) {
+        assert(force || it->successfulSubmits >= kMaxFramesInFlight);
         destroyBuffer(it->buffer);
         it = pendingBufferDestroys_.erase(it);
       } else {
@@ -66,8 +70,10 @@
     for (auto it = pendingOwnedImageDestroys_.begin(); it != pendingOwnedImageDestroys_.end();) {
       if (!force && it->framesRemaining > 0) {
         --it->framesRemaining;
+        ++it->successfulSubmits;
       }
       if (force || it->framesRemaining == 0) {
+        assert(force || it->successfulSubmits >= kMaxFramesInFlight);
         destroyOwnedVulkanImage(*it);
         it = pendingOwnedImageDestroys_.erase(it);
       } else {
@@ -215,6 +221,25 @@
       }
     }
     pendingTextureTransitions_.clear();
+  }
+
+  void retireDeferredResourcesAfterSubmit() {
+    destroyDeferredTextures(false);
+    destroyDeferredBuffers(false);
+    destroyDeferredOwnedImages(false);
+  }
+
+  bool swapchainImageStateReadyForAcquire() const {
+    if (swapchainImages_.empty()) {
+      return false;
+    }
+    if (imageInFlightFences_.size() != swapchainImages_.size() ||
+        imageRenderFinished_.size() != swapchainImages_.size()) {
+      return false;
+    }
+    return std::all_of(imageRenderFinished_.begin(), imageRenderFinished_.end(), [](VkSemaphore semaphore) {
+      return semaphore != VK_NULL_HANDLE;
+    });
   }
 
   VkFormat backdropRenderTargetFormat() const {

@@ -432,11 +432,11 @@ public:
     for (VkFence& imageFence : imageInFlightFences_) {
       if (imageFence == frameFence) imageFence = VK_NULL_HANDLE;
     }
-    start = phaseStart();
-    destroyDeferredTextures(false);
-    destroyDeferredBuffers(false);
-    destroyDeferredOwnedImages(false);
-    double const deferredDestroyMs = phaseMs(start);
+    double deferredDestroyMs = 0.0;
+    if (!swapchainImageStateReadyForAcquire()) {
+      swapchainDirty_ = true;
+      return;
+    }
     std::uint32_t imageIndex = 0;
     start = phaseStart();
     VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable, VK_NULL_HANDLE,
@@ -449,6 +449,16 @@ public:
     if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) {
       vkCheck(acquired, "vkAcquireNextImageKHR");
     }
+    if (imageIndex >= imageInFlightFences_.size() ||
+        imageIndex >= imageRenderFinished_.size() ||
+        !imageRenderFinished_[imageIndex]) {
+      std::fprintf(stderr,
+                   "Lambda Vulkan: acquired swapchain image %u with incomplete image state on window %u; recreating\n",
+                   imageIndex,
+                   handle_);
+      recreateSwapchain();
+      return;
+    }
     double imageFenceMs = 0.0;
     if (imageInFlightFences_[imageIndex]) {
       start = phaseStart();
@@ -456,10 +466,6 @@ public:
       imageFenceMs = phaseMs(start);
     }
     imageInFlightFences_[imageIndex] = frameFence;
-    if (imageIndex >= imageRenderFinished_.size() || !imageRenderFinished_[imageIndex]) {
-      swapchainDirty_ = true;
-      return;
-    }
     VkSemaphore const renderFinished = imageRenderFinished_[imageIndex];
 
     start = phaseStart();
@@ -538,6 +544,9 @@ public:
       vkCheck(submitted, "vkQueueSubmit");
     }
     resetFrameFenceIndex_ = kNoResetFrameFence;
+    start = phaseStart();
+    retireDeferredResourcesAfterSubmit();
+    deferredDestroyMs = phaseMs(start);
     start = phaseStart();
     flushFrameCapture();
     flushScreenshot();
@@ -727,8 +736,6 @@ public:
       if (canReuseCompletedFrame &&
           renderTargetFrameCacheValid_ &&
           renderTargetFrameSignature_ == requestedFrameSignature) {
-        destroyDeferredTextures(false);
-        destroyDeferredOwnedImages(false);
         debug::perf::recordPresentedFrame();
         return;
       }
@@ -756,22 +763,11 @@ public:
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
         waitFrameMs = phaseMs(start);
         start = phaseStart();
-        destroyDeferredTextures(false);
-        destroyDeferredBuffers(false);
-        destroyDeferredOwnedImages(false);
-        deferredDestroyMs = phaseMs(start);
-        start = phaseStart();
         vkResetCommandBuffer(commandBuffer, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
         beginMs = phaseMs(start);
-      } else {
-        auto start = phaseStart();
-        destroyDeferredTextures(false);
-        destroyDeferredBuffers(false);
-        destroyDeferredOwnedImages(false);
-        deferredDestroyMs = phaseMs(start);
       }
 
       RenderTargetRecordStats recordStats{};
@@ -817,6 +813,9 @@ public:
         vkCheck(submitted, "vkQueueSubmit2");
       }
       resetFrameFenceIndex_ = kNoResetFrameFence;
+      start = phaseStart();
+      retireDeferredResourcesAfterSubmit();
+      deferredDestroyMs = phaseMs(start);
       if (!targetSpec_.signalSemaphore) {
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
       }

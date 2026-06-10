@@ -269,9 +269,9 @@ Verification on Linux:
 
 What to do:
 
-- [ ] [Auto] Move the deferred-destroy decrement to immediately after a successful `vkQueueSubmit2` (and after the render-target submit), so aborted presents and cache hits no longer age the queues.
-- [ ] [Auto] Validate `imageRenderFinished_` sizing *before* calling `vkAcquireNextImageKHR`; if the defensive condition can still trigger post-acquire, recreate the swapchain immediately (which releases acquired images) rather than returning.
-- [ ] [Auto] Add a debug assertion (validation builds) that a deferred entry's countdown only reaches zero after at least `kMaxFramesInFlight` successful submits.
+- [x] [Auto] Move the deferred-destroy decrement to immediately after a successful `vkQueueSubmit2` (and after the render-target submit), so aborted presents and cache hits no longer age the queues.
+- [x] [Auto] Validate `imageRenderFinished_` sizing *before* calling `vkAcquireNextImageKHR`; if the defensive condition can still trigger post-acquire, recreate the swapchain immediately (which releases acquired images) rather than returning.
+- [x] [Auto] Add a debug assertion (validation builds) that a deferred entry's countdown only reaches zero after at least `kMaxFramesInFlight` successful submits.
 
 Verification on Linux:
 
