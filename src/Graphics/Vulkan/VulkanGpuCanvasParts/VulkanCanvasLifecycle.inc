@@ -326,7 +326,6 @@ public:
     batches_.clear();
     ops_.clear();
     pathVerts_.clear();
-    backdropOpPrefixHashes_.clear();
     stateStack_.clear();
     state_ = {};
     state_.clip = Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_));

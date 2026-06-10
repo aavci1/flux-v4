@@ -350,7 +350,7 @@
 
       CachedBackdropBlur &cacheEntry = ensureBackdropBlurCacheEntry(runIndex);
       std::uint64_t const signature = backdropBlurSignature(run, runIndex);
-      bool const cacheHit = !targetSpec_.preserveContents && cacheEntry.valid && cacheEntry.signature == signature;
+      bool const cacheHit = cacheEntry.valid && cacheEntry.signature == signature;
       debug::perf::recordBackdropBlurCacheLookup(cacheHit);
       Texture *blurTexture = cacheHit ? &cacheEntry.texture : nullptr;
       if (!blurTexture) {
@@ -507,4 +507,3 @@
                 {x1 > x0 ? x1 - x0 : 0u, y1 > y0 ? y1 - y0 : 0u}};
     vkCmdSetScissor(commandBuffer, 0, 1, &sc);
   }
-

@@ -514,6 +514,7 @@
       return;
     }
     renderTargetFrameCacheValid_ = false;
+    texture.contentGeneration = image->contentGeneration;
     queueTextureUpload(texture, image->pixels.data());
   }
 
@@ -542,7 +543,20 @@
       return;
     }
     renderTargetFrameCacheValid_ = false;
+    texture.contentGeneration = image->contentGeneration;
     queueTextureRegionUpload(texture, x, y, width, height, pixels, sourceBytesPerRow);
+  }
+
+  void markImageTextureContentsChanged(VulkanImage const* image) {
+    if (!image) {
+      return;
+    }
+    auto it = imageTextures_.find(image);
+    if (it == imageTextures_.end() || !it->second) {
+      return;
+    }
+    it->second->contentGeneration = image->contentGeneration;
+    renderTargetFrameCacheValid_ = false;
   }
 
 private:

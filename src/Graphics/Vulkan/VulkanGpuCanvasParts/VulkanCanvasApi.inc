@@ -125,6 +125,13 @@ bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled) {
   return vulkan ? vulkan->setTransparentSurface(enabled) : false;
 }
 
+bool markVulkanImageContentsChanged(Image* image) {
+  auto* vulkanImage = dynamic_cast<VulkanImage*>(image);
+  if (!vulkanImage) return false;
+  vulkanImage->markContentChanged();
+  return true;
+}
+
 bool drawVulkanBackdropBlurFrame(Canvas* canvas,
                                  Rect const& frame,
                                  CornerRadius const& frameRadius,

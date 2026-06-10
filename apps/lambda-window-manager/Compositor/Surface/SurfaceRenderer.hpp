@@ -22,6 +22,7 @@ namespace lambda::compositor {
 struct CachedClientImage {
   struct DmabufEntry {
     std::uint64_t bufferId = 0;
+    std::uint64_t serial = 0;
     std::shared_ptr<Image> image;
     bool imported = false;
   };

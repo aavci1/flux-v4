@@ -59,7 +59,6 @@
   Texture backdropScratchTexture_;
   Texture backdropBlurTexture_;
   std::vector<CachedBackdropBlur> backdropBlurCache_;
-  std::vector<std::uint64_t> backdropOpPrefixHashes_;
   std::uint32_t backdropBlurBaseDownsample_ = kDefaultBackdropBlurBaseDownsample;
   VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
   VkDescriptorSet calloutDescriptorSet_ = VK_NULL_HANDLE;
@@ -148,6 +147,16 @@ void updateImageTextureRegionFor(VulkanImage const* image,
   for (::lambda::VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->updateImageTextureRegion(image, x, y, width, height, pixels, sourceBytesPerRow);
+  }
+}
+
+void markImageTextureContentsChangedFor(VulkanImage const* image) {
+  if (!image)
+    return;
+  std::lock_guard lock(gCanvasRegistryMutex);
+  for (::lambda::VulkanCanvas* canvas : gCanvases) {
+    if (canvas)
+      canvas->markImageTextureContentsChanged(image);
   }
 }
 

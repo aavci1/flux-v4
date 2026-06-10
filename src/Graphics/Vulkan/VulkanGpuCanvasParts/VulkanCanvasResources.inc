@@ -325,6 +325,99 @@
     return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
   }
 
+  Rect rectInstanceBounds(RectInstance const& r) const {
+    Point const p00{r.axisX[0], r.axisX[1]};
+    Point const p10{r.axisX[0] + r.axisX[2], r.axisX[1] + r.axisX[3]};
+    Point const p01{r.axisX[0] + r.axisY[0], r.axisX[1] + r.axisY[1]};
+    Point const p11{p10.x + r.axisY[0], p10.y + r.axisY[1]};
+    float const x0 = std::min({p00.x, p10.x, p01.x, p11.x});
+    float const y0 = std::min({p00.y, p10.y, p01.y, p11.y});
+    float const x1 = std::max({p00.x, p10.x, p01.x, p11.x});
+    float const y1 = std::max({p00.y, p10.y, p01.y, p11.y});
+    return Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
+  }
+
+  Rect rectBounds(std::uint32_t first, std::uint32_t count) const {
+    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
+    bool hasBounds = false;
+    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(rects_.size()));
+    for (std::uint32_t index = first; index < end; ++index) {
+      Rect const next = rectInstanceBounds(rects_[index]);
+      bounds = hasBounds ? unionRects(bounds, next) : next;
+      hasBounds = true;
+    }
+    return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
+  }
+
+  Rect calloutBounds(std::uint32_t first, std::uint32_t count) const {
+    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
+    bool hasBounds = false;
+    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(callouts_.size()));
+    for (std::uint32_t index = first; index < end; ++index) {
+      CalloutInstance const& c = callouts_[index];
+      RectInstance r{};
+      r.axisX[0] = c.axisX[0];
+      r.axisX[1] = c.axisX[1];
+      r.axisX[2] = c.axisX[2];
+      r.axisX[3] = c.axisX[3];
+      r.axisY[0] = c.axisY[0];
+      r.axisY[1] = c.axisY[1];
+      Rect const next = rectInstanceBounds(r);
+      bounds = hasBounds ? unionRects(bounds, next) : next;
+      hasBounds = true;
+    }
+    return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
+  }
+
+  Rect pathBounds(std::uint32_t first, std::uint32_t count) const {
+    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(pathVerts_.size()));
+    if (first >= end) {
+      return Rect::sharp(0.f, 0.f, 0.f, 0.f);
+    }
+    float x0 = pathVerts_[first].x;
+    float y0 = pathVerts_[first].y;
+    float x1 = x0;
+    float y1 = y0;
+    for (std::uint32_t index = first + 1; index < end; ++index) {
+      x0 = std::min(x0, pathVerts_[index].x);
+      y0 = std::min(y0, pathVerts_[index].y);
+      x1 = std::max(x1, pathVerts_[index].x);
+      y1 = std::max(y1, pathVerts_[index].y);
+    }
+    return Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
+  }
+
+  bool drawOpBounds(DrawOp const& op, Rect& bounds) const {
+    if (op.externalStorageDescriptor || op.externalVertexBuffer) {
+      return false;
+    }
+    switch (op.kind) {
+    case DrawOp::Kind::Rect:
+      bounds = rectBounds(op.first, op.count);
+      return op.first + op.count <= rects_.size();
+    case DrawOp::Kind::Callout:
+      bounds = calloutBounds(op.first, op.count);
+      return op.first + op.count <= callouts_.size();
+    case DrawOp::Kind::Path:
+      bounds = pathBounds(op.first, op.count);
+      return op.first + op.count <= pathVerts_.size();
+    case DrawOp::Kind::Image:
+    case DrawOp::Kind::BackdropBlur:
+      bounds = quadBounds(op.first, op.count);
+      return op.first + op.count <= quads_.size();
+    }
+    return false;
+  }
+
+  bool drawOpAffectsBackdropClip(DrawOp const& op, Rect const& clip) const {
+    Rect bounds{};
+    if (!drawOpBounds(op, bounds)) {
+      return true;
+    }
+    Rect const clipped = intersectRects(bounds, op.clip);
+    return clipped.width > 0.f && clipped.height > 0.f && clipped.intersects(clip);
+  }
+
   Rect backdropBlurRunClip(std::size_t start, std::size_t end, float radiusPx) const {
     Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
     bool hasBounds = false;
@@ -423,6 +516,7 @@
       hashValue(h, texture->layout);
       hashValue(h, texture->width);
       hashValue(h, texture->height);
+      hashValue(h, texture->contentGeneration);
     }
   }
 
@@ -453,6 +547,9 @@
       }
       break;
     case DrawOp::Kind::Callout:
+      for (std::uint32_t index = op.first; index < end && index < callouts_.size(); ++index) {
+        hashValue(h, callouts_[index]);
+      }
       break;
     case DrawOp::Kind::Path:
       for (std::uint32_t index = op.first; index < end && index < pathVerts.size(); ++index) {
@@ -488,16 +585,6 @@
     hashValue(h, drawOpGeometrySignature(op, rects_, quads_, pathVerts_));
   }
 
-  void rebuildBackdropOpPrefixHashes() {
-    backdropOpPrefixHashes_.resize(ops_.size() + 1u);
-    std::uint64_t h = 14695981039346656037ULL;
-    backdropOpPrefixHashes_[0] = h;
-    for (std::size_t index = 0; index < ops_.size(); ++index) {
-      hashDrawOpGeometry(h, ops_[index]);
-      backdropOpPrefixHashes_[index + 1u] = h;
-    }
-  }
-
   std::uint64_t backdropBlurSignature(BackdropBlurRun const &run, std::size_t runIndex) const {
     std::uint64_t h = 14695981039346656037ULL;
     hashValue(h, runIndex);
@@ -519,14 +606,16 @@
       hashValue(h, quads_[run.verticalQuad]);
     }
     std::size_t const opEnd = std::min(run.start, ops_.size());
-    hashValue(h, opEnd);
-    if (opEnd < backdropOpPrefixHashes_.size()) {
-      hashValue(h, backdropOpPrefixHashes_[opEnd]);
-    } else {
-      for (std::size_t index = 0; index < opEnd; ++index) {
-        hashDrawOpGeometry(h, ops_[index]);
+    std::uint64_t affectingOps = 0;
+    for (std::size_t index = 0; index < opEnd; ++index) {
+      DrawOp const& op = ops_[index];
+      if (!drawOpAffectsBackdropClip(op, run.clip)) {
+        continue;
       }
+      hashDrawOpGeometry(h, op);
+      ++affectingOps;
     }
+    hashValue(h, affectingOps);
     return h;
   }
 
@@ -587,7 +676,6 @@
       if (start >= ops_.size()) break;
       if (runs.empty()) {
         ensureBackdropSceneTarget();
-        rebuildBackdropOpPrefixHashes();
       }
       std::size_t const end = backdropBlurRunEnd(start);
       auto const [opCount, quadCount] = backdropBlurRunOpCounts(start, end);

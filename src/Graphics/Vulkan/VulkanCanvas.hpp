@@ -60,6 +60,7 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
 bool setVulkanCanvasBackdropBlurBaseDownsample(Canvas* canvas, std::uint32_t downsample);
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled);
 bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled);
+bool markVulkanImageContentsChanged(Image* image);
 bool drawVulkanBackdropBlurFrame(Canvas* canvas,
                                  Rect const& frame,
                                  CornerRadius const& frameRadius,

@@ -105,6 +105,7 @@ void updateImageTextureRegionFor(VulkanImage const* image,
                                  std::uint32_t height,
                                  void const* pixels,
                                  std::uint32_t sourceBytesPerRow = 0);
+void markImageTextureContentsChangedFor(VulkanImage const* image);
 struct SharedVulkanCore;
 SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface);
 void releaseSharedVulkanCore();
@@ -169,6 +170,7 @@ struct VulkanImage final : Image {
   bool ownsCoreReference = false;
   VkDevice owningDevice = VK_NULL_HANDLE;
   VmaAllocator owningAllocator = VK_NULL_HANDLE;
+  std::uint64_t contentGeneration = 1;
 
   VulkanImage(int w, int h, std::vector<std::uint8_t> p, VkFormat pixelFormat)
       : width(w),
@@ -227,6 +229,10 @@ struct VulkanImage final : Image {
     }
   }
   Size size() const override { return {static_cast<float>(width), static_cast<float>(height)}; }
+  void markContentChanged() {
+    contentGeneration = contentGeneration == std::numeric_limits<std::uint64_t>::max() ? 1 : contentGeneration + 1;
+    markImageTextureContentsChangedFor(this);
+  }
   bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void*) override {
     return updatePixels(rgbaPixels, PixelFormat::Rgba8888, nullptr);
   }
@@ -245,6 +251,7 @@ struct VulkanImage final : Image {
       pixels.resize(expectedSize);
     }
     std::memcpy(pixels.data(), newPixels.data(), expectedSize);
+    markContentChanged();
     updateImageTexturesFor(this);
     return true;
   }
@@ -285,6 +292,7 @@ struct VulkanImage final : Image {
       auto const* src = newPixels.data() + static_cast<std::size_t>(row) * srcStride;
       std::memcpy(dst, src, rowBytes);
     }
+    markContentChanged();
     updateImageTextureRegionFor(this, x, y, regionWidth, regionHeight, newPixels.data(),
                                 static_cast<std::uint32_t>(srcStride));
     return true;

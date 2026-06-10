@@ -169,6 +169,14 @@ bool setCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
 #endif
 }
 
+void markCachedImageContentsChanged(Image* image) {
+#if LAMBDA_VULKAN
+  (void)markVulkanImageContentsChanged(image);
+#else
+  (void)image;
+#endif
+}
+
 bool destinationMatchesWindow(CommittedSurfaceSnapshot const &surface) {
   return (surface.destinationWidth <= 0 || surface.destinationWidth == surface.width) &&
          (surface.destinationHeight <= 0 || surface.destinationHeight == surface.height);
@@ -290,6 +298,15 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
   }
   if (cached.image && cached.id == surface.id) {
     if (hasDmabuf && cached.dmabufBufferId == surface.dmabufBufferId) {
+      if (cached.serial != surface.serial) {
+        markCachedImageContentsChanged(cached.image.get());
+        for (CachedClientImage::DmabufEntry& entry : cached.dmabufImages) {
+          if (entry.bufferId == surface.dmabufBufferId) {
+            entry.serial = surface.serial;
+          }
+        }
+      }
+      cached.serial = surface.serial;
       wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
     }
@@ -348,6 +365,10 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
                                        return entry.bufferId == surface.dmabufBufferId && entry.image;
                                      });
     if (cachedDmabuf != cached.dmabufImages.end()) {
+      if (cachedDmabuf->serial != surface.serial) {
+        markCachedImageContentsChanged(cachedDmabuf->image.get());
+        cachedDmabuf->serial = surface.serial;
+      }
       cached.image = cachedDmabuf->image;
       cached.dmabufImported = cachedDmabuf->imported;
       CachedClientImage::DmabufEntry entry = std::move(*cachedDmabuf);
@@ -406,6 +427,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
     if (cached.image) {
       cached.dmabufImages.push_back(CachedClientImage::DmabufEntry{
           .bufferId = surface.dmabufBufferId,
+          .serial = surface.serial,
           .image = cached.image,
           .imported = cached.dmabufImported,
       });
@@ -436,6 +458,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
                             static_cast<unsigned long long>(surface.dmabufBufferId), elapsedMilliseconds(importStart));
         cached.dmabufImages.push_back(CachedClientImage::DmabufEntry{
             .bufferId = surface.dmabufBufferId,
+            .serial = surface.serial,
             .image = cached.image,
             .imported = false,
         });

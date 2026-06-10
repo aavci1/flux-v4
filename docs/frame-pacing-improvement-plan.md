@@ -170,7 +170,7 @@ What to do:
 What to do:
 
 - [x] [Auto] Use the existing `inflateDamageForBackdropSampling` (`CompositorSceneGraph.cpp`) to *expand* damage by the blur sampling radius around affected blur regions instead of disabling the partial path. Only fall back to full output when an inflated rect actually covers most of the screen.
-- [ ] [Auto] Cache blurred backdrop results per region: key by (region rect, backdrop content signature) — the Vulkan canvas already has `backdropBlurCache_` keyed by signature; ensure compositor-side damage that does not intersect a blur region's *sample area* leaves its cache entry valid, so unrelated client updates don't re-blur every glass titlebar.
+- [x] [Auto] Cache blurred backdrop results per region: key by (region rect, backdrop content signature) — the Vulkan canvas already has `backdropBlurCache_` keyed by signature; ensure compositor-side damage that does not intersect a blur region's *sample area* leaves its cache entry valid, so unrelated client updates don't re-blur every glass titlebar.
 - [ ] [Manual] Measure: with one glass titlebar and a terminal printing output, partial frames should activate and `background_ms`/`surface_ms` in the CSV should drop versus today's full-output frames.
 
 Verification on Linux (KMS TTY):

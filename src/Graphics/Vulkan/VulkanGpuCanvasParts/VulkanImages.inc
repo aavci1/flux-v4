@@ -12,11 +12,13 @@
         tex->layout = image.ownsImportedMemory ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
         tex->width = image.width;
         tex->height = image.height;
+        tex->contentGeneration = image.contentGeneration;
         tex->ownsImage = false;
         tex->ownsView = false;
         importedNeedsTransition = image.ownsImportedMemory;
       } else {
         createTexture(*tex, image.width, image.height, image.format, image.pixels.data(), false);
+        tex->contentGeneration = image.contentGeneration;
         queueTextureUpload(*tex, image.pixels.data());
       }
       ensureTextureDescriptor(*tex);

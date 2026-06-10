@@ -20,6 +20,7 @@ struct Texture {
   VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
   int width = 0;
   int height = 0;
+  std::uint64_t contentGeneration = 1;
   bool ownsImage = true;
   bool ownsView = true;
 };
