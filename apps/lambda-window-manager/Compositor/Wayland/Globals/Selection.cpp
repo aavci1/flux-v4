@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/Globals/Selection.hpp"
 
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Wayland/DataDeviceDndState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -221,34 +222,6 @@ void dataSourceOffer(wl_client*, wl_resource* resource, char const* mimeType) {
 
 void dataSourceDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
-}
-
-bool validDndActionMask(std::uint32_t actions) {
-  constexpr std::uint32_t valid = WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
-                                  WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE |
-                                  WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
-  return (actions & ~valid) == 0u;
-}
-
-bool validPreferredDndAction(std::uint32_t action) {
-  return action == WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE ||
-         action == WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY ||
-         action == WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE ||
-         action == WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
-}
-
-std::uint32_t chooseDndAction(std::uint32_t sourceActions,
-                              std::uint32_t targetActions,
-                              std::uint32_t preferredAction) {
-  std::uint32_t const available = sourceActions & targetActions;
-  if (preferredAction != WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE &&
-      (available & preferredAction) != 0u) {
-    return preferredAction;
-  }
-  if ((available & WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY) != 0u) return WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY;
-  if ((available & WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE) != 0u) return WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE;
-  if ((available & WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK) != 0u) return WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
-  return WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
 }
 
 void updateDndOfferAction(WaylandServer::Impl::DataOffer* offer) {
