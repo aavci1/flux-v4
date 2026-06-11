@@ -1934,33 +1934,31 @@ private:
                                       id<MTLBuffer>* clipBuffer) {
     NSUInteger const needed = static_cast<NSUInteger>(std::max<std::size_t>(1, stateCount));
     std::size_t const frameIndex = metal_.currentFrameIndex();
-    id<MTLBuffer>& frameUniformBuffer = backdropUniformBuffers_[frameIndex];
     NSUInteger& frameUniformCapacity = backdropUniformBufferCapacities_[frameIndex];
-    id<MTLBuffer>& frameClipBuffer = backdropClipBuffers_[frameIndex];
     NSUInteger& frameClipCapacity = backdropClipBufferCapacities_[frameIndex];
     if (needed > frameUniformCapacity) {
       NSUInteger const newCapacity =
           frameUniformCapacity == 0 ? needed : std::max(needed, frameUniformCapacity * 2);
-      frameUniformBuffer =
+      backdropUniformBuffers_[frameIndex] =
           [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalDrawUniforms)
                                        options:MTLResourceStorageModeShared];
-      frameUniformCapacity = frameUniformBuffer ? newCapacity : 0;
+      frameUniformCapacity = backdropUniformBuffers_[frameIndex] ? newCapacity : 0;
     }
     if (needed > frameClipCapacity) {
       NSUInteger const newCapacity =
           frameClipCapacity == 0 ? needed : std::max(needed, frameClipCapacity * 2);
-      frameClipBuffer =
+      backdropClipBuffers_[frameIndex] =
           [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalRoundedClipStack)
                                        options:MTLResourceStorageModeShared];
-      frameClipCapacity = frameClipBuffer ? newCapacity : 0;
+      frameClipCapacity = backdropClipBuffers_[frameIndex] ? newCapacity : 0;
     }
     if (uniformBuffer) {
-      *uniformBuffer = frameUniformBuffer;
+      *uniformBuffer = backdropUniformBuffers_[frameIndex];
     }
     if (clipBuffer) {
-      *clipBuffer = frameClipBuffer;
+      *clipBuffer = backdropClipBuffers_[frameIndex];
     }
-    return frameUniformBuffer != nil && frameClipBuffer != nil;
+    return backdropUniformBuffers_[frameIndex] != nil && backdropClipBuffers_[frameIndex] != nil;
   }
 
   static NSUInteger backdropBlurDownsample(NSUInteger width, NSUInteger height, float radius) {

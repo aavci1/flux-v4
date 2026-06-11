@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include "Graphics/CoreTextSystem.hpp"
+#include "Graphics/Metal/GlyphAtlas.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 
@@ -162,6 +163,44 @@ static int colorDelta(std::vector<std::uint8_t> const& pixels, std::uint32_t wid
 }
 
 #if defined(__APPLE__)
+static std::vector<std::uint8_t> readR8Texture(id<MTLDevice> device,
+                                               id<MTLCommandQueue> queue,
+                                               id<MTLTexture> texture,
+                                               std::uint32_t width,
+                                               std::uint32_t height) {
+  if (!device || !queue || !texture || width == 0 || height == 0) {
+    return {};
+  }
+  std::size_t const byteCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+  id<MTLBuffer> readback =
+      [device newBufferWithLength:static_cast<NSUInteger>(byteCount) options:MTLResourceStorageModeShared];
+  if (!readback) {
+    return {};
+  }
+  id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+  id<MTLBlitCommandEncoder> blit = commandBuffer ? [commandBuffer blitCommandEncoder] : nil;
+  if (!commandBuffer || !blit) {
+    return {};
+  }
+  [blit copyFromTexture:texture
+            sourceSlice:0
+            sourceLevel:0
+           sourceOrigin:MTLOriginMake(0, 0, 0)
+             sourceSize:MTLSizeMake(width, height, 1)
+               toBuffer:readback
+      destinationOffset:0
+ destinationBytesPerRow:width
+destinationBytesPerImage:width * height];
+  [blit endEncoding];
+  [commandBuffer commit];
+  [commandBuffer waitUntilCompleted];
+  if (commandBuffer.status != MTLCommandBufferStatusCompleted) {
+    return {};
+  }
+  auto const* bytes = static_cast<std::uint8_t const*>([readback contents]);
+  return std::vector<std::uint8_t>(bytes, bytes + byteCount);
+}
+
 struct HeadlessMetalTarget {
   id<MTLDevice> device = nil;
   id<MTLTexture> texture = nil;
@@ -251,6 +290,70 @@ struct HeadlessMetalTarget {
 #endif
 
 } // namespace
+
+TEST_CASE("Metal GlyphAtlas keeps glyph padding transparent") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    REQUIRE(device);
+    id<MTLCommandQueue> queue = [device newCommandQueue];
+    REQUIRE(queue);
+
+    CoreTextSystem textSystem;
+    GlyphAtlas atlas{device, textSystem, queue};
+
+    Font font{};
+    font.family = ".AppleSystemUIFont";
+    font.size = 96.f;
+    font.weight = 500.f;
+    auto layout = textSystem.layout("T", font, Colors::black, 200.f, {});
+    REQUIRE(!layout->runs.empty());
+    TextRun const& run = layout->runs.front().run;
+    REQUIRE(!run.glyphIds.empty());
+
+    GlyphKey key{};
+    key.fontId = run.fontId;
+    key.glyphId = run.glyphIds.front();
+    key.sizeQ8 = static_cast<std::uint16_t>(std::lround(run.fontSize * 4.f));
+    AtlasEntry const entry = atlas.getOrUpload(key);
+    REQUIRE(entry.width > 0);
+    REQUIRE(entry.height > 0);
+    REQUIRE(entry.u > 0);
+    REQUIRE(entry.v > 0);
+
+    id<MTLCommandBuffer> upload = [queue commandBuffer];
+    REQUIRE(upload);
+    atlas.flushUploads(upload);
+    [upload commit];
+    [upload waitUntilCompleted];
+    REQUIRE(upload.status == MTLCommandBufferStatusCompleted);
+
+    std::uint32_t const oldWidth = atlas.atlasPixelWidth();
+    std::uint32_t const oldHeight = atlas.atlasPixelHeight();
+    std::vector<std::uint8_t> pixels = readR8Texture(device, queue, atlas.texture(), oldWidth, oldHeight);
+    REQUIRE(pixels.size() == static_cast<std::size_t>(oldWidth) * oldHeight);
+    auto sample = [&](std::vector<std::uint8_t> const& source, std::uint32_t width,
+                      std::uint32_t x, std::uint32_t y) {
+      return source[static_cast<std::size_t>(y) * width + x];
+    };
+
+    CHECK(sample(pixels, oldWidth, entry.u - 1, entry.v) == 0);
+    CHECK(sample(pixels, oldWidth, entry.u, entry.v - 1) == 0);
+    CHECK(sample(pixels, oldWidth, entry.u + entry.width, entry.v) == 0);
+    CHECK(sample(pixels, oldWidth, entry.u, entry.v + entry.height) == 0);
+
+    REQUIRE(atlas.grow());
+    std::uint32_t const newWidth = atlas.atlasPixelWidth();
+    std::uint32_t const newHeight = atlas.atlasPixelHeight();
+    std::vector<std::uint8_t> grown = readR8Texture(device, queue, atlas.texture(), newWidth, newHeight);
+    REQUIRE(grown.size() == static_cast<std::size_t>(newWidth) * newHeight);
+    CHECK(sample(grown, newWidth, entry.u - 1, entry.v) == 0);
+    CHECK(sample(grown, newWidth, oldWidth + 1, oldHeight + 1) == 0);
+  }
+#endif
+}
 
 TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing regressions") {
 #if !defined(__APPLE__)

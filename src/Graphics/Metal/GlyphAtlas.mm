@@ -28,6 +28,9 @@ GlyphAtlas::GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem, id<MTLComma
   if (!texture_ || !queue_) {
     throw std::runtime_error("GlyphAtlas: failed to create atlas resources");
   }
+  if (!clearTexture(texture_, atlasWidth_, atlasHeight_)) {
+    throw std::runtime_error("GlyphAtlas: failed to clear atlas texture");
+  }
 }
 
 id<MTLTexture> GlyphAtlas::createTexture(std::uint32_t width, std::uint32_t height) const {
@@ -38,6 +41,48 @@ id<MTLTexture> GlyphAtlas::createTexture(std::uint32_t width, std::uint32_t heig
   d.usage = MTLTextureUsageShaderRead;
   d.storageMode = MTLStorageModePrivate;
   return [device_ newTextureWithDescriptor:d];
+}
+
+bool GlyphAtlas::encodeClearTexture(id<MTLBlitCommandEncoder> blit,
+                                    id<MTLTexture> texture,
+                                    std::uint32_t width,
+                                    std::uint32_t height) const {
+  if (!blit || !texture || width == 0 || height == 0) {
+    return false;
+  }
+  std::size_t const byteCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+  id<MTLBuffer> zeroBuffer =
+      [device_ newBufferWithLength:static_cast<NSUInteger>(byteCount) options:MTLResourceStorageModeShared];
+  if (!zeroBuffer) {
+    return false;
+  }
+  std::memset([zeroBuffer contents], 0, byteCount);
+  [blit copyFromBuffer:zeroBuffer
+          sourceOffset:0
+     sourceBytesPerRow:width
+   sourceBytesPerImage:width * height
+            sourceSize:MTLSizeMake(width, height, 1)
+             toTexture:texture
+      destinationSlice:0
+      destinationLevel:0
+     destinationOrigin:MTLOriginMake(0, 0, 0)];
+  return true;
+}
+
+bool GlyphAtlas::clearTexture(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height) const {
+  id<MTLCommandBuffer> commandBuffer = queue_ ? [queue_ commandBuffer] : nil;
+  id<MTLBlitCommandEncoder> blit = commandBuffer ? [commandBuffer blitCommandEncoder] : nil;
+  if (!commandBuffer || !blit) {
+    return false;
+  }
+  if (!encodeClearTexture(blit, texture, width, height)) {
+    [blit endEncoding];
+    return false;
+  }
+  [blit endEncoding];
+  [commandBuffer commit];
+  [commandBuffer waitUntilCompleted];
+  return commandBuffer.status == MTLCommandBufferStatusCompleted;
 }
 
 void GlyphAtlas::queueUpload(std::uint32_t x, std::uint32_t y, std::uint32_t width,
@@ -129,6 +174,10 @@ bool GlyphAtlas::grow() {
   id<MTLBlitCommandEncoder> blit = commandBuffer ? [commandBuffer blitCommandEncoder] : nil;
   if (!commandBuffer || !blit) {
     throw std::runtime_error("GlyphAtlas: grow failed to create blit command buffer");
+  }
+  if (!encodeClearTexture(blit, newTex, newWidth, newHeight)) {
+    [blit endEncoding];
+    throw std::runtime_error("GlyphAtlas: grow failed to clear new texture");
   }
   if (oldTexture) {
     [blit copyFromTexture:oldTexture

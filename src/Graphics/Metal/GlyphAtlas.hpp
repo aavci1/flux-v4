@@ -75,6 +75,11 @@ private:
 
   bool pressureHighForHeadroom() const;
   id<MTLTexture> createTexture(std::uint32_t width, std::uint32_t height) const;
+  bool encodeClearTexture(id<MTLBlitCommandEncoder> blit,
+                          id<MTLTexture> texture,
+                          std::uint32_t width,
+                          std::uint32_t height) const;
+  bool clearTexture(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height) const;
   void queueUpload(std::uint32_t x, std::uint32_t y, std::uint32_t width, std::uint32_t height,
                    std::vector<std::uint8_t> const& r8);
 

@@ -35,9 +35,10 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] ASan + Vulkan validation-layer KMS resize-storm pass completed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-155247/asan-validation-resize-storm`) after fixing DRM modifier plane layouts, KMS external render-target frame-slot rotation, and per-buffer Vulkan render fences for KMS command-buffer/semaphore reuse. Rerun summary: validation layer loaded, zero validation errors, zero ASan errors, zero fatal matches, presentation feedback reported `CLOCK_MONOTONIC` with `VSYNC|HW_CLOCK|HW_COMPLETION`, CPU avg/max 42.27%/44.20%, surface avg/max 3.925/4.197 ms, and present avg/max 0.991/1.184 ms. Follow-up normal Linux verifier passed (`.debug-logs/frame-pacing-verify/20260611-155435`) across atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases with zero fatal matches.
 - [ ] Remaining local input/visual gap: `ydotool`, `wtype`, `evemu-event`, and `wayland-info` are installed, and real evdev input is validated. `/dev/uinput` is still `root:root` mode `0600`, `ydotoold` fails with `failed to open uinput device: Permission denied`, and `sudo -n true` still prompts for a password, so uinput-backed validation requires host permission repair. Manual cursor visual validation still requires an interactive human session.
 - [ ] Remaining environment gap: automated app smoke passed with `lambda-shell`, scripted `lambda-terminal`, and `lambda-editor`; manual visual checks are still needed for cursor appearance, drag/move/resize feel, and representative app inspection on a live compositor session.
-- [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
-- [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
-- [ ] Remaining macOS verification gap for the latest Metal changes: rebuild and run `MetalCanvasTests.mm` including the deferred atlas grow regression test, paste large unicode-heavy text into `lambda-editor`, collect `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), run full `ctest`, and compare backdrop-blur visuals.
+- [x] macOS compile verification after the latest Metal atlas/backdrop batches: fixed the ARC-only compile error in `MetalCanvas.mm` backdrop buffer pooling (`id<MTLBuffer>&` with no explicit ownership), then `cmake --build build -j"$(sysctl -n hw.ncpu)"` passed (2026-06-11).
+- [x] macOS focused tests: `MetalCanvasTests.mm` passed 12 cases / 92 assertions including the deferred atlas grow and glyph-padding regressions, `SceneGraphTests.cpp` passed 20 cases / 115 assertions, and the explicit deferred atlas grow regression passed with `LAMBDA_DEBUG_PERF=2` (2026-06-11).
+- [x] macOS full `ctest --test-dir build --output-on-failure -j"$(sysctl -n hw.ncpu)"` passed 2/2 tests (2026-06-11).
+- [ ] Remaining macOS runtime/visual gap for the latest Metal changes: paste large unicode-heavy text into `lambda-editor` with `LAMBDA_DEBUG_PERF=2`, inspect `CanvasDrawableWait`/atlas-grow behavior, and compare backdrop-blur visuals.
 - [x] Post-implementation review backlog (REV-*) fixed; remaining unchecked items are validation gaps.
 
 ## Working Environment
@@ -395,8 +396,9 @@ What to do:
 
 Verification on macOS:
 
-- [ ] `debug::perf` — `CanvasDrawableWait` p95 drops; no atlas-grow hitch when pasting large unicode-heavy text into `lambda-editor`.
-- [ ] Full `ctest` suite passes (includes `MetalCanvasTests.mm`); backdrop blur visuals unchanged (frame-capture comparison).
+- [x] Full `ctest` suite passes, including `MetalCanvasTests.mm` and the deferred atlas grow regression.
+- [ ] `debug::perf` runtime check — `CanvasDrawableWait` p95 drops and no atlas-grow hitch when pasting large unicode-heavy text into `lambda-editor`.
+- [ ] Backdrop blur visuals unchanged by frame-capture/manual comparison.
 
 ---
 
