@@ -1,3 +1,131 @@
+  void markFrameFenceComplete(std::size_t index) {
+    if (index >= frameFenceCompleteGenerations_.size()) {
+      return;
+    }
+    frameFenceCompleteGenerations_[index] = frameFenceSubmitGenerations_[index];
+  }
+
+  void markFrameFenceComplete(VkFence fence) {
+    if (!fence) {
+      return;
+    }
+    for (std::size_t i = 0; i < frameFences_.size(); ++i) {
+      if (frameFences_[i] == fence) {
+        markFrameFenceComplete(i);
+        return;
+      }
+    }
+  }
+
+  void markFrameFenceSubmitted(std::size_t index) {
+    if (index >= frameFenceSubmitGenerations_.size()) {
+      return;
+    }
+    ++frameFenceSubmitGenerations_[index];
+  }
+
+  VkFence createPresentFence(bool signaled, char const* label) {
+    VkFence fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    info.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0u;
+    vkCheck(vkCreateFence(device_, &info, nullptr, &fence), label);
+    return fence;
+  }
+
+  void destroyRetiredSwapchainResources(RetiredSwapchain& retired) {
+    for (VkSemaphore semaphore : retired.renderFinished) {
+      if (semaphore) {
+        vkDestroySemaphore(device_, semaphore, nullptr);
+      }
+    }
+    retired.renderFinished.clear();
+    for (VkFence fence : retired.presentFences) {
+      if (fence) {
+        vkDestroyFence(device_, fence, nullptr);
+      }
+    }
+    retired.presentFences.clear();
+    for (VkImageView view : retired.views) {
+      if (view) {
+        vkDestroyImageView(device_, view, nullptr);
+      }
+    }
+    retired.views.clear();
+    if (retired.swapchain) {
+      vkDestroySwapchainKHR(device_, retired.swapchain, nullptr);
+      retired.swapchain = VK_NULL_HANDLE;
+    }
+  }
+
+  bool retiredPresentFencesReady(RetiredSwapchain const& retired) const {
+    for (VkFence fence : retired.presentFences) {
+      if (!fence) {
+        continue;
+      }
+      VkResult const status = vkGetFenceStatus(device_, fence);
+      if (status == VK_NOT_READY) {
+        return false;
+      }
+      vkCheck(status, "vkGetFenceStatus(retiredPresentFence)");
+    }
+    return true;
+  }
+
+  bool retiredFrameFencesReady(RetiredSwapchain const& retired) const {
+    for (std::size_t i = 0; i < frameFenceCompleteGenerations_.size(); ++i) {
+      if (frameFenceCompleteGenerations_[i] < retired.frameFenceGenerations[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool retiredSwapchainReady(RetiredSwapchain const& retired, bool force) const {
+    if (force) {
+      return true;
+    }
+    if (!retired.presentFences.empty() && !retiredPresentFencesReady(retired)) {
+      return false;
+    }
+    return retiredFrameFencesReady(retired);
+  }
+
+  void retireSwapchains(bool force) {
+    for (auto it = retiredSwapchains_.begin(); it != retiredSwapchains_.end();) {
+      if (retiredSwapchainReady(*it, force)) {
+        destroyRetiredSwapchainResources(*it);
+        it = retiredSwapchains_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  void retireSwapchainResources(VkSwapchainKHR swapchain,
+                                std::vector<VkImageView> views,
+                                std::vector<VkSemaphore> renderFinished,
+                                std::vector<VkFence> presentFences) {
+    if (!swapchain && views.empty() && renderFinished.empty() && presentFences.empty()) {
+      return;
+    }
+    RetiredSwapchain retired{};
+    retired.swapchain = swapchain;
+    retired.views = std::move(views);
+    retired.renderFinished = std::move(renderFinished);
+    retired.presentFences = std::move(presentFences);
+    retired.frameFenceGenerations = frameFenceSubmitGenerations_;
+    retiredSwapchains_.push_back(std::move(retired));
+  }
+
+  void retirePresentFence(VkFence fence) {
+    if (!fence) {
+      return;
+    }
+    RetiredSwapchain retired{};
+    retired.presentFences.push_back(fence);
+    retiredSwapchains_.push_back(std::move(retired));
+  }
+
   void recreateSwapchain() {
     if (!device_)
       return;
@@ -7,12 +135,6 @@
       return static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count()) / 1000.0;
     };
-    for (VkFence fence : frameFences_) {
-      if (fence)
-        vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
-    }
-    double const waitFencesMs = phaseMs(phaseStart);
-    phaseStart = std::chrono::steady_clock::now();
     VkSwapchainKHR oldSwapchain = swapchain_;
     std::vector<VkImageView> oldViews = std::move(swapchainViews_);
     std::vector<VkSemaphore> oldImageRenderFinished = std::move(imageRenderFinished_);
@@ -22,6 +144,12 @@
     swapchainViews_.clear();
     imageRenderFinished_.clear();
     imagePresentFences_.clear();
+    retireSwapchainResources(oldSwapchain,
+                             std::move(oldViews),
+                             std::move(oldImageRenderFinished),
+                             std::move(oldImagePresentFences));
+    double const retireMs = phaseMs(phaseStart);
+    phaseStart = std::chrono::steady_clock::now();
     VkSurfaceCapabilitiesKHR caps{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &caps);
     std::uint32_t presentCount = 0;
@@ -105,13 +233,10 @@
     }
     swapchainViews_.resize(count);
     VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VkFenceCreateInfo presentFenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    presentFenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
       vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageRenderFinished_[i]), "vkCreateSemaphore");
       if (!imagePresentFences_.empty()) {
-        vkCheck(vkCreateFence(device_, &presentFenceInfo, nullptr, &imagePresentFences_[i]),
-                "vkCreateFence(presentFence)");
+        imagePresentFences_[i] = createPresentFence(true, "vkCreateFence(presentFence)");
       }
       VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
       view.image = swapchainImages_[i];
@@ -123,30 +248,6 @@
       vkCheck(vkCreateImageView(device_, &view, nullptr, &swapchainViews_[i]), "vkCreateImageView");
     }
     double const imageSetupMs = phaseMs(phaseStart);
-    phaseStart = std::chrono::steady_clock::now();
-    for (VkSemaphore semaphore : oldImageRenderFinished) {
-      if (semaphore)
-        vkDestroySemaphore(device_, semaphore, nullptr);
-    }
-    for (VkFence fence : oldImagePresentFences) {
-      if (fence) {
-        VkResult const waitResult = vkWaitForFences(device_, 1, &fence, VK_TRUE, 1000000000ull);
-        if (waitResult == VK_TIMEOUT) {
-          presentFenceRuntimeDisabled_ = true;
-          std::fprintf(stderr,
-                       "Lambda Vulkan: present fence did not signal before swapchain destroy on window %u\n",
-                       handle_);
-        } else {
-          vkCheck(waitResult, "vkWaitForFences(oldPresentFence)");
-        }
-        vkDestroyFence(device_, fence, nullptr);
-      }
-    }
-    for (VkImageView view : oldViews)
-      vkDestroyImageView(device_, view, nullptr);
-    if (oldSwapchain)
-      vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
-    double const oldDestroyMs = phaseMs(phaseStart);
     swapchainDirty_ = false;
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -155,35 +256,28 @@
           "vulkan-recreate-swapchain",
           "window=%u framebuffer=%dx%d target=%dx%d extent=%ux%u images=%zu "
           "capsCurrent=%ux%u requested=%ux%u "
-          "presentFences=%zu waitFences=%.3fms caps=%.3fms create=%.3fms imageSetup=%.3fms "
-          "oldDestroy=%.3fms elapsed=%.3fms\n",
+          "presentFences=%zu retire=%zu retireQueue=%.3fms caps=%.3fms create=%.3fms imageSetup=%.3fms "
+          "elapsed=%.3fms\n",
                    handle_, framebufferWidth_, framebufferHeight_, swapchainTargetWidth_, swapchainTargetHeight_,
                    swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
                    caps.currentExtent.width, caps.currentExtent.height,
                    requestedExtent.width, requestedExtent.height,
                    imagePresentFences_.size(),
-                   waitFencesMs, capsMs, createMs, imageSetupMs, oldDestroyMs,
+                   retiredSwapchains_.size(), retireMs, capsMs, createMs, imageSetupMs,
                    static_cast<double>(elapsed) / 1000.0);
     }
   }
 
   void destroySwapchain() {
-    for (VkImageView view : swapchainViews_)
-      vkDestroyImageView(device_, view, nullptr);
+    retireSwapchainResources(swapchain_,
+                             std::move(swapchainViews_),
+                             std::move(imageRenderFinished_),
+                             std::move(imagePresentFences_));
+    swapchain_ = VK_NULL_HANDLE;
     swapchainViews_.clear();
     swapchainImages_.clear();
-    for (VkSemaphore semaphore : imageRenderFinished_) {
-      if (semaphore)
-        vkDestroySemaphore(device_, semaphore, nullptr);
-    }
+    imageInFlightFences_.clear();
     imageRenderFinished_.clear();
-    for (VkFence fence : imagePresentFences_) {
-      if (fence)
-        vkDestroyFence(device_, fence, nullptr);
-    }
     imagePresentFences_.clear();
-    if (swapchain_) {
-      vkDestroySwapchainKHR(device_, swapchain_, nullptr);
-      swapchain_ = VK_NULL_HANDLE;
-    }
+    retireSwapchains(true);
   }

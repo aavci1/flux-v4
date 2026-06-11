@@ -286,8 +286,8 @@ Verification on Linux:
 
 What to do:
 
-- [ ] [Auto] Use the existing `oldSwapchain` handoff (`VulkanSwapchain.inc:89`) without draining all frame fences: keep the old swapchain alive in a retire list and destroy it when its images' present fences (maintenance1) or frame fences signal. Only the first-ever create needs no wait at all.
-- [ ] [Auto] Restrict the present-fence wait to swapchain retirement and resource destruction; steady-state presents should rely on acquire back-pressure alone. Keep `presentFenceRuntimeDisabled_` as the escape hatch.
+- [x] [Auto] Use the existing `oldSwapchain` handoff (`VulkanSwapchain.inc:89`) without draining all frame fences: keep the old swapchain alive in a retire list and destroy it when its images' present fences (maintenance1) or frame fences signal. Only the first-ever create needs no wait at all.
+- [x] [Auto] Restrict the present-fence wait to swapchain retirement and resource destruction; steady-state presents should rely on acquire back-pressure alone. Keep `presentFenceRuntimeDisabled_` as the escape hatch.
 - [ ] [Manual] Interactive resize on Wayland: trace `vulkan-recreate-swapchain` and confirm recreate cost no longer scales with frames in flight; extent-headroom growth (only-grow logic at `VulkanCanvasLifecycle.inc:217-224`) still avoids most recreates.
 
 ## FP-14: Client-side pacing — flush on frameDone, avoid double throttling, align platforms

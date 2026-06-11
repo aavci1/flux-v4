@@ -43,6 +43,8 @@
   std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
   std::array<VkSemaphore, kMaxFramesInFlight> imageAvailable_{};
   std::array<VkFence, kMaxFramesInFlight> frameFences_{};
+  std::array<std::uint64_t, kMaxFramesInFlight> frameFenceSubmitGenerations_{};
+  std::array<std::uint64_t, kMaxFramesInFlight> frameFenceCompleteGenerations_{};
   static constexpr std::size_t kNoResetFrameFence = static_cast<std::size_t>(-1);
   std::size_t resetFrameFenceIndex_ = kNoResetFrameFence;
   std::size_t currentFrame_ = 0;
@@ -55,6 +57,7 @@
   std::vector<VkFence> imagePresentFences_;
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkSemaphore> imageRenderFinished_;
+  std::vector<RetiredSwapchain> retiredSwapchains_;
   Texture backdropSceneTexture_;
   Texture backdropScratchTexture_;
   Texture backdropBlurTexture_;

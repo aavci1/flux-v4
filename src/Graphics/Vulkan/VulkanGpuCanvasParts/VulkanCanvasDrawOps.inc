@@ -586,6 +586,14 @@ private:
     bool recycleUploadStaging = false;
   };
 
+  struct RetiredSwapchain {
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    std::vector<VkImageView> views;
+    std::vector<VkSemaphore> renderFinished;
+    std::vector<VkFence> presentFences;
+    std::array<std::uint64_t, kMaxFramesInFlight> frameFenceGenerations{};
+  };
+
   struct CachedBackdropBlur {
     std::uint64_t signature = 0;
     Texture texture;

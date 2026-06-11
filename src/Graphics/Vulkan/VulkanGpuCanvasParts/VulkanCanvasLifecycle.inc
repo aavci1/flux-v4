@@ -432,6 +432,7 @@ public:
 
     auto start = phaseStart();
     vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+    markFrameFenceComplete(currentFrame_);
     double const frameFenceMs = phaseMs(start);
     start = phaseStart();
     pollReadbacks(false);
@@ -470,6 +471,7 @@ public:
     if (imageInFlightFences_[imageIndex]) {
       start = phaseStart();
       vkWaitForFences(device_, 1, &imageInFlightFences_[imageIndex], VK_TRUE, UINT64_MAX);
+      markFrameFenceComplete(imageInFlightFences_[imageIndex]);
       imageFenceMs = phaseMs(start);
     }
     imageInFlightFences_[imageIndex] = frameFence;
@@ -550,6 +552,7 @@ public:
       recoverResetFrameFence();
       vkCheck(submitted, "vkQueueSubmit");
     }
+    markFrameFenceSubmitted(currentFrame_);
     resetFrameFenceIndex_ = kNoResetFrameFence;
     start = phaseStart();
     retireDeferredResourcesAfterSubmit();
@@ -566,7 +569,7 @@ public:
     presentInfo.pImageIndices = &imageIndex;
     VkFence presentFence = VK_NULL_HANDLE;
     VkSwapchainPresentFenceInfoKHR presentFenceInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR};
-    double presentFenceWaitMs = 0.0;
+    double presentFenceStatusMs = 0.0;
     double presentFenceResetMs = 0.0;
     bool const usePresentFence = shared_ && shared_->swapchainMaintenance1 && !presentFenceRuntimeDisabled_ &&
                                  imageIndex < imagePresentFences_.size() &&
@@ -574,22 +577,22 @@ public:
     if (usePresentFence) {
       presentFence = imagePresentFences_[imageIndex];
       start = phaseStart();
-      VkResult const waitResult = vkWaitForFences(device_, 1, &presentFence, VK_TRUE, 1000000000ull);
-      presentFenceWaitMs = phaseMs(start);
-      if (waitResult == VK_TIMEOUT) {
-        presentFenceRuntimeDisabled_ = true;
-        presentFence = VK_NULL_HANDLE;
-        std::fprintf(stderr,
-                     "Lambda Vulkan: disabling present fences after timeout on window %u image %u\n",
-                     handle_, imageIndex);
-      } else {
-        vkCheck(waitResult, "vkWaitForFences(presentFence)");
+      VkResult const fenceStatus = vkGetFenceStatus(device_, presentFence);
+      presentFenceStatusMs = phaseMs(start);
+      if (fenceStatus == VK_SUCCESS) {
         start = phaseStart();
         vkCheck(vkResetFences(device_, 1, &presentFence), "vkResetFences(presentFence)");
         presentFenceResetMs = phaseMs(start);
-        presentFenceInfo.swapchainCount = 1;
-        presentFenceInfo.pFences = &presentFence;
+      } else if (fenceStatus == VK_NOT_READY) {
+        VkFence replacement = createPresentFence(false, "vkCreateFence(presentFence replacement)");
+        retirePresentFence(presentFence);
+        imagePresentFences_[imageIndex] = replacement;
+        presentFence = replacement;
+      } else {
+        vkCheck(fenceStatus, "vkGetFenceStatus(presentFence)");
       }
+      presentFenceInfo.swapchainCount = 1;
+      presentFenceInfo.pFences = &presentFence;
     }
     VkPresentTimeGOOGLE presentTime{.presentID = nextPresentId_, .desiredPresentTime = 0};
     VkPresentTimesInfoGOOGLE presentTimes{VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE};
@@ -602,9 +605,17 @@ public:
       presentFenceInfo.pNext = presentInfo.pNext;
       presentInfo.pNext = &presentFenceInfo;
     }
+    bool const presentFenceQueued = presentFence != VK_NULL_HANDLE;
     start = phaseStart();
     VkResult presented = vkQueuePresentKHR(queue_, &presentInfo);
     double const presentQueueMs = phaseMs(start);
+    bool const presentAccepted = presented == VK_SUCCESS || presented == VK_SUBOPTIMAL_KHR;
+    if (!presentAccepted && presentFence && imageIndex < imagePresentFences_.size() &&
+        imagePresentFences_[imageIndex] == presentFence) {
+      vkDestroyFence(device_, presentFence, nullptr);
+      imagePresentFences_[imageIndex] = createPresentFence(true, "vkCreateFence(presentFence after failed present)");
+      presentFence = VK_NULL_HANDLE;
+    }
     if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR) {
       swapchainDirty_ = true;
     } else {
@@ -624,7 +635,7 @@ public:
           "window=%u image=%u ops=%zu rects=%zu quads=%zu paths=%zu "
           "waitFrame=%.3fms deferred=%.3fms acquire=%.3fms waitImage=%.3fms "
           "atlas=%.3fms blurPrep=%.3fms upload=%.3fms record=%.3fms submit=%.3fms "
-          "screenshot=%.3fms presentFence=%d waitPresentFence=%.3fms resetPresentFence=%.3fms "
+          "screenshot=%.3fms presentFence=%d statusPresentFence=%.3fms resetPresentFence=%.3fms "
           "queuePresent=%.3fms\n",
           handle_,
           imageIndex,
@@ -642,8 +653,8 @@ public:
           recordMs,
           submitMs,
           screenshotMs,
-          presentFence ? 1 : 0,
-          presentFenceWaitMs,
+          presentFenceQueued ? 1 : 0,
+          presentFenceStatusMs,
           presentFenceResetMs,
           presentQueueMs);
     }
@@ -767,6 +778,7 @@ public:
         commandBuffer = commandBuffers_[currentFrame_];
         auto start = phaseStart();
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+        markFrameFenceComplete(currentFrame_);
         waitFrameMs = phaseMs(start);
         pollReadbacks(false);
         start = phaseStart();
@@ -819,6 +831,7 @@ public:
         recoverResetFrameFence();
         vkCheck(submitted, "vkQueueSubmit2");
       }
+      markFrameFenceSubmitted(currentFrame_);
       resetFrameFenceIndex_ = kNoResetFrameFence;
       start = phaseStart();
       retireDeferredResourcesAfterSubmit();

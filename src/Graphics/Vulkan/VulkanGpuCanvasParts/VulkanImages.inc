@@ -266,6 +266,7 @@
     destroyDeferredTextures(false);
     destroyDeferredBuffers(false);
     destroyDeferredOwnedImages(false);
+    retireSwapchains(false);
   }
 
   bool swapchainImageStateReadyForAcquire() const {
