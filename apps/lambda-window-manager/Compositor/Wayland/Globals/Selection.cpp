@@ -291,13 +291,14 @@ void dataOfferDestroy(wl_client*, wl_resource* resource) {
 
 void dataOfferFinish(wl_client*, wl_resource* resource) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
-  if (!offer || !offer->source || !offer->source->resource) return;
-  if (offer->dnd && offer->selectedAction == WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE) {
-    if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
-      wl_data_source_send_cancelled(offer->source->resource);
-    }
+  if (!offer) return;
+  if (!dataOfferCanFinishDnd(offer->dnd, !offer->acceptedMimeType.empty(), offer->selectedAction)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_FINISH,
+                           "wl_data_offer.finish requires an accepted DnD mime type and action");
     return;
   }
+  if (!offer->source || !offer->source->resource) return;
   if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
     wl_data_source_send_dnd_finished(offer->source->resource);
   }
@@ -305,6 +306,12 @@ void dataOfferFinish(wl_client*, wl_resource* resource) {
 void dataOfferSetActions(wl_client*, wl_resource* resource, std::uint32_t actions, std::uint32_t preferredAction) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer) return;
+  if (!dataOfferAcceptsDndActions(offer->dnd)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_OFFER,
+                           "wl_data_offer.set_actions is only valid for DnD offers");
+    return;
+  }
   if (!validDndActionMask(actions)) {
     wl_resource_post_error(resource,
                            WL_DATA_OFFER_ERROR_INVALID_ACTION_MASK,

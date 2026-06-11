@@ -53,3 +53,17 @@ TEST_CASE("data-device DnD action negotiation honors preference then fallback or
                         WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE) ==
         WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK);
 }
+
+TEST_CASE("data-device DnD offer request validation enforces DnD finish rules") {
+  using namespace lambda::compositor;
+
+  CHECK(dataOfferAcceptsDndActions(true));
+  CHECK_FALSE(dataOfferAcceptsDndActions(false));
+
+  CHECK(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE));
+  CHECK(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK));
+  CHECK_FALSE(dataOfferCanFinishDnd(false, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK_FALSE(dataOfferCanFinishDnd(true, false, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK_FALSE(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE));
+}

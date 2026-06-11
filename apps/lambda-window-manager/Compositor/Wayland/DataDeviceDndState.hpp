@@ -42,4 +42,16 @@ inline std::uint32_t chooseDndAction(std::uint32_t sourceActions,
   return WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
 }
 
+inline bool dataOfferAcceptsDndActions(bool dnd) {
+  return dnd;
+}
+
+inline bool dataOfferCanFinishDnd(bool dnd,
+                                  bool hasAcceptedMimeType,
+                                  std::uint32_t selectedAction) {
+  return dnd &&
+         hasAcceptedMimeType &&
+         selectedAction != WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+}
+
 } // namespace lambda::compositor
