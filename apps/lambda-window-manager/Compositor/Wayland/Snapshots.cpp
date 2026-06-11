@@ -138,17 +138,9 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   bool const xdgToplevel = surfaceIsXdgToplevel(surface);
   std::int32_t const committedWidth = committedDisplayWidthForSurface(surface);
   std::int32_t const committedHeight = committedDisplayHeightForSurface(surface);
-  std::int32_t width = displayWidth(surface);
-  std::int32_t height = displayHeight(surface);
-  bool const pendingUncommittedFrame =
-      xdgToplevel &&
-      (surface->awaitingConfigureCommit ||
-       surface->resizeConfigureInFlight ||
-       surface->pendingResizeConfigure);
-  if (pendingUncommittedFrame && committedWidth > 0 && committedHeight > 0) {
-    width = committedWidth;
-    height = committedHeight;
-  }
+  wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+  std::int32_t const width = frameSize.width;
+  std::int32_t const height = frameSize.height;
   ChromeButton hovered = ChromeButton::None;
   if (decorated) {
     auto chromeContext =

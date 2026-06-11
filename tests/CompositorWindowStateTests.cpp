@@ -573,6 +573,39 @@ TEST_CASE("xdg toplevel interactive requests require a configured toplevel surfa
   CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
 }
 
+TEST_CASE("interactive frame size follows committed content while toplevel configure is pending") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  surface.width = 1280;
+  surface.height = 960;
+  surface.bufferState.scale = 2;
+  surface.frameWidth = 900;
+  surface.frameHeight = 700;
+
+  auto live = lambda::compositor::wm::interactiveFrameDisplaySize(&surface);
+  CHECK(live.width == 900);
+  CHECK(live.height == 700);
+  CHECK_FALSE(lambda::compositor::wm::toplevelHasPendingUncommittedFrame(&surface));
+
+  surface.awaitingConfigureCommit = true;
+  auto awaiting = lambda::compositor::wm::interactiveFrameDisplaySize(&surface);
+  CHECK(awaiting.width == 640);
+  CHECK(awaiting.height == 480);
+  CHECK(lambda::compositor::wm::toplevelHasPendingUncommittedFrame(&surface));
+
+  surface.awaitingConfigureCommit = false;
+  surface.resizeConfigureInFlight = true;
+  auto resizing = lambda::compositor::wm::interactiveFrameDisplaySize(&surface);
+  CHECK(resizing.width == 640);
+  CHECK(resizing.height == 480);
+
+  surface.role = lambda::compositor::SurfaceRole::LayerSurface;
+  auto layer = lambda::compositor::wm::interactiveFrameDisplaySize(&surface);
+  CHECK(layer.width == 900);
+  CHECK(layer.height == 700);
+  CHECK_FALSE(lambda::compositor::wm::toplevelHasPendingUncommittedFrame(&surface));
+}
+
 TEST_CASE("xdg toplevel title validation follows strict UTF-8") {
   auto bytes = [](std::initializer_list<unsigned char> values) {
     std::string result;

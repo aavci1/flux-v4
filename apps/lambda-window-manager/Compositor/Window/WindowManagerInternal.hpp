@@ -36,6 +36,11 @@ struct ChromeHitContext {
   bool cutouts = false;
 };
 
+struct FrameDisplaySize {
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+};
+
 enum class ChromeButton {
   None,
   Close,
@@ -46,6 +51,35 @@ enum class ChromeButton {
 ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y);
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface);
+inline bool toplevelHasPendingUncommittedFrame(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsXdgToplevel(surface) &&
+         (surface->awaitingConfigureCommit ||
+          surface->resizeConfigureInFlight ||
+          surface->pendingResizeConfigure);
+}
+inline FrameDisplaySize liveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return {};
+  return {
+      .width = surface->frameWidth > 0
+                   ? surface->frameWidth
+                   : std::max(0, surfaceTransformedBufferWidth(surface) / std::max(1, surface->bufferState.scale)),
+      .height = surface->frameHeight > 0
+                    ? surface->frameHeight
+                    : std::max(0, surfaceTransformedBufferHeight(surface) / std::max(1, surface->bufferState.scale)),
+  };
+}
+inline FrameDisplaySize interactiveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
+  FrameDisplaySize size = liveFrameDisplaySize(surface);
+  if (!toplevelHasPendingUncommittedFrame(surface)) return size;
+
+  std::int32_t const committedWidth = surfaceCommittedDisplayWidth(surface);
+  std::int32_t const committedHeight = surfaceCommittedDisplayHeight(surface);
+  if (committedWidth > 0 && committedHeight > 0) {
+    size.width = committedWidth;
+    size.height = committedHeight;
+  }
+  return size;
+}
 struct ToplevelSizeHints {
   std::int32_t minWidth = 0;
   std::int32_t minHeight = 0;

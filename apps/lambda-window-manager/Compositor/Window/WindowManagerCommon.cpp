@@ -377,8 +377,9 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
   if (popupAt(server, x, y)) return std::nullopt;
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
-    std::int32_t const width = displayWidth(surface);
-    std::int32_t const height = displayHeight(surface);
+    FrameDisplaySize const frameSize = interactiveFrameDisplaySize(surface);
+    std::int32_t const width = frameSize.width;
+    std::int32_t const height = frameSize.height;
     if (!surface || surface->minimized || surfaceIsXdgPopup(surface) || width <= 0 || height <= 0) continue;
 
     float const contentLeft = static_cast<float>(surface->windowX);
@@ -424,8 +425,9 @@ bool controlsRegionContains(ChromeHitContext const& context, float x, float y) {
   if (!context.serverSideDecorated || !context.cutouts) return false;
   auto const& chrome = context.surface->server->chromeConfig_;
   ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome);
-  float const cutoutWidth = std::min(metrics.controlsWidth, static_cast<float>(displayWidth(context.surface)));
-  float const cutoutHeight = std::min(metrics.titleBarHeight, static_cast<float>(displayHeight(context.surface)));
+  FrameDisplaySize const frameSize = interactiveFrameDisplaySize(context.surface);
+  float const cutoutWidth = std::min(metrics.controlsWidth, static_cast<float>(frameSize.width));
+  float const cutoutHeight = std::min(metrics.titleBarHeight, static_cast<float>(frameSize.height));
   return containsPoint(x, y, context.right - cutoutWidth, context.contentTop, context.right, context.contentTop + cutoutHeight);
 }
 
