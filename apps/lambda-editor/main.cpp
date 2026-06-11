@@ -1,5 +1,6 @@
 #include "EditorCommands.hpp"
 #include "EditorDocument.hpp"
+#include "EditorFileWatcher.hpp"
 
 #include <Lambda.hpp>
 #include <Lambda/UI/Events.hpp>
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
@@ -90,6 +92,47 @@ int envPositiveInt(char const* name, int fallback) {
   }
   int parsed = parsePositiveInt(value);
   return parsed > 0 ? parsed : fallback;
+}
+
+std::string envString(char const* name, std::string fallback = {}) {
+  char const* value = std::getenv(name);
+  return value && *value ? std::string{value} : std::move(fallback);
+}
+
+bool writeWholeFile(std::filesystem::path const& path, std::string const& contents) {
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  if (!out) {
+    return false;
+  }
+  out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+  if (!out) {
+    return false;
+  }
+  std::error_code ec;
+  std::filesystem::last_write_time(
+      path,
+      std::filesystem::file_time_type::clock::now() + std::chrono::seconds{5},
+      ec);
+  return !ec;
+}
+
+std::string generatedFileWatchReplacement() {
+  std::string text;
+  for (int i = 1; i <= 120; ++i) {
+    text += "externally replaced line " + std::to_string(i) +
+            " with enough text to exercise scrolling and reload preservation\n";
+  }
+  return text;
+}
+
+char const* watchKindLabel(EditorFileWatchEventKind kind) {
+  switch (kind) {
+  case EditorFileWatchEventKind::Modified:
+    return "modified";
+  case EditorFileWatchEventKind::Missing:
+    return "missing";
+  }
+  return "unknown";
 }
 
 TextInput::Style compactInputStyle() {
@@ -722,6 +765,17 @@ struct CommandPalette {
   }
 };
 
+struct EditorFileWatchAutotestState {
+  std::uint64_t timerId = 0;
+  int step = 0;
+  int ticks = 0;
+  std::filesystem::path path;
+  std::string mode;
+  std::string replacement;
+  int expectedCaret = 0;
+  Point expectedScroll{};
+};
+
 struct LambdaEditor {
   EditorDocument initialDocument = EditorDocument::untitled();
   std::string initialStatus;
@@ -760,6 +814,23 @@ struct LambdaEditor {
     auto commandPaletteSelectedIndex = useState(-1);
     auto commandPaletteScrollOffset = useState(Point{});
     auto commandPaletteFocusGeneration = useState(0);
+    auto editorScrollOffset = useState(Point{});
+    auto fileWatcher = useState<std::shared_ptr<EditorFileWatcher>>(
+        std::make_shared<EditorFileWatcher>());
+    auto watcherReady = useState(false);
+    auto pendingExternalChange = useState(std::optional<EditorFileWatchEvent>{});
+    auto activeExternalToastId = useState<std::uint64_t>(0);
+    auto fileWatchAutotest =
+        useState<std::shared_ptr<EditorFileWatchAutotestState>>(
+            std::make_shared<EditorFileWatchAutotestState>());
+
+    auto toastApi = useToast();
+    auto showToast = std::get<0>(toastApi);
+    auto dismissToast = std::get<1>(toastApi);
+    auto clearToasts = std::get<2>(toastApi);
+    bool const hasVisibleToasts = std::get<3>(toastApi);
+    (void)clearToasts;
+    (void)hasVisibleToasts;
 
     auto refreshHistoryState = [history, canUndo, canRedo] {
       canUndo.set(history.peek()->canUndo());
@@ -770,6 +841,11 @@ struct LambdaEditor {
       history.peek()->reset(EditorSnapshot{.text = text.peek(), .selection = selection.peek()});
       historyReady.set(true);
       refreshHistoryState();
+    }
+
+    if (!watcherReady.peek()) {
+      fileWatcher.peek()->reset(document.peek());
+      watcherReady.set(true);
     }
 
     useEffect([document, window] {
@@ -797,7 +873,17 @@ struct LambdaEditor {
       status.set(std::move(message));
     };
 
-    auto resetToDocument = [document, text, selection, history, refreshHistoryState, status](
+    auto clearExternalPrompt = [pendingExternalChange, activeExternalToastId, dismissToast] {
+      pendingExternalChange.set(std::optional<EditorFileWatchEvent>{});
+      std::uint64_t const toastId = activeExternalToastId.peek();
+      if (toastId != 0) {
+        activeExternalToastId.set(0);
+        dismissToast(toastId);
+      }
+    };
+
+    auto resetToDocument = [document, text, selection, history, refreshHistoryState, status,
+                            editorScrollOffset, fileWatcher, clearExternalPrompt](
                                EditorDocument next, std::string message) {
       detail::TextEditSelection endSelection{
           .caretByte = static_cast<int>(next.text().size()),
@@ -806,8 +892,11 @@ struct LambdaEditor {
       text.set(next.text());
       selection.set(endSelection);
       history.peek()->reset(EditorSnapshot{.text = next.text(), .selection = endSelection});
+      fileWatcher.peek()->reset(next);
       document.set(std::move(next));
       refreshHistoryState();
+      editorScrollOffset.set(Point{});
+      clearExternalPrompt();
       status.set(std::move(message));
     };
 
@@ -855,12 +944,14 @@ struct LambdaEditor {
           },
       });
     };
-    auto saveFileAs = [document, text, status, showFileDialog] mutable {
+    auto saveFileAs = [document, text, status, showFileDialog, fileWatcher,
+                       clearExternalPrompt] mutable {
       showFileDialog(FileDialog{
           .mode = FileDialogMode::Save,
           .initialDirectory = documentDirectory(document.peek()),
           .initialName = saveDialogInitialName(document.peek()),
-          .onAccept = [document, text, status](std::filesystem::path path) {
+          .onAccept = [document, text, status, fileWatcher, clearExternalPrompt](
+                          std::filesystem::path path) {
             EditorDocument current = document.peek();
             current.setText(text.peek());
             EditorDocumentResult result = saveDocumentAs(current, path.string());
@@ -868,12 +959,15 @@ struct LambdaEditor {
             if (result.ok) {
               document.set(result.document);
               text.set(result.document.text());
+              fileWatcher.peek()->reset(result.document);
+              clearExternalPrompt();
             }
             return result.ok;
           },
       });
     };
-    auto saveFile = [document, text, status, saveFileAs] mutable {
+    auto saveFile = [document, text, status, saveFileAs, fileWatcher,
+                     clearExternalPrompt] mutable {
       EditorDocument current = document.peek();
       current.setText(text.peek());
       EditorDocumentResult result = saveDocument(current);
@@ -881,10 +975,354 @@ struct LambdaEditor {
       if (result.ok) {
         document.set(result.document);
         text.set(result.document.text());
+        fileWatcher.peek()->reset(result.document);
+        clearExternalPrompt();
       } else if (result.needsPath) {
         saveFileAs();
       }
     };
+
+    auto reloadExternalChange = [document, text, selection, history, refreshHistoryState,
+                                 status, editorScrollOffset, fileWatcher,
+                                 clearExternalPrompt, pendingExternalChange] {
+      std::optional<EditorFileWatchEvent> event = pendingExternalChange.peek();
+      if (!event || event->kind != EditorFileWatchEventKind::Modified) {
+        return;
+      }
+
+      Point const preservedScroll = editorScrollOffset.peek();
+      detail::TextEditSelection const preservedSelection = selection.peek();
+      EditorDocumentResult result = openDocument(event->path.string());
+      if (!result.ok) {
+        status.set(result.status);
+        return;
+      }
+
+      detail::TextEditSelection const clampedSelection =
+          detail::clampSelection(result.document.text(), preservedSelection);
+      text.set(result.document.text());
+      selection.set(clampedSelection);
+      history.peek()->reset(EditorSnapshot{
+          .text = result.document.text(),
+          .selection = clampedSelection,
+      });
+      document.set(result.document);
+      refreshHistoryState();
+      editorScrollOffset.set(preservedScroll);
+      fileWatcher.peek()->reset(result.document);
+      clearExternalPrompt();
+      status.set("Reloaded " + result.document.displayName() + ".");
+      std::fprintf(stderr,
+                   "lambda-editor-watch: reloaded path=\"%s\" bytes=%zu caret=%d anchor=%d scroll_y=%.3f\n",
+                   result.document.pathText().c_str(),
+                   result.document.text().size(),
+                   clampedSelection.caretByte,
+                   clampedSelection.anchorByte,
+                   preservedScroll.y);
+    };
+
+    auto showExternalChangePrompt = [showToast, dismissToast, saveFileAs,
+                                     reloadExternalChange, fileWatcher,
+                                     pendingExternalChange, activeExternalToastId,
+                                     status](EditorFileWatchEvent event) mutable {
+      std::uint64_t const previousToastId = activeExternalToastId.peek();
+      if (previousToastId != 0) {
+        pendingExternalChange.set(std::optional<EditorFileWatchEvent>{});
+        activeExternalToastId.set(0);
+        dismissToast(previousToastId);
+      }
+
+      pendingExternalChange.set(event);
+      std::string displayName = event.path.filename().string();
+      if (displayName.empty()) {
+        displayName = event.path.string();
+      }
+
+      Toast toast;
+      toast.placement = ToastPlacement::BottomTrailing;
+      toast.autoDismissMs = 0;
+      toast.showCloseButton = true;
+      toast.minWidth = 360.f;
+      toast.maxWidth = 460.f;
+      toast.tone = event.kind == EditorFileWatchEventKind::Modified ? ToastTone::Warning
+                                                                     : ToastTone::Danger;
+      if (event.kind == EditorFileWatchEventKind::Modified) {
+        toast.title = "File changed on disk";
+        toast.message = event.localDirty
+            ? "Reloading " + displayName + " will discard unsaved edits."
+            : displayName + " changed outside the editor.";
+        toast.action = ToastAction{
+            .label = "Reload",
+            .variant = ButtonVariant::Secondary,
+            .dismissOnTap = false,
+            .action = reloadExternalChange,
+        };
+      } else {
+        toast.title = "File no longer exists";
+        toast.message = event.localDirty
+            ? displayName + " disappeared outside the editor. Save As keeps your unsaved edits."
+            : displayName + " disappeared outside the editor.";
+        toast.action = ToastAction{
+            .label = "Save As",
+            .variant = ButtonVariant::Secondary,
+            .dismissOnTap = false,
+            .action = saveFileAs,
+        };
+      }
+      toast.onDismiss = [fileWatcher, pendingExternalChange, activeExternalToastId, status] {
+        if (pendingExternalChange.peek()) {
+          fileWatcher.peek()->dismissPending();
+          pendingExternalChange.set(std::optional<EditorFileWatchEvent>{});
+          status.set("External file change dismissed.");
+        }
+        activeExternalToastId.set(0);
+      };
+
+      std::uint64_t const toastId = showToast(std::move(toast));
+      activeExternalToastId.set(toastId);
+      status.set(event.kind == EditorFileWatchEventKind::Modified
+                     ? "File changed outside the editor."
+                     : "File disappeared outside the editor.");
+      std::fprintf(stderr,
+                   "lambda-editor-watch: prompt kind=%s dirty=%d path=\"%s\"\n",
+                   watchKindLabel(event.kind),
+                   event.localDirty ? 1 : 0,
+                   event.path.string().c_str());
+    };
+
+    auto dismissExternalChange = [fileWatcher, pendingExternalChange, activeExternalToastId,
+                                  dismissToast, status] {
+      if (!pendingExternalChange.peek()) {
+        return;
+      }
+      fileWatcher.peek()->dismissPending();
+      pendingExternalChange.set(std::optional<EditorFileWatchEvent>{});
+      std::uint64_t const toastId = activeExternalToastId.peek();
+      if (toastId != 0) {
+        activeExternalToastId.set(0);
+        dismissToast(toastId);
+      }
+      status.set("External file change dismissed.");
+    };
+
+    if (Application::hasInstance()) {
+      auto watchTimerId = std::make_shared<std::uint64_t>(
+          Application::instance().scheduleRepeatingTimer(std::chrono::milliseconds{500},
+                                                         window ? window->handle() : 0u));
+      Application::instance().eventQueue().on<TimerEvent>(
+          [watchTimerId, document, fileWatcher, showExternalChangePrompt](TimerEvent const& event) mutable {
+            if (!watchTimerId || *watchTimerId == 0 || event.timerId != *watchTimerId) {
+              return;
+            }
+            if (std::optional<EditorFileWatchEvent> watchEvent =
+                    fileWatcher.peek()->poll(document.peek())) {
+              showExternalChangePrompt(*watchEvent);
+              if (Application::hasInstance()) {
+                Application::instance().requestRedraw();
+              }
+            }
+          });
+      onCleanup([watchTimerId] {
+        if (watchTimerId && *watchTimerId != 0 && Application::hasInstance()) {
+          Application::instance().cancelTimer(*watchTimerId);
+          *watchTimerId = 0;
+        }
+      });
+    }
+
+    if (!envString("LAMBDA_EDITOR_AUTOTEST_FILE_WATCH").empty() && Application::hasInstance()) {
+      std::shared_ptr<EditorFileWatchAutotestState> state = fileWatchAutotest.peek();
+      if (state && state->timerId == 0) {
+        if (!document.peek().hasPath()) {
+          std::fprintf(stderr, "lambda-editor-watch-autotest: initial document has no path\n");
+          std::exit(20);
+        }
+        state->path = document.peek().path();
+        state->mode = envString("LAMBDA_EDITOR_AUTOTEST_FILE_WATCH_MODE", "modified");
+        if (state->mode != "modified" && state->mode != "missing") {
+          std::fprintf(stderr,
+                       "lambda-editor-watch-autotest: unsupported mode: %s\n",
+                       state->mode.c_str());
+          std::exit(21);
+        }
+        if (state->mode == "modified") {
+          std::string replacementPath = envString("LAMBDA_EDITOR_AUTOTEST_FILE_WATCH_TEXT_FILE");
+          if (!replacementPath.empty()) {
+            std::optional<std::string> replacement = readWholeFile(replacementPath);
+            if (!replacement) {
+              std::fprintf(stderr,
+                           "lambda-editor-watch-autotest: failed to read replacement file: %s\n",
+                           replacementPath.c_str());
+              std::exit(22);
+            }
+            state->replacement = std::move(*replacement);
+          } else {
+            state->replacement = envString("LAMBDA_EDITOR_AUTOTEST_FILE_WATCH_TEXT",
+                                           generatedFileWatchReplacement());
+          }
+        }
+        int const requestedCaret = envPositiveInt("LAMBDA_EDITOR_AUTOTEST_FILE_WATCH_CARET", 64);
+        state->expectedCaret = std::min(requestedCaret, static_cast<int>(text.peek().size()));
+        state->expectedScroll =
+            Point{0.f, static_cast<float>(envPositiveInt("LAMBDA_EDITOR_AUTOTEST_FILE_WATCH_SCROLL_Y", 160))};
+        state->timerId =
+            Application::instance().scheduleRepeatingTimer(std::chrono::milliseconds{100},
+                                                           window ? window->handle() : 0u);
+        Application::instance().eventQueue().on<TimerEvent>(
+            [state, text, selection, editorScrollOffset, pendingExternalChange,
+             reloadExternalChange, dismissExternalChange](TimerEvent const& event) {
+              if (!state || state->timerId == 0 || event.timerId != state->timerId) {
+                return;
+              }
+
+              auto fail = [state](int code, char const* message) {
+                std::fprintf(stderr,
+                             "lambda-editor-watch-autotest: failed code=%d step=%d ticks=%d %s\n",
+                             code,
+                             state->step,
+                             state->ticks,
+                             message);
+                if (Application::hasInstance()) {
+                  Application::instance().cancelTimer(state->timerId);
+                }
+                state->timerId = 0;
+                std::exit(code);
+              };
+              auto finish = [state] {
+                if (Application::hasInstance()) {
+                  Application::instance().cancelTimer(state->timerId);
+                  Application::instance().quit();
+                }
+                state->timerId = 0;
+              };
+
+              ++state->ticks;
+              if (state->ticks > 120) {
+                fail(22, "timed out");
+                return;
+              }
+
+              if (state->step == 0) {
+                detail::TextEditSelection const expectedSelection{
+                    .caretByte = state->expectedCaret,
+                    .anchorByte = state->expectedCaret,
+                };
+                selection.set(expectedSelection);
+                editorScrollOffset.set(state->expectedScroll);
+                std::fprintf(stderr,
+                             "lambda-editor-watch-autotest: initialized caret=%d scroll_y=%.3f path=\"%s\"\n",
+                             state->expectedCaret,
+                             state->expectedScroll.y,
+                             state->path.string().c_str());
+                state->step = 1;
+                if (Application::hasInstance()) {
+                  Application::instance().requestRedraw();
+                }
+                return;
+              }
+
+              if (state->step == 1) {
+                if (state->mode == "missing") {
+                  std::error_code ec;
+                  bool const removed = std::filesystem::remove(state->path, ec);
+                  if (ec || !removed) {
+                    fail(23, "could not remove watched file");
+                    return;
+                  }
+                  std::fprintf(stderr,
+                               "lambda-editor-watch-autotest: external-remove path=\"%s\"\n",
+                               state->path.string().c_str());
+                } else {
+                  if (!writeWholeFile(state->path, state->replacement)) {
+                    fail(24, "could not write replacement");
+                    return;
+                  }
+                  std::fprintf(stderr,
+                               "lambda-editor-watch-autotest: external-write bytes=%zu\n",
+                               state->replacement.size());
+                }
+                state->step = 2;
+                return;
+              }
+
+              if (state->step == 2) {
+                std::optional<EditorFileWatchEvent> event = pendingExternalChange.peek();
+                if (!event) {
+                  return;
+                }
+                EditorFileWatchEventKind const expectedKind =
+                    state->mode == "missing" ? EditorFileWatchEventKind::Missing
+                                             : EditorFileWatchEventKind::Modified;
+                if (event->kind != expectedKind) {
+                  fail(24, "unexpected prompt kind");
+                  return;
+                }
+                if (state->mode == "missing") {
+                  std::fprintf(stderr,
+                               "lambda-editor-watch-autotest: missing-prompt-observed dirty=%d path=\"%s\"\n",
+                               event->localDirty ? 1 : 0,
+                               event->path.string().c_str());
+                  dismissExternalChange();
+                } else {
+                  std::fprintf(stderr,
+                               "lambda-editor-watch-autotest: prompt-observed dirty=%d path=\"%s\"\n",
+                               event->localDirty ? 1 : 0,
+                               event->path.string().c_str());
+                  reloadExternalChange();
+                }
+                state->step = 3;
+                if (Application::hasInstance()) {
+                  Application::instance().requestRedraw();
+                }
+                return;
+              }
+
+              if (state->step == 3) {
+                if (state->mode == "missing") {
+                  if (pendingExternalChange.peek()) {
+                    fail(25, "missing prompt did not dismiss");
+                    return;
+                  }
+                  std::fprintf(stderr,
+                               "lambda-editor-watch-autotest: missing-verified path=\"%s\"\n",
+                               state->path.string().c_str());
+                  finish();
+                  return;
+                }
+
+                int const expectedCaret =
+                    std::min(state->expectedCaret, static_cast<int>(state->replacement.size()));
+                detail::TextEditSelection const actualSelection = selection.peek();
+                Point const actualScroll = editorScrollOffset.peek();
+                if (text.peek() != state->replacement) {
+                  fail(26, "reloaded text mismatch");
+                  return;
+                }
+                if (actualSelection.caretByte != expectedCaret ||
+                    actualSelection.anchorByte != expectedCaret) {
+                  fail(27, "caret was not preserved or clamped");
+                  return;
+                }
+                if (std::abs(actualScroll.y - state->expectedScroll.y) > 0.5f) {
+                  fail(28, "scroll offset was not preserved");
+                  return;
+                }
+                std::fprintf(stderr,
+                             "lambda-editor-watch-autotest: verified bytes=%zu caret=%d scroll_y=%.3f\n",
+                             state->replacement.size(),
+                             actualSelection.caretByte,
+                             actualScroll.y);
+                finish();
+              }
+            });
+        onCleanup([state] {
+          if (state && state->timerId != 0 && Application::hasInstance()) {
+            Application::instance().cancelTimer(state->timerId);
+            state->timerId = 0;
+          }
+        });
+      }
+    }
 
     auto undo = [history, applySnapshot] {
       if (std::optional<EditorSnapshot> snapshot = history.peek()->undo()) {
@@ -1114,6 +1552,25 @@ struct LambdaEditor {
         .icon = IconName::SaveAs,
         .shortcut = ctrlShortcut(keys::S, Modifiers::Shift),
         .isEnabled = [] { return true; },
+    });
+    useWindowCommand("file.reloadExternalChange", reloadExternalChange, CommandDescriptor{
+        .title = "Reload Changed File",
+        .category = "File",
+        .icon = IconName::Refresh,
+        .paletteVisible = false,
+        .isEnabled = [pendingExternalChange] {
+          std::optional<EditorFileWatchEvent> event = pendingExternalChange.peek();
+          return event && event->kind == EditorFileWatchEventKind::Modified;
+        },
+    });
+    useWindowCommand("file.dismissExternalChange", dismissExternalChange, CommandDescriptor{
+        .title = "Dismiss External File Change",
+        .category = "File",
+        .icon = IconName::Close,
+        .paletteVisible = false,
+        .isEnabled = [pendingExternalChange] {
+          return pendingExternalChange.peek().has_value();
+        },
     });
     useWindowCommand("edit.undo", undo, CommandDescriptor{
         .title = "Undo",
@@ -1360,9 +1817,10 @@ struct LambdaEditor {
         });
 
     auto editorArea = [text, selection, document, history, refreshHistoryState,
-                       editorStyle](bool wrap) {
+                       editorStyle, editorScrollOffset](bool wrap) {
       return ScrollView{
           .axis = wrap ? ScrollAxis::Vertical : ScrollAxis::Both,
+          .scrollOffset = editorScrollOffset,
           .children = children(
               TextInput{
                   .value = text,

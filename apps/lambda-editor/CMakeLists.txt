@@ -5,4 +5,5 @@ lambda_add_app(lambda-editor
   SOURCES
     EditorCommands.cpp
     EditorDocument.cpp
+    EditorFileWatcher.cpp
     main.cpp)

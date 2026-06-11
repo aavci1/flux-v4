@@ -12,7 +12,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-007 | Bug | Minimized windows and dock previews are not wired across Window Manager and Shell | Medium | P2 |
 | TODO-008 | Bug | Live resize can stretch stale window content | Medium | P1 |
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
-| TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
 | TODO-015 | Feature | Add a cross-window command registry and command palette | N/A | P2 |
 | TODO-016 | Bug | useAutoFocus cannot focus targets inside nested child components | Medium | P2 |
@@ -58,20 +57,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Keep system `mimeapps.list` support for installed apps, but local Flux app associations should work in a build-tree/development run without writing desktop files to the user's system.
 - [ ] [Auto] Add or update tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
 - [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, and SVG files from Files.
-
-## TODO-013: Add Editor file watcher with reload prompt
-
-- [ ] [Auto] In the Editor app, watch the currently opened file for external changes.
-- [ ] [Auto + Manual] When the watched file changes outside the Editor app, show a non-blocking, non-intrusive bottom-right banner/toast asking whether to reload the file instead of reloading automatically.
-- [ ] [Auto + Manual] The reload banner/toast should be easy to ignore and should not block editing, scrolling, toolbar actions, window movement, or window close.
-- [ ] [Auto + Manual] Provide clear Reload and Dismiss actions in the banner/toast.
-- [ ] [Auto] Do not show the reload banner/toast for saves initiated by the same Editor instance.
-- [ ] [Auto] If the user reloads, preserve the current scroll position and caret position when possible; if the file changed enough that the exact position no longer exists, clamp to the nearest valid position.
-- [ ] [Auto + Manual] If the buffer has unsaved local changes, the banner/toast should clearly communicate that reloading will discard those edits, and the user should be able to ignore local changes and reload in one action.
-- [ ] [Auto + Manual] If the watched file is deleted or renamed externally, show a similar non-blocking bottom-right banner/toast explaining that the file disappeared, with Dismiss and Save As actions.
-- [ ] [Auto] Update the watcher when the user opens a different file, creates a new file, or closes the document, and avoid leaving stale watchers running.
-- [ ] [Auto] Coalesce duplicate filesystem events so one external save produces one reload prompt.
-- [ ] [Auto] Automate verification if possible by opening a file in Editor, changing it externally, asserting the reload banner/toast appears, accepting reload, and checking that scroll and caret position are preserved.
 
 ## TODO-014: Tooltips are not showing
 

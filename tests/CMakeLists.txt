@@ -20,6 +20,8 @@ set(_lambda_test_sources
   EditorCommandsTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorDocument.cpp
   EditorDocumentTests.cpp
+  ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorFileWatcher.cpp
+  EditorFileWatcherTests.cpp
   EnvironmentKeyOtherTU.cpp
   EnvironmentKeyTests.cpp
   EventQueueTests.cpp
