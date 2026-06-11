@@ -824,6 +824,24 @@ TEST_CASE("xdg toplevel pending size hints are validated as commit state") {
   CHECK_FALSE(lambda::compositor::wm::toplevelPendingSizeHintsValid(&toplevel));
 }
 
+TEST_CASE("xdg resize configure gate allows acked interactive resize updates") {
+  auto idle = lambda::compositor::xdgResizeConfigureGate(false, false, false);
+  CHECK(idle.sendConfigure);
+  CHECK_FALSE(idle.rememberPending);
+
+  auto duplicate = lambda::compositor::xdgResizeConfigureGate(true, false, true);
+  CHECK_FALSE(duplicate.sendConfigure);
+  CHECK_FALSE(duplicate.rememberPending);
+
+  auto beforeAck = lambda::compositor::xdgResizeConfigureGate(true, false, false);
+  CHECK_FALSE(beforeAck.sendConfigure);
+  CHECK(beforeAck.rememberPending);
+
+  auto afterAck = lambda::compositor::xdgResizeConfigureGate(true, true, false);
+  CHECK(afterAck.sendConfigure);
+  CHECK_FALSE(afterAck.rememberPending);
+}
+
 TEST_CASE("xdg toplevel size hints clamp interactive resize geometry around anchored edges") {
   using lambda::compositor::ResizeEdge;
   using lambda::compositor::WindowGeometry;

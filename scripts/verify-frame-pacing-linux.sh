@@ -129,6 +129,14 @@ summarize_resize_storm() {
   local label="$2"
   local resize_events
   resize_events=$(rg -c 'resize-configure|ack-configure .* configure=[1-9][0-9]*x[1-9][0-9]*' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local resize_defers
+  resize_defers=$(rg -c 'resize-configure-defer' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local resize_replacements
+  resize_replacements=$(rg -c 'resize-configure-replace-acked' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local resize_acks
+  resize_acks=$(rg -c 'ack-configure .* configure=[1-9][0-9]*x[1-9][0-9]*' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local resize_commits
+  resize_commits=$(rg -c 'commit-match-(shm|dmabuf).* configureSerial=.* configure=[1-9][0-9]*x[1-9][0-9]*' "$dir/compositor.log" 2>/dev/null || echo 0)
   local sizing_blocks
   sizing_blocks=$(awk '
     function phrase(pattern, key,    raw) {
@@ -143,7 +151,8 @@ summarize_resize_storm() {
     }
     END { printf "%.0f\n", sizing }
   ' "$dir/cpu.log" 2>/dev/null || echo 0)
-  printf 'SUMMARY %s resize_events=%s sizing_cache_blocks=%s\n' "$label" "$resize_events" "$sizing_blocks"
+  printf 'SUMMARY %s resize_events=%s resize_defers=%s resize_replacements=%s resize_acks=%s resize_commits=%s sizing_cache_blocks=%s\n' \
+    "$label" "$resize_events" "$resize_defers" "$resize_replacements" "$resize_acks" "$resize_commits" "$sizing_blocks"
   if [[ "$resize_events" -le 0 || "$sizing_blocks" -le 0 ]]; then
     return 1
   fi

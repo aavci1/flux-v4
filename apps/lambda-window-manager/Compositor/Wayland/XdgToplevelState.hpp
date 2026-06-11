@@ -27,6 +27,24 @@ namespace lambda::compositor {
   return xdgToplevelMapped(parent) ? parent : nullptr;
 }
 
+struct XdgResizeConfigureGate {
+  bool sendConfigure = true;
+  bool rememberPending = false;
+};
+
+[[nodiscard]] inline XdgResizeConfigureGate xdgResizeConfigureGate(bool inFlight,
+                                                                   bool acked,
+                                                                   bool sameAsInFlight) {
+  if (!inFlight) return {};
+  if (sameAsInFlight) {
+    return XdgResizeConfigureGate{.sendConfigure = false, .rememberPending = false};
+  }
+  if (!acked) {
+    return XdgResizeConfigureGate{.sendConfigure = false, .rememberPending = true};
+  }
+  return XdgResizeConfigureGate{.sendConfigure = true, .rememberPending = false};
+}
+
 inline bool resetXdgToplevelClientStateForUnmap(WaylandServer::Impl::XdgToplevel* toplevel) {
   if (!toplevel) return false;
   bool const changed = toplevel->mapped ||

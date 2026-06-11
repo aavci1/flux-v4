@@ -211,28 +211,44 @@ bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
     bool const sameAsInFlight =
         x == surface->resizeConfigureX && y == surface->resizeConfigureY &&
         width == surface->resizeConfigureWidth && height == surface->resizeConfigureHeight;
-    surface->pendingResizeConfigure = !sameAsInFlight;
-    surface->pendingResizeConfigureX = sameAsInFlight ? 0 : x;
-    surface->pendingResizeConfigureY = sameAsInFlight ? 0 : y;
-    surface->pendingResizeConfigureWidth = sameAsInFlight ? 0 : width;
-    surface->pendingResizeConfigureHeight = sameAsInFlight ? 0 : height;
-    if (!sameAsInFlight) {
-      LAMBDA_RESIZE_TRACE("compositor",
-                                  "resize-configure-defer surface=%llu desired=%d,%d %dx%d inFlight=%u %d,%d %dx%d "
-                                  "acked=%d\n",
-                                  static_cast<unsigned long long>(surface->id),
-                                  x,
-                                  y,
-                                  width,
-                                  height,
-                                  surface->resizeConfigureSerial,
-                                  surface->resizeConfigureX,
-                                  surface->resizeConfigureY,
-                                  surface->resizeConfigureWidth,
-                                  surface->resizeConfigureHeight,
-                                  surface->resizeConfigureAcked ? 1 : 0);
+    XdgResizeConfigureGate const gate =
+        xdgResizeConfigureGate(true, surface->resizeConfigureAcked, sameAsInFlight);
+    if (!gate.sendConfigure) {
+      surface->pendingResizeConfigure = gate.rememberPending;
+      surface->pendingResizeConfigureX = gate.rememberPending ? x : 0;
+      surface->pendingResizeConfigureY = gate.rememberPending ? y : 0;
+      surface->pendingResizeConfigureWidth = gate.rememberPending ? width : 0;
+      surface->pendingResizeConfigureHeight = gate.rememberPending ? height : 0;
+      if (gate.rememberPending) {
+        LAMBDA_RESIZE_TRACE("compositor",
+                            "resize-configure-defer surface=%llu desired=%d,%d %dx%d "
+                            "inFlight=%u %d,%d %dx%d acked=%d\n",
+                            static_cast<unsigned long long>(surface->id),
+                            x,
+                            y,
+                            width,
+                            height,
+                            surface->resizeConfigureSerial,
+                            surface->resizeConfigureX,
+                            surface->resizeConfigureY,
+                            surface->resizeConfigureWidth,
+                            surface->resizeConfigureHeight,
+                            surface->resizeConfigureAcked ? 1 : 0);
+      }
+      return false;
     }
-    return false;
+    LAMBDA_RESIZE_TRACE("compositor",
+                        "resize-configure-replace-acked surface=%llu desired=%d,%d %dx%d previous=%u %d,%d %dx%d\n",
+                        static_cast<unsigned long long>(surface->id),
+                        x,
+                        y,
+                        width,
+                        height,
+                        surface->resizeConfigureSerial,
+                        surface->resizeConfigureX,
+                        surface->resizeConfigureY,
+                        surface->resizeConfigureWidth,
+                        surface->resizeConfigureHeight);
   }
 
   if (!surface->awaitingConfigureCommit &&
