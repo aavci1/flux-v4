@@ -38,9 +38,9 @@ struct ScrollView : ViewModifiers<ScrollView> {
     /// Enables pointer drag-to-scroll in addition to wheel / trackpad scrolling.
     bool dragScrollEnabled = true;
     /// Optional tap handler attached to the scroll viewport itself.
-    std::function<void(MouseButton, Modifiers)> onTap;
+    std::function<void(MouseButton, Modifiers)> onTap{};
     /// Content children. Most callers pass a single layout container such as `VStack`.
-    std::vector<Element> children;
+    std::vector<Element> children{};
 
     /// Custom measurement hook used by the measured-component pipeline.
     Size measure(MeasureContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;

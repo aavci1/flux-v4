@@ -55,7 +55,7 @@ struct Popover : ViewModifiers<Popover> {
 
   /// Maximum size of the popover content area (excluding arrow).
   /// nullopt = size to content, clamped to window bounds.
-  std::optional<Size> maxSize;
+  std::optional<Size> maxSize{};
 
   /// Full-window dim behind the popover. Default `Color::theme()` uses `Theme::popoverScrimColor`.
   Color backdropColor = Color::theme();
@@ -63,7 +63,7 @@ struct Popover : ViewModifiers<Popover> {
   float backdropBlurRadius = kFloatFromTheme;
 
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).
-  std::optional<float> anchorMaxHeight;
+  std::optional<float> anchorMaxHeight{};
 
   /// Expands the resolved anchor rect before placement (useful when the visible trigger chrome is
   /// larger than the composite layout rect, such as fields that add outer padding modifiers).
@@ -73,7 +73,7 @@ struct Popover : ViewModifiers<Popover> {
 
   bool dismissOnEscape = true;
   bool dismissOnOutsideTap = true;
-  std::function<void()> onDismiss;
+  std::function<void()> onDismiss{};
 
   /// When true (default), \ref usePopover prefers the last pointer-down tap anchor (same resolution
   /// as popover-demo: \c forLeafKeyPrefix on the tap leaf). Set false when using \ref useHoverLeafAnchor
@@ -90,14 +90,14 @@ struct Popover : ViewModifiers<Popover> {
   bool useFocusAnchor = false;
 
   /// When set, \ref usePopover uses this window-space rect as the anchor (skips tap, hover, and key lookup).
-  std::optional<Rect> anchorRectOverride;
+  std::optional<Rect> anchorRectOverride{};
 
   /// Set when presenting via \ref usePopover (initial resolve) and on each overlay rebuild when
   /// \ref OverlayConfig::popoverPreferredPlacement is set.
   PopoverPlacement resolvedPlacement = placement;
 
   /// Optional debug label for anchor/placement instrumentation.
-  std::string debugName;
+  std::string debugName{};
 
   // ── Component protocol ─────────────────────────────────────────────────────
 

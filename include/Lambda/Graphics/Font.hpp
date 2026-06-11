@@ -14,7 +14,7 @@ namespace lambda {
 /// `weight <= 0` inherits from the preceding resolved style; for UI `Text`, use concrete defaults
 /// (e.g. size 16, weight 400).
 struct Font {
-  std::string family;
+  std::string family{};
   float size = 0.f;
   float weight = 0.f;
   bool italic = false;

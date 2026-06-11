@@ -70,7 +70,7 @@ struct InputEvent {
   /// Backend input serial for operations that must be tied to the triggering user event.
   /// Wayland uses this for xdg_toplevel.move/resize. Other backends leave it at 0.
   std::uint32_t platformSerial = 0;
-  std::string text;
+  std::string text{};
 };
 
 /// Posted when an `Application`-scheduled repeating timer fires (main queue / run loop).
@@ -93,7 +93,7 @@ struct FrameEvent {
 
 struct CustomEvent {
   std::uint32_t type = 0;
-  std::any payload;
+  std::any payload{};
 };
 
 using Event = std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, TimerEvent, FrameEvent, CustomEvent>;
