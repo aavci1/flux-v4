@@ -42,6 +42,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -117,12 +118,46 @@ struct WaylandPopoverSurfaceState {
   bool rendering = false;
   bool closeAfterEvent = false;
   bool closing = false;
+  std::uint64_t renderCount = 0;
+  std::uint64_t redrawRequestCount = 0;
+  std::uint64_t frameRequestCount = 0;
+  std::uint64_t frameDoneCount = 0;
 };
 
 std::atomic<unsigned int> gNextHandle{1};
 std::int64_t nowNanos() {
   using namespace std::chrono;
   return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+bool waylandPopoverTraceEnabled() {
+  static int cached = -1;
+  if (cached < 0) {
+    cached = debug::envTruthy(std::getenv("LAMBDA_WAYLAND_POPOVER_TRACE")) ? 1 : 0;
+  }
+  return cached != 0;
+}
+
+void tracePopover(WaylandPopoverSurfaceState const& state,
+                  char const* event,
+                  char const* reason = "") {
+  if (!waylandPopoverTraceEnabled()) return;
+  std::fprintf(stderr,
+               "%.3fms wayland-popover: event=%s reason=%s id=%" PRIu64
+               " committed=%d redraw=%d rendering=%d frameCallback=%d renders=%" PRIu64
+               " redrawRequests=%" PRIu64 " frameRequests=%" PRIu64 " frameDones=%" PRIu64 "\n",
+               static_cast<double>(nowNanos()) / 1'000'000.0,
+               event ? event : "",
+               reason ? reason : "",
+               state.id.value,
+               state.committed ? 1 : 0,
+               state.redrawRequested ? 1 : 0,
+               state.rendering ? 1 : 0,
+               state.frameCallback ? 1 : 0,
+               state.renderCount,
+               state.redrawRequestCount,
+               state.frameRequestCount,
+               state.frameDoneCount);
 }
 
 float safeScale(float scale) { return std::max(0.25f, scale); }
@@ -1246,6 +1281,7 @@ public:
     xdg_positioner_destroy(positioner);
 
     wl_surface_commit(state->surface);
+    tracePopover(*state, "show");
     flushWaylandDisplay(shared_, "popover show");
     popovers_.push_back(std::move(state));
     return id;
@@ -1635,10 +1671,12 @@ private:
     }
   }
 
-  void renderPopover(WaylandPopoverSurfaceState& state) {
+  void renderPopover(WaylandPopoverSurfaceState& state, char const* reason = "redraw") {
     if (state.closing || !state.host || !ensurePopoverCanvas(state)) {
       return;
     }
+    bool const committedBefore = state.committed;
+    bool const frameCallbackBefore = state.frameCallback != nullptr;
     state.redrawRequested = false;
     state.rendering = true;
     try {
@@ -1657,6 +1695,20 @@ private:
       return;
     }
     flushWaylandDisplay(shared_, "popover render");
+    ++state.renderCount;
+    tracePopover(state,
+                 "render",
+                 reason ? reason : (committedBefore ? "committed" : "initial"));
+    if (waylandPopoverTraceEnabled()) {
+      std::fprintf(stderr,
+                   "%.3fms wayland-popover-detail: event=render id=%" PRIu64
+                   " reason=%s committed_before=%d frame_callback_before=%d\n",
+                   static_cast<double>(nowNanos()) / 1'000'000.0,
+                   state.id.value,
+                   reason ? reason : "",
+                   committedBefore ? 1 : 0,
+                   frameCallbackBefore ? 1 : 0);
+    }
     if (state.redrawRequested && state.committed) {
       requestPopoverFrame(state);
     }
@@ -1671,6 +1723,8 @@ private:
     wl_callback_add_listener(state.frameCallback, &popoverFrameCallbackListener_, &state);
     wl_surface_damage_buffer(state.surface, 0, 0, 1, 1);
     wl_surface_commit(state.surface);
+    ++state.frameRequestCount;
+    tracePopover(state, "frame-request");
     flushWaylandDisplay(shared_, "popover frame request");
   }
 
@@ -1679,12 +1733,9 @@ private:
       return;
     }
     state.redrawRequested = true;
-    if (state.committed && !state.rendering && !state.frameCallback && state.surface &&
-        canSendWaylandRequests(shared_)) {
-      renderPopover(state);
-      return;
-    }
-    requestPopoverFrame(state);
+    ++state.redrawRequestCount;
+    tracePopover(state, "redraw-request");
+    if (state.committed) requestPopoverFrame(state);
   }
 
   void dispatchPopoverPointerMove(WaylandPopoverSurfaceState& state, Point point) {
@@ -1869,7 +1920,7 @@ private:
     xdg_surface_ack_configure(surface, serial);
     if (!state->committed && state->host && state->owner) {
       state->host->mount(Size{static_cast<float>(state->width), static_cast<float>(state->height)});
-      state->owner->renderPopover(*state);
+      state->owner->renderPopover(*state, "initial-configure");
       state->committed = true;
       if (state->redrawRequested) state->owner->requestPopoverFrame(*state);
       if (!state->grabbed && state->popup && state->shared && state->shared->seat &&
@@ -1903,10 +1954,12 @@ private:
       state->frameCallback = nullptr;
     }
     wl_callback_destroy(callback);
+    ++state->frameDoneCount;
+    tracePopover(*state, "frame-done");
     if (!state->redrawRequested || state->closing || state->closeAfterEvent || !state->owner) {
       return;
     }
-    state->owner->renderPopover(*state);
+    state->owner->renderPopover(*state, "frame-callback");
   }
 
   static void frameDone(void* data, wl_callback* callback, std::uint32_t) {

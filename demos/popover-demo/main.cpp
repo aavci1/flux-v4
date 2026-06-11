@@ -1,4 +1,6 @@
 #include <Lambda.hpp>
+#include <Lambda/UI/EventQueue.hpp>
+#include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/UI.hpp>
 #include <Lambda/UI/Views/Button.hpp>
@@ -9,17 +11,113 @@
 #include <Lambda/UI/Views/Text.hpp>
 #include <Lambda/UI/Views/VStack.hpp>
 
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 using namespace lambda;
+
+namespace {
+
+bool envEnabled(char const *name) {
+    char const *value = std::getenv(name);
+    return value && *value && std::strcmp(value, "0") != 0 && std::strcmp(value, "false") != 0;
+}
+
+} // namespace
 
 struct PopoverDemoRoot {
     auto body() const {
         auto showArrow = useState<bool>(true);
         auto dismissOutside = useState<bool>(true);
         auto [showPopover, hidePopover, popoverOpen] = usePopover();
+        auto autotestText = useState<std::string>("Autotest step 0");
+        auto autotestStep = useState<int>(0);
+        auto autotestTimer = useState<std::uint64_t>(0);
+
+        if (envEnabled("LAMBDA_POPOVER_DEMO_AUTOTEST") && Application::hasInstance()) {
+            auto alive = std::make_shared<bool>(true);
+            Application::instance().eventQueue().on<TimerEvent>(
+                [alive,
+                 autotestText,
+                 autotestStep,
+                 autotestTimer,
+                 showPopover = showPopover,
+                 hidePopover = hidePopover](TimerEvent const &event) mutable {
+                    if (!*alive || event.timerId == 0 || event.timerId != autotestTimer.peek()) {
+                        return;
+                    }
+
+                    int const step = autotestStep.peek();
+                    if (step == 0) {
+                        std::fprintf(stderr, "[popover-demo-autotest] show step=%d\n", step);
+                        showPopover(Popover {
+                            .content = VStack {
+                                .spacing = 8.f,
+                                .alignment = Alignment::Start,
+                                .children = children(
+                                    Text {
+                                        .text = [autotestText] {
+                                            return autotestText();
+                                        },
+                                        .font = Font::title3(),
+                                        .color = Color::primary(),
+                                        .wrapping = TextWrapping::Wrap,
+                                    },
+                                    Text {
+                                        .text = "Reactive text updates exercise committed popover redraw pacing.",
+                                        .font = Font::footnote(),
+                                        .color = Color::secondary(),
+                                        .wrapping = TextWrapping::Wrap,
+                                    }
+                                ),
+                            },
+                            .placement = PopoverPlacement::Below,
+                            .arrow = true,
+                            .maxSize = Size {300.f, 160.f},
+                            .backdropColor = Colors::transparent,
+                            .dismissOnEscape = true,
+                            .dismissOnOutsideTap = false,
+                            .useTapAnchor = false,
+                            .anchorRectOverride = Rect {360.f, 120.f, 80.f, 32.f},
+                            .debugName = "popover-autotest",
+                        });
+                    } else if (step <= 8) {
+                        std::string next = "Autotest step " + std::to_string(step) +
+                                           " - committed popover redraw";
+                        std::fprintf(stderr, "[popover-demo-autotest] update step=%d\n", step);
+                        autotestText.set(std::move(next));
+                    } else {
+                        std::fprintf(stderr, "[popover-demo-autotest] complete step=%d\n", step);
+                        hidePopover();
+                        Application::instance().cancelTimer(event.timerId);
+                        autotestTimer.set(0);
+                        Application::instance().quit();
+                    }
+                    autotestStep.set(step + 1);
+                });
+
+            Reactive::onCleanup([alive, autotestTimer] {
+                *alive = false;
+                if (Application::hasInstance() && autotestTimer.peek() != 0) {
+                    Application::instance().cancelTimer(autotestTimer.peek());
+                    autotestTimer.set(0);
+                }
+            });
+
+            useEffect([autotestTimer] {
+                if (autotestTimer.peek() == 0) {
+                    autotestTimer.set(Application::instance().scheduleRepeatingTimer(
+                        std::chrono::milliseconds {120}));
+                }
+            });
+        }
 
         auto theme = useEnvironment<ThemeKey>();
 
