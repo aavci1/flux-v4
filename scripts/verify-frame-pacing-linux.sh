@@ -372,6 +372,27 @@ summarize_multi_dirty_partial() {
       if (surface_max > surface_budget_ms) exit 1
     }
   ' "$dir/cpu.log"
+
+  awk -v label="$label" '
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    /^cpu-trace:/ {
+      line = $0
+      prepared += phrase("blur prepared=[0-9]+ ops=[0-9]+ quads=[0-9]+", "prepared")
+      runs += phrase("cache_hits=[0-9]+ cache_misses=[0-9]+ runs=[0-9]+", "runs")
+      stacked_blur += phrase("vulkan_ms record=[0-9.]+ draw_ops=[0-9.]+ stacked_blur=[0-9.]+", "stacked_blur")
+      samples += 1
+    }
+    END {
+      printf "SUMMARY %s glass_blur samples=%d prepared=%.0f runs=%.0f stacked_blur_ms=%.3f\n",
+        label, samples, prepared, runs, stacked_blur
+      if (samples == 0 || prepared <= 0 || runs <= 0 || stacked_blur <= 0.0) exit 1
+    }
+  ' "$dir/cpu.log"
 }
 
 summarize_cpu_trace() {
@@ -455,6 +476,41 @@ run_multi_dirty_partial_case() {
   local wm_pid=""
   local checker_a_pid=""
   local checker_b_pid=""
+  local config_file="$dir/compositor-config.toml"
+  cat >"$config_file" <<'EOF'
+background = "#203040"
+animations = false
+
+[rendering.backdrop_blur]
+base_downsample = 2
+
+[chrome]
+title_bar_height = 28
+controls_width = 84
+controls_inset_right = 8
+controls_inset_top = 6
+button_size = 16
+button_radius = 5
+button_gap = 4
+title_text_color = "#ffffff"
+window_corner_radius = 14
+content_inset_width = 4
+window_border_color = "#ffffff66"
+window_border_width = 1
+border_line_color = "#ffffff66"
+focused_shadow_radius = 0
+unfocused_shadow_radius = 0
+
+[chrome.glass]
+blur_radius = 64
+base_color = "#ddddff"
+tint_color = "#ddffff"
+border_color = "#ffffff66"
+opacity = 0.05
+contrast_color = "#000000"
+focused_contrast_opacity = 0.18
+unfocused_contrast_opacity = 0.13
+EOF
   cleanup() {
     set +e
     if [[ -n "$checker_a_pid" ]]; then
@@ -487,6 +543,7 @@ run_multi_dirty_partial_case() {
     LAMBDA_KMS_PRESENT_TRACE=1 \
     LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
     LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LAMBDA_WINDOW_MANAGER_CONFIG="$config_file" \
     LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
     LWM_DIAGNOSTIC_SCRIPTED_MULTI_TOPLEVELS=1 \
     "$WM" >"$dir/compositor.log" 2>&1 &
