@@ -251,6 +251,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .shmPixels = surface->shmPixels,
       .shmPixelBytes = surface->shmPixelBytes,
       .pixelFormat = surface->pixelFormat,
+      .contentFullyOpaque = surface->rgbaFullyOpaque ||
+                            (surface->dmabufBuffer && surface->dmabufBuffer->format == DRM_FORMAT_XRGB8888),
       .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
       .dmabufFormat = 0,
       .dmabufPlanes = {},

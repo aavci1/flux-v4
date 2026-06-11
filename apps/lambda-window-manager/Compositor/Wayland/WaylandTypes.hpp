@@ -150,6 +150,7 @@ struct CommittedSurfaceSnapshot {
   std::uint8_t const* shmPixels = nullptr;
   std::size_t shmPixelBytes = 0;
   Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
+  bool contentFullyOpaque = false;
   std::uint64_t dmabufBufferId = 0;
   std::uint32_t dmabufFormat = 0;
   std::vector<DmabufPlane> dmabufPlanes;

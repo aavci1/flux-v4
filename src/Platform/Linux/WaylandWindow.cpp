@@ -848,6 +848,7 @@ public:
       if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
     }
     updateBackgroundEffectRegion();
+    updateOpaqueRegion();
     wl_surface_commit(surface_);
     surfaceCommitted_ = true;
     while (!configured_) {
@@ -936,6 +937,7 @@ public:
       zwlr_layer_surface_v1_set_size(layerSurface_,
                                      layerShellProtocolWidth(size_, layerShellConfig_),
                                      layerShellProtocolHeight(size_, layerShellConfig_));
+      updateOpaqueRegion();
       commitSurface();
       if (size_.width <= 0.f || size_.height <= 0.f) {
         return;
@@ -948,6 +950,7 @@ public:
     }
     updateViewportDestination();
     updateBackgroundEffectRegion();
+    updateOpaqueRegion();
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
@@ -979,6 +982,7 @@ public:
                                    layerShellProtocolWidth(size_, layerShellConfig_),
                                    layerShellProtocolHeight(size_, layerShellConfig_));
     updateBackgroundEffectRegion();
+    updateOpaqueRegion();
     updateLayerShellInputRegion();
     commitSurface();
   }
@@ -1070,6 +1074,7 @@ public:
       setVulkanCanvasTransparentSurface(canvas_, wantsTransparentSurface());
     }
     updateBackgroundEffectRegion();
+    updateOpaqueRegion();
     commitSurface();
   }
 
@@ -2260,6 +2265,33 @@ private:
     }
   }
 
+  void updateOpaqueRegion() {
+    if (!shared_ || !shared_->compositor || !surface_ || !canSendWaylandRequests(shared_)) {
+      return;
+    }
+    int const width = std::max(0, static_cast<int>(std::lround(size_.width)));
+    int const height = std::max(0, static_cast<int>(std::lround(size_.height)));
+    bool const enabled = !wantsTransparentSurface() && width > 0 && height > 0;
+    if (opaqueRegionConfigured_ &&
+        opaqueRegionEnabled_ == enabled &&
+        opaqueRegionWidth_ == width &&
+        opaqueRegionHeight_ == height) {
+      return;
+    }
+
+    wl_region* region = nullptr;
+    if (enabled) {
+      region = wl_compositor_create_region(shared_->compositor);
+      wl_region_add(region, 0, 0, width, height);
+    }
+    wl_surface_set_opaque_region(surface_, region);
+    if (region) wl_region_destroy(region);
+    opaqueRegionConfigured_ = true;
+    opaqueRegionEnabled_ = enabled;
+    opaqueRegionWidth_ = width;
+    opaqueRegionHeight_ = height;
+  }
+
   void updateBackgroundEffectRegion() {
     LayerShellChromeOptions const& chrome = layerShellConfig_.chrome;
     bool const wantsGlass = background_.kind == WindowBackgroundKind::Glass;
@@ -2630,6 +2662,10 @@ private:
   bool receivedCutout_ = false;
   bool warnedDecorationFallback_ = false;
   bool loggedDecorationMode_ = false;
+  bool opaqueRegionConfigured_ = false;
+  bool opaqueRegionEnabled_ = false;
+  int opaqueRegionWidth_ = 0;
+  int opaqueRegionHeight_ = 0;
   std::int32_t lastCutoutX_ = 0;
   std::int32_t lastCutoutY_ = 0;
   std::int32_t lastCutoutWidth_ = 0;

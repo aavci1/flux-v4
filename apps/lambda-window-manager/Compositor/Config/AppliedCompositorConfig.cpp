@@ -112,15 +112,24 @@ void advanceWallpaperReveal(AppliedCompositorConfig& config, std::chrono::steady
 void drawCompositorBackground(Canvas& canvas,
                               AppliedCompositorConfig& config,
                               std::uint32_t outputWidth,
-                              std::uint32_t outputHeight) {
+                              std::uint32_t outputHeight,
+                              bool clearTarget,
+                              bool fillTarget) {
   auto const now = std::chrono::steady_clock::now();
   advanceWallpaperReveal(config, now);
 
   bool const wallpaperLoading =
       config.config.wallpaperPath && (config.wallpaperLoadPending || config.wallpaperRevealOpacity < 1.f);
-  canvas.clear(wallpaperLoading ? wallpaperLoadingClearColor(config.config) : config.config.backgroundColor);
+  if (clearTarget) {
+    canvas.clear(wallpaperLoading ? wallpaperLoadingClearColor(config.config) : config.config.backgroundColor);
+  }
 
   auto const bounds = Rect::sharp(0.f, 0.f, static_cast<float>(outputWidth), static_cast<float>(outputHeight));
+  bool const paintTarget = clearTarget || fillTarget;
+
+  if (!paintTarget) {
+    return;
+  }
 
   if (wallpaperLoading && !config.wallpaperPreviewImage && config.wallpaperRevealOpacity <= 0.f) {
     canvas.drawRect(bounds,
@@ -132,6 +141,13 @@ void drawCompositorBackground(Canvas& canvas,
     canvas.drawRect(bounds,
                     CornerRadius{0.f},
                     config.backgroundFill,
+                    StrokeStyle::none(),
+                    ShadowStyle::none());
+  } else if (!clearTarget) {
+    canvas.drawRect(bounds,
+                    CornerRadius{0.f},
+                    FillStyle::solid(wallpaperLoading ? wallpaperLoadingClearColor(config.config)
+                                                       : config.config.backgroundColor),
                     StrokeStyle::none(),
                     ShadowStyle::none());
   }

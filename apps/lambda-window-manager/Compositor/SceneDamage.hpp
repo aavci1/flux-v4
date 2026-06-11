@@ -11,6 +11,7 @@ namespace lambda::compositor {
 
 struct SceneDamageResult {
   bool fullOutput = false;
+  bool backgroundFillRequired = false;
   std::vector<CommittedSurfaceSnapshot::RegionRect> rects;
 
   [[nodiscard]] bool empty() const noexcept { return !fullOutput && rects.empty(); }

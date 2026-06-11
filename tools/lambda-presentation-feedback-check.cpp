@@ -27,18 +27,17 @@ namespace {
 
 constexpr int kWidth = 160;
 constexpr int kHeight = 96;
-constexpr int kStride = kWidth * 4;
-constexpr int kBufferSize = kStride * kHeight;
 constexpr int kDefaultTimeoutMs = 5000;
 
 struct ShmBuffer {
   wl_buffer* buffer = nullptr;
   void* pixels = MAP_FAILED;
   int fd = -1;
+  int size = 0;
 
   ~ShmBuffer() {
     if (buffer) wl_buffer_destroy(buffer);
-    if (pixels != MAP_FAILED) munmap(pixels, kBufferSize);
+    if (pixels != MAP_FAILED && size > 0) munmap(pixels, static_cast<std::size_t>(size));
     if (fd >= 0) close(fd);
   }
 };
@@ -289,28 +288,39 @@ wp_presentation_feedback_listener const kFeedbackListener{
     .discarded = feedbackDiscarded,
 };
 
-ShmBuffer createBuffer(wl_shm* shm) {
+int envInt(char const* name, int fallback, int minValue, int maxValue) {
+  if (char const* value = std::getenv(name); value && *value) {
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    if (end != value) return std::clamp(static_cast<int>(parsed), minValue, maxValue);
+  }
+  return fallback;
+}
+
+ShmBuffer createBuffer(wl_shm* shm, int width, int height) {
   ShmBuffer result;
+  int const stride = width * 4;
+  result.size = stride * height;
   result.fd = createMemfd("lambda-presentation-feedback");
   if (result.fd < 0) fail(std::string("memfd/tmpfile creation failed: ") + std::strerror(errno));
-  if (ftruncate(result.fd, kBufferSize) != 0) fail(std::string("ftruncate failed: ") + std::strerror(errno));
-  result.pixels = mmap(nullptr, kBufferSize, PROT_READ | PROT_WRITE, MAP_SHARED, result.fd, 0);
+  if (ftruncate(result.fd, result.size) != 0) fail(std::string("ftruncate failed: ") + std::strerror(errno));
+  result.pixels = mmap(nullptr, static_cast<std::size_t>(result.size), PROT_READ | PROT_WRITE, MAP_SHARED, result.fd, 0);
   if (result.pixels == MAP_FAILED) fail(std::string("mmap failed: ") + std::strerror(errno));
 
   auto* pixels = static_cast<std::uint32_t*>(result.pixels);
-  for (int y = 0; y < kHeight; ++y) {
-    for (int x = 0; x < kWidth; ++x) {
-      std::uint8_t const r = static_cast<std::uint8_t>((x * 255) / std::max(1, kWidth - 1));
-      std::uint8_t const g = static_cast<std::uint8_t>((y * 255) / std::max(1, kHeight - 1));
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      std::uint8_t const r = static_cast<std::uint8_t>((x * 255) / std::max(1, width - 1));
+      std::uint8_t const g = static_cast<std::uint8_t>((y * 255) / std::max(1, height - 1));
       std::uint8_t const b = 0x90;
-      pixels[y * kWidth + x] = (0xffu << 24u) | (static_cast<std::uint32_t>(r) << 16u) |
-                               (static_cast<std::uint32_t>(g) << 8u) | b;
+      pixels[y * width + x] = (0xffu << 24u) | (static_cast<std::uint32_t>(r) << 16u) |
+                              (static_cast<std::uint32_t>(g) << 8u) | b;
     }
   }
 
-  wl_shm_pool* pool = wl_shm_create_pool(shm, result.fd, kBufferSize);
+  wl_shm_pool* pool = wl_shm_create_pool(shm, result.fd, result.size);
   if (!pool) fail("wl_shm_create_pool failed");
-  result.buffer = wl_shm_pool_create_buffer(pool, 0, kWidth, kHeight, kStride, WL_SHM_FORMAT_ARGB8888);
+  result.buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_ARGB8888);
   wl_shm_pool_destroy(pool);
   if (!result.buffer) fail("wl_shm_pool_create_buffer failed");
   return result;
@@ -415,11 +425,13 @@ int main() {
   wl_surface_commit(client.surface);
   dispatchUntil(client, &Client::configured, timeoutMs, "initial xdg configure");
 
-  ShmBuffer buffer = createBuffer(client.shm);
+  int const width = envInt("LAMBDA_PRESENTATION_FEEDBACK_WIDTH", kWidth, 16, 2048);
+  int const height = envInt("LAMBDA_PRESENTATION_FEEDBACK_HEIGHT", kHeight, 16, 2048);
+  ShmBuffer buffer = createBuffer(client.shm, width, height);
   client.feedback = wp_presentation_feedback(client.presentation, client.surface);
   wp_presentation_feedback_add_listener(client.feedback, &kFeedbackListener, &client);
   wl_surface_attach(client.surface, buffer.buffer, 0, 0);
-  wl_surface_damage_buffer(client.surface, 0, 0, kWidth, kHeight);
+  wl_surface_damage_buffer(client.surface, 0, 0, width, height);
   wl_surface_commit(client.surface);
   dispatchUntil(client, &Client::feedbackDone, timeoutMs, "presentation feedback");
 

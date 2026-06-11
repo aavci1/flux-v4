@@ -161,6 +161,7 @@ bool damageRectsMergeable(RegionRect const& a, RegionRect const& b) {
 
 void makeFullDamage(SceneDamageResult& damage, std::int32_t outputWidth, std::int32_t outputHeight) {
   damage.fullOutput = outputWidth > 0 && outputHeight > 0;
+  damage.backgroundFillRequired = damage.fullOutput;
   damage.rects.clear();
   if (damage.fullOutput) {
     damage.rects.push_back(RegionRect{.x = 0, .y = 0, .width = outputWidth, .height = outputHeight});
@@ -170,10 +171,15 @@ void makeFullDamage(SceneDamageResult& damage, std::int32_t outputWidth, std::in
 void appendDamageRect(SceneDamageResult& damage,
                       RegionRect rect,
                       std::int32_t outputWidth,
-                      std::int32_t outputHeight) {
-  if (damage.fullOutput || outputWidth <= 0 || outputHeight <= 0) return;
+                      std::int32_t outputHeight,
+                      bool backgroundFillRequired = true) {
+  if (damage.fullOutput || outputWidth <= 0 || outputHeight <= 0) {
+    if (damage.fullOutput && backgroundFillRequired) damage.backgroundFillRequired = true;
+    return;
+  }
   rect = clippedRect(rect, outputWidth, outputHeight);
   if (rectEmpty(rect)) return;
+  damage.backgroundFillRequired = damage.backgroundFillRequired || backgroundFillRequired;
   if (rect.x <= 0 && rect.y <= 0 && rect.width >= outputWidth && rect.height >= outputHeight) {
     makeFullDamage(damage, outputWidth, outputHeight);
     return;
@@ -225,7 +231,7 @@ void inflateDamageForBackdropSampling(SceneDamageResult& damage,
   for (RegionRect const& rect : damage.rects) {
     RegionRect clipped = clippedRect(inflatedRect(rect, inflation), outputWidth, outputHeight);
     if (!rectEmpty(clipped)) {
-      appendDamageRect(normalized, clipped, outputWidth, outputHeight);
+      appendDamageRect(normalized, clipped, outputWidth, outputHeight, damage.backgroundFillRequired);
       if (normalized.fullOutput) {
         damage = std::move(normalized);
         return;
@@ -521,6 +527,30 @@ RegionRect mapBufferDamageToSurface(CommittedSurfaceSnapshot const& surface,
   return RegionRect{.x = x0, .y = y0, .width = x1 - x0, .height = y1 - y0};
 }
 
+bool opaqueRegionCoversOutputDamage(CommittedSurfaceSnapshot const& surface, RegionRect const& damage) {
+  if (rectEmpty(damage)) return true;
+  for (RegionRect const& opaque : surface.opaqueRegionRects) {
+    RegionRect const outputOpaque{
+        .x = surface.x + opaque.x,
+        .y = surface.y + opaque.y,
+        .width = opaque.width,
+        .height = opaque.height,
+    };
+    if (rectContains(outputOpaque, damage)) return true;
+  }
+  return false;
+}
+
+bool contentDamageKnownOpaque(CommittedSurfaceSnapshot const& surface,
+                              RegionRect const& damage,
+                              ChromeConfig const& chrome,
+                              float dpiScale) {
+  if (rectEmpty(damage)) return true;
+  RegionRect const visibleContent = surfaceVisibleContentRect(surface, chrome, dpiScale);
+  if (!rectContains(visibleContent, damage)) return false;
+  return surface.contentFullyOpaque || opaqueRegionCoversOutputDamage(surface, damage);
+}
+
 RetainedSceneSurfaceSnapshot retainedSceneSnapshot(CommittedSurfaceSnapshot const& snapshot,
                                                    ChromeConfig const& chrome) {
   return RetainedSceneSurfaceSnapshot{
@@ -682,13 +712,19 @@ SceneDamageResult computeSceneDamage(CompositorSceneGraphState const& previous,
           canMapBufferDamage(*oldSurfaceIt->second, *currentSurfaceIt->second)) {
         CommittedSurfaceSnapshot const& current = *currentSurfaceIt->second;
         if (current.bufferDamageRects.empty()) {
-          appendDamageRect(damage, node.bounds, outputWidth, outputHeight);
+          appendDamageRect(damage,
+                           node.bounds,
+                           outputWidth,
+                           outputHeight,
+                           !contentDamageKnownOpaque(current, node.bounds, chrome, dpiScale));
         } else {
           for (RegionRect const& rect : current.bufferDamageRects) {
+            RegionRect const mappedDamage = mapBufferDamageToSurface(current, rect, chrome, dpiScale);
             appendDamageRect(damage,
-                             mapBufferDamageToSurface(current, rect, chrome, dpiScale),
+                             mappedDamage,
                              outputWidth,
-                             outputHeight);
+                             outputHeight,
+                             !contentDamageKnownOpaque(current, mappedDamage, chrome, dpiScale));
           }
         }
         continue;

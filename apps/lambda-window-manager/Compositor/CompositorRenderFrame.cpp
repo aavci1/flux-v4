@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,6 +29,35 @@
 
 namespace lambda::compositor {
 namespace {
+
+bool diagnosticEnvEnabled(char const* name) {
+  char const* raw = std::getenv(name);
+  if (!raw || !*raw) return false;
+  return std::strcmp(raw, "0") != 0 && std::strcmp(raw, "false") != 0;
+}
+
+Rect surfaceDrawBounds(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  Rect bounds = windowFrameRect(surface, chrome.contentInsetWidth);
+  if (!surface.serverSideDecorated) return bounds;
+
+  ShadowStyle const shadow{
+      .radius = surface.focused ? chrome.focusedShadowRadius : chrome.unfocusedShadowRadius,
+      .offset = surface.focused ? chrome.focusedShadowOffset : chrome.unfocusedShadowOffset,
+      .color = surface.focused ? chrome.focusedShadowColor : chrome.unfocusedShadowColor,
+  };
+  if (shadow.isNone()) return bounds;
+
+  WindowShadowLayerGeometry const shadowLayer =
+      windowShadowLayerGeometry(bounds,
+                                chrome.windowCornerRadius,
+                                shadow,
+                                std::max(0.f, shadow.radius + 2.f));
+  float const left = std::min(bounds.x, shadowLayer.rect.x);
+  float const top = std::min(bounds.y, shadowLayer.rect.y);
+  float const right = std::max(bounds.x + bounds.width, shadowLayer.rect.x + shadowLayer.rect.width);
+  float const bottom = std::max(bounds.y + bounds.height, shadowLayer.rect.y + shadowLayer.rect.height);
+  return Rect::sharp(left, top, std::max(0.f, right - left), std::max(0.f, bottom - top));
+}
 
 void drawScreenshotSelectionOverlay(Canvas& canvas,
                                     WaylandServer const& wayland,
@@ -506,29 +536,10 @@ std::uint64_t damageArea(SceneDamageResult const& damage) {
   return area;
 }
 
-std::vector<Rect> logicalDamageClipRects(SceneDamageResult const& damage) {
-  constexpr std::size_t kMaxSparseDamageClipRects = 8;
-  constexpr std::uint64_t kSparseDamageOverdrawRatio = 2;
+std::optional<Rect> logicalDamageClipRect(SceneDamageResult const& damage) {
   std::optional<Rect> const bounds = logicalDamageBounds(damage);
-  if (!bounds) return {};
-  if (damage.fullOutput || damage.rects.size() <= 1) {
-    return {*bounds};
-  }
-  std::uint64_t const coveredArea = damageArea(damage);
-  std::uint64_t const boundsArea =
-      static_cast<std::uint64_t>(std::max(0.f, bounds->width)) *
-      static_cast<std::uint64_t>(std::max(0.f, bounds->height));
-  if (coveredArea == 0 || damage.rects.size() > kMaxSparseDamageClipRects ||
-      boundsArea <= coveredArea * kSparseDamageOverdrawRatio) {
-    return {*bounds};
-  }
-  std::vector<Rect> clips;
-  clips.reserve(damage.rects.size());
-  for (RegionRect const& rect : damage.rects) {
-    if (rect.width <= 0 || rect.height <= 0) continue;
-    clips.push_back(logicalRect(rect));
-  }
-  return clips.empty() ? std::vector<Rect>{*bounds} : clips;
+  if (!bounds || bounds->width <= 0.f || bounds->height <= 0.f) return std::nullopt;
+  return bounds;
 }
 
 std::vector<platform::KmsAtomicPresenter::DamageRect>
@@ -1028,10 +1039,12 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     }
   }
 
+  bool const forceFullDamage = diagnosticEnvEnabled("LWM_DIAGNOSTIC_FORCE_FULL_DAMAGE");
   bool const partialDamageCandidate =
       atomicPresenter &&
       !renderAheadFrame &&
       !pendingOverlay &&
+      !forceFullDamage &&
       !sceneDamage.fullOutput &&
       !sceneDamage.empty();
   std::vector<platform::KmsAtomicPresenter::DamageRect> physicalDamage =
@@ -1062,7 +1075,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     drawCompositorBackground(ctx.canvas,
                              ctx.appliedConfig,
                              static_cast<std::uint32_t>(ctx.wayland.logicalOutputWidth()),
-                             static_cast<std::uint32_t>(ctx.wayland.logicalOutputHeight()));
+                             static_cast<std::uint32_t>(ctx.wayland.logicalOutputHeight()),
+                             !partialDamageFrame,
+                             !partialDamageFrame || sceneDamage.backgroundFillRequired);
     double const backgroundMs = profileMs(phaseStart);
     atomicFrameProfile.backgroundMs += backgroundMs;
     ctx.frameProfile.backgroundMs += backgroundMs;
@@ -1073,6 +1088,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
         snapPreviewDrawn = true;
       }
       liveSurfaceIds.insert(clientSurface.id);
+      if (partialDamageFrame && ctx.canvas.quickReject(surfaceDrawBounds(clientSurface, ctx.appliedConfig.config.chrome))) {
+        continue;
+      }
       if (clientSurface.id == overlaySurfaceId) {
         ctx.surfaceRenderState.clientImages.erase(clientSurface.id);
         drawWindowFrameShadow(ctx.canvas, clientSurface, ctx.appliedConfig.config.chrome);
@@ -1130,17 +1148,14 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     ctx.frameProfile.cursorMs += cursorMs;
   };
   if (partialDamageFrame) {
-    std::vector<Rect> const damageClips = logicalDamageClipRects(sceneDamage);
-    if (damageClips.empty()) {
+    std::optional<Rect> const damageClip = logicalDamageClipRect(sceneDamage);
+    if (!damageClip) {
       drawFrameContent();
     } else {
-      for (Rect const& damageClip : damageClips) {
-        if (damageClip.width <= 0.f || damageClip.height <= 0.f) continue;
-        ctx.canvas.save();
-        ctx.canvas.clipRect(damageClip);
-        drawFrameContent();
-        ctx.canvas.restore();
-      }
+      ctx.canvas.save();
+      ctx.canvas.clipRect(*damageClip);
+      drawFrameContent();
+      ctx.canvas.restore();
     }
   } else {
     drawFrameContent();

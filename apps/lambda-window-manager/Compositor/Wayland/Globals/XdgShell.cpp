@@ -19,6 +19,8 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <limits>
 #include <memory>
@@ -394,6 +396,36 @@ extern struct xdg_surface_interface const xdgSurfaceImpl;
 extern struct xdg_toplevel_interface const xdgToplevelImpl;
 
 WindowGeometry initialToplevelPlacement(WaylandServer::Impl* server) {
+  if (char const* value = std::getenv("LWM_DIAGNOSTIC_SPREAD_INITIAL_TOPLEVELS");
+      value && *value && std::strcmp(value, "0") != 0 && std::strcmp(value, "false") != 0) {
+    struct Slot {
+      float x;
+      float y;
+    };
+    constexpr std::array<Slot, 6> kDiagnosticSlots{{
+        {0.08f, 0.14f},
+        {0.58f, 0.14f},
+        {0.08f, 0.58f},
+        {0.58f, 0.58f},
+        {0.33f, 0.14f},
+        {0.33f, 0.58f},
+    }};
+    std::int32_t const maxX = std::max(0, server->logicalOutputWidth() - kCompositorMinWindowWidth);
+    std::int32_t const maxY =
+        std::max(kCompositorTitleBarHeight, server->logicalOutputHeight() - kCompositorMinWindowHeight);
+    Slot const slot = kDiagnosticSlots[server->toplevels_.size() % kDiagnosticSlots.size()];
+    return {
+        .x = std::clamp(static_cast<std::int32_t>(std::lround(slot.x * static_cast<float>(server->logicalOutputWidth()))),
+                        0,
+                        maxX),
+        .y = std::clamp(static_cast<std::int32_t>(std::lround(slot.y * static_cast<float>(server->logicalOutputHeight()))),
+                        kCompositorTitleBarHeight,
+                        maxY),
+        .width = 0,
+        .height = 0,
+    };
+  }
+
   std::int32_t const step = 36;
   std::int32_t const start = 80;
   std::int32_t const maxX = std::max(0, server->logicalOutputWidth() - kCompositorMinWindowWidth);

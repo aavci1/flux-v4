@@ -25,6 +25,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
   - holds ten decorated static SHM client windows and asserts snapshot/surface phases stay cheap
   - moves two decorated checker windows and asserts multi-rect partial damage stays cheap
+  - compares a glass-titlebar terminal workload against a forced full-output baseline
   - forces the offscreen scanout-copy path and asserts partial damage copies fewer pixels than full-frame copies
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
@@ -606,6 +607,133 @@ summarize_scanout_copy_partial() {
   ' "$dir/cpu.log"
 }
 
+summarize_glass_terminal_partial() {
+  local dir="$1"
+  local label="$2"
+  local partial_dir="$dir/partial"
+  local full_dir="$dir/full"
+  [[ -s "$partial_dir/cpu.log" && -s "$full_dir/cpu.log" ]] || {
+    echo "SUMMARY $label glass_terminal_missing_cpu_log=1"
+    return 1
+  }
+  [[ -s "$partial_dir/pacing.log" && -s "$full_dir/pacing.log" ]] || {
+    echo "SUMMARY $label glass_terminal_missing_pacing_log=1"
+    return 1
+  }
+
+  local partial_frames
+  partial_frames=$(rg -c 'scene-damage-render partial=1' "$partial_dir/pacing.log" 2>/dev/null || echo 0)
+  local forced_partial_frames
+  forced_partial_frames=$(rg -c 'scene-damage-render partial=1' "$full_dir/pacing.log" 2>/dev/null || echo 0)
+  local terminal_perf_partial
+  terminal_perf_partial=$(rg -c 'vulkan-present-detail:|\[lambda:perf:detail\]' "$partial_dir/lambda-terminal-render.log" 2>/dev/null || echo 0)
+  local terminal_perf_full
+  terminal_perf_full=$(rg -c 'vulkan-present-detail:|\[lambda:perf:detail\]' "$full_dir/lambda-terminal-render.log" 2>/dev/null || echo 0)
+  local static_presented_partial
+  static_presented_partial=$( (rg --no-filename 'lambda-presentation-feedback-check: presented' "$partial_dir"/presentation-feedback-static*.log 2>/dev/null || true) | wc -l | tr -d ' ' )
+  local static_presented_full
+  static_presented_full=$( (rg --no-filename 'lambda-presentation-feedback-check: presented' "$full_dir"/presentation-feedback-static*.log 2>/dev/null || true) | wc -l | tr -d ' ' )
+
+  local warmup_skip="${LWM_GLASS_TERMINAL_CPU_WARMUP_SAMPLES:-2}"
+  local metrics
+  metrics="$(awk -v partial_log="$partial_dir/cpu.log" -v full_log="$full_dir/cpu.log" -v warmup_skip="$warmup_skip" '
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    function record(kind) {
+      frames = phrase("frames=[0-9]+", "frames")
+      surfaces = phrase("surfaces=[0-9.]+/f", "surfaces")
+      if (frames <= 0 || surfaces < 1.0) return
+      seen[kind] += 1
+      if (seen[kind] <= warmup_skip) return
+      bg = phrase("phase_avg_ms total=[0-9.]+ bg=[0-9.]+", "bg")
+      surface = phrase("phase_avg_ms total=[0-9.]+ bg=[0-9.]+ snapshot=[0-9.]+ surface=[0-9.]+", "surface")
+      total = phrase("phase_avg_ms total=[0-9.]+", "total")
+      samples[kind] += 1
+      frames_sum[kind] += frames
+      surfaces_sum[kind] += surfaces
+      bg_sum[kind] += bg
+      surface_sum[kind] += surface
+      total_sum[kind] += total
+      if (surfaces > surfaces_max[kind]) surfaces_max[kind] = surfaces
+      if (bg > bg_max[kind]) bg_max[kind] = bg
+      if (surface > surface_max[kind]) surface_max[kind] = surface
+      if (total > total_max[kind]) total_max[kind] = total
+    }
+    /^cpu-trace:/ {
+      line = $0
+      if (FILENAME == partial_log) {
+        record("partial")
+      } else if (FILENAME == full_log) {
+        record("full")
+      }
+    }
+    END {
+      p_bg = samples["partial"] > 0 ? bg_sum["partial"] / samples["partial"] : 0.0
+      f_bg = samples["full"] > 0 ? bg_sum["full"] / samples["full"] : 0.0
+      p_surface = samples["partial"] > 0 ? surface_sum["partial"] / samples["partial"] : 0.0
+      f_surface = samples["full"] > 0 ? surface_sum["full"] / samples["full"] : 0.0
+      p_total = samples["partial"] > 0 ? total_sum["partial"] / samples["partial"] : 0.0
+      f_total = samples["full"] > 0 ? total_sum["full"] / samples["full"] : 0.0
+      p_surfaces = samples["partial"] > 0 ? surfaces_sum["partial"] / samples["partial"] : 0.0
+      f_surfaces = samples["full"] > 0 ? surfaces_sum["full"] / samples["full"] : 0.0
+      printf "warmup_skip=%d partial_samples=%d full_samples=%d partial_frames=%.0f full_frames=%.0f partial_surfaces_avg=%.2f full_surfaces_avg=%.2f partial_surfaces_max=%.2f full_surfaces_max=%.2f partial_bg_avg=%.3f full_bg_avg=%.3f partial_bg_max=%.3f full_bg_max=%.3f partial_surface_avg=%.3f full_surface_avg=%.3f partial_surface_max=%.3f full_surface_max=%.3f partial_total_avg=%.3f full_total_avg=%.3f partial_total_max=%.3f full_total_max=%.3f",
+        warmup_skip,
+        samples["partial"], samples["full"], frames_sum["partial"], frames_sum["full"],
+        p_surfaces, f_surfaces, surfaces_max["partial"], surfaces_max["full"],
+        p_bg, f_bg, bg_max["partial"], bg_max["full"],
+        p_surface, f_surface, surface_max["partial"], surface_max["full"],
+        p_total, f_total, total_max["partial"], total_max["full"]
+      if (samples["partial"] == 0 || samples["full"] == 0) exit 1
+    }
+  ' "$partial_dir/cpu.log" "$full_dir/cpu.log")" || {
+    printf 'SUMMARY %s glass_terminal_metrics_failed\n' "$label"
+    return 1
+  }
+
+  local max_ratio="${LWM_GLASS_TERMINAL_PARTIAL_MAX_RATIO:-0.92}"
+  printf 'SUMMARY %s glass_terminal partial_damage_frames=%s forced_full_partial_frames=%s terminal_perf_partial=%s terminal_perf_full=%s static_presented_partial=%s static_presented_full=%s %s max_ratio=%s\n' \
+    "$label" "$partial_frames" "$forced_partial_frames" "$terminal_perf_partial" "$terminal_perf_full" \
+    "$static_presented_partial" "$static_presented_full" "$metrics" "$max_ratio"
+
+  awk -v partial_frames="$partial_frames" \
+      -v forced_partial_frames="$forced_partial_frames" \
+      -v terminal_perf_partial="$terminal_perf_partial" \
+      -v terminal_perf_full="$terminal_perf_full" \
+      -v static_presented_partial="$static_presented_partial" \
+      -v static_presented_full="$static_presented_full" \
+      -v metrics="$metrics" \
+      -v max_ratio="$max_ratio" '
+    function metric(name,    pattern, raw) {
+      pattern = name "=[0-9.]+"
+      if (!match(metrics, pattern)) return 0.0
+      raw = substr(metrics, RSTART, RLENGTH)
+      sub(/^.*=/, "", raw)
+      return raw + 0.0
+    }
+    END {
+      partial_surface = metric("partial_surface_avg")
+      full_surface = metric("full_surface_avg")
+      partial_bg = metric("partial_bg_avg")
+      full_bg = metric("full_bg_avg")
+      partial_surfaces = metric("partial_surfaces_avg")
+      full_surfaces = metric("full_surfaces_avg")
+      surface_ok = full_surface > 0.0 && partial_surface < full_surface * max_ratio
+      bg_ok = full_bg > 0.0 && partial_bg < full_bg * max_ratio
+      if (partial_frames <= 0 || forced_partial_frames != 0 ||
+          static_presented_partial <= 0 || static_presented_full <= 0 ||
+          partial_surfaces < 1.5 || full_surfaces < 1.5 ||
+          terminal_perf_partial < 5 || terminal_perf_full < 5 ||
+          !surface_ok || !bg_ok) {
+        exit 1
+      }
+    }
+  '
+}
+
 summarize_cpu_trace() {
   local log="$1"
   [[ -s "$log" ]] || return 0
@@ -824,6 +952,180 @@ EOF
   summarize_runtime_logs "$dir" "$label"
   summarize_multi_dirty_partial "$dir" "$label"
   summarize_cpu_trace "$dir/cpu.log"
+}
+
+run_glass_terminal_partial_case() {
+  local label="glass-terminal-partial"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local config_file="$dir/compositor-config.toml"
+  cat >"$config_file" <<'EOF'
+background = "#203040"
+animations = false
+
+[rendering.backdrop_blur]
+base_downsample = 2
+
+[chrome]
+title_bar_height = 28
+controls_width = 84
+controls_inset_right = 8
+controls_inset_top = 6
+button_size = 16
+button_radius = 5
+button_gap = 4
+title_text_color = "#ffffff"
+window_corner_radius = 14
+content_inset_width = 4
+window_border_color = "#ffffff66"
+window_border_width = 1
+border_line_color = "#ffffff66"
+focused_shadow_radius = 0
+unfocused_shadow_radius = 0
+
+[chrome.glass]
+blur_radius = 64
+base_color = "#ddddff"
+tint_color = "#ddffff"
+border_color = "#ffffff66"
+opacity = 0.05
+contrast_color = "#000000"
+focused_contrast_opacity = 0.18
+unfocused_contrast_opacity = 0.13
+EOF
+
+  run_one_glass_terminal() {
+    local mode="$1"
+    local force_full="$2"
+    local run_dir="$dir/$mode"
+    mkdir -p "$run_dir"
+    local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+    rm -f "$display_file"
+
+    local wm_pid=""
+    local -a static_pids=()
+    cleanup_one() {
+      set +e
+      for pid in "${static_pids[@]}"; do
+        if [[ -n "$pid" ]]; then
+          kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+        fi
+      done
+      if [[ -n "$wm_pid" ]]; then
+        kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+      fi
+      sleep 1
+      for pid in "${static_pids[@]}"; do
+        if [[ -n "$pid" ]]; then
+          kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+        fi
+      done
+      if [[ -n "$wm_pid" ]]; then
+        kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+      fi
+      set -e
+    }
+    trap cleanup_one RETURN
+
+    local -a wm_env=(
+      LAMBDA_WINDOW_MANAGER_CPU_TRACE=1
+      LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$run_dir/cpu.log"
+      LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0
+      LAMBDA_KMS_PRESENT_TRACE=1
+      LAMBDA_WINDOW_MANAGER_PACING_TRACE=1
+      LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$run_dir/pacing.log"
+      LAMBDA_WINDOW_MANAGER_CONFIG="$config_file"
+      LAMBDA_COMPOSITOR_DISABLE_KMS_OVERLAYS=1
+      LAMBDA_COMPOSITOR_DISABLE_FULLSCREEN_DIRECT_SCANOUT=1
+      LWM_DIAGNOSTIC_DISABLE_RENDER_AHEAD=1
+      LWM_DIAGNOSTIC_SPREAD_INITIAL_TOPLEVELS=1
+    )
+    if [[ "$force_full" == "1" ]]; then
+      wm_env+=(LWM_DIAGNOSTIC_FORCE_FULL_DAMAGE=1)
+    fi
+
+    setsid timeout --signal=TERM --kill-after=5s 35s env "${wm_env[@]}" \
+      "$WM" >"$run_dir/compositor.log" 2>&1 &
+    wm_pid=$!
+
+    local display=""
+    for _ in $(seq 1 150); do
+      if [[ -r "$display_file" ]]; then
+        display="$(cat "$display_file")"
+        break
+      fi
+      if ! kill -0 "$wm_pid" 2>/dev/null; then
+        break
+      fi
+      sleep 0.1
+    done
+    if [[ -z "$display" ]]; then
+      echo "CASE $label/$mode display-not-ready log_dir=$run_dir" >&2
+      tail -n 120 "$run_dir/compositor.log" >&2 || true
+      return 20
+    fi
+
+    local static_count="${LWM_GLASS_TERMINAL_STATIC_WINDOWS:-1}"
+    for index in $(seq 1 "$static_count"); do
+      local static_log="$run_dir/presentation-feedback-static-$index.log"
+      setsid timeout --signal=TERM --kill-after=2s 22s env \
+        WAYLAND_DISPLAY="$display" \
+        LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+        LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+        LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=17000 \
+        LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+        LAMBDA_PRESENTATION_FEEDBACK_WIDTH="${LWM_GLASS_TERMINAL_STATIC_WIDTH:-300}" \
+        LAMBDA_PRESENTATION_FEEDBACK_HEIGHT="${LWM_GLASS_TERMINAL_STATIC_HEIGHT:-220}" \
+        "$CHECKER" >"$static_log" 2>&1 &
+      local static_pid="$!"
+      static_pids+=("$static_pid")
+      for _ in $(seq 1 80); do
+        if rg -q 'lambda-presentation-feedback-check: presented' "$static_log" 2>/dev/null; then
+          break
+        fi
+        if ! kill -0 "$static_pid" 2>/dev/null; then
+          break
+        fi
+        sleep 0.1
+      done
+      if ! rg -q 'lambda-presentation-feedback-check: presented' "$static_log" 2>/dev/null; then
+        echo "CASE $label/$mode static-checker-not-ready index=$index log_dir=$run_dir" >&2
+        tail -n 80 "$static_log" >&2 || true
+        return 21
+      fi
+      sleep 0.1
+    done
+
+    WAYLAND_DISPLAY="$display" \
+      LWM_BUILD_DIR="$WAYLAND_BUILD_DIR" \
+      LWM_TRACE_DIR="$run_dir" \
+      LAMBDA_TERMINAL_TEST_SECONDS=12 \
+      LAMBDA_TERMINAL_TEST_MODE=scroll \
+      LAMBDA_TERMINAL_FRAME_SLEEP=0.016 \
+      LAMBDA_TERMINAL_WINDOW_WIDTH="${LWM_GLASS_TERMINAL_WINDOW_WIDTH:-300}" \
+      LAMBDA_TERMINAL_WINDOW_HEIGHT="${LWM_GLASS_TERMINAL_WINDOW_HEIGHT:-220}" \
+      LAMBDA_DEBUG_PERF=2 \
+      LAMBDA_RESIZE_TRACE=0 \
+      "$ROOT/scripts/trace-terminal-rendering.sh" >"$run_dir/terminal-driver.log" 2>&1
+
+    sleep 1
+    cleanup_one
+    trap - RETURN
+    wait "$wm_pid" 2>/dev/null || true
+
+    local presenter_line
+    presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$run_dir/compositor.log" | tail -1 || true)"
+    printf 'CASE %s/%s display=%s force_full=%s %s log_dir=%s\n' \
+      "$label" "$mode" "$display" "$force_full" "$presenter_line" "$run_dir"
+    summarize_runtime_logs "$run_dir" "$label/$mode"
+    summarize_cpu_trace "$run_dir/cpu.log"
+    summarize_terminal_present "$run_dir/lambda-terminal-render.log"
+  }
+
+  run_one_glass_terminal partial 0
+  run_one_glass_terminal full 1
+  summarize_glass_terminal_partial "$dir" "$label"
 }
 
 run_scanout_copy_partial_case() {
@@ -1521,6 +1823,7 @@ run_selected_case atomic-pointer-under-terminal-load run_compositor_case atomic-
 run_selected_case surface-cache-static run_surface_cache_case
 run_selected_case snapshot-load-10-windows run_snapshot_load_case
 run_selected_case multi-dirty-partial run_multi_dirty_partial_case
+run_selected_case glass-terminal-partial run_glass_terminal_partial_case
 run_selected_case scanout-copy-partial run_scanout_copy_partial_case
 run_selected_case chrome-hover-press-cache run_chrome_interaction_case
 run_selected_case resize-storm run_resize_storm_case

@@ -94,9 +94,11 @@ int main(int argc, char* argv[]) {
   app.setName("lambda-terminal");
   auto const preferences = lambda_terminal::loadTerminalPreferences();
   auto const profile = lambda_terminal::activeTerminalProfile(preferences.preferences);
+  auto const initialWidth = static_cast<float>(envInt("LAMBDA_TERMINAL_WINDOW_WIDTH", 920));
+  auto const initialHeight = static_cast<float>(envInt("LAMBDA_TERMINAL_WINDOW_HEIGHT", 560));
 
   auto& window = app.createWindow<lambda::Window>({
-      .size = {920.f, 560.f},
+      .size = {initialWidth, initialHeight},
       .title = "Terminal",
       .titlebar = lambda::WindowTitlebarMode::System,
       .resizable = true,

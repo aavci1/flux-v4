@@ -350,6 +350,76 @@ TEST_CASE("scene graph damage with backdrop blur keeps small updates partial") {
   CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 70, .y = 90, .width = 110, .height = 110}));
 }
 
+TEST_CASE("scene graph opaque content damage does not require background fill") {
+  lambda::compositor::ChromeConfig chrome;
+  chrome.glass.blurRadius = 32.f;
+  chrome.focusedShadowRadius = 0.f;
+  chrome.unfocusedShadowRadius = 0.f;
+  auto first = surface(80, 100, 120, 200, 100, 1);
+  first.serverSideDecorated = true;
+  first.focused = true;
+  first.titleBarHeight = chrome.titleBarHeight;
+  first.contentFullyOpaque = true;
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> visuals;
+
+  CompositorSceneGraphState state;
+  auto initial = lambda::compositor::buildCompositorSceneFrame(
+      state,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = std::vector<CommittedSurfaceSnapshot>{first},
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  auto opaqueNext = first;
+  opaqueNext.serial = 2;
+  opaqueNext.bufferDamageRects.push_back(RegionRect{.x = 20, .y = 20, .width = 10, .height = 10});
+  auto opaquePlan = lambda::compositor::buildCompositorSceneFrame(
+      initial.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = std::vector<CommittedSurfaceSnapshot>{opaqueNext},
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  CHECK_FALSE(opaquePlan.damage.fullOutput);
+  CHECK_FALSE(opaquePlan.damage.backgroundFillRequired);
+
+  auto transparentNext = first;
+  transparentNext.contentFullyOpaque = false;
+  transparentNext.serial = 3;
+  transparentNext.bufferDamageRects.push_back(RegionRect{.x = 20, .y = 20, .width = 10, .height = 10});
+  auto transparentPlan = lambda::compositor::buildCompositorSceneFrame(
+      opaquePlan.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = std::vector<CommittedSurfaceSnapshot>{transparentNext},
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  CHECK_FALSE(transparentPlan.damage.fullOutput);
+  CHECK(transparentPlan.damage.backgroundFillRequired);
+}
+
 TEST_CASE("scene graph damage with backdrop blur falls back when expanded damage is large") {
   lambda::compositor::ChromeConfig chrome;
   chrome.glass.blurRadius = 220.f;

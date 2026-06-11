@@ -35,7 +35,9 @@ void advanceWallpaperReveal(AppliedCompositorConfig& config, std::chrono::steady
 void drawCompositorBackground(Canvas& canvas,
                               AppliedCompositorConfig& config,
                               std::uint32_t outputWidth,
-                              std::uint32_t outputHeight);
+                              std::uint32_t outputHeight,
+                              bool clearTarget = true,
+                              bool fillTarget = true);
 
 [[nodiscard]] std::uint32_t wallpaperPreviewMaxEdge();
 

@@ -2277,11 +2277,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (presenter->atomicPresenter()->hasPendingPageFlip() || !atomicReadyFrames.empty()) return false;
       if (forceRender || animationFrameNeededNow || screenshotFlashFrameNeededNow ||
           snapPreviewFrameNeededNow || windowCyclerFrameNeededNow ||
-          inputRenderRequiredNow || configReloadedNow || wayland.hasPendingFrameCallbacks()) {
+          inputRenderRequiredNow || configReloadedNow) {
         return false;
       }
 
       auto const traceStart = diagnostics::cpuTraceNow();
+      bool const callbackOnly = wayland.hasPendingFrameCallbacks();
       bool const softwareCursorRequested = !appliedConfig.config.hardwareCursorEnabled || !hardwareCursorAvailable;
       auto const& softwareCursorSnapshot = loopSnapshots.cursorSurface(wayland, softwareCursorRequested);
       auto const& committedSurfaces = loopSnapshots.committedSurfaces(wayland);
@@ -2315,7 +2316,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       surfaceRenderState.sceneGraph = std::move(scenePlan.nextState);
       atomicFrameDirty = false;
       lastKnownContentSerial = wayland.contentSerial();
-      LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-skip empty=1 surfaces=%zu contentSerial=%llu\n",
+      if (callbackOnly) {
+        std::uint32_t const nowMs = presentation::monotonicMilliseconds();
+        wayland.completePresentationFeedbacks({}, nowMs);
+        wayland.sendFrameCallbacksOnly(nowMs);
+      }
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-skip empty=1 callbacks=%d surfaces=%zu contentSerial=%llu\n",
+                    callbackOnly ? 1 : 0,
                     committedSurfaces.size(),
                     static_cast<unsigned long long>(lastKnownContentSerial));
       diagnostics::recordCpuAtomicLoop({

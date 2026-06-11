@@ -68,6 +68,7 @@ void makeFullDamage(SceneDamageResult& damage,
                     std::int32_t outputWidth,
                     std::int32_t outputHeight) {
   damage.fullOutput = outputWidth > 0 && outputHeight > 0;
+  damage.backgroundFillRequired = damage.fullOutput;
   damage.rects.clear();
   if (damage.fullOutput) damage.rects.push_back(fullOutputRect(outputWidth, outputHeight));
 }
@@ -75,10 +76,15 @@ void makeFullDamage(SceneDamageResult& damage,
 void appendDamageRect(SceneDamageResult& damage,
                       RegionRect rect,
                       std::int32_t outputWidth,
-                      std::int32_t outputHeight) {
-  if (damage.fullOutput || outputWidth <= 0 || outputHeight <= 0) return;
+                      std::int32_t outputHeight,
+                      bool backgroundFillRequired = true) {
+  if (damage.fullOutput || outputWidth <= 0 || outputHeight <= 0) {
+    if (damage.fullOutput && backgroundFillRequired) damage.backgroundFillRequired = true;
+    return;
+  }
   rect = clippedRect(rect, outputWidth, outputHeight);
   if (rectEmpty(rect)) return;
+  damage.backgroundFillRequired = damage.backgroundFillRequired || backgroundFillRequired;
   if (rect.x <= 0 && rect.y <= 0 && rect.width >= outputWidth && rect.height >= outputHeight) {
     makeFullDamage(damage, outputWidth, outputHeight);
     return;
