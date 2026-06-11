@@ -5,11 +5,14 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <memory>
 
 struct VmaAllocation_T;
 using VmaAllocation = VmaAllocation_T *;
 
 namespace lambda {
+
+class Image;
 
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
@@ -73,6 +76,7 @@ struct DrawOp {
                                    Callout };
   Kind kind = Kind::Rect;
   Texture *texture = nullptr;
+  std::shared_ptr<Image const> sourceImageRef;
   void const *sourceImage = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;

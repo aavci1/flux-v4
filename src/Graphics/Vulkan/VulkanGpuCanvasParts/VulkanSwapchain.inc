@@ -229,7 +229,7 @@
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, swapchainImages_.data());
     imageInFlightFences_.assign(count, VK_NULL_HANDLE);
     imageRenderFinished_.resize(count, VK_NULL_HANDLE);
-    if (shared_ && shared_->swapchainMaintenance1 && !vulkanPresentFencesDisabled() &&
+    if (shared_ && shared_->swapchainMaintenance1 && vulkanPresentFencesEnabled() &&
         !presentFenceRuntimeDisabled_) {
       imagePresentFences_.resize(count, VK_NULL_HANDLE);
     }

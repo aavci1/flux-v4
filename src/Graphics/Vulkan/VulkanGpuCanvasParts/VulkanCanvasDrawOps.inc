@@ -294,6 +294,11 @@
     }
     DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
     op.sourceImage = vi;
+    try {
+      op.sourceImageRef = image.shared_from_this();
+    } catch (std::bad_weak_ptr const&) {
+      op.sourceImageRef.reset();
+    }
     op.premultipliedAlpha = imagePremultipliedAlpha_;
     appendSignedDrawOp(target, op);
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
@@ -724,6 +729,13 @@ private:
     return rect;
   }
 
+  Rect localReplayClip(VulkanFrameRecorder const& recorded, Rect opClip, float dx, float dy) const {
+    if (sameRect(opClip, recorded.rootClip)) {
+      return state_.clip;
+    }
+    return intersectRects(translatedRect(opClip, dx, dy), state_.clip);
+  }
+
   static std::uint64_t nonZeroSignature(std::uint64_t value) {
     return value != 0 ? value : 1;
   }
@@ -1024,7 +1036,7 @@ private:
         if (localReplay) {
           op.geometrySignature =
               translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
-          op.clip = state_.clip;
+          op.clip = localReplayClip(recorded, op.clip, dx, dy);
           if (op.hasBlurCacheClip) {
             op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
           }
@@ -1102,7 +1114,7 @@ private:
       if (localReplay) {
         op.geometrySignature =
             translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
-        op.clip = state_.clip;
+        op.clip = localReplayClip(recorded, op.clip, dx, dy);
         if (op.hasBlurCacheClip) {
           op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
         }

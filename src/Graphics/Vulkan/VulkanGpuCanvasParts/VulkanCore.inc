@@ -87,12 +87,12 @@ bool renderTargetFrameCacheDisabled() {
   return disabled;
 }
 
-bool vulkanPresentFencesDisabled() {
-  static bool const disabled = [] {
+bool vulkanPresentFencesEnabled() {
+  static bool const enabled = [] {
     char const* value = std::getenv("LAMBDA_VULKAN_PRESENT_FENCES");
-    return value && (*value == '0' || std::strcmp(value, "false") == 0 || std::strcmp(value, "off") == 0);
+    return debug::envNonZero(value);
   }();
-  return disabled;
+  return enabled;
 }
 
 int vulkanPreparedGeometryOverride() {

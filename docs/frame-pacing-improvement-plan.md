@@ -24,13 +24,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Validation-layer focused Vulkan render-target run passed on 2026-06-11: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation VK_LOADER_DEBUG=layer ./build/tests/lambda_tests --source-file="*VulkanRenderTargetTests.cpp" --no-skip` loaded `VK_LAYER_KHRONOS_validation` and passed 20 cases / 146 assertions after matching the backdrop-blur pipeline format to its R16 render targets and covering same-frame image draw/destroy.
 - [x] KMS cursor/presentation review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
 - [x] Wayland/chrome review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, compositor scene/surface/chrome slice (47 cases / 300 assertions), and frame-scheduler/scene-damage/window-state source slice (41 cases / 253 assertions).
+- [x] Vulkan recorder/replay review batch build and focused tests passed on 2026-06-11: normal and `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` Vulkan render-target tests (21 cases / 157 assertions each), validation-layer Vulkan render-target tests (21 cases / 157 assertions), and a prepared/recorder scene slice (6 cases / 79 assertions).
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages. The broad pointer/compositor doctest slice also still needs a live `WAYLAND_DISPLAY`; four `RuntimeInputTests.cpp` cases failed with `Failed to connect to Wayland display`.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 3 high, 4 medium, 5 low, and 1 nit item remain open.
+- [ ] Post-implementation review backlog (REV-*) below — 3 high, 3 medium, and 2 low items remain open.
 
 ## Working Environment
 
@@ -435,17 +436,6 @@ What to do:
 
 ## Medium severity
 
-### REV-V2: Prepared-geometry replay omits clip intersection
-
-**Severity: Medium (draws outside parent clip on non-RADV drivers).**
-
-CPU-copy replay intersects clip (`VulkanCanvasDrawOps.inc:1100`); prepared-geometry path only translates (`:1019`). Scissor comes from `op.clip` (`VulkanCommandRecording.inc:409-414`). Enabled on non-RADV since `recorderPreparedGeometryFastPathEnabled()` (`VulkanCanvasDrawOps.inc:978-988`).
-
-What to do:
-
-- [ ] [Auto] Apply `intersectRects(translatedRect(op.clip, dx, dy), state_.clip)` in the prepared path too.
-- [ ] [Auto] Add a clipped-replay regression test under `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` or on a non-RADV CI target.
-
 ### REV-K3: Scene damage under-covers after rendered-but-unscheduled frame
 
 **Severity: Medium (stale pixels on glass; amplified by relaxed partial guard).**
@@ -483,28 +473,6 @@ What to do:
 
 ## Low severity
 
-### REV-V6: Recorder `sourceImage` raw pointer — undocumented keep-alive contract
-
-**Severity: Low (use-after-free if caller replays after image destruction).**
-
-`VulkanCanvasTypes.hpp:76`, replay at `VulkanCanvasDrawOps.inc:947`. In-tree usage is safe (`ImageNode` retains `shared_ptr`); test keeps image alive deliberately. Frame signature hashes raw pointer (ABA-prone in theory).
-
-What to do:
-
-- [ ] [Auto] Document keep-alive requirement on `VulkanFrameRecorder`, or store `shared_ptr<Image>` in recorded ops.
-- [ ] [Auto] Add test that replay after image destruction is detected (fail gracefully).
-
-### REV-V7: Prepared text ops not refreshed after atlas rebuild
-
-**Severity: Low (permanent live-render fallback after one atlas rebuild).**
-
-`recordedGlyphAtlasCurrent` rejects stale replay (`VulkanCanvasDrawOps.inc:761-767`) but leaves stale `PreparedRenderOps` in place (`SceneRenderer.cpp:688-697`). Node is not re-prepared because key unchanged.
-
-What to do:
-
-- [ ] [Auto] Clear `preparedRenderOps_` when replay fails due to atlas generation mismatch.
-- [ ] [Auto] Scene-graph test: rebuild atlas between renders, assert prepare count increases.
-
 ### REV-M5: Drawable retry can block main thread up to ~2 s
 
 **Severity: Low (stall at `beginFrame` when drawable pool exhausted).**
@@ -525,27 +493,6 @@ What to do:
 What to do:
 
 - [ ] [Auto] Defer grow to `afterPresent` only, or use async handoff (pairs with REV-M1).
-
-### REV-F13: Present fences still attached on steady-state presents
-
-**Severity: Low (non-blocking status poll, not 1 s wait — reduced vs plan fear).**
-
-Steady-state presents still use `SwapchainPresentFenceInfoKHR` when maintenance1 available (`VulkanCanvasLifecycle.inc:575-608`). Uses `vkGetFenceStatus` + fence replacement on `NOT_READY`, not blocking wait. Retire-list handles swapchain recreation.
-
-What to do:
-
-- [ ] [Auto] Optional: disable steady-state present fences entirely; rely on acquire back-pressure only (keep `LAMBDA_VULKAN_PRESENT_FENCES=0` escape hatch).
-- [ ] [Manual] Resize trace — present phase ms stable under interactive resize.
-
----
-
-## Nits
-
-### REV-V12: `rasterize()` temporary canvas calls `vkDeviceWaitIdle` mid-session
-
-`VulkanCanvasLifecycle.inc:167` reachable via raster-cache builds — pre-existing whole-device stall, not introduced by frame-pacing work.
-
-- [ ] [Auto] Optional follow-up: defer raster-cache readback like FP-10 readback path.
 
 ---
 

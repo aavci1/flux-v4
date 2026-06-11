@@ -87,6 +87,16 @@ bool prepareRecordedOpsForCanvas(Canvas *canvas, VulkanFrameRecorder *recorded) 
   return false;
 }
 
+bool recordedOpsGlyphAtlasCurrentForCanvas(Canvas *canvas, VulkanFrameRecorder const &recorded) {
+  if (!canvas) {
+    return false;
+  }
+  if (auto *vulkan = dynamic_cast<VulkanCanvas *>(canvas)) {
+    return vulkan->recordedOpsGlyphAtlasCurrent(recorded);
+  }
+  return false;
+}
+
 bool replayRecordedOpsForCanvas(Canvas *canvas, VulkanFrameRecorder const &recorded) {
   if (!canvas) {
     return false;

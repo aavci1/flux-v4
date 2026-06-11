@@ -217,11 +217,22 @@ class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
     explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded) : recorded_(std::move(recorded)) {}
 
     bool replay(Renderer &renderer) const override {
+        atlasMismatchOnLastReplay_ = false;
+        if (recorded_.glyphAtlasGeneration != 0 &&
+            !recordedOpsGlyphAtlasCurrentForCanvas(renderer.canvas(), recorded_)) {
+            atlasMismatchOnLastReplay_ = true;
+            return false;
+        }
         return replayRecordedLocalOpsForCanvas(renderer.canvas(), recorded_);
+    }
+
+    bool reusableAfterReplayFailure() const override {
+        return !atlasMismatchOnLastReplay_;
     }
 
   private:
     VulkanFrameRecorder recorded_;
+    mutable bool atlasMismatchOnLastReplay_ = false;
 };
 #endif
 
@@ -644,6 +655,10 @@ struct SceneRenderer::Impl {
                 if (needsState) {
                     renderer->restore();
                 }
+                if (!replayed && !prepared->reusableAfterReplayFailure()) {
+                    prepared.reset();
+                    detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
+                }
                 return replayed;
             };
             if (replayPrepared()) {
@@ -690,6 +705,10 @@ struct SceneRenderer::Impl {
                         debug::perf::recordPreparedReplayResult(replayed);
                     }
                     if (!replayed) {
+                        if (!prepared->reusableAfterReplayFailure()) {
+                            prepared.reset();
+                            detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
+                        }
                         if (collectCounters) {
                             debug::perf::recordLiveLeafRender();
                         }

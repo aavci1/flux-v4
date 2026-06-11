@@ -26,6 +26,7 @@ class PreparedRenderOps {
   public:
     virtual ~PreparedRenderOps() = default;
     virtual bool replay(Renderer &renderer) const = 0;
+    virtual bool reusableAfterReplayFailure() const { return true; }
 };
 
 class Renderer {

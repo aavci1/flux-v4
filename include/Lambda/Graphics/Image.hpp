@@ -21,7 +21,7 @@
 namespace lambda {
 
 /// Abstract image reference; pixel dimensions drive UV normalization in `Canvas::drawImage`.
-class Image {
+class Image : public std::enable_shared_from_this<Image> {
 public:
   enum class PixelFormat : std::uint8_t {
     Rgba8888,

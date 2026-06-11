@@ -165,10 +165,18 @@ public:
     return out;
   }
 
+  bool recordedOpsGlyphAtlasCurrent(VulkanFrameRecorder const& recorded) const {
+    return recordedGlyphAtlasCurrent(recorded);
+  }
+
   ~VulkanCanvas() override {
     if (device_) {
-      // Intentional canvas teardown wait before destroying per-canvas GPU objects.
-      vkDeviceWaitIdle(device_);
+      if (deviceWaitIdleOnDestruct_) {
+        // Intentional canvas teardown wait before destroying swapchain/present resources.
+        vkDeviceWaitIdle(device_);
+      } else {
+        waitForSubmittedFrameWork();
+      }
       pollReadbacks(true);
     }
     unregisterCanvas();
@@ -214,6 +222,21 @@ public:
       vkDestroySurfaceKHR(instance_, surface_, nullptr);
     if (ownsSharedVulkanCore_)
       releaseSharedVulkanCore();
+  }
+
+  void waitForSubmittedFrameWork() {
+    if (!device_) {
+      return;
+    }
+    for (std::size_t i = 0; i < frameFences_.size(); ++i) {
+      VkFence const fence = frameFences_[i];
+      if (fence == VK_NULL_HANDLE ||
+          frameFenceCompleteGenerations_[i] >= frameFenceSubmitGenerations_[i]) {
+        continue;
+      }
+      vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
+      markFrameFenceComplete(i);
+    }
   }
 
   Backend backend() const noexcept override { return Backend::Vulkan; }
@@ -372,6 +395,8 @@ public:
         targetCanvas.clear(Colors::transparent);
         draw(targetCanvas, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
         targetCanvas.present();
+        targetCanvas.waitForSubmittedFrameWork();
+        targetCanvas.deviceWaitIdleOnDestruct_ = false;
       }
 
       auto image = std::make_shared<VulkanImage>(device_, allocator_, target.image, target.allocation,
@@ -839,6 +864,7 @@ public:
         // Render-target canvases without an exported signal are synchronous by contract;
         // callers use them for offscreen rasterization and immediate readback.
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+        markFrameFenceComplete(currentFrame_);
       }
       pollFrameCapture(false);
       if (canReuseCompletedFrame) {

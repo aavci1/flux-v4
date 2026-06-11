@@ -86,6 +86,7 @@
   std::vector<std::uint8_t> capturedFrameBytes_;
   std::uint32_t capturedFrameWidth_ = 0;
   std::uint32_t capturedFrameHeight_ = 0;
+  bool deviceWaitIdleOnDestruct_ = true;
   bool swapchainDirty_ = true;
   bool presentFenceRuntimeDisabled_ = false;
   bool transparentSurface_ = false;

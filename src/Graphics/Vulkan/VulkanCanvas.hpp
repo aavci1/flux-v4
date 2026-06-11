@@ -55,6 +55,7 @@ bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, 
 bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, VulkanFrameRecorder* target);
 void endRecordedOpsCaptureForCanvas(Canvas* canvas);
 bool prepareRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder* recorded);
+bool recordedOpsGlyphAtlasCurrentForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 bool replayRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 bool replayRecordedLocalOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight);
