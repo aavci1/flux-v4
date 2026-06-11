@@ -78,7 +78,8 @@
     if (count == 0)
       return;
     auto const &res = resources();
-    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : rectDescriptorSet_;
+    auto const& geometry = frameGeometryResources();
+    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : geometry.rectDescriptorSet;
     if (!storageDescriptor)
       return;
     bindPipeline(commandBuffer, state, res.rectPipeline, res.rectPipelineLayout);
@@ -96,10 +97,11 @@
     if (count == 0)
       return;
     auto const &res = resources();
-    if (!calloutDescriptorSet_)
+    auto const& geometry = frameGeometryResources();
+    if (!geometry.calloutDescriptorSet)
       return;
     bindPipeline(commandBuffer, state, res.calloutPipeline, res.calloutPipelineLayout);
-    bindDescriptorSet(commandBuffer, state, res.calloutPipelineLayout, 0, calloutDescriptorSet_);
+    bindDescriptorSet(commandBuffer, state, res.calloutPipelineLayout, 0, geometry.calloutDescriptorSet);
     pushDrawConstants(commandBuffer, state, res.calloutPipelineLayout, translationX, translationY);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
@@ -109,7 +111,8 @@
                      float translationX = 0.f, float translationY = 0.f) {
     if (count == 0)
       return;
-    VkBuffer const buffer = vertexBuffer ? vertexBuffer : pathBuffer_.buffer;
+    auto const& geometry = frameGeometryResources();
+    VkBuffer const buffer = vertexBuffer ? vertexBuffer : geometry.pathBuffer.buffer;
     if (!buffer)
       return;
     auto const &res = resources();
@@ -126,7 +129,8 @@
     if (!texture || !texture->descriptor || count == 0)
       return;
     auto const &res = resources();
-    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
+    auto const& geometry = frameGeometryResources();
+    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : geometry.quadDescriptorSet;
     if (!storageDescriptor)
       return;
     bindPipeline(commandBuffer,
@@ -145,7 +149,8 @@
     if (!texture || !texture->descriptor || count == 0)
       return;
     auto const &res = resources();
-    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
+    auto const& geometry = frameGeometryResources();
+    VkDescriptorSet const storageDescriptor = descriptor ? descriptor : geometry.quadDescriptorSet;
     if (!storageDescriptor)
       return;
     bindPipeline(commandBuffer, state, res.backdropPipeline, res.backdropPipelineLayout);
@@ -210,8 +215,11 @@
       return;
     setViewportScissor(commandBuffer, clip, targetExtent);
     auto const &res = resources();
+    auto const& geometry = frameGeometryResources();
+    if (!geometry.quadDescriptorSet)
+      return;
     bindPipeline(commandBuffer, state, res.backdropBlurPipeline, res.backdropPipelineLayout);
-    bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 0, quadDescriptorSet_);
+    bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 0, geometry.quadDescriptorSet);
     pushDrawConstants(commandBuffer, state, res.backdropPipelineLayout);
     bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 1, texture->descriptor);
     vkCmdDraw(commandBuffer, 6, 1, 0, first);

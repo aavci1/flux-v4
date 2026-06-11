@@ -200,10 +200,9 @@ public:
     uploadStagingPool_.clear();
     destroyBuffer(pendingScreenshotBuffer_);
     destroyBuffer(pendingFrameCaptureBuffer_);
-    destroyBuffer(pathBuffer_);
-    destroyBuffer(rectBuffer_);
-    destroyBuffer(calloutBuffer_);
-    destroyBuffer(quadBuffer_);
+    for (auto& geometry : frameGeometry_) {
+      destroyFrameGeometryResources(geometry);
+    }
     for (VkSemaphore semaphore : imageAvailable_) {
       if (semaphore)
         vkDestroySemaphore(device_, semaphore, nullptr);

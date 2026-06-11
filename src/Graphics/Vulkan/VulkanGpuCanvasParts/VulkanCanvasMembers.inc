@@ -63,13 +63,7 @@
   Texture backdropBlurTexture_;
   std::vector<CachedBackdropBlur> backdropBlurCache_;
   std::uint32_t backdropBlurBaseDownsample_ = kDefaultBackdropBlurBaseDownsample;
-  VkDescriptorSet rectDescriptorSet_ = VK_NULL_HANDLE;
-  VkDescriptorSet calloutDescriptorSet_ = VK_NULL_HANDLE;
-  VkDescriptorSet quadDescriptorSet_ = VK_NULL_HANDLE;
-  Buffer rectBuffer_;
-  Buffer calloutBuffer_;
-  Buffer quadBuffer_;
-  Buffer pathBuffer_;
+  std::array<FrameGeometryResources, kMaxFramesInFlight> frameGeometry_{};
   Buffer pendingScreenshotBuffer_;
   VkDeviceSize pendingScreenshotSize_ = 0;
   std::string pendingScreenshotPath_;

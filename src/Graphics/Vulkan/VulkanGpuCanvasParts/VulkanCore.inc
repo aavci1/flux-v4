@@ -637,6 +637,17 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   auto app = vkStructure<VkApplicationInfo>(VK_STRUCTURE_TYPE_APPLICATION_INFO);
   app.pApplicationName = "Lambda";
   app.apiVersion = VK_API_VERSION_1_3;
+  if (containsExtension(gRequiredInstanceExtensions, VK_KHR_SURFACE_EXTENSION_NAME)) {
+    std::uint32_t availableCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &availableCount, nullptr);
+    std::vector<VkExtensionProperties> available(availableCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &availableCount, available.data());
+    if (extensionAvailable(available, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME) &&
+        extensionAvailable(available, VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME)) {
+      appendUniqueExtension(gRequiredInstanceExtensions, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+      appendUniqueExtension(gRequiredInstanceExtensions, VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    }
+  }
   std::vector<char const *> instanceExtensions = extensionNamePointers(gRequiredInstanceExtensions);
   if (!instanceExtensions.empty()) {
     std::uint32_t availableCount = 0;

@@ -31,6 +31,7 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Final Linux test pass after review fixes: full `ctest --test-dir build --output-on-failure` passed under headless Weston (2/2 tests); `RuntimeInputTests.cpp` passed separately under headless Weston (33 cases / 198 assertions, with the existing `may_fail` case allowed); fresh Vulkan validation-layer render-target run passed (21 cases / 157 assertions); normal focused Vulkan/compositor slice passed (6 cases / 79 assertions); rebuilt KMS focused slice passed (6 cases / 79 assertions); ASan Vulkan recorder/render-target slice passed (4 cases / 65 assertions).
 - [x] Linux verifier rerun after installing `evemu` and `wayland-utils` passed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-145444`): atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases all passed with zero fatal matches; tool availability now reports `ydotool`, `wtype`, and `evemu-event` available.
 - [x] Real evdev hardware-input validation passed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-151835/evemu-hardware-input`): `evemu-event` injected 60 relative pointer events into `/dev/input/event6` (`GXTP7863:00 27C6:01E0 Mouse`), KMS/libinput logged 60 raw pointer motions, the hardware-cursor fast path logged 60 moves, presentation feedback reported `CLOCK_MONOTONIC` with `VSYNC|HW_CLOCK|HW_COMPLETION`, and there were zero fallback/unavailable moves or fatal matches.
+- [x] Runtime Vulkan validation-layer text-scroll and debug-screenshot pass completed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-153332/validation-scroll-screenshot`) after fixing validation errors from the first run. Fixes: enable the `VK_KHR_surface_maintenance1` instance-extension dependency chain and rotate swapchain geometry storage buffers/descriptors per in-flight frame. Rerun summary: 946 `vulkan-present-detail` samples, validation layer loaded, zero validation errors, zero fatal matches, valid `P6` debug screenshot (1,545,615 bytes), `waitImage` max 0.000 ms, screenshot phase max 22.480 ms, atlas max 4.710 ms, record max 1.463 ms, and `queuePresent` max 0.164 ms. Focused validation-layer `VulkanRenderTargetTests.cpp` also passed 21 cases / 157 assertions.
 - [ ] Remaining local input/visual gap: `ydotool`, `wtype`, `evemu-event`, and `wayland-info` are installed, and real evdev input is validated. `/dev/uinput` is still `root:root` mode `0600`, `ydotoold` fails with `failed to open uinput device: Permission denied`, and `sudo -n true` still prompts for a password, so uinput-backed validation requires host permission repair. Manual cursor visual validation still requires an interactive human session.
 - [ ] Remaining environment gap: automated app smoke passed with `lambda-shell`, scripted `lambda-terminal`, and `lambda-editor`; manual visual checks are still needed for cursor appearance, drag/move/resize feel, and representative app inspection on a live compositor session.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
@@ -95,7 +96,7 @@ Verification on Linux:
 
 - [x] `LAMBDA_RESIZE_TRACE=1` — the `atlasMs` phase in `vulkan-present-detail` should drop to ~0 on frames that add new glyphs (type rapidly in `lambda-terminal` / `lambda-editor` with a cold atlas).
 - [x] `./build/tests/lambda_tests --test-case="*Vulkan*,Compositor*"` (lavapipe OK) — glyph text test (`Vulkan RenderTarget renders glyph atlas text`) still passes.
-- [ ] Validation layers report no missing-barrier or layout errors while scrolling text-heavy content.
+- [x] Validation layers report no missing-barrier or layout errors while scrolling text-heavy content. Verified by the 2026-06-11 runtime text-scroll pass in `.debug-logs/frame-pacing-verify/20260611-153332/validation-scroll-screenshot` with 946 `vulkan-present-detail` samples and zero validation errors after the per-frame storage-buffer/descriptor fix.
 
 ## FP-2: Composite partial-damage frames once, not once per damage rect
 
@@ -273,7 +274,7 @@ What to do:
 
 Verification on Linux:
 
-- [ ] With `LAMBDA_DEBUG_SCREENSHOT_PATH` active, `vulkan-present-detail` shows present no longer blocked by readback waits; captured images remain correct (existing frame-capture parity test still passes under lavapipe).
+- [x] With `LAMBDA_DEBUG_SCREENSHOT_PATH` active, `vulkan-present-detail` shows present no longer blocked by readback waits; captured images remain correct (existing frame-capture parity test still passes under lavapipe). Verified by `.debug-logs/frame-pacing-verify/20260611-153332/validation-scroll-screenshot`: valid `P6` debug screenshot, `waitImage` max 0.000 ms, `queuePresent` max 0.164 ms, and focused validation-layer `VulkanRenderTargetTests.cpp` passed 21 cases / 157 assertions.
 - [x] ASan run of capture-heavy Vulkan recorder/render-target tests is clean: `build-asan` passed 22 cases/170 assertions with leak detection enabled.
 
 ## FP-11: Re-enable the frame-recorder prepared-geometry fast path safely

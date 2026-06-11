@@ -128,22 +128,34 @@
   }
 
   void uploadFrameBuffers() {
-    ensureBuffer(rectBuffer_, std::max<VkDeviceSize>(sizeof(RectInstance), rects_.size() * sizeof(RectInstance)),
+    FrameGeometryResources& geometry = frameGeometryResources();
+    ensureBuffer(geometry.rectBuffer,
+                 std::max<VkDeviceSize>(sizeof(RectInstance), rects_.size() * sizeof(RectInstance)),
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    upload(rectBuffer_, rects_.data(), rects_.size() * sizeof(RectInstance));
-    ensureStorageDescriptor(rectDescriptorSet_, resources().rectDescriptorLayout, rectBuffer_);
-    ensureBuffer(calloutBuffer_,
+    upload(geometry.rectBuffer, rects_.data(), rects_.size() * sizeof(RectInstance));
+    ensureStorageDescriptor(geometry.rectDescriptorSet, resources().rectDescriptorLayout, geometry.rectBuffer);
+    ensureBuffer(geometry.calloutBuffer,
                  std::max<VkDeviceSize>(sizeof(CalloutInstance), callouts_.size() * sizeof(CalloutInstance)),
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    upload(calloutBuffer_, callouts_.data(), callouts_.size() * sizeof(CalloutInstance));
-    ensureStorageDescriptor(calloutDescriptorSet_, resources().rectDescriptorLayout, calloutBuffer_);
-    ensureBuffer(quadBuffer_, std::max<VkDeviceSize>(sizeof(QuadInstance), quads_.size() * sizeof(QuadInstance)),
+    upload(geometry.calloutBuffer, callouts_.data(), callouts_.size() * sizeof(CalloutInstance));
+    ensureStorageDescriptor(geometry.calloutDescriptorSet, resources().rectDescriptorLayout, geometry.calloutBuffer);
+    ensureBuffer(geometry.quadBuffer,
+                 std::max<VkDeviceSize>(sizeof(QuadInstance), quads_.size() * sizeof(QuadInstance)),
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    upload(quadBuffer_, quads_.data(), quads_.size() * sizeof(QuadInstance));
-    ensureStorageDescriptor(quadDescriptorSet_, resources().quadDescriptorLayout, quadBuffer_);
-    ensureBuffer(pathBuffer_, std::max<VkDeviceSize>(sizeof(VulkanPathVertex), pathVerts_.size() * sizeof(VulkanPathVertex)),
+    upload(geometry.quadBuffer, quads_.data(), quads_.size() * sizeof(QuadInstance));
+    ensureStorageDescriptor(geometry.quadDescriptorSet, resources().quadDescriptorLayout, geometry.quadBuffer);
+    ensureBuffer(geometry.pathBuffer,
+                 std::max<VkDeviceSize>(sizeof(VulkanPathVertex), pathVerts_.size() * sizeof(VulkanPathVertex)),
                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    upload(pathBuffer_, pathVerts_.data(), pathVerts_.size() * sizeof(VulkanPathVertex));
+    upload(geometry.pathBuffer, pathVerts_.data(), pathVerts_.size() * sizeof(VulkanPathVertex));
+  }
+
+  FrameGeometryResources& frameGeometryResources() {
+    return frameGeometry_[currentFrame_ % frameGeometry_.size()];
+  }
+
+  FrameGeometryResources const& frameGeometryResources() const {
+    return frameGeometry_[currentFrame_ % frameGeometry_.size()];
   }
 
   void ensureBuffer(Buffer &buffer, VkDeviceSize size, VkBufferUsageFlags usage) {
@@ -213,6 +225,23 @@
     if (buffer.buffer)
       vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
     buffer = {};
+  }
+
+  void destroyStorageDescriptor(VkDescriptorSet& set) {
+    if (set && resources().descriptorPool) {
+      vkFreeDescriptorSets(device_, resources().descriptorPool, 1, &set);
+    }
+    set = VK_NULL_HANDLE;
+  }
+
+  void destroyFrameGeometryResources(FrameGeometryResources& geometry) {
+    destroyStorageDescriptor(geometry.rectDescriptorSet);
+    destroyStorageDescriptor(geometry.calloutDescriptorSet);
+    destroyStorageDescriptor(geometry.quadDescriptorSet);
+    destroyBuffer(geometry.pathBuffer);
+    destroyBuffer(geometry.rectBuffer);
+    destroyBuffer(geometry.calloutBuffer);
+    destroyBuffer(geometry.quadBuffer);
   }
 
   static Buffer takeBuffer(Buffer& buffer) {

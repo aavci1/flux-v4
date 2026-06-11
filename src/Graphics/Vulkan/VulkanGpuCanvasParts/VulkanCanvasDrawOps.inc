@@ -575,6 +575,16 @@ private:
     bool recycleUploadStaging = false;
   };
 
+  struct FrameGeometryResources {
+    VkDescriptorSet rectDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet calloutDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet quadDescriptorSet = VK_NULL_HANDLE;
+    Buffer rectBuffer;
+    Buffer calloutBuffer;
+    Buffer quadBuffer;
+    Buffer pathBuffer;
+  };
+
   struct RetiredSwapchain {
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     std::vector<VkImageView> views;
