@@ -108,6 +108,10 @@ public:
     return true;
   }
 
+  void markExternalRenderTargetSubmitted() {
+    retireDeferredResourcesAfterSubmit();
+  }
+
   bool requestNextFrameCapture() {
     frameCaptureRequested_ = true;
     return true;

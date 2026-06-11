@@ -45,6 +45,7 @@ std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface,
 std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,
                                                        TextSystem& textSystem);
 bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec const& spec);
+bool markVulkanRenderTargetCanvasSubmitted(Canvas* canvas);
 
 /// Requests a CPU readback of the next presented Vulkan frame as BGRA8.
 bool requestNextFrameCaptureForCanvas(Canvas* canvas);

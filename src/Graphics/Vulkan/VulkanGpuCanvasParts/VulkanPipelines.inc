@@ -57,13 +57,15 @@
     auto &res = resources();
     VkFormat const format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM
                                                                          : surfaceFormat_.format;
+    VkFormat const backdropFormat = backdropRenderTargetFormat();
     if (res.initialized) {
-      if (res.renderFormat != format) {
+      if (res.renderFormat != format || res.backdropRenderFormat != backdropFormat) {
         throw std::runtime_error("Shared Vulkan resources cannot be reused with a different surface format");
       }
       return;
     }
     res.renderFormat = format;
+    res.backdropRenderFormat = backdropFormat;
     createDescriptors();
     createSampler();
     createPipelineCache(*shared_);
@@ -186,7 +188,8 @@
                                           lambda_backdrop_frag_spv, lambda_backdrop_frag_spv_len, {});
     res.backdropBlurPipeline =
         createPipeline(res.backdropPipelineLayout, lambda_image_vert_spv, lambda_image_vert_spv_len,
-                       lambda_backdrop_blur_frag_spv, lambda_backdrop_blur_frag_spv_len, {});
+                       lambda_backdrop_blur_frag_spv, lambda_backdrop_blur_frag_spv_len, {},
+                       res.backdropRenderFormat);
     std::array<VkVertexInputBindingDescription, 1> binding{};
     binding[0].binding = 0;
     binding[0].stride = sizeof(VulkanPathVertex);
@@ -227,7 +230,8 @@
   }
 
   VkPipeline createPipeline(VkPipelineLayout layout, unsigned char const *vertBytes, unsigned int vertLen,
-                            unsigned char const *fragBytes, unsigned int fragLen, VertexInput input) {
+                            unsigned char const *fragBytes, unsigned int fragLen, VertexInput input,
+                            VkFormat colorFormatOverride = VK_FORMAT_UNDEFINED) {
     VkShaderModule vert = shaderModule(device_, vertBytes, vertLen);
     VkShaderModule frag = shaderModule(device_, fragBytes, fragLen);
     VkPipelineShaderStageCreateInfo stages[2]{
@@ -281,7 +285,9 @@
     dyn.pDynamicStates = states;
     auto info = vkStructure<VkGraphicsPipelineCreateInfo>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
     auto rendering = vkStructure<VkPipelineRenderingCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO);
-    VkFormat const colorFormat = resources().renderFormat;
+    VkFormat const colorFormat = colorFormatOverride == VK_FORMAT_UNDEFINED
+                                     ? resources().renderFormat
+                                     : colorFormatOverride;
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachmentFormats = &colorFormat;
     info.pNext = &rendering;

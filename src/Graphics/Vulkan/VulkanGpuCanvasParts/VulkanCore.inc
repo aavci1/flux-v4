@@ -531,9 +531,10 @@ struct SharedVulkanCore {
   VmaAllocator allocator = VK_NULL_HANDLE;
   VkQueue queue = VK_NULL_HANDLE;
   std::uint32_t queueFamily = 0;
-  struct Resources {
+    struct Resources {
     bool initialized = false;
     VkFormat renderFormat = VK_FORMAT_UNDEFINED;
+    VkFormat backdropRenderFormat = VK_FORMAT_UNDEFINED;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout rectDescriptorLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout quadDescriptorLayout = VK_NULL_HANDLE;

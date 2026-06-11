@@ -2020,15 +2020,15 @@ private:
     bool renderComplete = true;
     bool prepared = false;
     bool discardWhenReady = false;
-	    bool partialFrame = false;
-	    bool primaryContentsValid = false;
-	    std::uint64_t renderSubmittedNsec = 0;
-	    std::uint64_t renderReadyNsec = 0;
-	    std::vector<KmsAtomicPresenter::DamageRect> damageRects;
-	    std::vector<KmsAtomicPresenter::DamageRect> staleRects;
-	    std::vector<KmsAtomicPresenter::DamageRect> scanoutCopyRects;
-	    VulkanRenderTargetSpec spec{};
-	  };
+    bool partialFrame = false;
+    bool primaryContentsValid = false;
+    std::uint64_t renderSubmittedNsec = 0;
+    std::uint64_t renderReadyNsec = 0;
+    std::vector<KmsAtomicPresenter::DamageRect> damageRects;
+    std::vector<KmsAtomicPresenter::DamageRect> staleRects;
+    std::vector<KmsAtomicPresenter::DamageRect> scanoutCopyRects;
+    VulkanRenderTargetSpec spec{};
+  };
 
   std::uint32_t tokenForBuffer(int index) const noexcept {
     return index >= 0 ? static_cast<std::uint32_t>(index + 1) : 0u;
@@ -2055,7 +2055,9 @@ private:
     buffer.prepared = false;
     buffer.discardWhenReady = false;
     buffer.partialFrame = false;
+    buffer.primaryContentsValid = false;
     buffer.damageRects.clear();
+    buffer.staleRects.assign(1, fullDamageRect());
     buffer.scanoutCopyRects.clear();
     buffer.renderComplete = true;
     buffer.renderSubmittedNsec = 0;
@@ -3106,6 +3108,7 @@ private:
       if (fallbackFence) vkDestroyFence(lambda::VulkanContext::instance().device(), fallbackFence, nullptr);
       throw;
     }
+    lambda::markVulkanRenderTargetCanvasSubmitted(canvas_.get());
     recordKmsTraceSince(KmsTraceBucket::QueueSubmit, submitStart);
     if (fallbackFence) {
       if (!renderFenceFallbackLogged_) {

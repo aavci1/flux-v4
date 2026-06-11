@@ -1368,31 +1368,31 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         int const flipFd = presenter->atomicPresenter()->eventFd();
         if (flipFd >= 0) storage[count++] = flipFd;
       }
-	      if (presenter->atomicPresenter()) {
-	        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
-	          if (frame->overlayOnly || frame->directScanout) continue;
-	          int const readyFd = presenter->atomicPresenter()->renderReadyFd(frame->presentToken);
-	          if (readyFd >= 0) {
-	            storage[count++] = readyFd;
-	            break;
-	          }
-	        }
-	        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
-	          int acquireFenceFd = -1;
-	          if (frame->scanoutCandidate) {
-	            acquireFenceFd = frame->scanoutCandidate->acquireFenceFd;
-	          } else if (frame->directScanout) {
-	            acquireFenceFd = presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd();
-	          } else if (frame->overlayOnly) {
-	            acquireFenceFd = presenter->atomicPresenter()->preparedOverlayAcquireFenceFd();
-	          }
-	          if (acquireFenceFd < 0) continue;
-	          if (!fdReadableNow(acquireFenceFd)) {
-	            storage[count++] = acquireFenceFd;
-	            break;
-	          }
-	        }
-	      }
+      if (presenter->atomicPresenter()) {
+        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
+          if (frame->overlayOnly || frame->directScanout) continue;
+          int const readyFd = presenter->atomicPresenter()->renderReadyFd(frame->presentToken);
+          if (readyFd >= 0) {
+            storage[count++] = readyFd;
+            break;
+          }
+        }
+        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
+          int acquireFenceFd = -1;
+          if (frame->scanoutCandidate) {
+            acquireFenceFd = frame->scanoutCandidate->acquireFenceFd;
+          } else if (frame->directScanout) {
+            acquireFenceFd = presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd();
+          } else if (frame->overlayOnly) {
+            acquireFenceFd = presenter->atomicPresenter()->preparedOverlayAcquireFenceFd();
+          }
+          if (acquireFenceFd < 0) continue;
+          if (!fdReadableNow(acquireFenceFd)) {
+            storage[count++] = acquireFenceFd;
+            break;
+          }
+        }
+      }
       return std::span<int const>(storage.data(), count);
     };
     auto pollMaskHas = [](std::uint64_t mask, std::size_t index) {
@@ -1857,7 +1857,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         }
       }
       atomicReadyFrames.clear();
-	      atomicRenderedFrame = AtomicReadyFrame{};
+      atomicRenderedFrame = AtomicReadyFrame{};
     };
     auto dispatchAtomicPageFlip = [&] {
       auto const traceStart = diagnostics::cpuTraceNow();
@@ -2283,15 +2283,15 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           (animationFrameNeeded || screenshotFlashFrameNeededBeforePoll || snapPreviewCanRenderBeforePoll ||
            windowCyclerCanRenderBeforePoll || atomicDirtyCanRenderBeforePoll) &&
           !atomicFrameBlockedBeforePoll;
-	      int const renderAheadDelayBeforePoll =
-	          diagnosticRenderAheadAllowed() ? atomicRenderAheadDelayMs() : kIdlePollMs;
-	      int const queuedScheduleDelayBeforePoll = queuedAtomicScheduleDelayMs();
-	      int const acquireWaitCallbackDelayBeforePoll = acquireWaitFrameCallbackDelayMs();
-	      int const vulkanDisplayPresentationDelayBeforePoll = vulkanDisplayPresentationPollDelayMs();
-	      int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
-	                              ? 0
-	                              : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
-	      pollTimeoutMs = std::min(pollTimeoutMs, queuedScheduleDelayBeforePoll);
+      int const renderAheadDelayBeforePoll =
+          diagnosticRenderAheadAllowed() ? atomicRenderAheadDelayMs() : kIdlePollMs;
+      int const queuedScheduleDelayBeforePoll = queuedAtomicScheduleDelayMs();
+      int const acquireWaitCallbackDelayBeforePoll = acquireWaitFrameCallbackDelayMs();
+      int const vulkanDisplayPresentationDelayBeforePoll = vulkanDisplayPresentationPollDelayMs();
+      int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
+                              ? 0
+                              : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
+      pollTimeoutMs = std::min(pollTimeoutMs, queuedScheduleDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, vulkanDisplayPresentationDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, diagnosticExerciseDelayMs());
@@ -2357,9 +2357,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                           pageFlipWoke,
                                           renderReadyWoke);
       }
-	      bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
-	      (void)maybeCompleteVulkanDisplayPresentationCallbacks();
-	      if (shellWoke) {
+      bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
+      (void)maybeCompleteVulkanDisplayPresentationCallbacks();
+      if (shellWoke) {
         wayland.dispatchShellIpc();
         loopSnapshots.reset();
       }
@@ -2483,11 +2483,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       bool const emptyDamageSkipped =
           tryClearAtomicDirtyForEmptyDamage(animationFrameNeeded,
-	                                            screenshotFlashFrameNeeded,
-	                                            snapPreviewFrameNeeded,
-	                                            windowCyclerFrameNeeded,
-	                                            inputRenderRequired,
-	                                            configReloaded);
+                                            screenshotFlashFrameNeeded,
+                                            snapPreviewFrameNeeded,
+                                            windowCyclerFrameNeeded,
+                                            inputRenderRequired,
+                                            configReloaded);
       bool const atomicPageFlipPending = presenter->atomicPresenter() && presenter->atomicPresenter()->hasPendingPageFlip();
       bool const queuedAtomicCanSchedule = queuedAtomicScheduleCandidate().has_value();
       bool const atomicFrameBlocked =

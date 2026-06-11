@@ -21,14 +21,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Added ASan capture-heavy verification for Vulkan recorder/render-target tests. A fresh `build-asan` now builds `lambda_tests` with the generated Wayland server protocol headers ordered correctly, and the ASan slice passed 22 cases/170 assertions including recorded image replay after the recording canvas is destroyed.
 - [x] Perf-wrapped full Linux verifier passed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-102353`): atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases all passed with zero fatal matches. `perf stat` captured 26,854.53 ms task-clock, 340,670 page faults, 30,434,613,748 cycles, and 64,869,277,919 instructions for the verifier script.
 - [x] Standard external compositor smoke partially passed: Weston 15.0.1 headless with kiosk shell/fake seat ran `weston-smoke` until a controlled 8-second timeout with no Weston runtime errors. The Lambda presentation-feedback checker also connected far enough to report that Weston headless advertises `CLOCK_MONOTONIC_RAW`, so it remains unsuitable for validating Lambda's stricter `CLOCK_MONOTONIC` presentation contract.
-- [ ] Remaining validation-layer gap: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` Vulkan render tests still pass, but `VK_LOADER_DEBUG=layer` reports `Layer "VK_LAYER_KHRONOS_validation" was not found`; `vulkan-validation-layers` and `vulkan-tools` are still not installed.
+- [x] Validation-layer focused Vulkan render-target run passed on 2026-06-11: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation VK_LOADER_DEBUG=layer ./build/tests/lambda_tests --source-file="*VulkanRenderTargetTests.cpp" --no-skip` loaded `VK_LAYER_KHRONOS_validation` and passed 19 cases / 141 assertions after matching the backdrop-blur pipeline format to its R16 render targets.
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 3 high, 9 medium, 11 low/nit items remain open.
+- [ ] Post-implementation review backlog (REV-*) below — 1 high, 9 medium, 10 low/nit items remain open.
 
 ## Working Environment
 
@@ -396,29 +396,6 @@ Items found during the 2026-06-11 review of commits `50d65831..HEAD`. Each item 
 
 ## High severity
 
-### REV-V1: External-command-buffer render targets never age deferred destroys (KMS memory leak)
-
-**Severity: High (unbounded ~16 MB staging-buffer growth on the compositor output path).**
-
-`retireDeferredResourcesAfterSubmit()` (`VulkanImages.inc:265-269`) runs only after the canvas's own `vkQueueSubmit2` (`VulkanCanvasLifecycle.inc:549-558`). The KMS atomic presenter always supplies an external command buffer (`KmsOutput.cpp:2870`), so `presentRenderTarget()` returns at `VulkanCanvasLifecycle.inc:803` before line 838 — deferred texture/buffer/image destroys and staging-buffer recycling never run. Every glyph-atlas upload queues a ~16 MB staging buffer (`recordPendingTextureUploads`, `VulkanImages.inc:243-254`).
-
-What to do:
-
-- [ ] [Auto] Call `retireDeferredResourcesAfterSubmit()` (or equivalent aging) on the external-command-buffer path after the external queue submit that consumed the recorded commands.
-- [ ] [Auto] Alternatively, tie deferred-destroy aging to the exported render-fence / frame-fence completion on the KMS path.
-- [ ] [Auto + Manual] Run compositor with heavy text churn; monitor RSS / VMA allocator stats — should plateau, not grow linearly with frames.
-
-### REV-K1: Discarded frames poison partial-frame content preservation
-
-**Severity: High (ghost pixels on partial scanout reuse).**
-
-Region-limited copies (`KmsOutput.cpp:3040-3063`) assume buffer pixels equal last-presented content plus `staleRects` (`markPrimaryDamagePresented`, `2066-2084`). A frame rendered then discarded from the mailbox (`releasePreparedBuffer`, `2051-2064`) overwrites offscreen/scanout without updating `primaryContentsValid` / `staleRects`. The next partial reuse of that buffer can scan out never-presented pixels outside `staleRects ∪ new damage`.
-
-What to do:
-
-- [ ] [Auto] In `releasePreparedBuffer`, set `buffer.primaryContentsValid = false` or reset `staleRects` to full-output so the next partial use forces a full preserved-copy.
-- [ ] [Manual] Drag a window with intermediate discarded frames; verify no ghost at revert positions (caret blink, hover flicker, discontiguous moves).
-
 ### REV-M1: Metal atlas grow blit races with in-flight render-queue uploads
 
 **Severity: High (permanent garbage glyphs after grow).**
@@ -716,12 +693,6 @@ What to do:
 `KmsOutput.cpp:3589-3591` — if `addAtomicCursorProperties` returns false without setting errno, stale `EBUSY` could false-defer. Currently unreachable given pre-checks at `3571-3572`.
 
 - [ ] [Auto] Distinguish "props not added" from "commit failed" explicitly.
-
-### REV-K8: Stray tab indentation
-
-Tabs mixed into space-indented files, e.g. `KmsOutput.cpp:2024` (`Buffer` struct), `CompositorRuntime.cpp:2489`.
-
-- [ ] [Auto] Strip leading tabs on affected lines.
 
 ### REV-W4: `renderPopover` throw through libwayland C callback
 

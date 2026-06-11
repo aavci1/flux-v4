@@ -35,6 +35,15 @@ bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec c
   return vulkan && vulkan->setRenderTargetSpec(spec);
 }
 
+bool markVulkanRenderTargetCanvasSubmitted(Canvas* canvas) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  if (!vulkan) {
+    return false;
+  }
+  vulkan->markExternalRenderTargetSubmitted();
+  return true;
+}
+
 bool requestNextFrameCaptureForCanvas(Canvas* canvas) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan && vulkan->requestNextFrameCapture();
