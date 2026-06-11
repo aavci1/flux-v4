@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <ctime>
 #include <cmath>
 #include <stdexcept>
@@ -77,6 +78,23 @@ enum class KmsTraceBucket : std::size_t {
   Count,
 };
 
+enum class KmsCopyTraceKind : std::size_t {
+  PrimaryPreserve,
+  Scanout,
+  Count,
+};
+
+struct KmsCopyTraceCounters {
+  std::uint64_t fullCopies = 0;
+  std::uint64_t regionCopies = 0;
+  std::uint64_t rects = 0;
+  std::uint64_t pixels = 0;
+  std::uint64_t fullEquivalentPixels = 0;
+  std::uint64_t fullPixels = 0;
+  std::uint64_t regionPixels = 0;
+  std::uint64_t regionFullEquivalentPixels = 0;
+};
+
 char const* kmsTraceBucketName(KmsTraceBucket bucket) {
   switch (bucket) {
   case KmsTraceBucket::Prepare: return "prepare";
@@ -119,6 +137,7 @@ struct KmsTraceState {
   std::uint64_t windowStartNsec = monotonicNanoseconds();
   std::array<std::uint64_t, static_cast<std::size_t>(KmsTraceBucket::Count)> counts{};
   std::array<std::uint64_t, static_cast<std::size_t>(KmsTraceBucket::Count)> nanos{};
+  std::array<KmsCopyTraceCounters, static_cast<std::size_t>(KmsCopyTraceKind::Count)> copyCounters{};
 };
 
 KmsTraceState& kmsTraceState() {
@@ -128,6 +147,56 @@ KmsTraceState& kmsTraceState() {
 
 std::uint64_t kmsTraceStart() {
   return kmsPresentTraceEnabled() ? monotonicNanoseconds() : 0;
+}
+
+void recordKmsCopyTrace(KmsCopyTraceKind kind,
+                        bool fullCopy,
+                        std::uint64_t rects,
+                        std::uint64_t pixels,
+                        std::uint64_t fullEquivalentPixels) noexcept {
+  if (!kmsPresentTraceEnabled()) return;
+  try {
+    auto& state = kmsTraceState();
+    std::scoped_lock lock(state.mutex);
+    std::size_t const index = static_cast<std::size_t>(kind);
+    if (index >= state.copyCounters.size()) return;
+    KmsCopyTraceCounters& counters = state.copyCounters[index];
+    if (fullCopy) {
+      ++counters.fullCopies;
+      counters.fullPixels += pixels;
+    } else {
+      ++counters.regionCopies;
+      counters.regionPixels += pixels;
+      counters.regionFullEquivalentPixels += fullEquivalentPixels;
+    }
+    counters.rects += rects;
+    counters.pixels += pixels;
+    counters.fullEquivalentPixels += fullEquivalentPixels;
+  } catch (...) {
+  }
+}
+
+void printKmsCopyCounters(char const* prefix, KmsCopyTraceCounters const& counters) noexcept {
+  if (counters.fullCopies == 0 && counters.regionCopies == 0) return;
+  std::fprintf(stderr,
+               " %s_full=%llu %s_region=%llu %s_rects=%llu %s_pixels=%llu %s_full_equiv_pixels=%llu"
+               " %s_full_pixels=%llu %s_region_pixels=%llu %s_region_full_equiv_pixels=%llu",
+               prefix,
+               static_cast<unsigned long long>(counters.fullCopies),
+               prefix,
+               static_cast<unsigned long long>(counters.regionCopies),
+               prefix,
+               static_cast<unsigned long long>(counters.rects),
+               prefix,
+               static_cast<unsigned long long>(counters.pixels),
+               prefix,
+               static_cast<unsigned long long>(counters.fullEquivalentPixels),
+               prefix,
+               static_cast<unsigned long long>(counters.fullPixels),
+               prefix,
+               static_cast<unsigned long long>(counters.regionPixels),
+               prefix,
+               static_cast<unsigned long long>(counters.regionFullEquivalentPixels));
 }
 
 void recordKmsTraceElapsed(KmsTraceBucket bucket, std::uint64_t elapsedNsec) noexcept {
@@ -152,9 +221,14 @@ void recordKmsTraceElapsed(KmsTraceBucket bucket, std::uint64_t elapsedNsec) noe
                    static_cast<unsigned long long>(state.counts[i]),
                    static_cast<double>(state.nanos[i]) / 1'000'000.0);
     }
+    printKmsCopyCounters("primary_preserve_copy",
+                         state.copyCounters[static_cast<std::size_t>(KmsCopyTraceKind::PrimaryPreserve)]);
+    printKmsCopyCounters("scanout_copy",
+                         state.copyCounters[static_cast<std::size_t>(KmsCopyTraceKind::Scanout)]);
     std::fprintf(stderr, "\n");
     state.counts.fill(0);
     state.nanos.fill(0);
+    state.copyCounters.fill(KmsCopyTraceCounters{});
     state.windowStartNsec = now;
   } catch (...) {
   }
@@ -833,6 +907,24 @@ public:
            static_cast<std::int64_t>(rect.y) + rect.height >= connector_.mode.vdisplay;
   }
 
+  [[nodiscard]] std::uint64_t fullScanoutPixels() const noexcept {
+    return static_cast<std::uint64_t>(connector_.mode.hdisplay) *
+           static_cast<std::uint64_t>(connector_.mode.vdisplay);
+  }
+
+  [[nodiscard]] std::uint64_t copyPixels(VkImageCopy const& copy) const noexcept {
+    return static_cast<std::uint64_t>(copy.extent.width) *
+           static_cast<std::uint64_t>(copy.extent.height);
+  }
+
+  [[nodiscard]] std::uint64_t copyPixels(std::span<VkImageCopy const> copies) const noexcept {
+    std::uint64_t pixels = 0;
+    for (VkImageCopy const& copy : copies) {
+      pixels += copyPixels(copy);
+    }
+    return pixels;
+  }
+
   [[nodiscard]] bool damageRectsOverlapOrTouch(KmsAtomicPresenter::DamageRect const& a,
                                                KmsAtomicPresenter::DamageRect const& b) const noexcept {
     std::int64_t const ax2 = static_cast<std::int64_t>(a.x) + a.width;
@@ -972,6 +1064,10 @@ public:
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                      1,
                      &copy);
+      if (kmsPresentTraceEnabled()) {
+        std::uint64_t const pixels = fullScanoutPixels();
+        recordKmsCopyTrace(KmsCopyTraceKind::PrimaryPreserve, true, 1, pixels, pixels);
+      }
     } else {
       std::vector<VkImageCopy> copies;
       copies.reserve(damage.size());
@@ -996,6 +1092,13 @@ public:
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        static_cast<std::uint32_t>(copies.size()),
                        copies.data());
+        if (kmsPresentTraceEnabled()) {
+          recordKmsCopyTrace(KmsCopyTraceKind::PrimaryPreserve,
+                             false,
+                             copies.size(),
+                             copyPixels(copies),
+                             fullScanoutPixels());
+        }
       }
     }
 
@@ -3101,6 +3204,15 @@ private:
         copy.dstSubresource.layerCount = 1;
         copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
         copies.push_back(copy);
+      }
+      if (kmsPresentTraceEnabled()) {
+        bool const fullCopy = !regionCopy ||
+                              (copies.size() == 1u && copyPixels(copies.front()) == fullScanoutPixels());
+        recordKmsCopyTrace(KmsCopyTraceKind::Scanout,
+                           fullCopy,
+                           copies.size(),
+                           copyPixels(copies),
+                           fullScanoutPixels());
       }
       vkCmdCopyImage(buffer.commandBuffer,
                      buffer.offscreenImage,

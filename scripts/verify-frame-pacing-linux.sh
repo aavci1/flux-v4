@@ -25,6 +25,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
   - holds ten decorated static SHM client windows and asserts snapshot/surface phases stay cheap
   - moves two decorated checker windows and asserts multi-rect partial damage stays cheap
+  - forces the offscreen scanout-copy path and asserts partial damage copies fewer pixels than full-frame copies
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
   - captures compositor resize-storm frames and snap CSV metrics for artifact inspection
@@ -518,6 +519,93 @@ summarize_multi_dirty_partial() {
   ' "$dir/cpu.log"
 }
 
+summarize_scanout_copy_partial() {
+  local dir="$1"
+  local label="$2"
+  [[ -s "$dir/compositor.log" ]] || {
+    echo "SUMMARY $label scanout_copy_missing_compositor_log=1"
+    return 1
+  }
+  [[ -s "$dir/cpu.log" ]] || {
+    echo "SUMMARY $label scanout_copy_missing_cpu_log=1"
+    return 1
+  }
+  if ! rg -q 'uses optimal offscreen render targets with copy to scanout' "$dir/compositor.log"; then
+    echo "SUMMARY $label scanout_copy_offscreen_path=0"
+    return 1
+  fi
+
+  local max_ratio="${LWM_SCANOUT_COPY_MAX_PIXEL_RATIO:-0.85}"
+  awk -v label="$label" -v max_ratio="$max_ratio" '
+    function value(name,    pattern, raw) {
+      pattern = name "=[0-9]+"
+      if (!match(line, pattern)) return 0
+      raw = substr(line, RSTART, RLENGTH)
+      sub(/^.*=/, "", raw)
+      return raw + 0
+    }
+    /^kms-trace:/ {
+      line = $0
+      scanout_full += value("scanout_copy_full")
+      scanout_region += value("scanout_copy_region")
+      scanout_rects += value("scanout_copy_rects")
+      scanout_pixels += value("scanout_copy_pixels")
+      scanout_full_equiv += value("scanout_copy_full_equiv_pixels")
+      scanout_full_pixels += value("scanout_copy_full_pixels")
+      scanout_region_pixels += value("scanout_copy_region_pixels")
+      scanout_region_full_equiv += value("scanout_copy_region_full_equiv_pixels")
+      preserve_full += value("primary_preserve_copy_full")
+      preserve_region += value("primary_preserve_copy_region")
+      preserve_rects += value("primary_preserve_copy_rects")
+      preserve_pixels += value("primary_preserve_copy_pixels")
+      preserve_full_equiv += value("primary_preserve_copy_full_equiv_pixels")
+      preserve_region_pixels += value("primary_preserve_copy_region_pixels")
+      preserve_region_full_equiv += value("primary_preserve_copy_region_full_equiv_pixels")
+      samples += 1
+    }
+    END {
+      ratio = scanout_full_equiv > 0 ? scanout_pixels / scanout_full_equiv : 1.0
+      region_ratio = scanout_region_full_equiv > 0 ? scanout_region_pixels / scanout_region_full_equiv : 1.0
+      preserve_ratio = preserve_region_full_equiv > 0 ? preserve_region_pixels / preserve_region_full_equiv : 0.0
+      printf "SUMMARY %s scanout_copy samples=%d full=%d region=%d rects=%d pixels=%d full_equiv_pixels=%d pixel_ratio=%.3f region_pixels=%d region_full_equiv_pixels=%d region_pixel_ratio=%.3f max_ratio=%.3f preserve_full=%d preserve_region=%d preserve_rects=%d preserve_region_pixels=%d preserve_region_full_equiv_pixels=%d preserve_region_pixel_ratio=%.3f\n",
+        label, samples, scanout_full, scanout_region, scanout_rects, scanout_pixels, scanout_full_equiv,
+        ratio, scanout_region_pixels, scanout_region_full_equiv, region_ratio, max_ratio,
+        preserve_full, preserve_region, preserve_rects, preserve_region_pixels,
+        preserve_region_full_equiv, preserve_ratio
+      if (samples == 0 || scanout_region <= 0 || scanout_rects <= 0 ||
+          scanout_region_pixels <= 0 || scanout_region_full_equiv <= 0 || region_ratio >= max_ratio) exit 1
+    }
+  ' "$dir/compositor.log"
+
+  local present_budget_ms="${LWM_SCANOUT_COPY_PRESENT_MAX_MS:-3.0}"
+  awk -v label="$label" -v present_budget_ms="$present_budget_ms" '
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    /^cpu-trace:/ {
+      line = $0
+      frames = phrase("frames=[0-9]+", "frames")
+      present = phrase("cursor=[0-9.]+ present=[0-9.]+", "present")
+      if (frames <= 0) next
+      samples += 1
+      present_sum += present
+      if (present > present_max) present_max = present
+    }
+    END {
+      if (samples == 0) {
+        printf "SUMMARY %s scanout_copy_present samples=0\n", label
+        exit 1
+      }
+      printf "SUMMARY %s scanout_copy_present samples=%d present_avg=%.3f present_max=%.3f budget=%.3f\n",
+        label, samples, present_sum / samples, present_max, present_budget_ms
+      if (present_max > present_budget_ms) exit 1
+    }
+  ' "$dir/cpu.log"
+}
+
 summarize_cpu_trace() {
   local log="$1"
   [[ -s "$log" ]] || return 0
@@ -735,6 +823,123 @@ EOF
     "$label" "$display" "$presenter_line" "$checker_a_line" "$checker_b_line" "$dir"
   summarize_runtime_logs "$dir" "$label"
   summarize_multi_dirty_partial "$dir" "$label"
+  summarize_cpu_trace "$dir/cpu.log"
+}
+
+run_scanout_copy_partial_case() {
+  local label="scanout-copy-partial"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+  rm -f "$display_file"
+
+  local wm_pid=""
+  local checker_a_pid=""
+  local checker_b_pid=""
+  cleanup() {
+    set +e
+    if [[ -n "$checker_a_pid" ]]; then
+      kill -TERM -"$checker_a_pid" 2>/dev/null || kill -TERM "$checker_a_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$checker_b_pid" ]]; then
+      kill -TERM -"$checker_b_pid" 2>/dev/null || kill -TERM "$checker_b_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+    fi
+    sleep 1
+    if [[ -n "$checker_a_pid" ]]; then
+      kill -KILL -"$checker_a_pid" 2>/dev/null || kill -KILL "$checker_a_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$checker_b_pid" ]]; then
+      kill -KILL -"$checker_b_pid" 2>/dev/null || kill -KILL "$checker_b_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+    fi
+    set -e
+  }
+  trap cleanup RETURN
+
+  setsid timeout --signal=TERM --kill-after=5s 35s env \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$dir/cpu.log" \
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0 \
+    LAMBDA_KMS_PRESENT_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LAMBDA_COMPOSITOR_DISABLE_DIRECT_SCANOUT_RENDER=1 \
+    LAMBDA_COMPOSITOR_DISABLE_KMS_OVERLAYS=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_MULTI_TOPLEVELS=1 \
+    "$WM" >"$dir/compositor.log" 2>&1 &
+  wm_pid=$!
+
+  local display=""
+  for _ in $(seq 1 150); do
+    if [[ -r "$display_file" ]]; then
+      display="$(cat "$display_file")"
+      break
+    fi
+    if ! kill -0 "$wm_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -z "$display" ]]; then
+    echo "CASE $label display-not-ready log_dir=$dir" >&2
+    tail -n 120 "$dir/compositor.log" >&2 || true
+    return 20
+  fi
+
+  setsid timeout --signal=TERM --kill-after=2s 18s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=11000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback-a.log" 2>&1 &
+  checker_a_pid=$!
+  sleep 0.4
+  setsid timeout --signal=TERM --kill-after=2s 18s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=11000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback-b.log" 2>&1 &
+  checker_b_pid=$!
+
+  local checker_a_status=0
+  wait "$checker_a_pid" || checker_a_status=$?
+  checker_a_pid=""
+  local checker_b_status=0
+  wait "$checker_b_pid" || checker_b_status=$?
+  checker_b_pid=""
+  if [[ "$checker_a_status" -ne 0 || "$checker_b_status" -ne 0 ]]; then
+    echo "CASE $label checker_a_status=$checker_a_status checker_b_status=$checker_b_status" >&2
+    tail -n 80 "$dir/presentation-feedback-a.log" >&2 || true
+    tail -n 80 "$dir/presentation-feedback-b.log" >&2 || true
+    return 21
+  fi
+
+  sleep 1
+  cleanup
+  trap - RETURN
+  wait "$wm_pid" 2>/dev/null || true
+
+  local checker_a_line
+  local checker_b_line
+  checker_a_line="$(tr '\n' ' ' < "$dir/presentation-feedback-a.log")"
+  checker_b_line="$(tr '\n' ' ' < "$dir/presentation-feedback-b.log")"
+  local presenter_line
+  presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
+  printf 'CASE %s display=%s %s checker_a=%s checker_b=%s log_dir=%s\n' \
+    "$label" "$display" "$presenter_line" "$checker_a_line" "$checker_b_line" "$dir"
+  summarize_runtime_logs "$dir" "$label"
+  summarize_multi_dirty_partial "$dir" "$label"
+  summarize_scanout_copy_partial "$dir" "$label"
   summarize_cpu_trace "$dir/cpu.log"
 }
 
@@ -1316,6 +1521,7 @@ run_selected_case atomic-pointer-under-terminal-load run_compositor_case atomic-
 run_selected_case surface-cache-static run_surface_cache_case
 run_selected_case snapshot-load-10-windows run_snapshot_load_case
 run_selected_case multi-dirty-partial run_multi_dirty_partial_case
+run_selected_case scanout-copy-partial run_scanout_copy_partial_case
 run_selected_case chrome-hover-press-cache run_chrome_interaction_case
 run_selected_case resize-storm run_resize_storm_case
 run_selected_case vulkan-display run_compositor_case vulkan-display vulkan-display 0 0
