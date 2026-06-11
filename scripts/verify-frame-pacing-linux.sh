@@ -165,6 +165,22 @@ summarize_pointer_terminal_overlap() {
   printf 'SUMMARY %s pointer_terminal_overlap %s\n' "$label" "$timing"
 }
 
+summarize_cursor_primary_interleave() {
+  local dir="$1"
+  local label="$2"
+  local accepted_interleaved
+  accepted_interleaved=$(rg -c 'hardware-cursor-motion-fast-path moved=1 pendingFlip=1 deferred=0' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local deferred_interleaved
+  deferred_interleaved=$(rg -c 'hardware-cursor-motion-fast-path moved=1 pendingFlip=1 deferred=1' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local pending_pointer_moves
+  pending_pointer_moves=$(rg -c 'hardware-cursor-motion-fast-path moved=1 pendingFlip=1' "$dir/pacing.log" 2>/dev/null || echo 0)
+  printf 'SUMMARY %s cursor_primary_interleave accepted=%s deferred=%s pending_pointer_moves=%s\n' \
+    "$label" "$accepted_interleaved" "$deferred_interleaved" "$pending_pointer_moves"
+  if [[ "$accepted_interleaved" -le 0 ]]; then
+    return 1
+  fi
+}
+
 summarize_chrome_interaction() {
   local dir="$1"
   local label="$2"
@@ -2005,6 +2021,7 @@ run_compositor_case() {
     summarize_pointer_fast_path "$dir" "$label"
     if [[ "$run_apps" == "1" ]]; then
       summarize_pointer_terminal_overlap "$dir" "$label"
+      summarize_cursor_primary_interleave "$dir" "$label"
     fi
   fi
   summarize_cpu_trace "$dir/cpu.log"

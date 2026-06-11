@@ -1110,18 +1110,27 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                                    hardwareCursorMotionFastPathAllowed &&
                                                    !hardwareCursorMotionFastPathDisabled;
         bool const hardwareCursorFastPathAttempted = hardwareCursorFastPathEnabled && cursorState.hardwareVisible;
+        bool const primaryFlipPendingBeforeCursor =
+            presenter->atomicPresenter() && presenter->atomicPresenter()->hasPendingPageFlip();
         bool const hardwareCursorMoved = moveCurrentHardwareCursor(wayland,
                                                                    output,
                                                                    cursorState,
                                                                    hardwareCursorFastPathEnabled);
+        bool const cursorCommitDeferred = output.hasDeferredCursorCommit();
         if (hardwareCursorMoved) {
-          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path moved=1 pointer=%.1f,%.1f\n",
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path moved=1 pendingFlip=%d deferred=%d "
+                                             "pointer=%.1f,%.1f\n",
+                                             primaryFlipPendingBeforeCursor ? 1 : 0,
+                                             cursorCommitDeferred ? 1 : 0,
                                              wayland.pointerX(),
                                              wayland.pointerY());
           return;
         }
         if (hardwareCursorFastPathAttempted) {
-          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path moved=0 pointer=%.1f,%.1f\n",
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path moved=0 pendingFlip=%d deferred=%d "
+                                             "pointer=%.1f,%.1f\n",
+                                             primaryFlipPendingBeforeCursor ? 1 : 0,
+                                             cursorCommitDeferred ? 1 : 0,
                                              wayland.pointerX(),
                                              wayland.pointerY());
           hardwareCursorMotionFastPathDisabled = true;

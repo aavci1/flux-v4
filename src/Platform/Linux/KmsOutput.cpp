@@ -3777,6 +3777,15 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
   }
 
   bool const retryDeferred = commitErrno == EBUSY || commitErrno == EAGAIN;
+  if (!committed && retryDeferred && visible) {
+    errno = 0;
+    committed = drmModeMoveCursor(fd, connector_.crtcId, x, y) == 0;
+    if (committed) {
+      atomicCursorActive_ = true;
+      atomicCursorMoveDeferred_ = false;
+      return true;
+    }
+  }
   if (!committed && retryDeferred) {
     atomicCursorMoveDeferred_ = true;
     return true;
