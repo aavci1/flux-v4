@@ -105,6 +105,7 @@ option(LAMBDA_BUILD_APPS "Build Lambda desktop apps." ON)
 option(LAMBDA_BUILD_DEMOS "Build standalone demos under demos/." OFF)
 option(LAMBDA_BUILD_TESTS "Build unit and integration tests under tests/." OFF)
 option(LAMBDA_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)
+option(LAMBDA_BUILD_TOOLS "Build developer verification tools under tools/." ON)
 
 set(LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT OFF)
 if(UNIX AND NOT APPLE)
@@ -131,4 +132,8 @@ endif()
 
 if(LAMBDA_BUILD_BENCHMARKS)
   add_subdirectory(bench)
+endif()
+
+if(LAMBDA_BUILD_TOOLS)
+  add_subdirectory(tools)
 endif()
