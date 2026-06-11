@@ -768,21 +768,21 @@ bool applyXdgConfigureState(WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->server) return false;
   for (auto const& xdgSurface : surface->server->xdgSurfaces_) {
     if (!xdgSurface || xdgSurface->surface != surface || !xdgSurface->pendingConfigure) continue;
-    xdgSurface->currentConfigure = xdgSurface->pendingConfigure;
-    xdgSurface->pendingConfigure.reset();
+    WaylandServer::Impl::XdgConfigure const pendingConfigure = *xdgSurface->pendingConfigure;
+    if (!commitPendingXdgConfigure(xdgSurface.get())) continue;
     LAMBDA_RESIZE_TRACE("compositor",
                         "configure-commit-state surface=%llu serial=%u role=%u configure=%dx%d "
                         "window=%d %d,%d %dx%d\n",
                         static_cast<unsigned long long>(surface->id),
-                        xdgSurface->currentConfigure->serial,
-                        static_cast<unsigned int>(xdgSurface->currentConfigure->role),
-                        xdgSurface->currentConfigure->width,
-                        xdgSurface->currentConfigure->height,
-                        xdgSurface->currentConfigure->hasWindowGeometry ? 1 : 0,
-                        xdgSurface->currentConfigure->windowX,
-                        xdgSurface->currentConfigure->windowY,
-                        xdgSurface->currentConfigure->windowWidth,
-                        xdgSurface->currentConfigure->windowHeight);
+                        pendingConfigure.serial,
+                        static_cast<unsigned int>(pendingConfigure.role),
+                        pendingConfigure.width,
+                        pendingConfigure.height,
+                        pendingConfigure.hasWindowGeometry ? 1 : 0,
+                        pendingConfigure.windowX,
+                        pendingConfigure.windowY,
+                        pendingConfigure.windowWidth,
+                        pendingConfigure.windowHeight);
     return true;
   }
   return false;

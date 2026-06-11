@@ -994,47 +994,34 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
                            "xdg_surface must have a role object before ack_configure");
     return;
   }
-  auto configure = std::find_if(xdgSurface->configureList.begin(),
-                                xdgSurface->configureList.end(),
-                                [serial](WaylandServer::Impl::XdgConfigure const& candidate) {
-                                  return candidate.serial == serial;
-                                });
-  if (configure == xdgSurface->configureList.end()) {
+  std::uint32_t const resizeConfigureSerial =
+      xdgSurface->surface && xdgSurface->surface->resizeConfigureInFlight
+          ? xdgSurface->surface->resizeConfigureSerial
+          : 0u;
+  XdgConfigureAckResult const ackResult =
+      acknowledgeXdgSurfaceConfigure(xdgSurface, serial, resizeConfigureSerial);
+  if (ackResult.status != XdgConfigureAckStatus::Acked || !ackResult.ackedConfigure) {
     wl_resource_post_error(resource,
                            XDG_SURFACE_ERROR_INVALID_SERIAL,
                            "ack_configure received unknown serial %u",
                            serial);
     return;
   }
-  WaylandServer::Impl::XdgConfigure const ackedConfigure = *configure;
-  std::optional<WaylandServer::Impl::XdgConfigure> ackedResizeConfigure;
-  if (auto* surface = xdgSurface->surface; surface && surface->resizeConfigureInFlight) {
-    auto resizeConfigure = std::find_if(xdgSurface->configureList.begin(),
-                                        configure + 1,
-                                        [surface](WaylandServer::Impl::XdgConfigure const& candidate) {
-                                          return candidate.serial == surface->resizeConfigureSerial;
-                                        });
-    if (resizeConfigure != configure + 1) {
-      ackedResizeConfigure = *resizeConfigure;
-    }
-  }
-  xdgSurface->configureList.erase(xdgSurface->configureList.begin(), configure + 1);
-  xdgSurface->pendingConfigure = ackedConfigure;
-  xdgSurface->configured = true;
+  WaylandServer::Impl::XdgConfigure const& ackedConfigure = *ackResult.ackedConfigure;
   if (auto* surface = xdgSurface->surface) {
     std::uint64_t now = 0;
     if (lambda::detail::resizeTraceMetadataEnabled()) {
       now = lambda::detail::resizeTraceTimestampNanoseconds();
       if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
     }
-    if (surface->resizeConfigureInFlight && ackedResizeConfigure) {
+    if (surface->resizeConfigureInFlight && ackResult.ackedResizeConfigure) {
       surface->server->noteResizePacingActivity();
       surface->resizeConfigureAcked = true;
-      if (ackedResizeConfigure->hasWindowGeometry) {
-        surface->resizeConfigureX = ackedResizeConfigure->windowX;
-        surface->resizeConfigureY = ackedResizeConfigure->windowY;
-        surface->resizeConfigureWidth = ackedResizeConfigure->windowWidth;
-        surface->resizeConfigureHeight = ackedResizeConfigure->windowHeight;
+      if (ackResult.ackedResizeConfigure->hasWindowGeometry) {
+        surface->resizeConfigureX = ackResult.ackedResizeConfigure->windowX;
+        surface->resizeConfigureY = ackResult.ackedResizeConfigure->windowY;
+        surface->resizeConfigureWidth = ackResult.ackedResizeConfigure->windowWidth;
+        surface->resizeConfigureHeight = ackResult.ackedResizeConfigure->windowHeight;
       }
     }
     double const configureToAckMs =

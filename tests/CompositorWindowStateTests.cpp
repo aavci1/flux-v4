@@ -456,6 +456,96 @@ TEST_CASE("xdg surface configure state resets on unmap") {
   CHECK_FALSE(lambda::compositor::resetXdgSurfaceConfigureStateForUnmap(&xdgSurface));
 }
 
+TEST_CASE("xdg surface ack_configure consumes serial range into pending configure state") {
+  using lambda::compositor::SurfaceRole;
+  using lambda::compositor::WaylandServer;
+  using lambda::compositor::XdgConfigureAckStatus;
+
+  WaylandServer::Impl::XdgSurface xdgSurface{};
+  xdgSurface.configureList.push_back(WaylandServer::Impl::XdgConfigure{
+      .serial = 10,
+      .role = SurfaceRole::XdgToplevel,
+      .width = 640,
+      .height = 480,
+      .hasWindowGeometry = true,
+      .windowX = 8,
+      .windowY = 12,
+      .windowWidth = 624,
+      .windowHeight = 456,
+  });
+  xdgSurface.configureList.push_back(WaylandServer::Impl::XdgConfigure{
+      .serial = 11,
+      .role = SurfaceRole::XdgToplevel,
+      .width = 800,
+      .height = 600,
+  });
+  xdgSurface.configureList.push_back(WaylandServer::Impl::XdgConfigure{
+      .serial = 12,
+      .role = SurfaceRole::XdgToplevel,
+      .width = 1024,
+      .height = 768,
+  });
+
+  auto missing = lambda::compositor::acknowledgeXdgSurfaceConfigure(&xdgSurface, 9, 10);
+  CHECK(missing.status == XdgConfigureAckStatus::UnknownSerial);
+  CHECK_FALSE(missing.ackedConfigure.has_value());
+  CHECK_FALSE(missing.ackedResizeConfigure.has_value());
+  CHECK_FALSE(xdgSurface.configured);
+  CHECK(xdgSurface.configureList.size() == 3);
+  CHECK_FALSE(xdgSurface.pendingConfigure.has_value());
+  CHECK_FALSE(xdgSurface.currentConfigure.has_value());
+
+  auto acked = lambda::compositor::acknowledgeXdgSurfaceConfigure(&xdgSurface, 11, 10);
+  CHECK(acked.status == XdgConfigureAckStatus::Acked);
+  REQUIRE(acked.ackedConfigure.has_value());
+  CHECK(acked.ackedConfigure->serial == 11);
+  REQUIRE(acked.ackedResizeConfigure.has_value());
+  CHECK(acked.ackedResizeConfigure->serial == 10);
+  CHECK(acked.ackedResizeConfigure->hasWindowGeometry);
+  CHECK(xdgSurface.configured);
+  REQUIRE(xdgSurface.pendingConfigure.has_value());
+  CHECK(xdgSurface.pendingConfigure->serial == 11);
+  CHECK_FALSE(xdgSurface.currentConfigure.has_value());
+  REQUIRE(xdgSurface.configureList.size() == 1);
+  CHECK(xdgSurface.configureList.front().serial == 12);
+
+  CHECK(lambda::compositor::commitPendingXdgConfigure(&xdgSurface));
+  CHECK_FALSE(xdgSurface.pendingConfigure.has_value());
+  REQUIRE(xdgSurface.currentConfigure.has_value());
+  CHECK(xdgSurface.currentConfigure->serial == 11);
+  CHECK_FALSE(lambda::compositor::commitPendingXdgConfigure(&xdgSurface));
+}
+
+TEST_CASE("xdg surface ack_configure does not consume newer resize configure") {
+  using lambda::compositor::SurfaceRole;
+  using lambda::compositor::WaylandServer;
+  using lambda::compositor::XdgConfigureAckStatus;
+
+  WaylandServer::Impl::XdgSurface xdgSurface{};
+  xdgSurface.configureList.push_back(WaylandServer::Impl::XdgConfigure{
+      .serial = 20,
+      .role = SurfaceRole::XdgToplevel,
+      .width = 640,
+      .height = 480,
+  });
+  xdgSurface.configureList.push_back(WaylandServer::Impl::XdgConfigure{
+      .serial = 21,
+      .role = SurfaceRole::XdgToplevel,
+      .width = 800,
+      .height = 600,
+  });
+
+  auto acked = lambda::compositor::acknowledgeXdgSurfaceConfigure(&xdgSurface, 20, 21);
+  CHECK(acked.status == XdgConfigureAckStatus::Acked);
+  REQUIRE(acked.ackedConfigure.has_value());
+  CHECK(acked.ackedConfigure->serial == 20);
+  CHECK_FALSE(acked.ackedResizeConfigure.has_value());
+  REQUIRE(xdgSurface.pendingConfigure.has_value());
+  CHECK(xdgSurface.pendingConfigure->serial == 20);
+  REQUIRE(xdgSurface.configureList.size() == 1);
+  CHECK(xdgSurface.configureList.front().serial == 21);
+}
+
 TEST_CASE("xdg toplevel interactive requests require a configured toplevel surface") {
   CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(nullptr));
 
