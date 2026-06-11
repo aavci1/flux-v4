@@ -21,14 +21,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Added ASan capture-heavy verification for Vulkan recorder/render-target tests. A fresh `build-asan` now builds `lambda_tests` with the generated Wayland server protocol headers ordered correctly, and the ASan slice passed 22 cases/170 assertions including recorded image replay after the recording canvas is destroyed.
 - [x] Perf-wrapped full Linux verifier passed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-102353`): atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases all passed with zero fatal matches. `perf stat` captured 26,854.53 ms task-clock, 340,670 page faults, 30,434,613,748 cycles, and 64,869,277,919 instructions for the verifier script.
 - [x] Standard external compositor smoke partially passed: Weston 15.0.1 headless with kiosk shell/fake seat ran `weston-smoke` until a controlled 8-second timeout with no Weston runtime errors. The Lambda presentation-feedback checker also connected far enough to report that Weston headless advertises `CLOCK_MONOTONIC_RAW`, so it remains unsuitable for validating Lambda's stricter `CLOCK_MONOTONIC` presentation contract.
-- [x] Validation-layer focused Vulkan render-target run passed on 2026-06-11: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation VK_LOADER_DEBUG=layer ./build/tests/lambda_tests --source-file="*VulkanRenderTargetTests.cpp" --no-skip` loaded `VK_LAYER_KHRONOS_validation` and passed 19 cases / 141 assertions after matching the backdrop-blur pipeline format to its R16 render targets.
+- [x] Validation-layer focused Vulkan render-target run passed on 2026-06-11: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation VK_LOADER_DEBUG=layer ./build/tests/lambda_tests --source-file="*VulkanRenderTargetTests.cpp" --no-skip` loaded `VK_LAYER_KHRONOS_validation` and passed 20 cases / 146 assertions after matching the backdrop-blur pipeline format to its R16 render targets and covering same-frame image draw/destroy.
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 1 high, 9 medium, 10 low/nit items remain open.
+- [ ] Post-implementation review backlog (REV-*) below — 3 high, 8 medium, 10 low, and 3 nit items remain open.
 
 ## Working Environment
 
@@ -58,7 +58,7 @@ Measurement tooling that already exists — use it before and after every change
 | Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent` | Drawable stalls vs present cost on macOS |
 | Validation layers | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Sync/lifetime regressions from any of these changes |
 
-**Suggested fix order for open REV items:** REV-V1 → REV-K1 → REV-M1/M2/M3 (high-severity regressions), then medium REV-V2 … REV-W2, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
+**Suggested fix order for open REV items:** REV-M1/M2/M3 (high-severity regressions), then medium REV-V2 … REV-F2, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
 
 ---
 
@@ -444,39 +444,6 @@ What to do:
 - [ ] [Auto] Apply `intersectRects(translatedRect(op.clip, dx, dy), state_.clip)` in the prepared path too.
 - [ ] [Auto] Add a clipped-replay regression test under `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` or on a non-RADV CI target.
 
-### REV-V3: Recorder GPU buffers overwritten every replay without in-flight guard
-
-**Severity: Medium (torn geometry; extra map/memcpy per cached node).**
-
-`ensureRecorderBuffer` re-uploads on every `prepareRecorderBuffers` call (`VulkanCanvasDrawOps.inc:806-809`) while prior frames may still bind the buffer. Identical content is benign; mutated geometry (the new test case) can race. Content-hash skip or per-frame/fence-guarded buffers would fix both perf and correctness.
-
-What to do:
-
-- [ ] [Auto] Skip upload when recorded geometry signature unchanged; or use per-frame recorder buffer slots.
-- [ ] [Auto] Extend `VulkanRenderTargetTests.cpp` to exercise in-flight overwrite (two overlapping presents with geometry mutation).
-
-### REV-V4: `evictImageTexture` cancels first-use pending upload/transition
-
-**Severity: Medium (undefined layout + garbage on same-frame draw+destroy).**
-
-`evictImageTexturesFor` erases pending uploads and transitions (`VulkanCanvasDrawOps.inc:466-487`) that `ensureImageTexture` queued (`VulkanImages.inc:22-23`, `31-33`). Texture survives in `pendingTextureDestroys_` with ops still referencing its descriptor.
-
-What to do:
-
-- [ ] [Auto] Do not erase pending upload/transition for textures still referenced by current-frame ops; or flush pending work before eviction.
-- [ ] [Auto] Add a same-frame draw-then-destroy test under validation layers.
-
-### REV-V5: `vkDestroyFence` on present fence after failed present
-
-**Severity: Medium (validation-layer fault under OUT_OF_DATE).**
-
-`VulkanCanvasLifecycle.inc:614-619` destroys the present fence immediately when `vkQueuePresentKHR` fails. Under swapchain-maintenance1 the present may still be enqueued. Use `retirePresentFence()` (pattern at `:589`) instead.
-
-What to do:
-
-- [ ] [Auto] Replace immediate destroy with `retirePresentFence(presentFence)` and a fresh signaled replacement.
-- [ ] [Auto] Resize-storm test under validation layers — no `VUID-vkDestroyFence-fence-01120`.
-
 ### REV-K2: EBUSY-deferred cursor-only commit can strand the cursor
 
 **Severity: Medium (cursor stops short of final position on idle screen).**
@@ -580,26 +547,6 @@ What to do:
 - [ ] [Auto] Clear `preparedRenderOps_` when replay fails due to atlas generation mismatch.
 - [ ] [Auto] Scene-graph test: rebuild atlas between renders, assert prepare count increases.
 
-### REV-V8: Destructor leaks `pendingTextureUploads_` staging buffers
-
-**Severity: Low (teardown leak when uploads queued but never presented).**
-
-Destructor (`VulkanCanvasLifecycle.inc:164-193`) frees pools and deferred queues but not `pendingTextureUploads_` entries. More likely since FP-1 made queued uploads common.
-
-What to do:
-
-- [ ] [Auto] Drain `pendingTextureUploads_` in destructor (recycle or destroy staging buffers).
-
-### REV-V9: Post-acquire incomplete-image branch unreachable
-
-**Severity: Low (dead code; would corrupt acquire semaphore if reached).**
-
-Pre-acquire `swapchainImageStateReadyForAcquire()` (`VulkanCanvasLifecycle.inc:444-447`) makes post-acquire recreate branch (`460-468`) unreachable. If hit, would leave `imageAvailable` semaphore in bad state.
-
-What to do:
-
-- [ ] [Auto] Remove dead branch or rotate semaphore on that path.
-
 ### REV-K4: `HW_COMPLETION` OR'd onto software-estimated flip completions
 
 **Severity: Low (wp_presentation semantics; pre-existing, preserved by refactor).**
@@ -700,18 +647,6 @@ What to do:
 
 - [ ] [Auto] Catch and log at callback boundary (`popoverFrameDone`, `popoverXdgSurfaceConfigure`).
 
-### REV-V10: Redundant double `resolveRecordedImageTexture` in `appendRecordedOps`
-
-Pre-loop resolution (`VulkanCanvasDrawOps.inc:990-994`) plus in-loop calls in both branches — dead weight.
-
-- [ ] [Auto] Remove in-loop duplicate resolution.
-
-### REV-V11: `endImmediate` / `transitionImmediate` effectively dead code
-
-No per-frame callers remain; `uploadTexture(uploadNow=true)` has no callers; `transitionImmediate` has zero call sites. FP-1 goal achieved.
-
-- [ ] [Auto] Delete `endImmediate`, `transitionImmediate`, and the `uploadNow` branch, or mark `@deprecated` with assert if called.
-
 ### REV-V12: `rasterize()` temporary canvas calls `vkDeviceWaitIdle` mid-session
 
 `VulkanCanvasLifecycle.inc:167` reachable via raster-cache builds — pre-existing whole-device stall, not introduced by frame-pacing work.
@@ -730,7 +665,7 @@ No per-frame callers remain; `uploadTexture(uploadNow=true)` has no callers; `tr
 | `sceneUsesBackdropSampling` blocks partial damage | Removed — uses `inflateDamageForBackdropSampling` | `CompositorSceneGraph.cpp:216-243`, `CompositorRenderFrame.cpp:1005-1010` |
 | `markFrameRendered` `vkQueueWaitIdle` fallback | Fixed — no `vkQueueWaitIdle` in `KmsOutput.cpp` | `KmsOutput.cpp:1087-1095` |
 | `canUsePreparedGeometry = false &&` | Fixed — driver-gated `recorderPreparedGeometryFastPathEnabled()` | `VulkanCanvasDrawOps.inc:830-838`, `978-988` |
-| `ensureRecorderBuffer` skips upload | Fixed — always uploads when data provided | `VulkanCanvasDrawOps.inc:806-808` |
+| `ensureRecorderBuffer` skips upload | Fixed — uploads on content-signature changes and skips unchanged buffers | `VulkanCanvasDrawOps.inc:795-832` |
 | Deferred destroy before acquire / on early return | Fixed — `retireDeferredResourcesAfterSubmit` after submit only | `VulkanCanvasLifecycle.inc:558`, `VulkanImages.inc:265-269` |
 | Present-fence 1 s blocking wait | Fixed — `vkGetFenceStatus` + replacement | `VulkanCanvasLifecycle.inc:575-597` |
 | `recreateSwapchain` waits all frame fences | Fixed — retire list, no frame-fence drain | `VulkanSwapchain.inc:131-152` |

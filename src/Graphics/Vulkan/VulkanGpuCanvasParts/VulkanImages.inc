@@ -17,7 +17,7 @@
         tex->ownsView = false;
         importedNeedsTransition = image.ownsImportedMemory;
       } else {
-        createTexture(*tex, image.width, image.height, image.format, image.pixels.data(), false);
+        createTexture(*tex, image.width, image.height, image.format);
         tex->contentGeneration = image.contentGeneration;
         queueTextureUpload(*tex, image.pixels.data());
       }
@@ -116,9 +116,7 @@
   void createTexture(Texture& tex,
                      int width,
                      int height,
-                     VkFormat format,
-                     void const* pixels,
-                     bool uploadNow) {
+                     VkFormat format) {
     tex.width = width;
     tex.height = height;
     tex.format = format == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : format;
@@ -144,8 +142,6 @@
     view.subresourceRange.levelCount = 1;
     view.subresourceRange.layerCount = 1;
     vkCheck(vkCreateImageView(device_, &view, nullptr, &tex.view), "vkCreateImageView");
-    if (uploadNow)
-      uploadTexture(tex, pixels);
   }
 
   void queueTextureUpload(Texture& tex, void const* pixels) {
@@ -253,6 +249,13 @@
     pendingTextureUploads_.clear();
   }
 
+  void destroyPendingTextureUploads() {
+    for (PendingTextureUpload& uploadJob : pendingTextureUploads_) {
+      destroyBuffer(uploadJob.staging);
+    }
+    pendingTextureUploads_.clear();
+  }
+
   void recordPendingTextureTransitions(VkCommandBuffer cmd) {
     for (PendingTextureTransition const& pending : pendingTextureTransitions_) {
       if (pending.texture) {
@@ -333,25 +336,6 @@
     tex.layout = VK_IMAGE_LAYOUT_UNDEFINED;
   }
 
-  void uploadTexture(Texture& tex, void const* pixels) {
-    if (!pixels || tex.width <= 0 || tex.height <= 0)
-      return;
-    Buffer staging{};
-    VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * 4u;
-    ensureBuffer(staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    upload(staging, pixels, static_cast<std::size_t>(size));
-    VkCommandBuffer cmd = beginImmediate();
-    transition(cmd, tex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    VkBufferImageCopy copy{};
-    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.imageSubresource.layerCount = 1;
-    copy.imageExtent = {static_cast<std::uint32_t>(tex.width), static_cast<std::uint32_t>(tex.height), 1};
-    vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-    transition(cmd, tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    endImmediate(cmd);
-    destroyBuffer(staging);
-  }
-
   void ensureTextureDescriptor(Texture &tex) {
     if (tex.descriptor)
       return;
@@ -379,38 +363,6 @@
     if (tex.image && tex.ownsImage)
       vmaDestroyImage(allocator_, tex.image, tex.allocation);
     tex = {};
-  }
-
-  VkCommandBuffer beginImmediate() {
-    auto alloc = vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
-    alloc.commandPool = commandPool_;
-    alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc.commandBufferCount = 1;
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    vkCheck(vkAllocateCommandBuffers(device_, &alloc, &cmd), "vkAllocateCommandBuffers");
-    auto begin = vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
-    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkCheck(vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer");
-    return cmd;
-  }
-
-  void endImmediate(VkCommandBuffer cmd) {
-    vkCheck(vkEndCommandBuffer(cmd), "vkEndCommandBuffer");
-    auto commandBufferInfo = vkStructure<VkCommandBufferSubmitInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO);
-    commandBufferInfo.commandBuffer = cmd;
-    auto submit = vkStructure<VkSubmitInfo2>(VK_STRUCTURE_TYPE_SUBMIT_INFO_2);
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &commandBufferInfo;
-    vkCheck(vkQueueSubmit2(queue_, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit2");
-    // Keep immediate submissions off per-frame paths; this wait is only for one-shot setup work.
-    vkQueueWaitIdle(queue_);
-    vkFreeCommandBuffers(device_, commandPool_, 1, &cmd);
-  }
-
-  void transitionImmediate(Texture &texture, VkImageLayout newLayout) {
-    VkCommandBuffer cmd = beginImmediate();
-    transition(cmd, texture, newLayout);
-    endImmediate(cmd);
   }
 
   static VkPipelineStageFlags2 stageMaskForLayout(VkImageLayout layout) {

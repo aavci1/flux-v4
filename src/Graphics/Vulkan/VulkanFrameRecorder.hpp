@@ -24,15 +24,18 @@ struct VulkanFrameRecorder {
   mutable VmaAllocation preparedQuadAllocation = VK_NULL_HANDLE;
   mutable VkDeviceSize preparedQuadCapacity = 0;
   mutable VkDescriptorSet preparedQuadDescriptor = VK_NULL_HANDLE;
+  mutable std::uint64_t preparedQuadUploadSignature = 0;
 
   mutable VkBuffer preparedRectBuffer = VK_NULL_HANDLE;
   mutable VmaAllocation preparedRectAllocation = VK_NULL_HANDLE;
   mutable VkDeviceSize preparedRectCapacity = 0;
   mutable VkDescriptorSet preparedRectDescriptor = VK_NULL_HANDLE;
+  mutable std::uint64_t preparedRectUploadSignature = 0;
 
   mutable VkBuffer preparedPathVertexBuffer = VK_NULL_HANDLE;
   mutable VmaAllocation preparedPathVertexAllocation = VK_NULL_HANDLE;
   mutable VkDeviceSize preparedPathVertexCapacity = 0;
+  mutable std::uint64_t preparedPathVertexUploadSignature = 0;
 
   mutable VmaAllocator allocator = VK_NULL_HANDLE;
   mutable VkDevice device = VK_NULL_HANDLE;

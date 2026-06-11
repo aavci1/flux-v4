@@ -6,9 +6,7 @@
     createTexture(res.atlas,
                   res.atlas.width,
                   res.atlas.height,
-                  VK_FORMAT_R8G8B8A8_UNORM,
-                  res.atlasPixels.data(),
-                  false);
+                  VK_FORMAT_R8G8B8A8_UNORM);
     ensureTextureDescriptor(res.atlas);
   }
 

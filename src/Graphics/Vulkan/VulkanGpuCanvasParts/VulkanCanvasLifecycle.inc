@@ -173,6 +173,7 @@ public:
     }
     unregisterCanvas();
     destroySwapchain();
+    destroyPendingTextureUploads();
     destroyTexture(backdropSceneTexture_);
     destroyTexture(backdropScratchTexture_);
     destroyTexture(backdropBlurTexture_);
@@ -461,16 +462,9 @@ public:
     if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) {
       vkCheck(acquired, "vkAcquireNextImageKHR");
     }
-    if (imageIndex >= imageInFlightFences_.size() ||
-        imageIndex >= imageRenderFinished_.size() ||
-        !imageRenderFinished_[imageIndex]) {
-      std::fprintf(stderr,
-                   "Lambda Vulkan: acquired swapchain image %u with incomplete image state on window %u; recreating\n",
-                   imageIndex,
-                   handle_);
-      recreateSwapchain();
-      return;
-    }
+    assert(imageIndex < imageInFlightFences_.size());
+    assert(imageIndex < imageRenderFinished_.size());
+    assert(imageRenderFinished_[imageIndex] != VK_NULL_HANDLE);
     double imageFenceMs = 0.0;
     if (imageInFlightFences_[imageIndex]) {
       start = phaseStart();
@@ -617,7 +611,7 @@ public:
     bool const presentAccepted = presented == VK_SUCCESS || presented == VK_SUBOPTIMAL_KHR;
     if (!presentAccepted && presentFence && imageIndex < imagePresentFences_.size() &&
         imagePresentFences_[imageIndex] == presentFence) {
-      vkDestroyFence(device_, presentFence, nullptr);
+      retirePresentFence(presentFence);
       imagePresentFences_[imageIndex] = createPresentFence(true, "vkCreateFence(presentFence after failed present)");
       presentFence = VK_NULL_HANDLE;
     }

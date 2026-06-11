@@ -467,21 +467,6 @@
     auto it = imageTextures_.find(image);
     if (it == imageTextures_.end())
       return;
-    Texture* texture = it->second.get();
-    pendingTextureTransitions_.erase(std::remove_if(pendingTextureTransitions_.begin(),
-                                                    pendingTextureTransitions_.end(),
-                                                    [&](PendingTextureTransition const& transition) {
-                                                      return transition.texture == texture;
-                                                    }),
-                                     pendingTextureTransitions_.end());
-    for (auto uploadIt = pendingTextureUploads_.begin(); uploadIt != pendingTextureUploads_.end();) {
-      if (uploadIt->texture == texture) {
-        recycleUploadStagingBuffer(takeBuffer(uploadIt->staging));
-        uploadIt = pendingTextureUploads_.erase(uploadIt);
-      } else {
-        ++uploadIt;
-      }
-    }
     pendingTextureDestroys_.push_back(PendingTextureDestroy{std::move(it->second), kMaxFramesInFlight + 1u});
     imageTextures_.erase(it);
   }
@@ -777,6 +762,19 @@ private:
     vmaUnmapMemory(allocator_, allocation);
   }
 
+  static std::uint64_t recorderBufferUploadSignature(void const *data,
+                                                     VkDeviceSize size,
+                                                     VkBufferUsageFlags usage) {
+    if (!data || size == 0) {
+      return 0;
+    }
+    std::uint64_t h = 14695981039346656037ULL;
+    hashValue(h, size);
+    hashValue(h, usage);
+    hashBytes(h, data, static_cast<std::size_t>(size));
+    return nonZeroSignature(h);
+  }
+
   bool prepareRecorderOwnership(VulkanFrameRecorder const &recorded) {
     if ((recorded.allocator && recorded.allocator != allocator_) ||
         (recorded.device && recorded.device != device_) ||
@@ -797,14 +795,20 @@ private:
 
   bool ensureRecorderBuffer(VulkanFrameRecorder const &recorded, VkBuffer &buffer,
                             VmaAllocation &allocation, VkDeviceSize &capacity,
-                            void const *data, VkDeviceSize size, VkBufferUsageFlags usage) {
+                            std::uint64_t &uploadSignature, void const *data,
+                            VkDeviceSize size, VkBufferUsageFlags usage) {
     if (!data || size == 0) {
       return true;
     }
     if (!prepareRecorderOwnership(recorded))
       return false;
+    std::uint64_t const nextSignature = recorderBufferUploadSignature(data, size, usage);
     if (buffer && capacity >= size) {
+      if (uploadSignature == nextSignature) {
+        return true;
+      }
       uploadRecorderBuffer(allocation, data, size);
+      uploadSignature = nextSignature;
       return true;
     }
     if (buffer) {
@@ -812,6 +816,7 @@ private:
       buffer = VK_NULL_HANDLE;
       allocation = VK_NULL_HANDLE;
       capacity = 0;
+      uploadSignature = 0;
     }
     capacity = std::max<VkDeviceSize>(size, 1024);
     auto info = vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
@@ -824,6 +829,7 @@ private:
     vkCheck(vmaCreateBuffer(allocator_, &info, &allocationInfo, &buffer, &allocation, nullptr),
             "vmaCreateBuffer");
     uploadRecorderBuffer(allocation, data, size);
+    uploadSignature = nextSignature;
     return true;
   }
 
@@ -871,20 +877,23 @@ private:
     if (!prepareRecorderOwnership(recorded))
       return false;
     if (!ensureRecorderBuffer(recorded, recorded.preparedRectBuffer, recorded.preparedRectAllocation,
-                              recorded.preparedRectCapacity, recorded.rects.data(),
+                              recorded.preparedRectCapacity,
+                              recorded.preparedRectUploadSignature, recorded.rects.data(),
                               static_cast<VkDeviceSize>(recorded.rects.size() * sizeof(RectInstance)),
                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
       return false;
     }
     if (!ensureRecorderBuffer(recorded, recorded.preparedQuadBuffer, recorded.preparedQuadAllocation,
-                              recorded.preparedQuadCapacity, recorded.quads.data(),
+                              recorded.preparedQuadCapacity,
+                              recorded.preparedQuadUploadSignature, recorded.quads.data(),
                               static_cast<VkDeviceSize>(recorded.quads.size() * sizeof(QuadInstance)),
                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
       return false;
     }
     if (!ensureRecorderBuffer(recorded, recorded.preparedPathVertexBuffer,
                               recorded.preparedPathVertexAllocation,
-                              recorded.preparedPathVertexCapacity, recorded.pathVerts.data(),
+                              recorded.preparedPathVertexCapacity,
+                              recorded.preparedPathVertexUploadSignature, recorded.pathVerts.data(),
                               static_cast<VkDeviceSize>(recorded.pathVerts.size() * sizeof(VulkanPathVertex)),
                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) {
       return false;
@@ -988,18 +997,16 @@ private:
          (recorded.preparedQuadBuffer && recorded.preparedQuadDescriptor)) &&
         (recorded.pathVerts.empty() || recorded.preparedPathVertexBuffer);
 
-    for (DrawOp op : recorded.ops) {
+    std::vector<DrawOp> resolvedOps = recorded.ops;
+    for (DrawOp &op : resolvedOps) {
       if (!resolveRecordedImageTexture(op)) {
         return false;
       }
     }
 
     if (canUsePreparedGeometry) {
-      ops_.reserve(ops_.size() + recorded.ops.size());
-      for (DrawOp op : recorded.ops) {
-        if (!resolveRecordedImageTexture(op)) {
-          return false;
-        }
+      ops_.reserve(ops_.size() + resolvedOps.size());
+      for (DrawOp op : resolvedOps) {
         switch (op.kind) {
         case DrawOp::Kind::Rect:
           op.externalStorageDescriptor = recorded.preparedRectDescriptor;
@@ -1058,13 +1065,10 @@ private:
       pathVerts_.push_back(vertex);
     }
 
-    ops_.reserve(ops_.size() + recorded.ops.size());
+    ops_.reserve(ops_.size() + resolvedOps.size());
     float const uvDx = localReplay ? dx / std::max(1.f, static_cast<float>(width_)) : 0.f;
     float const uvDy = localReplay ? dy / std::max(1.f, static_cast<float>(height_)) : 0.f;
-    for (DrawOp op : recorded.ops) {
-      if (!resolveRecordedImageTexture(op)) {
-        return false;
-      }
+    for (DrawOp op : resolvedOps) {
       std::uint32_t const originalFirst = op.first;
       switch (op.kind) {
       case DrawOp::Kind::Rect:
