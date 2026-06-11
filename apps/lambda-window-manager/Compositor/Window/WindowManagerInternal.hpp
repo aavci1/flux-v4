@@ -68,9 +68,19 @@ inline FrameDisplaySize liveFrameDisplaySize(WaylandServer::Impl::Surface const*
                     : std::max(0, surfaceTransformedBufferHeight(surface) / std::max(1, surface->bufferState.scale)),
   };
 }
+inline bool surfaceHasCommittedDisplaySize(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return false;
+  if (surface->viewportState.destinationSet) {
+    return surface->viewportState.destinationWidth > 0 && surface->viewportState.destinationHeight > 0;
+  }
+  if (surface->viewportState.sourceSet) {
+    return surface->viewportState.sourceWidth > 0.f && surface->viewportState.sourceHeight > 0.f;
+  }
+  return surfaceTransformedBufferWidth(surface) > 0 && surfaceTransformedBufferHeight(surface) > 0;
+}
 inline FrameDisplaySize interactiveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
   FrameDisplaySize size = liveFrameDisplaySize(surface);
-  if (!toplevelHasPendingUncommittedFrame(surface)) return size;
+  if (!toplevelHasPendingUncommittedFrame(surface) || !surfaceHasCommittedDisplaySize(surface)) return size;
 
   std::int32_t const committedWidth = surfaceCommittedDisplayWidth(surface);
   std::int32_t const committedHeight = surfaceCommittedDisplayHeight(surface);

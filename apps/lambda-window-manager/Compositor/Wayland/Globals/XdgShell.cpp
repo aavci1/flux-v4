@@ -302,8 +302,9 @@ void sendToplevelStateConfigure(WaylandServer::Impl* server,
                                 WaylandServer::Impl::XdgToplevel* toplevel) {
   if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   WaylandServer::Impl::Surface* surface = toplevel->xdgSurface->surface;
-  std::int32_t const width = surface->frameWidth > 0 ? surface->frameWidth : 0;
-  std::int32_t const height = surface->frameHeight > 0 ? surface->frameHeight : 0;
+  wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+  std::int32_t const width = frameSize.width > 0 ? frameSize.width : 0;
+  std::int32_t const height = frameSize.height > 0 ? frameSize.height : 0;
   sendToplevelConfigureInternal(server, toplevel, width, height, false);
 }
 
@@ -379,11 +380,12 @@ void sendCutoutsConfigureIfNeeded(WaylandServer::Impl* server,
 void maybeSendInitialCutoutsConfigure(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   auto* toplevel = toplevelForSurface(server, surface);
   if (!toplevel || !toplevel->cutouts) return;
+  wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
   if (!shouldSendInitialCutoutConfigure(toplevel->cutouts != nullptr,
                                         toplevel->cutoutsRejected,
                                         toplevel->cutouts->lastSent,
-                                        displayWidth(surface),
-                                        displayHeight(surface))) {
+                                        frameSize.width,
+                                        frameSize.height)) {
     return;
   }
   sendToplevelStateConfigure(server, toplevel);
@@ -825,14 +827,10 @@ void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::X
   if (!popup || !popup->xdgSurface || !popup->xdgSurface->surface || !positioner) return;
   WaylandServer::Impl::Surface* surface = popup->xdgSurface->surface;
   WaylandServer::Impl::Surface const* parent = popup->parentSurface;
+  std::optional<WindowGeometry> parentGeometry;
+  if (parent) parentGeometry = wm::windowGeometryFor(parent);
   auto const geometry = positionedPopupGeometry({
-      .parent = parent ? std::optional<WindowGeometry>{WindowGeometry{
-                             .x = parent->windowX,
-                             .y = parent->windowY,
-                             .width = parent->frameWidth,
-                             .height = parent->frameHeight,
-                         }}
-                       : std::nullopt,
+      .parent = parentGeometry,
       .output = {.width = popup->server->logicalOutputWidth(), .height = popup->server->logicalOutputHeight()},
       .anchorRectX = positioner->anchorRectX,
       .anchorRectY = positioner->anchorRectY,
@@ -1046,10 +1044,11 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
 
   toplevel->cutoutsRejected = true;
   if (xdgSurface->surface) {
-    std::int32_t const nextWidth = displayWidth(xdgSurface->surface);
+    wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(xdgSurface->surface);
+    std::int32_t const nextWidth = frameSize.width;
     std::int32_t const nextHeight =
         std::max(kCompositorMinWindowHeight,
-                 displayHeight(xdgSurface->surface) - xdgSurface->server->chromeConfig_.titleBarHeight);
+                 frameSize.height - xdgSurface->server->chromeConfig_.titleBarHeight);
     setConfiguredFrameSize(xdgSurface->surface, nextWidth, nextHeight);
     if (requestToplevelResizeConfigure(xdgSurface->server,
                                        xdgSurface->surface,
@@ -1180,8 +1179,9 @@ void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uin
   if (!toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
-  std::int32_t const width = displayWidth(surface);
-  std::int32_t const height = displayHeight(surface);
+  wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+  std::int32_t const width = frameSize.width;
+  std::int32_t const height = frameSize.height;
   if (!validToplevelGrabSerial(server, resource, surface, serial)) return;
   if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE || width <= 0 || height <= 0 ||
       surface->fullscreen || surface->maximized) {

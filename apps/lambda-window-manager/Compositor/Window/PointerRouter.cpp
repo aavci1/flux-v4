@@ -104,8 +104,9 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
 
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
-    std::int32_t const width = displayWidth(surface);
-    std::int32_t const height = displayHeight(surface);
+    wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+    std::int32_t const width = frameSize.width;
+    std::int32_t const height = frameSize.height;
     if (!surface || !surfaceIsTopLevelRenderable(surface) || surfaceIsXdgPopup(surface) ||
         surface->minimized || width <= 0 || height <= 0) {
       continue;

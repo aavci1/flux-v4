@@ -606,6 +606,27 @@ TEST_CASE("interactive frame size follows committed content while toplevel confi
   CHECK_FALSE(lambda::compositor::wm::toplevelHasPendingUncommittedFrame(&surface));
 }
 
+TEST_CASE("interactive frame size does not invent committed content for empty pending toplevels") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  surface.frameWidth = 900;
+  surface.frameHeight = 700;
+  surface.awaitingConfigureCommit = true;
+
+  CHECK_FALSE(lambda::compositor::wm::surfaceHasCommittedDisplaySize(&surface));
+  auto empty = lambda::compositor::wm::interactiveFrameDisplaySize(&surface);
+  CHECK(empty.width == 900);
+  CHECK(empty.height == 700);
+
+  surface.viewportState.destinationSet = true;
+  surface.viewportState.destinationWidth = 640;
+  surface.viewportState.destinationHeight = 480;
+  CHECK(lambda::compositor::wm::surfaceHasCommittedDisplaySize(&surface));
+  auto viewport = lambda::compositor::wm::interactiveFrameDisplaySize(&surface);
+  CHECK(viewport.width == 640);
+  CHECK(viewport.height == 480);
+}
+
 TEST_CASE("window geometry helper uses interactive frame size during pending toplevel configure") {
   lambda::compositor::WaylandServer::Impl::Surface surface{};
   surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
