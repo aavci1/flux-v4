@@ -60,12 +60,16 @@ TEST_CASE("data-device DnD offer request validation enforces DnD finish rules") 
   CHECK(dataOfferAcceptsDndActions(true));
   CHECK_FALSE(dataOfferAcceptsDndActions(false));
 
-  CHECK(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
-  CHECK(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE));
-  CHECK(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK));
-  CHECK_FALSE(dataOfferCanFinishDnd(false, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
-  CHECK_FALSE(dataOfferCanFinishDnd(true, false, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
-  CHECK_FALSE(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE));
+  CHECK(dataOfferCanFinishDnd(false, true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK(dataOfferCanFinishDnd(false, true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE));
+  CHECK(dataOfferCanFinishDnd(false, true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK));
+  CHECK_FALSE(dataOfferCanFinishDnd(true, true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK_FALSE(dataOfferCanFinishDnd(false, false, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK_FALSE(dataOfferCanFinishDnd(false, true, false, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
+  CHECK_FALSE(dataOfferCanFinishDnd(false, true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE));
+
+  CHECK(dataOfferCanProcessRequest(false));
+  CHECK_FALSE(dataOfferCanProcessRequest(true));
 }
 
 TEST_CASE("data-device source lifecycle validation enforces DnD action ordering") {

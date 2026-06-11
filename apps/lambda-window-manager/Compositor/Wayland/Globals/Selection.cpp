@@ -277,6 +277,12 @@ struct wl_data_source_interface const dataSourceImpl{
 
 void dataOfferAccept(wl_client*, wl_resource* resource, std::uint32_t, char const* mimeType) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
+  if (offer && !dataOfferCanProcessRequest(offer->finished)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_OFFER,
+                           "wl_data_offer.accept is invalid after finish");
+    return;
+  }
   if (!offer || !offer->source || !offer->source->resource) return;
   offer->acceptedMimeType = mimeType ? mimeType : "";
   wl_data_source_send_target(offer->source->resource, mimeType);
@@ -284,6 +290,13 @@ void dataOfferAccept(wl_client*, wl_resource* resource, std::uint32_t, char cons
 
 void dataOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
+  if (offer && !dataOfferCanProcessRequest(offer->finished)) {
+    close(fd);
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_OFFER,
+                           "wl_data_offer.receive is invalid after finish");
+    return;
+  }
   if (!offer || !offer->source || !offer->source->resource || !mimeType) {
     close(fd);
     return;
@@ -299,12 +312,16 @@ void dataOfferDestroy(wl_client*, wl_resource* resource) {
 void dataOfferFinish(wl_client*, wl_resource* resource) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer) return;
-  if (!dataOfferCanFinishDnd(offer->dnd, !offer->acceptedMimeType.empty(), offer->selectedAction)) {
+  if (!dataOfferCanFinishDnd(offer->finished,
+                             offer->dnd,
+                             !offer->acceptedMimeType.empty(),
+                             offer->selectedAction)) {
     wl_resource_post_error(resource,
                            WL_DATA_OFFER_ERROR_INVALID_FINISH,
                            "wl_data_offer.finish requires an accepted DnD mime type and action");
     return;
   }
+  offer->finished = true;
   if (!offer->source || !offer->source->resource) return;
   if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
     wl_data_source_send_dnd_finished(offer->source->resource);
@@ -313,6 +330,12 @@ void dataOfferFinish(wl_client*, wl_resource* resource) {
 void dataOfferSetActions(wl_client*, wl_resource* resource, std::uint32_t actions, std::uint32_t preferredAction) {
   auto* offer = resourceData<WaylandServer::Impl::DataOffer>(resource);
   if (!offer) return;
+  if (!dataOfferCanProcessRequest(offer->finished)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_OFFER_ERROR_INVALID_OFFER,
+                           "wl_data_offer.set_actions is invalid after finish");
+    return;
+  }
   if (!dataOfferAcceptsDndActions(offer->dnd)) {
     wl_resource_post_error(resource,
                            WL_DATA_OFFER_ERROR_INVALID_OFFER,

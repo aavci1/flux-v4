@@ -46,12 +46,18 @@ inline bool dataOfferAcceptsDndActions(bool dnd) {
   return dnd;
 }
 
-inline bool dataOfferCanFinishDnd(bool dnd,
+inline bool dataOfferCanFinishDnd(bool alreadyFinished,
+                                  bool dnd,
                                   bool hasAcceptedMimeType,
                                   std::uint32_t selectedAction) {
-  return dnd &&
+  return !alreadyFinished &&
+         dnd &&
          hasAcceptedMimeType &&
          selectedAction != WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+}
+
+inline bool dataOfferCanProcessRequest(bool alreadyFinished) {
+  return !alreadyFinished;
 }
 
 inline bool dataSourceCanSetDndActions(bool actionsAlreadySet, bool sourceAlreadyUsed) {
