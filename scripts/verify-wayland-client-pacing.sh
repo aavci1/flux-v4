@@ -8,6 +8,7 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)"
 LOG_DIR="$LOG_ROOT/$RUN_ID"
 TEST_SECONDS="${LAMBDA_WAYLAND_CLIENT_PACING_SECONDS:-8}"
 MAX_FRAME_DONE_TO_PRESENT_MS="${LAMBDA_WAYLAND_CLIENT_FRAME_DONE_PRESENT_MAX_MS:-8}"
+FORCE_FIFO="${LAMBDA_WAYLAND_CLIENT_PACING_FORCE_FIFO:-1}"
 
 usage() {
   cat <<EOF
@@ -25,6 +26,7 @@ Environment:
   LWM_WAYLAND_CLIENT_PACING_LOG_DIR             Log root. Default: $LOG_ROOT
   LAMBDA_WAYLAND_CLIENT_PACING_SECONDS          Workload duration. Default: $TEST_SECONDS
   LAMBDA_WAYLAND_CLIENT_FRAME_DONE_PRESENT_MAX_MS Max frameDone->present delta. Default: $MAX_FRAME_DONE_TO_PRESENT_MS
+  LAMBDA_WAYLAND_CLIENT_PACING_FORCE_FIFO       Force FIFO present mode. Default: $FORCE_FIFO
 EOF
 }
 
@@ -94,6 +96,7 @@ WAYLAND_DISPLAY="$SOCKET" \
   LAMBDA_TERMINAL_TEST_MODE=grid \
   LAMBDA_DEBUG_PERF=2 \
   LAMBDA_RESIZE_TRACE=1 \
+  LAMBDA_VULKAN_FORCE_FIFO_PRESENT_MODE="$FORCE_FIFO" \
   "$ROOT/scripts/trace-terminal-rendering.sh" >"$LOG_DIR/driver.log" 2>&1
 
 RENDER_LOG="$LOG_DIR/lambda-terminal-render.log"
@@ -108,7 +111,9 @@ if [[ "$fatal_count" -ne 0 ]]; then
   exit 1
 fi
 
-awk -v label="wayland-client-pacing" -v max_delta="$MAX_FRAME_DONE_TO_PRESENT_MS" '
+awk -v label="wayland-client-pacing" \
+    -v max_delta="$MAX_FRAME_DONE_TO_PRESENT_MS" \
+    -v force_fifo="$FORCE_FIFO" '
   /wayland-window: frame-done/ {
     t = $2
     sub(/ms$/, "", t)
@@ -126,11 +131,14 @@ awk -v label="wayland-client-pacing" -v max_delta="$MAX_FRAME_DONE_TO_PRESENT_MS
   }
   /vulkan-present-detail:/ { present_detail += 1 }
   /wayland-window: flush-deferred/ && /immediate=1/ { immediate_flush += 1 }
+  /wayland-window: request-frame/ && /mode=fifo/ { fifo_requests += 1 }
+  /wayland-window: request-frame/ && /mode=mailbox/ { mailbox_requests += 1 }
   END {
     avg = pairs > 0 ? delta_sum / pairs : 0.0
-    printf "SUMMARY %s frame_done=%d present_pairs=%d present_detail=%d immediate_flush=%d frame_done_to_present_avg=%.3f frame_done_to_present_max=%.3f max_allowed=%.3f\n",
-      label, frame_done, pairs, present_detail, immediate_flush, avg, delta_max, max_delta
-    if (frame_done < 10 || pairs < 10 || present_detail < 10 || immediate_flush < 10 || delta_max > max_delta) {
+    printf "SUMMARY %s frame_done=%d present_pairs=%d present_detail=%d immediate_flush=%d fifo_requests=%d mailbox_requests=%d force_fifo=%s frame_done_to_present_avg=%.3f frame_done_to_present_max=%.3f max_allowed=%.3f\n",
+      label, frame_done, pairs, present_detail, immediate_flush, fifo_requests, mailbox_requests, force_fifo, avg, delta_max, max_delta
+    if (frame_done < 10 || pairs < 10 || present_detail < 10 || immediate_flush < 10 || delta_max > max_delta ||
+        (force_fifo != "0" && (fifo_requests < 10 || mailbox_requests != 0))) {
       exit 1
     }
   }

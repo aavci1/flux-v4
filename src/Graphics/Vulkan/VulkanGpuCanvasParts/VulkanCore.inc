@@ -95,6 +95,14 @@ bool vulkanPresentFencesEnabled() {
   return enabled;
 }
 
+bool vulkanForceFifoPresentMode() {
+  static bool const enabled = [] {
+    char const* value = std::getenv("LAMBDA_VULKAN_FORCE_FIFO_PRESENT_MODE");
+    return debug::envNonZero(value);
+  }();
+  return enabled;
+}
+
 int vulkanPreparedGeometryOverride() {
   static int const overrideValue = [] {
     char const* value = std::getenv("LAMBDA_VULKAN_PREPARED_GEOMETRY");

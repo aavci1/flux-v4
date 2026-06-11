@@ -161,10 +161,12 @@
     double const capsMs = phaseMs(phaseStart);
     phaseStart = std::chrono::steady_clock::now();
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
-    for (auto m : modes) {
-      if (m == VK_PRESENT_MODE_MAILBOX_KHR) {
-        mode = m;
-        break;
+    if (!vulkanForceFifoPresentMode()) {
+      for (auto m : modes) {
+        if (m == VK_PRESENT_MODE_MAILBOX_KHR) {
+          mode = m;
+          break;
+        }
       }
     }
     presentMode_ = mode;
