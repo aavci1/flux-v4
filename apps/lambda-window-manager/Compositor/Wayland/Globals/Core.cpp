@@ -1407,21 +1407,11 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
 }
 
 std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->frameWidth > 0
-             ? surface->frameWidth
-             : surface ? std::max(0,
-                                   surfaceTransformedBufferWidth(surface) /
-                                       std::max(1, surface->bufferState.scale))
-                       : 0;
+  return surfaceLiveDisplaySize(surface).width;
 }
 
 std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->frameHeight > 0
-             ? surface->frameHeight
-             : surface ? std::max(0,
-                                   surfaceTransformedBufferHeight(surface) /
-                                       std::max(1, surface->bufferState.scale))
-                       : 0;
+  return surfaceLiveDisplaySize(surface).height;
 }
 
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface) {

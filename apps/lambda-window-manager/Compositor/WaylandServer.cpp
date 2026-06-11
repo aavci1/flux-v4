@@ -237,8 +237,9 @@ WaylandServer::diagnosticTopToplevelCloseButtonCenter() const {
   if (!wm::isManagedToplevel(surface)) return std::nullopt;
   if (surface->fullscreen || surface->maximized || surface->snapped || surface->minimized) return std::nullopt;
 
-  std::int32_t const width = displayWidth(surface);
-  if (width <= 0 || displayHeight(surface) <= 0) return std::nullopt;
+  wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+  std::int32_t const width = frameSize.width;
+  if (width <= 0 || frameSize.height <= 0) return std::nullopt;
   std::int32_t const titleBarHeight = wm::externalTitleBarHeight(impl_.get(), surface);
   if (titleBarHeight <= 0) return std::nullopt;
 
@@ -259,8 +260,9 @@ bool WaylandServer::diagnosticExerciseTopToplevel(std::uint32_t step, bool resiz
   if (!wm::isManagedToplevel(surface)) return false;
   if (surface->fullscreen || surface->maximized || surface->snapped || surface->minimized) return false;
 
-  std::int32_t const baseWidth = std::max(320, displayWidth(surface));
-  std::int32_t const baseHeight = std::max(220, displayHeight(surface));
+  wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+  std::int32_t const baseWidth = std::max(320, frameSize.width);
+  std::int32_t const baseHeight = std::max(220, frameSize.height);
   std::int32_t const maxX = std::max(0, logicalOutputWidth() - baseWidth - 32);
   std::int32_t const maxY = std::max(0, logicalOutputHeight() - baseHeight - 32);
   float const t = static_cast<float>(step) * 0.105f;
@@ -309,8 +311,9 @@ bool WaylandServer::diagnosticExerciseToplevels(std::uint32_t step, bool resize)
   bool changed = false;
   for (std::size_t index = 0; index < targets.size(); ++index) {
     auto* surface = targets[index];
-    std::int32_t const baseWidth = std::max(160, displayWidth(surface));
-    std::int32_t const baseHeight = std::max(96, displayHeight(surface));
+    wm::FrameDisplaySize const frameSize = wm::interactiveFrameDisplaySize(surface);
+    std::int32_t const baseWidth = std::max(160, frameSize.width);
+    std::int32_t const baseHeight = std::max(96, frameSize.height);
     std::int32_t const maxX = std::max(0, logicalOutputWidth() - baseWidth - 32);
     std::int32_t const maxY = std::max(0, logicalOutputHeight() - baseHeight - 32);
     float const phase = static_cast<float>(index) * 2.0943951f;

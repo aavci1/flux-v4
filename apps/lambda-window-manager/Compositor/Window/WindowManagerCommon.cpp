@@ -325,10 +325,11 @@ std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, Way
     parent = parentPopup->parentSurface;
   }
   if (!parent) return bounds;
-  if (displayWidth(parent) <= 0 || displayHeight(parent) <= 0) return std::nullopt;
+  auto const parentGeometry = usableWindowGeometryFor(parent);
+  if (!parentGeometry) return std::nullopt;
 
-  bounds.x += parent->windowX;
-  bounds.y += parent->windowY;
+  bounds.x += parentGeometry->x;
+  bounds.y += parentGeometry->y;
   return bounds;
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Compositor/Wayland/SurfaceDisplaySize.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <algorithm>
@@ -29,22 +30,11 @@ using PointerConstraintRegionRect = CommittedSurfaceSnapshot::RegionRect;
 
 [[nodiscard]] inline PointerConstraintRegionRect pointerConstraintSurfaceRect(
     WaylandServer::Impl::Surface const* surface) {
-  std::int32_t const width = surface && surface->frameWidth > 0
-                                 ? surface->frameWidth
-                                 : surface ? std::max(0,
-                                                       surfaceTransformedBufferWidth(surface) /
-                                                           std::max(1, surface->bufferState.scale))
-                                           : 0;
-  std::int32_t const height = surface && surface->frameHeight > 0
-                                  ? surface->frameHeight
-                                  : surface ? std::max(0,
-                                                        surfaceTransformedBufferHeight(surface) /
-                                                            std::max(1, surface->bufferState.scale))
-                                            : 0;
+  SurfaceDisplaySize const size = surfaceInteractiveDisplaySize(surface);
   return {.x = 0,
           .y = 0,
-          .width = width,
-          .height = height};
+          .width = size.width,
+          .height = size.height};
 }
 
 [[nodiscard]] inline PointerConstraintRegionRect pointerConstraintIntersectRect(

@@ -255,9 +255,10 @@ bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
                         surface->resizeConfigureHeight);
   }
 
+  wm::FrameDisplaySize const currentSize = wm::interactiveFrameDisplaySize(surface);
   if (!surface->awaitingConfigureCommit &&
-      width == displayWidth(surface) &&
-      height == displayHeight(surface)) {
+      width == currentSize.width &&
+      height == currentSize.height) {
     if (x != surface->windowX || y != surface->windowY) {
       surface->windowX = x;
       surface->windowY = y;

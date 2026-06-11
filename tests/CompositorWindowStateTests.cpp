@@ -294,6 +294,27 @@ TEST_CASE("pointer constraint effective region follows surface input region") {
   CHECK(constraint.effectiveRegionRects[1].height == 10);
 }
 
+TEST_CASE("pointer constraint default region follows committed frame size during pending toplevel configure") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  surface.width = 1280;
+  surface.height = 960;
+  surface.bufferState.scale = 2;
+  surface.frameWidth = 900;
+  surface.frameHeight = 700;
+  surface.pendingResizeConfigure = true;
+
+  lambda::compositor::WaylandServer::Impl::PointerConstraint constraint{};
+  constraint.surface = &surface;
+
+  REQUIRE(lambda::compositor::rebuildPointerConstraintEffectiveRegion(&constraint));
+  REQUIRE(constraint.effectiveRegionRects.size() == 1);
+  CHECK(constraint.effectiveRegionRects[0].width == 640);
+  CHECK(constraint.effectiveRegionRects[0].height == 480);
+  CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 639.f, 479.f));
+  CHECK_FALSE(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 640.f, 480.f));
+}
+
 TEST_CASE("locked pointer cursor hint is committed with pointer constraint state") {
   lambda::compositor::WaylandServer::Impl::PointerConstraint constraint{};
   constraint.pendingCursorHintX = 12.5f;
@@ -650,6 +671,30 @@ TEST_CASE("window geometry helper uses interactive frame size during pending top
   CHECK(pending.y == 70);
   CHECK(pending.width == 640);
   CHECK(pending.height == 480);
+}
+
+TEST_CASE("usable window geometry helper rejects empty surfaces and follows pending configure size") {
+  lambda::compositor::WaylandServer::Impl::Surface empty{};
+  empty.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  CHECK_FALSE(lambda::compositor::wm::usableWindowGeometryFor(&empty).has_value());
+
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  surface.windowX = 25;
+  surface.windowY = 35;
+  surface.width = 1024;
+  surface.height = 768;
+  surface.bufferState.scale = 2;
+  surface.frameWidth = 900;
+  surface.frameHeight = 700;
+  surface.pendingResizeConfigure = true;
+
+  auto geometry = lambda::compositor::wm::usableWindowGeometryFor(&surface);
+  REQUIRE(geometry.has_value());
+  CHECK(geometry->x == 25);
+  CHECK(geometry->y == 35);
+  CHECK(geometry->width == 512);
+  CHECK(geometry->height == 384);
 }
 
 TEST_CASE("xdg toplevel title validation follows strict UTF-8") {

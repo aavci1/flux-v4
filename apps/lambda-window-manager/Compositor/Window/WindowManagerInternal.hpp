@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Compositor/Chrome/ChromeMetrics.hpp"
+#include "Compositor/Wayland/SurfaceDisplaySize.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/WaylandTypes.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
@@ -52,43 +53,24 @@ ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y);
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface);
 inline bool toplevelHasPendingUncommittedFrame(WaylandServer::Impl::Surface const* surface) {
-  return surfaceIsXdgToplevel(surface) &&
-         (surface->awaitingConfigureCommit ||
-          surface->resizeConfigureInFlight ||
-          surface->pendingResizeConfigure);
+  return lambda::compositor::surfaceHasPendingUncommittedFrame(surface);
 }
 inline FrameDisplaySize liveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return {};
+  SurfaceDisplaySize const size = lambda::compositor::surfaceLiveDisplaySize(surface);
   return {
-      .width = surface->frameWidth > 0
-                   ? surface->frameWidth
-                   : std::max(0, surfaceTransformedBufferWidth(surface) / std::max(1, surface->bufferState.scale)),
-      .height = surface->frameHeight > 0
-                    ? surface->frameHeight
-                    : std::max(0, surfaceTransformedBufferHeight(surface) / std::max(1, surface->bufferState.scale)),
+      .width = size.width,
+      .height = size.height,
   };
 }
 inline bool surfaceHasCommittedDisplaySize(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return false;
-  if (surface->viewportState.destinationSet) {
-    return surface->viewportState.destinationWidth > 0 && surface->viewportState.destinationHeight > 0;
-  }
-  if (surface->viewportState.sourceSet) {
-    return surface->viewportState.sourceWidth > 0.f && surface->viewportState.sourceHeight > 0.f;
-  }
-  return surfaceTransformedBufferWidth(surface) > 0 && surfaceTransformedBufferHeight(surface) > 0;
+  return lambda::compositor::surfaceHasCommittedDisplaySize(surface);
 }
 inline FrameDisplaySize interactiveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
-  FrameDisplaySize size = liveFrameDisplaySize(surface);
-  if (!toplevelHasPendingUncommittedFrame(surface) || !surfaceHasCommittedDisplaySize(surface)) return size;
-
-  std::int32_t const committedWidth = surfaceCommittedDisplayWidth(surface);
-  std::int32_t const committedHeight = surfaceCommittedDisplayHeight(surface);
-  if (committedWidth > 0 && committedHeight > 0) {
-    size.width = committedWidth;
-    size.height = committedHeight;
-  }
-  return size;
+  SurfaceDisplaySize const size = lambda::compositor::surfaceInteractiveDisplaySize(surface);
+  return {
+      .width = size.width,
+      .height = size.height,
+  };
 }
 struct ToplevelSizeHints {
   std::int32_t minWidth = 0;
@@ -284,6 +266,11 @@ inline WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surf
       .width = frameSize.width,
       .height = frameSize.height,
   };
+}
+inline std::optional<WindowGeometry> usableWindowGeometryFor(WaylandServer::Impl::Surface const* surface) {
+  WindowGeometry geometry = windowGeometryFor(surface);
+  if (geometry.width <= 0 || geometry.height <= 0) return std::nullopt;
+  return geometry;
 }
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server);
 OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server);
