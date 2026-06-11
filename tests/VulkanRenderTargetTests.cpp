@@ -40,6 +40,28 @@ namespace {
 using namespace lambda;
 using namespace lambda::scenegraph;
 
+struct ScopedEnvOverride {
+  char const* name = nullptr;
+  std::string previous;
+  bool hadPrevious = false;
+
+  ScopedEnvOverride(char const* envName, char const* value) : name(envName) {
+    if (char const* current = std::getenv(name)) {
+      previous = current;
+      hadPrevious = true;
+    }
+    setenv(name, value, 1);
+  }
+
+  ~ScopedEnvOverride() {
+    if (hadPrevious) {
+      setenv(name, previous.c_str(), 1);
+    } else {
+      unsetenv(name);
+    }
+  }
+};
+
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
   path /= "../demos/image-demo/test.png";
@@ -339,6 +361,23 @@ static std::uint8_t capturedChannel(std::vector<std::uint8_t> const& pixels, std
   std::size_t const idx =
       (static_cast<std::size_t>(y) * width + x) * 4u + static_cast<std::size_t>(channel);
   return pixels[idx];
+}
+
+static std::size_t countBrightPixels(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
+                                     std::uint32_t x0, std::uint32_t y0,
+                                     std::uint32_t x1, std::uint32_t y1,
+                                     std::uint8_t threshold) {
+  std::size_t count = 0;
+  for (std::uint32_t y = y0; y < y1; ++y) {
+    for (std::uint32_t x = x0; x < x1; ++x) {
+      if (capturedChannel(pixels, width, x, y, 0) >= threshold &&
+          capturedChannel(pixels, width, x, y, 1) >= threshold &&
+          capturedChannel(pixels, width, x, y, 2) >= threshold) {
+        ++count;
+      }
+    }
+  }
+  return count;
 }
 
 static int colorDelta(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
@@ -1182,6 +1221,46 @@ TEST_CASE("Vulkan RenderTarget renders glyph atlas text") {
       ++brightPixels;
     }
   }
+  CHECK(brightPixels > 20);
+}
+
+TEST_CASE("Vulkan prepared text replay uses current clip after scroll translation") {
+  ScopedEnvOverride forcePreparedGeometry{"LAMBDA_VULKAN_PREPARED_GEOMETRY", "1"};
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 220, 160, 1.f};
+  Font font{};
+  font.family = "sans";
+  font.size = 20.f;
+  font.weight = 500.f;
+  TextLayoutOptions options{};
+  options.lineHeight = 20.f;
+  auto layout = textSystem.layout("\n\n\n\n\n\n\n\n\nVisible after scroll",
+                                  font, Colors::white, 160.f, options);
+  REQUIRE(layout->runs.size() > 0);
+  REQUIRE(layout->lines.size() > 9);
+
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 220.f, 160.f});
+  root->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 220.f, 160.f}, FillStyle::solid(Colors::black)));
+
+  auto viewport = std::make_unique<RectNode>(
+      lambda::Rect{20.f, 20.f, 160.f, 80.f}, FillStyle::none());
+  viewport->setClipsContents(true);
+
+  auto content = std::make_unique<SceneNode>(lambda::Rect{0.f, -230.f, 160.f, 360.f});
+  content->appendChild(std::make_unique<TextNode>(
+      lambda::Rect{0.f, 0.f, 160.f, 340.f}, layout));
+  viewport->appendChild(std::move(content));
+  root->appendChild(std::move(viewport));
+
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::black);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+
+  std::size_t const brightPixels = countBrightPixels(pixels, target.pixelW, 20, 20, 180, 100, 140);
   CHECK(brightPixels > 20);
 }
 

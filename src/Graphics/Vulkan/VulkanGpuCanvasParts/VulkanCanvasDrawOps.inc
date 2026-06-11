@@ -980,6 +980,7 @@ private:
         // content. Keep that driver on the CPU-copy path while allowing unaffected drivers to bind replay buffers.
         recorderPreparedGeometryFastPathEnabled() &&
         (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
+        (!localReplay || !state_.roundedClip.active) &&
         !hasTranslatedBackdropBlur &&
         (recorded.rects.empty() ||
          (recorded.preparedRectBuffer && recorded.preparedRectDescriptor)) &&
@@ -1016,7 +1017,7 @@ private:
         if (localReplay) {
           op.geometrySignature =
               translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
-          op.clip = translatedRect(op.clip, dx, dy);
+          op.clip = state_.clip;
           if (op.hasBlurCacheClip) {
             op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
           }
@@ -1097,7 +1098,7 @@ private:
       if (localReplay) {
         op.geometrySignature =
             translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
-        op.clip = intersectRects(translatedRect(op.clip, dx, dy), state_.clip);
+        op.clip = state_.clip;
         if (op.hasBlurCacheClip) {
           op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
         }
