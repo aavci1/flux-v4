@@ -818,31 +818,58 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
+    bool const hardwareCursorMotionFastPathAllowed =
+        envEnabled("LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH");
+    bool hardwareCursorMotionFastPathDisabled = false;
+    bool hardwareCursorMotionFastPathFailureLogged = false;
     if (!hardwareCursorAvailable && appliedConfig.config.hardwareCursorEnabled) {
       std::fprintf(stderr, "lambda-window-manager: hardware cursor unavailable; using software cursor\n");
+    } else if (appliedConfig.config.hardwareCursorEnabled && !hardwareCursorMotionFastPathAllowed) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: hardware cursor motion fast path disabled; "
+                   "set LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1 to enable\n");
     }
 
     device->setInputHandler([&](lambda::platform::KmsInputEvent const& event) {
-      inputActivityThisLoop = true;
-      if (idleBlanked) {
+      try {
+        inputActivityThisLoop = true;
+        if (idleBlanked) {
+          inputRenderRequiredThisLoop = true;
+          return;
+        }
+        std::uint64_t const beforeSerial = wayland.contentSerial();
+        dispatchKmsInputEvent(wayland, event);
+        bool const contentChanged = wayland.contentSerial() != beforeSerial;
+        if (contentChanged) {
+          inputRenderRequiredThisLoop = true;
+          return;
+        }
+        bool const hardwareCursorFastPathEnabled = appliedConfig.config.hardwareCursorEnabled &&
+                                                   hardwareCursorAvailable &&
+                                                   hardwareCursorMotionFastPathAllowed &&
+                                                   !hardwareCursorMotionFastPathDisabled;
+        bool const hardwareCursorFastPathAttempted = hardwareCursorFastPathEnabled && cursorState.hardwareVisible;
+        bool const hardwareCursorMoved = moveCurrentHardwareCursor(wayland,
+                                                                   output,
+                                                                   cursorState,
+                                                                   hardwareCursorFastPathEnabled);
+        if (hardwareCursorMoved) {
+          return;
+        }
+        if (hardwareCursorFastPathAttempted) {
+          hardwareCursorMotionFastPathDisabled = true;
+          if (!hardwareCursorMotionFastPathFailureLogged) {
+            std::fprintf(stderr,
+                         "lambda-window-manager: hardware cursor motion fast path failed; using frame redraw fallback\n");
+            hardwareCursorMotionFastPathFailureLogged = true;
+          }
+        }
         inputRenderRequiredThisLoop = true;
-        return;
-      }
-      std::uint64_t const beforeSerial = wayland.contentSerial();
-      dispatchKmsInputEvent(wayland, event);
-      bool const contentChanged = wayland.contentSerial() != beforeSerial;
-      if (contentChanged) {
+      } catch (std::exception const& error) {
+        std::fprintf(stderr, "lambda-window-manager: input event handling failed: %s\n", error.what());
         inputRenderRequiredThisLoop = true;
-        return;
-      }
-      bool const hardwareCursorMoved =
-          moveCurrentHardwareCursor(wayland,
-                                    output,
-                                    cursorState,
-                                    appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
-      if (hardwareCursorMoved) {
-        return;
-      } else {
+      } catch (...) {
+        std::fprintf(stderr, "lambda-window-manager: input event handling failed with an unknown exception\n");
         inputRenderRequiredThisLoop = true;
       }
     });
