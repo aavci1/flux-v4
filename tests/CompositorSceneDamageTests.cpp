@@ -350,6 +350,58 @@ TEST_CASE("scene graph damage with backdrop blur keeps small updates partial") {
   CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 70, .y = 90, .width = 110, .height = 110}));
 }
 
+TEST_CASE("scene graph damage inflates neighboring content updates around glass chrome edges") {
+  lambda::compositor::ChromeConfig chrome;
+  chrome.glass.blurRadius = 32.f;
+  chrome.focusedShadowRadius = 0.f;
+  chrome.unfocusedShadowRadius = 0.f;
+  auto backing = surface(81, 40, 60, 500, 300, 1);
+  backing.contentFullyOpaque = true;
+  auto glass = surface(82, 140, 160, 220, 120, 1);
+  glass.serverSideDecorated = true;
+  glass.focused = true;
+  glass.titleBarHeight = chrome.titleBarHeight;
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> visuals;
+
+  CompositorSceneGraphState state;
+  auto initial = lambda::compositor::buildCompositorSceneFrame(
+      state,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = std::vector<CommittedSurfaceSnapshot>{backing, glass},
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  auto damagedBacking = backing;
+  damagedBacking.serial = 2;
+  damagedBacking.bufferDamageRects.push_back(RegionRect{.x = 112, .y = 82, .width = 12, .height = 12});
+  auto damagePlan = lambda::compositor::buildCompositorSceneFrame(
+      initial.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = std::vector<CommittedSurfaceSnapshot>{damagedBacking, glass},
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  CHECK_FALSE(damagePlan.damage.fullOutput);
+  REQUIRE(damagePlan.damage.rects.size() == 1);
+  CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 102, .y = 92, .width = 112, .height = 112}));
+  CHECK(anyRectCovers(damagePlan.damage.rects, RegionRect{.x = 140, .y = 132, .width = 24, .height = 28}));
+}
+
 TEST_CASE("scene graph opaque content damage does not require background fill") {
   lambda::compositor::ChromeConfig chrome;
   chrome.glass.blurRadius = 32.f;

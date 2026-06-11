@@ -344,6 +344,38 @@ summarize_frame_artifacts() {
   printf 'SUMMARY %s frame_artifacts %s\n' "$label" "$output"
 }
 
+summarize_blur_edge_artifacts() {
+  local dir="$1"
+  local label="$2"
+  local metrics_file
+  metrics_file=$(find "$dir/snap-capture" -name metrics.csv -print -quit 2>/dev/null || true)
+  if [[ -z "$metrics_file" || ! -s "$metrics_file" ]]; then
+    printf 'SUMMARY %s blur_edge_metrics_missing=1\n' "$label"
+    return 1
+  fi
+  local min_luma_range="${LWM_BLUR_EDGE_MIN_LUMA_RANGE:-0.5}"
+  awk -F, -v label="$label" -v min_luma_range="$min_luma_range" '
+    NR == 1 { next }
+    $2 ~ /^titlebar:/ {
+      rows += 1
+      luma = $7 + 0.0
+      alpha = $8 + 0.0
+      delta = $9 + 0.0
+      if (rows == 1 || luma < min_luma) min_luma = luma
+      if (rows == 1 || luma > max_luma) max_luma = luma
+      if (alpha >= 220.0) alpha_rows += 1
+      if (delta < 0) delta = -delta
+      if (delta >= 0.05) changing_rows += 1
+    }
+    END {
+      luma_range = rows > 0 ? max_luma - min_luma : 0.0
+      printf "SUMMARY %s blur_edge_titlebar rows=%d alpha_rows=%d changing_rows=%d luma_range=%.3f min_luma_range=%.3f\n",
+        label, rows, alpha_rows, changing_rows, luma_range, min_luma_range
+      if (rows <= 0 || alpha_rows <= 0 || changing_rows <= 0 || luma_range < min_luma_range) exit 1
+    }
+  ' "$metrics_file"
+}
+
 summarize_partial_full_damage_alternation() {
   local dir="$1"
   local label="$2"
@@ -968,6 +1000,7 @@ EOF
     LAMBDA_WINDOW_MANAGER_CONFIG="$config_file" \
     LWM_SNAP_CAPTURE_FRAMES=48 \
     LWM_SNAP_CAPTURE_ALWAYS=1 \
+    LWM_SNAP_CAPTURE_CHROME_REGIONS=1 \
     LWM_SNAP_CAPTURE_DIR="$dir/snap-capture" \
     LWM_SNAP_TRACE=1 \
     LWM_SNAP_TRACE_ALWAYS=1 \
@@ -1043,6 +1076,7 @@ EOF
   summarize_multi_dirty_partial "$dir" "$label"
   summarize_snap_artifacts "$dir" "$label"
   summarize_frame_artifacts "$dir" "$label" "32,48,64"
+  summarize_blur_edge_artifacts "$dir" "$label"
   summarize_cpu_trace "$dir/cpu.log"
 }
 
