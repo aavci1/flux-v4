@@ -297,8 +297,7 @@ public:
     if (!prepareRecorderBuffers(recorded)) {
       return false;
     }
-    appendRecordedOps(recorded, false);
-    return true;
+    return appendRecordedOps(recorded, false);
   }
 
   bool replayRecordedLocalOps(VulkanFrameRecorder const &recorded) {
@@ -308,8 +307,7 @@ public:
     if (!prepareRecorderBuffers(recorded)) {
       return false;
     }
-    appendRecordedOps(recorded, true);
-    return true;
+    return appendRecordedOps(recorded, true);
   }
 
   bool prepareRecordedOps(VulkanFrameRecorder *recorded) {

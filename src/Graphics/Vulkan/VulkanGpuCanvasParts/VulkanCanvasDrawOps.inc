@@ -293,6 +293,7 @@
       batches_.push_back(ImageBatch{texture, first, 1});
     }
     DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
+    op.sourceImage = vi;
     op.premultipliedAlpha = imagePremultipliedAlpha_;
     appendSignedDrawOp(target, op);
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
@@ -702,6 +703,7 @@ private:
            sameRect(a.clip, b.clip) &&
            a.hasBlurCacheClip == b.hasBlurCacheClip &&
            (!a.hasBlurCacheClip || sameRect(a.blurCacheClip, b.blurCacheClip)) &&
+           a.sourceImage == b.sourceImage &&
            a.externalStorageDescriptor == b.externalStorageDescriptor &&
            a.externalVertexBuffer == b.externalVertexBuffer &&
            a.premultipliedAlpha == b.premultipliedAlpha &&
@@ -937,6 +939,19 @@ private:
     inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
   }
 
+  bool resolveRecordedImageTexture(DrawOp &op) {
+    if (op.kind != DrawOp::Kind::Image || !op.sourceImage) {
+      return true;
+    }
+    try {
+      op.texture = ensureImageTexture(*static_cast<VulkanImage const *>(op.sourceImage));
+    } catch (std::exception const &e) {
+      std::fprintf(stderr, "Lambda Vulkan: recorded image texture upload failed: %s\n", e.what());
+      return false;
+    }
+    return op.texture != nullptr;
+  }
+
   static void translateQuadInstance(QuadInstance &inst, float dx, float dy, float opacityScale) {
     inst.axisX[0] += dx;
     inst.axisX[1] += dy;
@@ -950,7 +965,7 @@ private:
     vertex.params[3] *= opacityScale;
   }
 
-  void appendRecordedOps(VulkanFrameRecorder const &recorded, bool localReplay) {
+  bool appendRecordedOps(VulkanFrameRecorder const &recorded, bool localReplay) {
     float const dx = localReplay ? state_.transform.m[6] : 0.f;
     float const dy = localReplay ? state_.transform.m[7] : 0.f;
     float const opacityScale = localReplay ? state_.opacity : 1.f;
@@ -972,9 +987,18 @@ private:
          (recorded.preparedQuadBuffer && recorded.preparedQuadDescriptor)) &&
         (recorded.pathVerts.empty() || recorded.preparedPathVertexBuffer);
 
+    for (DrawOp op : recorded.ops) {
+      if (!resolveRecordedImageTexture(op)) {
+        return false;
+      }
+    }
+
     if (canUsePreparedGeometry) {
       ops_.reserve(ops_.size() + recorded.ops.size());
       for (DrawOp op : recorded.ops) {
+        if (!resolveRecordedImageTexture(op)) {
+          return false;
+        }
         switch (op.kind) {
         case DrawOp::Kind::Rect:
           op.externalStorageDescriptor = recorded.preparedRectDescriptor;
@@ -1001,7 +1025,7 @@ private:
         }
         ops_.push_back(op);
       }
-      return;
+      return true;
     }
 
     std::uint32_t const rectBase = static_cast<std::uint32_t>(rects_.size());
@@ -1037,6 +1061,9 @@ private:
     float const uvDx = localReplay ? dx / std::max(1.f, static_cast<float>(width_)) : 0.f;
     float const uvDy = localReplay ? dy / std::max(1.f, static_cast<float>(height_)) : 0.f;
     for (DrawOp op : recorded.ops) {
+      if (!resolveRecordedImageTexture(op)) {
+        return false;
+      }
       std::uint32_t const originalFirst = op.first;
       switch (op.kind) {
       case DrawOp::Kind::Rect:
@@ -1077,6 +1104,7 @@ private:
       }
       ops_.push_back(op);
     }
+    return true;
   }
 
   bool clipLineToCurrentClip(Point &a, Point &b) const {

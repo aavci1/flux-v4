@@ -537,6 +537,7 @@
     hashValue(h, op.externalTranslationX);
     hashValue(h, op.externalTranslationY);
     hashValue(h, op.premultipliedAlpha);
+    hashValue(h, reinterpret_cast<std::uintptr_t>(op.sourceImage));
     hashTextureReference(h, op.texture);
 
     std::uint32_t const end = op.first + op.count;

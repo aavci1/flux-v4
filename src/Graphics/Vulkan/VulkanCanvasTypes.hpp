@@ -73,6 +73,7 @@ struct DrawOp {
                                    Callout };
   Kind kind = Kind::Rect;
   Texture *texture = nullptr;
+  void const *sourceImage = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
   Rect clip{};
