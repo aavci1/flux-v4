@@ -59,10 +59,10 @@ Wayland protocols implemented directly against `libwayland-server`. DRM via `lib
 
 This is a real cost — wlroots solves many edge cases we'll re-encounter — but it's the path that lets the compositor stay coherent with Lambda's design rather than adopting wlroots' opinions about scene graphs, output management, and surface state.
 
-The direct implementation must still be held against wlroots behavior. As of 2026-06-12, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene, XDG configure/frame-size parity, DnD lifecycle parity, layer-shell dynamic behavior helper/state slices, and output-layout/enter/layer-placement helper slices. Remaining spec work:
+The direct implementation must still be held against wlroots behavior. As of 2026-06-12, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene, XDG configure/frame-size parity, DnD lifecycle parity, layer-shell dynamic behavior helper/state slices, and output-layout foundation including output-enter, layer-placement, and window-geometry helpers. Remaining spec work:
 
 - Resume the deferred frame-coherence issue when ready: system-titlebar and client content must render from one committed geometry model so Settings resize on DP-1 HiDPI cannot show momentary non-synced titlebar/content widths.
-- Compare larger wlroots workflows that are not fully covered by narrow resource tests: remaining seat focus/grabs and output-layout foundations.
+- Compare larger wlroots workflows that are not fully covered by narrow resource tests: remaining seat focus/grabs.
 - Build a repeatable visual/real-app validation harness for resize, dock/topbar, menus, fullscreen, browser/video, GTK/Qt, `foot`, and Lambda apps.
 
 The ordered implementation plan and validation gates live in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md). The daily-driver gate lives in [roadmap.md](roadmap.md).

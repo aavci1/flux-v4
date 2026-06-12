@@ -3,6 +3,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/LayerShellState.hpp"
+#include "Compositor/Wayland/OutputState.hpp"
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -40,9 +41,15 @@ bool containsPoint(float x, float y, float left, float top, float right, float b
 }
 
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
+  OutputLayoutBox const layout = server ? selectedOutputLayoutBox(server->output_.width,
+                                                                  server->output_.height,
+                                                                  server->preferredScale())
+                                        : OutputLayoutBox{};
   return {
-      .width = server ? server->logicalOutputWidth() : 0,
-      .height = server ? server->logicalOutputHeight() : 0,
+      .x = server ? layout.x : 0,
+      .y = server ? layout.y : 0,
+      .width = server ? layout.width : 0,
+      .height = server ? layout.height : 0,
   };
 }
 

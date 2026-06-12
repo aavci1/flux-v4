@@ -832,7 +832,7 @@ void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::X
   if (parent) parentGeometry = wm::windowGeometryFor(parent);
   auto const geometry = positionedPopupGeometry({
       .parent = parentGeometry,
-      .output = {.width = popup->server->logicalOutputWidth(), .height = popup->server->logicalOutputHeight()},
+      .output = wm::outputGeometryFor(popup->server),
       .anchorRectX = positioner->anchorRectX,
       .anchorRectY = positioner->anchorRectY,
       .anchorRectWidth = positioner->anchorRectWidth,

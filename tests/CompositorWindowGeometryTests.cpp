@@ -194,6 +194,45 @@ TEST_CASE("compositor snap and maximize geometry keep the chrome ring inside tar
   CHECK(maximizedFrame.height == 1080);
 }
 
+TEST_CASE("compositor snap and maximize geometry apply logical output origin") {
+  lambda::compositor::OutputGeometry const output{.x = 1920, .y = 80, .width = 1280, .height = 720};
+  constexpr std::int32_t titleBar = 40;
+  constexpr std::int32_t ring = 4;
+
+  auto left = lambda::compositor::snappedWindowGeometry(output, true, titleBar, ring);
+  CHECK(left.x == 1924);
+  CHECK(left.y == 120);
+  CHECK(left.width == 632);
+  CHECK(left.height == 676);
+  auto leftFrame = lambda::compositor::windowFrameGeometryForContent(left, titleBar, ring);
+  CHECK(leftFrame.x == 1920);
+  CHECK(leftFrame.y == 80);
+  CHECK(leftFrame.width == 640);
+  CHECK(leftFrame.height == 720);
+
+  auto right = lambda::compositor::snappedWindowGeometry(output, false, titleBar, ring);
+  CHECK(right.x == 2564);
+  CHECK(right.y == 120);
+  CHECK(right.width == 632);
+  CHECK(right.height == 676);
+  auto rightFrame = lambda::compositor::windowFrameGeometryForContent(right, titleBar, ring);
+  CHECK(rightFrame.x == 2560);
+  CHECK(rightFrame.y == 80);
+  CHECK(rightFrame.width == 640);
+  CHECK(rightFrame.height == 720);
+
+  auto maximized = lambda::compositor::maximizedWindowGeometry(output, titleBar, ring);
+  CHECK(maximized.x == 1924);
+  CHECK(maximized.y == 120);
+  CHECK(maximized.width == 1272);
+  CHECK(maximized.height == 676);
+  auto maximizedFrame = lambda::compositor::windowFrameGeometryForContent(maximized, titleBar, ring);
+  CHECK(maximizedFrame.x == 1920);
+  CHECK(maximizedFrame.y == 80);
+  CHECK(maximizedFrame.width == 1280);
+  CHECK(maximizedFrame.height == 720);
+}
+
 TEST_CASE("compositor snap edge detection uses the chrome ring as the visible window edge") {
   lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
   constexpr std::int32_t titleBar = lambda::compositor::kCompositorTitleBarHeight;
@@ -214,6 +253,28 @@ TEST_CASE("compositor snap edge detection uses the chrome ring as the visible wi
                                               ring);
   REQUIRE(rightTarget);
   CHECK(*rightTarget == lambda::compositor::SnapTarget::RightHalf);
+}
+
+TEST_CASE("compositor snap edge detection applies logical output origin") {
+  lambda::compositor::OutputGeometry const output{.x = 1920, .y = 80, .width = 1280, .height = 720};
+  constexpr std::int32_t titleBar = 40;
+  constexpr std::int32_t ring = 4;
+
+  auto leftTarget =
+      lambda::compositor::snapTargetForWindow({.x = 1924, .y = 180, .width = 420, .height = 300},
+                                              output,
+                                              titleBar,
+                                              ring);
+  REQUIRE(leftTarget);
+  CHECK(*leftTarget == lambda::compositor::SnapTarget::LeftHalf);
+
+  auto bottomRightTarget =
+      lambda::compositor::snapTargetForWindow({.x = 3010, .y = 620, .width = 190, .height = 176},
+                                              output,
+                                              titleBar,
+                                              ring);
+  REQUIRE(bottomRightTarget);
+  CHECK(*bottomRightTarget == lambda::compositor::SnapTarget::BottomRightQuarter);
 }
 
 TEST_CASE("compositor snap geometry uses output work area with reserved dock already removed") {
@@ -254,6 +315,17 @@ TEST_CASE("compositor drag geometry softly snaps near the center of the work are
   CHECK(outsideThreshold.y == 250);
 }
 
+TEST_CASE("compositor drag geometry softly snaps near logical output center") {
+  lambda::compositor::OutputGeometry const workArea{.x = -640, .y = 80, .width = 1280, .height = 720};
+  lambda::compositor::WindowGeometry const nearCenter{.x = -203, .y = 306, .width = 400, .height = 300};
+
+  auto centered = lambda::compositor::centerSnappedWindowGeometry(nearCenter, workArea, 40);
+  CHECK(centered.x == -200);
+  CHECK(centered.y == 310);
+  CHECK(centered.width == 400);
+  CHECK(centered.height == 300);
+}
+
 TEST_CASE("compositor geometry stays valid on tiny outputs") {
   lambda::compositor::OutputGeometry const output{.width = 120, .height = 80};
 
@@ -265,6 +337,24 @@ TEST_CASE("compositor geometry stays valid on tiny outputs") {
   auto maximized = lambda::compositor::maximizedWindowGeometry(output);
   CHECK(maximized.width == lambda::compositor::kCompositorMinWindowWidth);
   CHECK(maximized.height == lambda::compositor::kCompositorMinWindowHeight);
+}
+
+TEST_CASE("compositor resize geometry clamps to logical output origin") {
+  using lambda::compositor::ResizeEdge;
+
+  auto resized = lambda::compositor::resizedWindowGeometry({
+      .startPointerX = 0.f,
+      .startPointerY = 0.f,
+      .pointerX = 0.f,
+      .pointerY = 0.f,
+      .startWindow = {.x = 1800, .y = 60, .width = 300, .height = 200},
+      .edges = ResizeEdge::None,
+      .output = {.x = 1920, .y = 100, .width = 800, .height = 600},
+  });
+  CHECK(resized.x == 1920);
+  CHECK(resized.y == 100 + lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(resized.width == 300);
+  CHECK(resized.height == 200);
 }
 
 TEST_CASE("compositor snap preview rejects points outside the small edge threshold") {
@@ -333,6 +423,29 @@ TEST_CASE("compositor popup geometry slides to fit output when requested") {
   auto popup = lambda::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 580);
   CHECK(popup.window.y == 440);
+  CHECK(popup.configureX == -120);
+  CHECK(popup.configureY == -60);
+}
+
+TEST_CASE("compositor popup geometry constrains to logical output origin") {
+  lambda::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambda::compositor::WindowGeometry{.x = 2620, .y = 600, .width = 300, .height = 200},
+      .output = {.x = 1920, .y = 100, .width = 800, .height = 600},
+      .anchorRectX = 280,
+      .anchorRectY = 180,
+      .anchorRectWidth = 40,
+      .anchorRectHeight = 40,
+      .width = 220,
+      .height = 160,
+      .anchor = lambda::compositor::PopupAnchor::BottomRight,
+      .gravity = lambda::compositor::PopupGravity::BottomRight,
+      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::SlideX |
+                              lambda::compositor::PopupConstraintAdjustment::SlideY,
+  };
+
+  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.x == 2500);
+  CHECK(popup.window.y == 540);
   CHECK(popup.configureX == -120);
   CHECK(popup.configureY == -60);
 }

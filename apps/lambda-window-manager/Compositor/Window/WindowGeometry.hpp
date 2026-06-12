@@ -74,6 +74,8 @@ enum class PopupConstraintAdjustment : std::uint32_t {
 }
 
 struct OutputGeometry {
+  std::int32_t x = 0;
+  std::int32_t y = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
 };
