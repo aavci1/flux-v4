@@ -217,8 +217,10 @@ void backgroundEffectManagerGetBackgroundEffect(wl_client* client,
   auto effect = std::make_unique<WaylandServer::Impl::BackgroundEffect>();
   effect->server = server;
   effect->surface = surface;
+  auto const version =
+      backgroundEffectResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* effectResource =
-      wl_resource_create(client, &ext_background_effect_surface_v1_interface, wl_resource_get_version(resource), id);
+      wl_resource_create(client, &ext_background_effect_surface_v1_interface, version, id);
   if (!effectResource) {
     wl_client_post_no_memory(client);
     return;
@@ -244,8 +246,10 @@ struct ext_background_effect_manager_v1_interface const backgroundEffectManagerI
 } // namespace
 
 void bindBackgroundEffectManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource =
-      wl_resource_create(client, &ext_background_effect_manager_v1_interface, std::min(version, 4u), id);
+  wl_resource* resource = wl_resource_create(client,
+                                             &ext_background_effect_manager_v1_interface,
+                                             backgroundEffectResourceVersion(version),
+                                             id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;

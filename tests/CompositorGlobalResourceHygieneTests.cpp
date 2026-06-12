@@ -1,10 +1,13 @@
 #include "Compositor/Wayland/Globals/Activation.hpp"
+#include "Compositor/Wayland/Globals/BackgroundEffect.hpp"
 #include "Compositor/Wayland/Globals/Core.hpp"
 #include "Compositor/Wayland/Globals/Cutouts.hpp"
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
+#include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 #include "Compositor/Wayland/Globals/Seat.hpp"
 #include "Compositor/Wayland/Globals/Selection.hpp"
 #include "Compositor/Wayland/Globals/Shm.hpp"
+#include "Compositor/Wayland/Globals/XdgShell.hpp"
 
 #include <doctest/doctest.h>
 
@@ -54,6 +57,25 @@ TEST_CASE("remaining globals cap resources at implemented protocol versions") {
   CHECK(dataDeviceResourceVersion(1) == 1);
   CHECK(dataDeviceResourceVersion(3) == 3);
   CHECK(dataDeviceResourceVersion(4) == 3);
+
+  CHECK(kXdgWmBaseVersion == 6);
+  CHECK(xdgWmBaseResourceVersion(1) == 1);
+  CHECK(xdgWmBaseResourceVersion(6) == 6);
+  CHECK(xdgWmBaseResourceVersion(7) == 6);
+
+  CHECK(kXdgDecorationManagerVersion == 1);
+  CHECK(xdgDecorationResourceVersion(1) == 1);
+  CHECK(xdgDecorationResourceVersion(2) == 1);
+
+  CHECK(kLinuxDmabufVersion == 5);
+  CHECK(linuxDmabufResourceVersion(1) == 1);
+  CHECK(linuxDmabufResourceVersion(5) == 5);
+  CHECK(linuxDmabufResourceVersion(6) == 5);
+
+  CHECK(kBackgroundEffectVersion == 4);
+  CHECK(backgroundEffectResourceVersion(1) == 1);
+  CHECK(backgroundEffectResourceVersion(4) == 4);
+  CHECK(backgroundEffectResourceVersion(5) == 4);
 }
 
 } // namespace lambda::compositor

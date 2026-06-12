@@ -507,9 +507,11 @@ void xdgDecorationManagerGetToplevelDecoration(wl_client* client,
   auto decoration = std::make_unique<WaylandServer::Impl::ToplevelDecoration>();
   decoration->server = server;
   decoration->toplevel = toplevel;
+  auto const version =
+      xdgDecorationResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* decorationResource = wl_resource_create(client,
                                                        &zxdg_toplevel_decoration_v1_interface,
-                                                       wl_resource_get_version(resource),
+                                                       version,
                                                        id);
   if (!decorationResource) {
     wl_client_post_no_memory(client);
@@ -684,8 +686,10 @@ void xdgWmBaseCreatePositioner(wl_client* client, wl_resource* resource, std::ui
   auto* server = serverFrom(resource);
   auto positioner = std::make_unique<WaylandServer::Impl::XdgPositioner>();
   positioner->server = server;
+  auto const version =
+      xdgWmBaseResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* positionerResource =
-      wl_resource_create(client, &xdg_positioner_interface, wl_resource_get_version(resource), id);
+      wl_resource_create(client, &xdg_positioner_interface, version, id);
   if (!positionerResource) {
     wl_client_post_no_memory(client);
     return;
@@ -718,8 +722,9 @@ void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint3
   auto xdgSurface = std::make_unique<WaylandServer::Impl::XdgSurface>();
   xdgSurface->server = server;
   xdgSurface->surface = surface;
-  wl_resource* xdgResource = wl_resource_create(client, &xdg_surface_interface,
-                                                wl_resource_get_version(resource), id);
+  auto const version =
+      xdgWmBaseResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* xdgResource = wl_resource_create(client, &xdg_surface_interface, version, id);
   if (!xdgResource) {
     wl_client_post_no_memory(client);
     return;
@@ -765,8 +770,9 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   auto toplevel = std::make_unique<WaylandServer::Impl::XdgToplevel>();
   toplevel->server = xdgSurface->server;
   toplevel->xdgSurface = xdgSurface;
-  wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface,
-                                                     wl_resource_get_version(resource), id);
+  auto const version =
+      xdgWmBaseResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface, version, id);
   if (!toplevelResource) {
     wl_client_post_no_memory(client);
     return;
@@ -947,7 +953,9 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
   popup->server = xdgSurface->server;
   popup->xdgSurface = xdgSurface;
   popup->parentSurface = parentXdgSurface ? parentXdgSurface->surface : nullptr;
-  wl_resource* popupResource = wl_resource_create(client, &xdg_popup_interface, wl_resource_get_version(resource), id);
+  auto const version =
+      xdgWmBaseResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* popupResource = wl_resource_create(client, &xdg_popup_interface, version, id);
   if (!popupResource) {
     wl_client_post_no_memory(client);
     return;
@@ -1303,7 +1311,8 @@ struct xdg_toplevel_interface const xdgToplevelImpl{
 } // namespace
 
 void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &xdg_wm_base_interface, std::min(version, 6u), id);
+  wl_resource* resource =
+      wl_resource_create(client, &xdg_wm_base_interface, xdgWmBaseResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
@@ -1313,7 +1322,7 @@ void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::ui
 
 void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &zxdg_decoration_manager_v1_interface,
-                                             std::min(version, 1u), id);
+                                             xdgDecorationResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;

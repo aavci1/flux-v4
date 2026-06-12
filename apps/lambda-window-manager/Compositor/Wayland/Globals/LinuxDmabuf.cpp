@@ -315,8 +315,10 @@ void linuxDmabufCreateParams(wl_client* client, wl_resource* resource, std::uint
   auto* server = serverFrom(resource);
   auto params = std::make_unique<WaylandServer::Impl::DmabufParams>();
   params->server = server;
+  auto const version =
+      linuxDmabufResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* paramsResource = wl_resource_create(client, &zwp_linux_buffer_params_v1_interface,
-                                                   wl_resource_get_version(resource), id);
+                                                   version, id);
   if (!paramsResource) {
     wl_client_post_no_memory(client);
     return;
@@ -475,9 +477,11 @@ void sendDmabufFeedback(wl_resource* resource, WaylandServer::Impl* server) {
 }
 
 wl_resource* createDmabufFeedbackResource(wl_client* client, wl_resource* dmabufResource, std::uint32_t id) {
+  auto const version =
+      linuxDmabufResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(dmabufResource)));
   wl_resource* resource = wl_resource_create(client,
                                              &zwp_linux_dmabuf_feedback_v1_interface,
-                                             wl_resource_get_version(dmabufResource),
+                                             version,
                                              id);
   if (!resource) {
     wl_client_post_no_memory(client);
@@ -529,7 +533,7 @@ bool isSupportedDmabufFormat(std::uint32_t format) {
 }
 
 void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  std::uint32_t const resourceVersion = std::min(version, 5u);
+  std::uint32_t const resourceVersion = linuxDmabufResourceVersion(version);
   wl_resource* resource = wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, resourceVersion, id);
   if (!resource) {
     wl_client_post_no_memory(client);
