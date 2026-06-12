@@ -949,6 +949,84 @@ TEST_CASE("xdg popup grab stack preserves parent grabs while child is active") {
   CHECK(grab.seatResource == nullptr);
 }
 
+TEST_CASE("keyboard focus helper pins focus to the active popup grab") {
+  using lambda::compositor::KeyboardFocusRequestRefs;
+  using lambda::compositor::SurfaceRole;
+  using lambda::compositor::WaylandServer;
+
+  WaylandServer::Impl::Surface requested{};
+  requested.role = SurfaceRole::XdgToplevel;
+  WaylandServer::Impl::Surface popupSurface{};
+  popupSurface.role = SurfaceRole::XdgPopup;
+  WaylandServer::Impl::XdgSurface popupXdg{};
+  popupXdg.surface = &popupSurface;
+  WaylandServer::Impl::XdgPopup popup{};
+  popup.xdgSurface = &popupXdg;
+  WaylandServer::Impl::XdgPopupGrab grab{};
+  WaylandServer::Impl::XdgPopup* cachedTop = nullptr;
+
+  REQUIRE(lambda::compositor::xdgPopupGrabPush(grab, &popup, nullptr, nullptr));
+
+  CHECK(lambda::compositor::keyboardFocusTargetForRequest(KeyboardFocusRequestRefs{
+            .popupGrabsEnabled = true,
+            .popupGrab = &grab,
+            .cachedGrabPopup = &cachedTop,
+        }, &requested) == &popupSurface);
+  CHECK(cachedTop == &popup);
+
+  CHECK(lambda::compositor::keyboardFocusTargetForRequest(KeyboardFocusRequestRefs{
+            .popupGrabsEnabled = false,
+            .popupGrab = &grab,
+            .cachedGrabPopup = &cachedTop,
+        }, &requested) == &requested);
+
+  popup.dismissed = true;
+  CHECK(lambda::compositor::keyboardFocusTargetForRequest(KeyboardFocusRequestRefs{
+            .popupGrabsEnabled = true,
+            .popupGrab = &grab,
+            .cachedGrabPopup = &cachedTop,
+        }, &requested) == &requested);
+}
+
+TEST_CASE("keyboard focus helper clears stale cached popup grab top") {
+  using lambda::compositor::KeyboardFocusRequestRefs;
+  using lambda::compositor::WaylandServer;
+
+  WaylandServer::Impl::Surface requested{};
+  WaylandServer::Impl::XdgPopup oldPopup{};
+  WaylandServer::Impl::XdgPopupGrab emptyGrab{};
+  WaylandServer::Impl::XdgPopup* cachedTop = &oldPopup;
+
+  CHECK(lambda::compositor::keyboardFocusTargetForRequest(KeyboardFocusRequestRefs{
+            .popupGrabsEnabled = true,
+            .popupGrab = &emptyGrab,
+            .cachedGrabPopup = &cachedTop,
+        }, &requested) == &requested);
+  CHECK(cachedTop == nullptr);
+}
+
+TEST_CASE("keyboard focus restoration helpers follow popup focus state") {
+  using lambda::compositor::SurfaceRole;
+  using lambda::compositor::WaylandServer;
+
+  WaylandServer::Impl::Surface popupSurface{};
+  popupSurface.role = SurfaceRole::XdgPopup;
+  WaylandServer::Impl::Surface toplevelSurface{};
+  toplevelSurface.role = SurfaceRole::XdgToplevel;
+  WaylandServer::Impl::XdgSurface popupXdg{};
+  popupXdg.surface = &popupSurface;
+  WaylandServer::Impl::XdgPopup popup{};
+  popup.xdgSurface = &popupXdg;
+
+  CHECK(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterPopupDismiss(&popupSurface, &popup));
+  CHECK_FALSE(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterPopupDismiss(&toplevelSurface, &popup));
+  CHECK_FALSE(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterPopupDismiss(nullptr, &popup));
+
+  CHECK(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterGrabDismiss(&popupSurface));
+  CHECK_FALSE(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterGrabDismiss(&toplevelSurface));
+  CHECK_FALSE(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterGrabDismiss(nullptr));
+}
+
 TEST_CASE("xdg popup grab requests are rejected after commit or existing grab") {
   lambda::compositor::WaylandServer::Impl::XdgPopup popup{};
 

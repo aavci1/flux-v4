@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -35,6 +36,39 @@ struct SurfaceSeatCleanupResult {
   bool seatSerialsCleared = false;
   bool activationTokensCleared = false;
 };
+
+struct KeyboardFocusRequestRefs {
+  bool popupGrabsEnabled = false;
+  WaylandServer::Impl::XdgPopupGrab* popupGrab = nullptr;
+  WaylandServer::Impl::XdgPopup** cachedGrabPopup = nullptr;
+};
+
+[[nodiscard]] inline WaylandServer::Impl::Surface* popupGrabKeyboardFocusSurface(
+    WaylandServer::Impl::XdgPopup const* popup) {
+  if (!popup || popup->dismissed || !popup->xdgSurface) return nullptr;
+  return popup->xdgSurface->surface;
+}
+
+[[nodiscard]] inline WaylandServer::Impl::Surface* keyboardFocusTargetForRequest(
+    KeyboardFocusRequestRefs refs,
+    WaylandServer::Impl::Surface* requested) {
+  if (!refs.popupGrabsEnabled || !refs.popupGrab || !refs.cachedGrabPopup) return requested;
+  WaylandServer::Impl::XdgPopup* popup = xdgPopupGrabSyncTop(*refs.popupGrab, *refs.cachedGrabPopup);
+  if (auto* popupSurface = popupGrabKeyboardFocusSurface(popup)) return popupSurface;
+  if (refs.popupGrab->popups.empty()) xdgPopupGrabSyncTop(*refs.popupGrab, *refs.cachedGrabPopup);
+  return requested;
+}
+
+[[nodiscard]] inline bool keyboardFocusShouldRestoreToplevelAfterPopupDismiss(
+    WaylandServer::Impl::Surface const* keyboardFocus,
+    WaylandServer::Impl::XdgPopup const* popup) {
+  return keyboardFocus && keyboardFocus == xdgPopupSurface(popup);
+}
+
+[[nodiscard]] inline bool keyboardFocusShouldRestoreToplevelAfterGrabDismiss(
+    WaylandServer::Impl::Surface const* keyboardFocus) {
+  return surfaceIsXdgPopup(keyboardFocus);
+}
 
 inline SurfaceSeatStateRefs surfaceSeatStateRefs(WaylandServer::Impl* server) {
   if (!server) return {};
