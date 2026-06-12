@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-12 (WM-COMP-21 remaining resource-version caps verified)
+**Last updated:** 2026-06-12 (WM-COMP-21 global version constants verified)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose

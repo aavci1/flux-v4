@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Wayland/CursorShapeState.hpp"
 #include "Compositor/Wayland/FractionalScaleState.hpp"
 #include "Compositor/Wayland/Globals/Activation.hpp"
 #include "Compositor/Wayland/Globals/BackgroundEffect.hpp"
@@ -20,7 +21,12 @@
 #include "Compositor/Wayland/Globals/Viewporter.hpp"
 #include "Compositor/Wayland/Globals/XdgOutput.hpp"
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
+#include "Compositor/Wayland/IdleInhibitState.hpp"
 #include "Compositor/Wayland/OutputState.hpp"
+#include "Compositor/Wayland/PointerExtensionState.hpp"
+#include "Compositor/Wayland/PresentationState.hpp"
+#include "Compositor/Wayland/ViewporterState.hpp"
+#include "Compositor/Wayland/XdgOutputState.hpp"
 #include "cursor-shape-v1-server-protocol.h"
 #include "ext-background-effect-v1-server-protocol.h"
 #include "fractional-scale-v1-server-protocol.h"
@@ -147,37 +153,74 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   display_ = wl_display_create();
   if (!display_) throw std::runtime_error("wl_display_create failed");
 
-  compositorGlobal_ = wl_global_create(display_, &wl_compositor_interface, 5, this, bindCompositor);
-  subcompositorGlobal_ = wl_global_create(display_, &wl_subcompositor_interface, 1, this, bindSubcompositor);
-  shmGlobal_ = wl_global_create(display_, &wl_shm_interface, 1, this, bindShm);
-  outputGlobal_ = wl_global_create(display_, &wl_output_interface, 4, this, bindOutput);
-  seatGlobal_ = wl_global_create(display_, &wl_seat_interface, 7, this, bindSeat);
-  xdgWmBaseGlobal_ = wl_global_create(display_, &xdg_wm_base_interface, 6, this, bindXdgWmBase);
-  linuxDmabufGlobal_ = wl_global_create(display_, &zwp_linux_dmabuf_v1_interface, 5, this, bindLinuxDmabuf);
+  compositorGlobal_ = wl_global_create(display_, &wl_compositor_interface, kCompositorVersion, this, bindCompositor);
+  subcompositorGlobal_ =
+      wl_global_create(display_, &wl_subcompositor_interface, kSubcompositorVersion, this, bindSubcompositor);
+  shmGlobal_ = wl_global_create(display_, &wl_shm_interface, kShmVersion, this, bindShm);
+  outputGlobal_ = wl_global_create(display_, &wl_output_interface, kOutputVersion, this, bindOutput);
+  seatGlobal_ = wl_global_create(display_, &wl_seat_interface, kSeatVersion, this, bindSeat);
+  xdgWmBaseGlobal_ = wl_global_create(display_, &xdg_wm_base_interface, kXdgWmBaseVersion, this, bindXdgWmBase);
+  linuxDmabufGlobal_ =
+      wl_global_create(display_, &zwp_linux_dmabuf_v1_interface, kLinuxDmabufVersion, this, bindLinuxDmabuf);
   xdgDecorationManagerGlobal_ =
-      wl_global_create(display_, &zxdg_decoration_manager_v1_interface, 1, this, bindXdgDecorationManager);
+      wl_global_create(display_,
+                       &zxdg_decoration_manager_v1_interface,
+                       kXdgDecorationManagerVersion,
+                       this,
+                       bindXdgDecorationManager);
   xdgOutputManagerGlobal_ =
-      wl_global_create(display_, &zxdg_output_manager_v1_interface, 3, this, bindXdgOutputManager);
-  viewporterGlobal_ = wl_global_create(display_, &wp_viewporter_interface, 1, this, bindViewporter);
+      wl_global_create(display_, &zxdg_output_manager_v1_interface, kXdgOutputVersion, this, bindXdgOutputManager);
+  viewporterGlobal_ = wl_global_create(display_, &wp_viewporter_interface, kViewporterVersion, this, bindViewporter);
   fractionalScaleManagerGlobal_ =
-      wl_global_create(display_, &wp_fractional_scale_manager_v1_interface, 1, this, bindFractionalScaleManager);
-  cursorShapeManagerGlobal_ =
-      wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 1, this, bindCursorShapeManager);
-  idleInhibitManagerGlobal_ =
-      wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
-  layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 4, this, bindLayerShell);
-  presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
+      wl_global_create(display_,
+                       &wp_fractional_scale_manager_v1_interface,
+                       kFractionalScaleVersion,
+                       this,
+                       bindFractionalScaleManager);
+  cursorShapeManagerGlobal_ = wl_global_create(display_,
+                                               &wp_cursor_shape_manager_v1_interface,
+                                               kCursorShapeVersion,
+                                               this,
+                                               bindCursorShapeManager);
+  idleInhibitManagerGlobal_ = wl_global_create(display_,
+                                               &zwp_idle_inhibit_manager_v1_interface,
+                                               kIdleInhibitVersion,
+                                               this,
+                                               bindIdleInhibitManager);
+  layerShellGlobal_ =
+      wl_global_create(display_, &zwlr_layer_shell_v1_interface, kLayerShellVersion, this, bindLayerShell);
+  presentationGlobal_ =
+      wl_global_create(display_, &wp_presentation_interface, kPresentationVersion, this, bindPresentation);
   relativePointerManagerGlobal_ =
-      wl_global_create(display_, &zwp_relative_pointer_manager_v1_interface, 1, this, bindRelativePointerManager);
+      wl_global_create(display_,
+                       &zwp_relative_pointer_manager_v1_interface,
+                       kRelativePointerVersion,
+                       this,
+                       bindRelativePointerManager);
   pointerConstraintsGlobal_ =
-      wl_global_create(display_, &zwp_pointer_constraints_v1_interface, 1, this, bindPointerConstraints);
+      wl_global_create(display_,
+                       &zwp_pointer_constraints_v1_interface,
+                       kPointerConstraintsVersion,
+                       this,
+                       bindPointerConstraints);
   primarySelectionManagerGlobal_ =
-      wl_global_create(display_, &zwp_primary_selection_device_manager_v1_interface, 1, this, bindPrimarySelectionManager);
-  dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
-  activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
-  cutoutsManagerGlobal_ = wl_global_create(display_, &xx_cutouts_manager_v1_interface, 1, this, bindCutoutsManager);
+      wl_global_create(display_,
+                       &zwp_primary_selection_device_manager_v1_interface,
+                       kPrimarySelectionVersion,
+                       this,
+                       bindPrimarySelectionManager);
+  dataDeviceManagerGlobal_ =
+      wl_global_create(display_, &wl_data_device_manager_interface, kDataDeviceVersion, this, bindDataDeviceManager);
+  activationGlobal_ =
+      wl_global_create(display_, &xdg_activation_v1_interface, kActivationVersion, this, bindActivation);
+  cutoutsManagerGlobal_ =
+      wl_global_create(display_, &xx_cutouts_manager_v1_interface, kCutoutsVersion, this, bindCutoutsManager);
   backgroundEffectManagerGlobal_ =
-      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 4, this, bindBackgroundEffectManager);
+      wl_global_create(display_,
+                       &ext_background_effect_manager_v1_interface,
+                       kBackgroundEffectVersion,
+                       this,
+                       bindBackgroundEffectManager);
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
