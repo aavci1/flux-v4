@@ -949,6 +949,38 @@ TEST_CASE("xdg popup grab stack preserves parent grabs while child is active") {
   CHECK(grab.seatResource == nullptr);
 }
 
+TEST_CASE("xdg popup grab clears when its seat resource is destroyed") {
+  lambda::compositor::WaylandServer::Impl::XdgPopupGrab grab{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup parent{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup child{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup* cachedTop = nullptr;
+  auto* client = reinterpret_cast<wl_client*>(std::uintptr_t{1});
+  auto* seat = reinterpret_cast<wl_resource*>(std::uintptr_t{2});
+  auto* otherSeat = reinterpret_cast<wl_resource*>(std::uintptr_t{3});
+
+  REQUIRE(lambda::compositor::xdgPopupGrabPush(grab, &parent, client, seat));
+  REQUIRE(lambda::compositor::xdgPopupGrabPush(grab, &child, client, seat));
+  REQUIRE(lambda::compositor::xdgPopupGrabSyncTop(grab, cachedTop) == &child);
+
+  CHECK(lambda::compositor::xdgPopupGrabReferencesSeatResource(grab, seat));
+  CHECK_FALSE(lambda::compositor::xdgPopupGrabReferencesSeatResource(grab, otherSeat));
+  CHECK_FALSE(lambda::compositor::xdgPopupGrabClearForSeatResource(grab, cachedTop, otherSeat));
+  CHECK(parent.grabbed);
+  CHECK(child.grabbed);
+  CHECK(cachedTop == &child);
+  CHECK(grab.seatResource == seat);
+
+  CHECK(lambda::compositor::xdgPopupGrabClearForSeatResource(grab, cachedTop, seat));
+  CHECK_FALSE(parent.grabbed);
+  CHECK_FALSE(child.grabbed);
+  CHECK(parent.grabSeatResource == nullptr);
+  CHECK(child.grabSeatResource == nullptr);
+  CHECK(grab.popups.empty());
+  CHECK(grab.client == nullptr);
+  CHECK(grab.seatResource == nullptr);
+  CHECK(cachedTop == nullptr);
+}
+
 TEST_CASE("keyboard focus helper pins focus to the active popup grab") {
   using lambda::compositor::KeyboardFocusRequestRefs;
   using lambda::compositor::SurfaceRole;

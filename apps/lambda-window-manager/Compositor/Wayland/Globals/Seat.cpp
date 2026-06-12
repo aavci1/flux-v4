@@ -5,6 +5,7 @@
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
 
 #include <sys/mman.h>
@@ -22,7 +23,10 @@ namespace lambda::compositor {
 namespace {
 
 void seatDestroyResource(wl_resource* resource) {
-  if (auto* server = serverFrom(resource)) removeResource(server->seatResources_, resource);
+  if (auto* server = serverFrom(resource)) {
+    removeResource(server->seatResources_, resource);
+    xdgPopupGrabClearForSeatResource(server->popupGrab_, server->grabPopup_, resource);
+  }
 }
 
 void pointerDestroyResource(wl_resource* resource) {

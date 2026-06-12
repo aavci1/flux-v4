@@ -88,6 +88,16 @@ inline WaylandServer::Impl::XdgPopup* xdgPopupGrabSyncTop(
   return popup && std::find(grab.popups.begin(), grab.popups.end(), popup) != grab.popups.end();
 }
 
+[[nodiscard]] inline bool xdgPopupGrabReferencesSeatResource(
+    WaylandServer::Impl::XdgPopupGrab const& grab,
+    wl_resource* seatResource) {
+  if (!seatResource) return false;
+  if (grab.seatResource == seatResource) return true;
+  return std::any_of(grab.popups.begin(), grab.popups.end(), [seatResource](auto const* popup) {
+    return popup && popup->grabSeatResource == seatResource;
+  });
+}
+
 inline bool xdgPopupGrabPush(WaylandServer::Impl::XdgPopupGrab& grab,
                              WaylandServer::Impl::XdgPopup* popup,
                              wl_client* client,
@@ -130,6 +140,15 @@ inline void xdgPopupGrabClear(WaylandServer::Impl::XdgPopupGrab& grab) {
   grab.popups.clear();
   grab.client = nullptr;
   grab.seatResource = nullptr;
+}
+
+inline bool xdgPopupGrabClearForSeatResource(WaylandServer::Impl::XdgPopupGrab& grab,
+                                             WaylandServer::Impl::XdgPopup*& cachedTop,
+                                             wl_resource* seatResource) {
+  if (!xdgPopupGrabReferencesSeatResource(grab, seatResource)) return false;
+  xdgPopupGrabClear(grab);
+  cachedTop = nullptr;
+  return true;
 }
 
 } // namespace lambda::compositor
