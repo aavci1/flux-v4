@@ -7,22 +7,33 @@ LOG_ROOT="${LWM_REAL_APP_LOG_DIR:-$ROOT/.debug-logs/real-app-smoke}"
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 LOG_DIR="$LOG_ROOT/$RUN_ID"
 SECONDS_PER_APP="${LWM_REAL_APP_SECONDS:-45}"
+COMPOSITOR_TIMEOUT_SECONDS="${LWM_REAL_APP_COMPOSITOR_TIMEOUT_SECONDS:-300}"
 BUILD=1
 INCLUDE_SHELL=0
 PROBE_ONLY=0
+START_COMPOSITOR=0
 SELECTED_CASE=""
+COMPOSITOR_ARGS=()
 
 usage() {
   cat <<EOF
 Usage: scripts/run-real-app-smoke.sh [options]
 
 Launches the Lambda apps and available mature Wayland clients against an
-already-running lambda-window-manager session. It records one log per app and
+already-running lambda-window-manager session, or starts a guarded compositor
+session when --start-compositor is passed. It records one log per app and
 prints the manual checks to perform while each app is open.
 
 Options:
   --no-build       Do not build Lambda app targets first.
   --include-shell  Also launch lambda-shell. Normally the shell is already running.
+  --start-compositor
+                 Start lambda-window-manager with CPU/KMS/pacing traces, wait
+                 for its Wayland display file, run the selected apps, then stop it.
+  --compositor-timeout N
+                 Seconds before the started compositor is terminated. Default: $COMPOSITOR_TIMEOUT_SECONDS.
+  --compositor-arg ARG
+                 Extra argument passed to lambda-window-manager. Repeatable.
   --case NAME      Run one case: lambda-settings, lambda-files, lambda-editor,
                    lambda-terminal, shell, terminal, browser, gtk, qt, mpv.
   --seconds N      Seconds to leave each app open. Default: $SECONDS_PER_APP.
@@ -34,6 +45,10 @@ Environment:
   LWM_BUILD_DIR          Build directory. Default: $BUILD_DIR
   LWM_REAL_APP_LOG_DIR   Smoke log root. Default: $LOG_ROOT
   LWM_REAL_APP_SECONDS   Seconds per app. Default: $SECONDS_PER_APP
+  LWM_REAL_APP_COMPOSITOR_TIMEOUT_SECONDS
+                         Timeout for --start-compositor. Default: $COMPOSITOR_TIMEOUT_SECONDS
+  LAMBDA_WINDOW_MANAGER_BIN
+                         Override compositor binary for --start-compositor.
 EOF
 }
 
@@ -67,6 +82,26 @@ while [[ $# -gt 0 ]]; do
     --include-shell)
       INCLUDE_SHELL=1
       shift
+      ;;
+    --start-compositor)
+      START_COMPOSITOR=1
+      shift
+      ;;
+    --compositor-timeout)
+      COMPOSITOR_TIMEOUT_SECONDS="${2:-}"
+      if ! [[ "$COMPOSITOR_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || [[ "$COMPOSITOR_TIMEOUT_SECONDS" -le 0 ]]; then
+        echo "--compositor-timeout requires a positive integer" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --compositor-arg)
+      if [[ -z "${2:-}" ]]; then
+        echo "--compositor-arg requires a value" >&2
+        exit 2
+      fi
+      COMPOSITOR_ARGS+=("$2")
+      shift 2
       ;;
     --case)
       SELECTED_CASE="${2:-}"
@@ -105,14 +140,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+if [[ "$START_COMPOSITOR" -ne 1 && -z "${WAYLAND_DISPLAY:-}" ]]; then
   display_file="${XDG_RUNTIME_DIR:-}/lambda-window-manager-display"
   if [[ -r "$display_file" ]]; then
     export WAYLAND_DISPLAY="$(cat "$display_file")"
   fi
 fi
 
-if [[ "$PROBE_ONLY" -ne 1 && -z "${WAYLAND_DISPLAY:-}" ]]; then
+if [[ "$PROBE_ONLY" -ne 1 && "$START_COMPOSITOR" -ne 1 && -z "${WAYLAND_DISPLAY:-}" ]]; then
   echo "WAYLAND_DISPLAY is not set and lambda-window-manager-display was not found." >&2
   echo "Start lambda-window-manager first, then rerun this script from another TTY or SSH shell." >&2
   exit 1
@@ -157,6 +192,26 @@ lambda_exe() {
 
 lambda_cmd() {
   quote_path "$(lambda_exe "$1")"
+}
+
+compositor_exe() {
+  local override="${LAMBDA_WINDOW_MANAGER_BIN:-}"
+  local candidates=()
+  if [[ -n "$override" ]]; then
+    candidates+=("$override")
+  fi
+  candidates+=(
+    "$BUILD_DIR/apps/lambda-window-manager/lambda-window-manager"
+    "$BUILD_DIR/lambda-window-manager"
+  )
+  local path
+  for path in "${candidates[@]}"; do
+    if [[ -x "$path" ]]; then
+      printf "%s" "$path"
+      return
+    fi
+  done
+  printf "%s/apps/lambda-window-manager/lambda-window-manager" "$BUILD_DIR"
 }
 
 rows=()
@@ -294,6 +349,9 @@ fi
 
 if [[ "$BUILD" -eq 1 ]]; then
   build_targets=()
+  if [[ "$START_COMPOSITOR" -eq 1 && "$PROBE_ONLY" -ne 1 ]]; then
+    build_targets+=("lambda-window-manager")
+  fi
   for row in "${rows[@]}"; do
     IFS='|' read -r name required target command expected detail <<<"$row"
     case "$target" in
@@ -307,11 +365,81 @@ if [[ "$BUILD" -eq 1 ]]; then
   fi
 fi
 
+WM_PID=""
+DISPLAY_FILE="${XDG_RUNTIME_DIR:-}/lambda-window-manager-display"
+
+stop_started_compositor() {
+  set +e
+  if [[ -n "$WM_PID" ]]; then
+    kill -TERM -"$WM_PID" 2>/dev/null || kill -TERM "$WM_PID" 2>/dev/null || true
+    sleep 1
+    kill -KILL -"$WM_PID" 2>/dev/null || kill -KILL "$WM_PID" 2>/dev/null || true
+    wait "$WM_PID" 2>/dev/null || true
+  fi
+  set -e
+}
+
+start_compositor_if_requested() {
+  if [[ "$START_COMPOSITOR" -ne 1 || "$PROBE_ONLY" -eq 1 ]]; then
+    return
+  fi
+  if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
+    echo "XDG_RUNTIME_DIR is required for --start-compositor." >&2
+    exit 2
+  fi
+  if [[ -r "$DISPLAY_FILE" ]]; then
+    echo "Refusing --start-compositor because $DISPLAY_FILE already exists." >&2
+    echo "Stop the existing compositor or remove a stale display file before rerunning." >&2
+    exit 2
+  fi
+  local wm
+  wm="$(compositor_exe)"
+  if [[ ! -x "$wm" ]]; then
+    echo "Compositor binary not found: $wm" >&2
+    echo "Build it first with: cmake --build $BUILD_DIR --target lambda-window-manager" >&2
+    exit 1
+  fi
+  mkdir -p "$LOG_DIR"
+  echo "Starting lambda-window-manager for real-app smoke validation."
+  echo "Compositor log: $LOG_DIR/compositor.log"
+  setsid timeout --signal=TERM --kill-after=5s "${COMPOSITOR_TIMEOUT_SECONDS}s" env \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$LOG_DIR/cpu.log" \
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE="${LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE:-0}" \
+    LAMBDA_KMS_PRESENT_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$LOG_DIR/pacing.log" \
+    "$wm" "${COMPOSITOR_ARGS[@]}" >"$LOG_DIR/compositor.log" 2>&1 &
+  WM_PID=$!
+  trap stop_started_compositor EXIT
+
+  for _ in $(seq 1 150); do
+    if [[ -r "$DISPLAY_FILE" ]]; then
+      export WAYLAND_DISPLAY="$(cat "$DISPLAY_FILE")"
+      return
+    fi
+    if ! kill -0 "$WM_PID" 2>/dev/null; then
+      echo "lambda-window-manager exited before creating a Wayland display." >&2
+      tail -n 160 "$LOG_DIR/compositor.log" >&2 || true
+      exit 20
+    fi
+    sleep 0.1
+  done
+  echo "lambda-window-manager display file was not created: $DISPLAY_FILE" >&2
+  tail -n 160 "$LOG_DIR/compositor.log" >&2 || true
+  exit 20
+}
+
+start_compositor_if_requested
+
 echo "Real-app smoke matrix:"
 echo "  WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-not set}"
 echo "  build dir:       $BUILD_DIR"
 echo "  log dir:         $LOG_DIR"
 echo "  seconds/app:     $SECONDS_PER_APP"
+if [[ "$START_COMPOSITOR" -eq 1 && "$PROBE_ONLY" -ne 1 ]]; then
+  echo "  compositor:      started by this script, timeout ${COMPOSITOR_TIMEOUT_SECONDS}s"
+fi
 echo
 
 missing_required=0
@@ -378,6 +506,25 @@ echo "  Live resize should look continuous: exposed areas fill immediately and e
 echo "  Scroll representative Lambda apps, especially Editor, and confirm text keeps rendering beyond the initial window height."
 echo
 echo "Logs written to: $LOG_DIR"
+fatal_count=0
+if [[ -d "$LOG_DIR" ]]; then
+  fatal_count=$( (rg -n -i 'fatal|segmentation|assert|AddressSanitizer|VK_ERROR|present failed|surface lost|render error|protocol error|terminate called|exception|aborted' "$LOG_DIR" || true) | wc -l )
+fi
+if [[ "$fatal_count" -ne 0 ]]; then
+  echo "Detected $fatal_count fatal/protocol/runtime log matches:"
+  rg -n -i 'fatal|segmentation|assert|AddressSanitizer|VK_ERROR|present failed|surface lost|render error|protocol error|terminate called|exception|aborted' "$LOG_DIR" || true
+  failed=1
+fi
+if [[ "$START_COMPOSITOR" -eq 1 && "$PROBE_ONLY" -ne 1 ]]; then
+  cpu_trace_count=$(rg -c '^cpu-trace:' "$LOG_DIR/cpu.log" 2>/dev/null || echo 0)
+  pacing_trace_count=$(rg -c '^pacing-trace:' "$LOG_DIR/pacing.log" 2>/dev/null || echo 0)
+  printf 'Trace summary: cpu_trace=%s pacing_trace=%s compositor_log=%s cpu_log=%s pacing_log=%s\n' \
+    "$cpu_trace_count" "$pacing_trace_count" "$LOG_DIR/compositor.log" "$LOG_DIR/cpu.log" "$LOG_DIR/pacing.log"
+  if [[ "$cpu_trace_count" -lt 1 ]]; then
+    echo "No CPU trace entries were captured by the started compositor." >&2
+    failed=1
+  fi
+fi
 if [[ "$failed" -ne 0 ]]; then
   echo "One or more required apps were missing or failed to launch. Document intentional exclusions or fix protocol/runtime failures."
   exit 1

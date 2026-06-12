@@ -56,4 +56,14 @@ for case_name in \
     fail "scripts/run-real-app-smoke.sh --list is missing case '$case_name'"
 done
 
+for runner_capability in \
+  "--start-compositor" \
+  "LAMBDA_WINDOW_MANAGER_CPU_TRACE=1" \
+  "LAMBDA_WINDOW_MANAGER_PACING_TRACE=1" \
+  "LAMBDA_KMS_PRESENT_TRACE=1" \
+  "Trace summary:" \
+  "fatal/protocol/runtime log matches"; do
+  require_in_file "$runner_capability" "$SMOKE"
+done
+
 echo "WM-COMP-27 real-app matrix is documented and matches the smoke runner."
