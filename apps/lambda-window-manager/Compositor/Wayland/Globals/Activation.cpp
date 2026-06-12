@@ -5,7 +5,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "xdg-activation-v1-server-protocol.h"
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <memory>
@@ -144,8 +143,9 @@ void activationGetToken(wl_client* client, wl_resource* resource, std::uint32_t 
   auto token = std::make_unique<WaylandServer::Impl::ActivationToken>();
   token->server = server;
   token->token = "lambda-" + std::to_string(server->nextActivationTokenId_++);
+  auto const version = activationResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* tokenResource =
-      wl_resource_create(client, &xdg_activation_token_v1_interface, wl_resource_get_version(resource), id);
+      wl_resource_create(client, &xdg_activation_token_v1_interface, version, id);
   if (!tokenResource) {
     wl_client_post_no_memory(client);
     return;
@@ -185,7 +185,7 @@ struct xdg_activation_v1_interface const activationImpl{
 } // namespace
 
 void bindActivation(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &xdg_activation_v1_interface, std::min(version, 1u), id);
+  wl_resource* resource = wl_resource_create(client, &xdg_activation_v1_interface, activationResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;

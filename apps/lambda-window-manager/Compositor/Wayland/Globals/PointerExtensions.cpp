@@ -39,9 +39,11 @@ void relativePointerManagerGetRelativePointer(wl_client* client,
   auto relativePointer = std::make_unique<WaylandServer::Impl::RelativePointer>();
   relativePointer->server = server;
   relativePointer->pointer = pointerResource;
+  auto const version =
+      relativePointerResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* relativePointerResource = wl_resource_create(client,
                                                            &zwp_relative_pointer_v1_interface,
-                                                           relativePointerResourceVersion(wl_resource_get_version(resource)),
+                                                           version,
                                                            id);
   if (!relativePointerResource) {
     wl_client_post_no_memory(client);
@@ -60,7 +62,10 @@ struct zwp_relative_pointer_manager_v1_interface const relativePointerManagerImp
 
 void bindRelativePointerManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_relative_pointer_manager_v1_interface, std::min(version, 1u), id);
+      wl_resource_create(client,
+                         &zwp_relative_pointer_manager_v1_interface,
+                         relativePointerResourceVersion(version),
+                         id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
@@ -211,7 +216,8 @@ void createPointerConstraint(wl_client* client,
                                       : &zwp_confined_pointer_v1_interface;
   wl_resource* constraintResource = wl_resource_create(client,
                                                        interface,
-                                                       pointerConstraintsResourceVersion(wl_resource_get_version(resource)),
+                                                       pointerConstraintsResourceVersion(
+                                                           static_cast<std::uint32_t>(wl_resource_get_version(resource))),
                                                        id);
   if (!constraintResource) {
     wl_client_post_no_memory(client);

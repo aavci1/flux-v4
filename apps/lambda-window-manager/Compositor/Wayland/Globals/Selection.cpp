@@ -23,7 +23,7 @@ extern struct wl_data_offer_interface const dataOfferImpl;
 
 std::uint32_t dataDeviceVersion(WaylandServer::Impl::DataDevice const* device) {
   return device && device->resource
-             ? std::min<std::uint32_t>(static_cast<std::uint32_t>(wl_resource_get_version(device->resource)), 3u)
+             ? dataDeviceResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(device->resource)))
              : 1u;
 }
 
@@ -151,7 +151,9 @@ void primarySelectionManagerCreateSource(wl_client* client, wl_resource* resourc
   auto* server = serverFrom(resource);
   auto source = std::make_unique<WaylandServer::Impl::PrimarySelectionSource>();
   source->server = server;
-  wl_resource* sourceResource = wl_resource_create(client, &zwp_primary_selection_source_v1_interface, 1, id);
+  auto const version = primarySelectionResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* sourceResource =
+      wl_resource_create(client, &zwp_primary_selection_source_v1_interface, version, id);
   if (!sourceResource) {
     wl_client_post_no_memory(client);
     return;
@@ -170,7 +172,9 @@ void primarySelectionManagerGetDevice(wl_client* client,
   auto device = std::make_unique<WaylandServer::Impl::PrimarySelectionDevice>();
   device->server = server;
   device->seat = seatResource;
-  wl_resource* deviceResource = wl_resource_create(client, &zwp_primary_selection_device_v1_interface, 1, id);
+  auto const version = primarySelectionResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* deviceResource =
+      wl_resource_create(client, &zwp_primary_selection_device_v1_interface, version, id);
   if (!deviceResource) {
     wl_client_post_no_memory(client);
     return;
@@ -189,8 +193,10 @@ struct zwp_primary_selection_device_manager_v1_interface const primarySelectionM
 };
 
 void bindPrimarySelectionManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource =
-      wl_resource_create(client, &zwp_primary_selection_device_manager_v1_interface, std::min(version, 1u), id);
+  wl_resource* resource = wl_resource_create(client,
+                                             &zwp_primary_selection_device_manager_v1_interface,
+                                             primarySelectionResourceVersion(version),
+                                             id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
@@ -587,7 +593,7 @@ void dataDeviceManagerCreateDataSource(wl_client* client, wl_resource* resource,
   auto source = std::make_unique<WaylandServer::Impl::DataSource>();
   source->server = server;
   std::uint32_t const version =
-      std::min<std::uint32_t>(static_cast<std::uint32_t>(wl_resource_get_version(resource)), 3u);
+      dataDeviceResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* sourceResource = wl_resource_create(client, &wl_data_source_interface, version, id);
   if (!sourceResource) {
     wl_client_post_no_memory(client);
@@ -605,7 +611,7 @@ void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, st
   device->server = server;
   device->seat = seat;
   std::uint32_t const version =
-      std::min<std::uint32_t>(static_cast<std::uint32_t>(wl_resource_get_version(resource)), 3u);
+      dataDeviceResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* deviceResource = wl_resource_create(client, &wl_data_device_interface, version, id);
   if (!deviceResource) {
     wl_client_post_no_memory(client);
@@ -625,7 +631,8 @@ struct wl_data_device_manager_interface const dataDeviceManagerImpl{
 };
 
 void bindDataDeviceManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_data_device_manager_interface, std::min(version, 3u), id);
+  wl_resource* resource =
+      wl_resource_create(client, &wl_data_device_manager_interface, dataDeviceResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
