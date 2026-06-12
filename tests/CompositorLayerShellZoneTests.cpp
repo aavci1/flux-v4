@@ -26,6 +26,29 @@ TEST_CASE("layer shell reserved zones ignore unrelated namespaces") {
   CHECK(zones.dock == 0);
 }
 
+TEST_CASE("layer shell reserved zones use committed dock anchors and margins") {
+  using namespace lambda::compositor;
+
+  std::vector<LayerShellReservedZoneInput> layers{
+      {.nameSpace = "lambda.dock",
+       .anchor = kLayerShellAnchorTop,
+       .marginBottom = 24,
+       .extent = 80},
+      {.nameSpace = "lambda.dock",
+       .anchor = kLayerShellAnchorBottom,
+       .marginBottom = 8,
+       .extent = 64},
+      {.nameSpace = "lambda.dock",
+       .anchor = kLayerShellAnchorBottom,
+       .marginBottom = 2,
+       .extent = 96},
+  };
+
+  auto const zones = aggregateLayerShellReservedZones(layers);
+
+  CHECK(zones.dock == 100);
+}
+
 TEST_CASE("layer shell configure size resolves output-relative dimensions") {
   using namespace lambda::compositor;
 
@@ -131,6 +154,28 @@ TEST_CASE("layer shell pending state applies only on commit") {
   CHECK_FALSE(layer.pending.exclusiveZoneSet);
   CHECK_FALSE(layer.pending.marginSet);
   CHECK_FALSE(layer.pending.keyboardInteractivitySet);
+}
+
+TEST_CASE("layer shell dynamic layer changes apply on commit without configure") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::LayerSurface layer;
+  layer.width = 120;
+  layer.height = 36;
+  layer.anchor = kLayerShellAnchorBottom;
+  layer.layer = ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+  layer.pending.layer = ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY;
+  layer.pending.layerSet = true;
+
+  CHECK(layer.layer == ZWLR_LAYER_SHELL_V1_LAYER_TOP);
+
+  LayerSurfaceCommitResult const result = applyLayerSurfacePendingState(&layer);
+
+  CHECK(result.valid);
+  CHECK(result.stateChanged);
+  CHECK_FALSE(result.configureNeeded);
+  CHECK(layer.layer == ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY);
+  CHECK_FALSE(layer.pending.layerSet);
 }
 
 TEST_CASE("layer shell pending state rejects omitted dimensions without opposing anchors") {
