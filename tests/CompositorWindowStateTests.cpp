@@ -904,6 +904,21 @@ TEST_CASE("xdg popup topmost validation detects live child popups") {
   CHECK(lambda::compositor::xdgPopupHasLiveChild(withLiveChild, &parent));
 }
 
+TEST_CASE("xdg popup parent references include dismissed popups for cleanup") {
+  lambda::compositor::WaylandServer::Impl::Surface parentSurface{};
+  lambda::compositor::WaylandServer::Impl::Surface otherSurface{};
+  lambda::compositor::WaylandServer::Impl::XdgPopup child{};
+  child.parentSurface = &parentSurface;
+
+  CHECK(lambda::compositor::xdgPopupReferencesParentSurface(&child, &parentSurface));
+  CHECK_FALSE(lambda::compositor::xdgPopupReferencesParentSurface(&child, &otherSurface));
+  CHECK_FALSE(lambda::compositor::xdgPopupReferencesParentSurface(&child, nullptr));
+  CHECK_FALSE(lambda::compositor::xdgPopupReferencesParentSurface(nullptr, &parentSurface));
+
+  child.dismissed = true;
+  CHECK(lambda::compositor::xdgPopupReferencesParentSurface(&child, &parentSurface));
+}
+
 TEST_CASE("xdg popup grab stack preserves parent grabs while child is active") {
   lambda::compositor::WaylandServer::Impl::XdgPopupGrab grab{};
   lambda::compositor::WaylandServer::Impl::XdgPopup parent{};

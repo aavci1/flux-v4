@@ -755,6 +755,7 @@ void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
   if (!toplevel) return;
 
   bool changed = false;
+  changed = resetXdgPopupsParentedBySurface(surface->server, surface, true) || changed;
   WaylandServer::Impl::XdgToplevel* replacementParent = xdgToplevelRetainedParent(toplevel->parent);
   for (auto& child : surface->server->toplevels_) {
     if (child && child.get() != toplevel && child->parent == toplevel) {

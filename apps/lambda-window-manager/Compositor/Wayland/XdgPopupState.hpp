@@ -45,6 +45,12 @@ struct XdgPopupReparentGeometry {
   return popup && popup->xdgSurface ? popup->xdgSurface->surface : nullptr;
 }
 
+[[nodiscard]] inline bool xdgPopupReferencesParentSurface(
+    WaylandServer::Impl::XdgPopup const* popup,
+    WaylandServer::Impl::Surface const* parentSurface) {
+  return popup && parentSurface && popup->parentSurface == parentSurface;
+}
+
 [[nodiscard]] inline bool xdgPopupHasLiveChild(std::span<WaylandServer::Impl::XdgPopup const* const> popups,
                                                WaylandServer::Impl::XdgPopup const* popup) {
   auto const* surface = xdgPopupSurface(popup);

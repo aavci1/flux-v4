@@ -992,6 +992,9 @@ void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup
 bool resetXdgPopupRole(WaylandServer::Impl* server,
                        WaylandServer::Impl::XdgPopup* popup,
                        bool sendPopupDone);
+bool resetXdgPopupsParentedBySurface(WaylandServer::Impl* server,
+                                     WaylandServer::Impl::Surface* parentSurface,
+                                     bool sendPopupDone);
 bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs);

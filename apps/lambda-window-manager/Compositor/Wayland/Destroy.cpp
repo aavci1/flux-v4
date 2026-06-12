@@ -80,6 +80,24 @@ bool resetXdgPopupRole(WaylandServer::Impl* server,
   return true;
 }
 
+bool resetXdgPopupsParentedBySurface(WaylandServer::Impl* server,
+                                     WaylandServer::Impl::Surface* parentSurface,
+                                     bool sendPopupDone) {
+  if (!server || !parentSurface) return false;
+
+  bool changed = false;
+  while (true) {
+    auto child = std::find_if(server->popups_.begin(),
+                              server->popups_.end(),
+                              [parentSurface](auto const& popup) {
+                                return xdgPopupReferencesParentSurface(popup.get(), parentSurface);
+                              });
+    if (child == server->popups_.end()) break;
+    changed = resetXdgPopupRole(server, child->get(), sendPopupDone) || changed;
+  }
+  return changed;
+}
+
 void resetSubsurfaceRole(WaylandServer::Impl* server, WaylandServer::Impl::Subsurface* subsurface) {
   if (!server || !subsurface) return;
   if (subsurface->surface && subsurface->surface->subsurfaceRole == subsurface) {
@@ -193,13 +211,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   }
   if (dndIcon_ == surface) dndIcon_ = nullptr;
 
-  while (true) {
-    auto child = std::find_if(popups_.begin(), popups_.end(), [surface](auto const& popup) {
-      return popup && popup->parentSurface == surface;
-    });
-    if (child == popups_.end()) break;
-    resetXdgPopupRole(this, child->get(), true);
-  }
+  resetXdgPopupsParentedBySurface(this, surface, true);
   while (true) {
     auto ownPopup = std::find_if(popups_.begin(), popups_.end(), [surface](auto const& popup) {
       return popup && popup->xdgSurface && popup->xdgSurface->surface == surface;
@@ -328,6 +340,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   Surface* surface = toplevel && toplevel->xdgSurface ? toplevel->xdgSurface->surface : nullptr;
   bool const hadToplevel = surfaceIsXdgToplevel(surface);
   bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
+  resetXdgPopupsParentedBySurface(this, surface, true);
   if (surfaceIsXdgToplevel(surface)) {
     wm::clearFocusCycle(this);
     detachPointerButtonGrabSurface(this, surface);
