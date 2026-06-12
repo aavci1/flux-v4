@@ -3,6 +3,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
+#include "Compositor/Wayland/OutputState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/SeatFocusState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
@@ -1506,7 +1507,7 @@ wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroySurface>);
   for (wl_resource* output : outputResources_) {
-    if (output && wl_resource_get_client(output) == client) {
+    if (output && surfaceShouldReceiveOutputEnter(true, wl_resource_get_client(output) == client)) {
       wl_surface_send_enter(resource, output);
     }
   }

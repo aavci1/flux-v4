@@ -54,7 +54,8 @@ void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint3
   if (resourceVersion >= 2) wl_output_send_done(resource);
 
   for (auto const& surface : server->surfaces_) {
-    if (surface && surface->resource && wl_resource_get_client(surface->resource) == client) {
+    if (surface && surface->resource &&
+        surfaceShouldReceiveOutputEnter(true, wl_resource_get_client(surface->resource) == client)) {
       wl_surface_send_enter(surface->resource, resource);
     }
   }

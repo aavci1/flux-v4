@@ -47,4 +47,9 @@ struct OutputLayoutBox {
   };
 }
 
+[[nodiscard]] inline bool surfaceShouldReceiveOutputEnter(bool outputActive,
+                                                          bool resourceBelongsToSurfaceClient) {
+  return outputActive && resourceBelongsToSurfaceClient;
+}
+
 } // namespace lambda::compositor

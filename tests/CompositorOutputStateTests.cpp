@@ -39,4 +39,11 @@ TEST_CASE("selected output layout carries logical position scale and transform")
   CHECK(future.transform == 90);
 }
 
+TEST_CASE("selected output enter selection is scoped to active same-client resources") {
+  CHECK(surfaceShouldReceiveOutputEnter(true, true));
+  CHECK_FALSE(surfaceShouldReceiveOutputEnter(false, true));
+  CHECK_FALSE(surfaceShouldReceiveOutputEnter(true, false));
+  CHECK_FALSE(surfaceShouldReceiveOutputEnter(false, false));
+}
+
 } // namespace lambda::compositor
