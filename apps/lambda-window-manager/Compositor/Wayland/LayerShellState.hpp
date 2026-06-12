@@ -3,6 +3,7 @@
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 
 #include <cstdint>
+#include <string_view>
 
 namespace lambda::compositor {
 
@@ -21,6 +22,14 @@ inline std::uint32_t normalizeLayerShellKeyboardInteractivity(std::uint32_t reso
 
 inline bool validLayerShellKeyboardInteractivity(std::uint32_t interactivity) {
   return interactivity <= ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND;
+}
+
+inline bool layerShellNamespaceHidesForFullscreen(std::string_view nameSpace) {
+  return nameSpace == "lambda.dock";
+}
+
+inline bool layerShellFrameCallbacksHiddenForFullscreen(std::string_view nameSpace, float hideProgress) {
+  return layerShellNamespaceHidesForFullscreen(nameSpace) && hideProgress >= 0.999f;
 }
 
 } // namespace lambda::compositor

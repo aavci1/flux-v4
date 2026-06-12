@@ -3,6 +3,7 @@
 #include "Compositor/CompositorPresentation.hpp"
 #include "Compositor/Wayland/BufferRelease.hpp"
 #include "Compositor/Wayland/IdleInhibitState.hpp"
+#include "Compositor/Wayland/LayerShellState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
@@ -54,8 +55,9 @@ bool hasVisibleFullscreenToplevel(WaylandServer::Impl const& server) {
 }
 
 bool hiddenFullscreenShellPanel(WaylandServer::Impl const& server, WaylandServer::Impl::Surface const* surface) {
-  return surfaceIsLayerSurface(surface) && surface->layerSurface && server.shellPanelHideProgress_ >= 0.999f &&
-         surface->layerSurface->nameSpace == "lambda.dock";
+  return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         layerShellFrameCallbacksHiddenForFullscreen(surface->layerSurface->nameSpace,
+                                                     server.shellPanelHideProgress_);
 }
 
 void updateShellPanelAnimation(WaylandServer::Impl& server, std::uint32_t timeMs, bool animationsEnabled) {

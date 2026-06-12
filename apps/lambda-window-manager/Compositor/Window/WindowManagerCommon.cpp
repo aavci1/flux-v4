@@ -2,6 +2,7 @@
 
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
+#include "Compositor/Wayland/LayerShellState.hpp"
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -67,7 +68,7 @@ bool hasVisibleFullscreenToplevel(WaylandServer::Impl const* server) {
 bool fullscreenHiddenShellPanel(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface &&
          surface->layerSurface->mapped &&
-         surface->layerSurface->nameSpace == "lambda.dock";
+         layerShellNamespaceHidesForFullscreen(surface->layerSurface->nameSpace);
 }
 
 WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, float x, float y) {

@@ -164,6 +164,19 @@ TEST_CASE("layer shell keyboard interactivity normalizes by protocol version") {
   CHECK_FALSE(validLayerShellKeyboardInteractivity(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND + 1));
 }
 
+TEST_CASE("layer shell fullscreen hide policy is limited to dock panels") {
+  using namespace lambda::compositor;
+
+  CHECK(layerShellNamespaceHidesForFullscreen("lambda.dock"));
+  CHECK_FALSE(layerShellNamespaceHidesForFullscreen("lambda.command-launcher"));
+  CHECK_FALSE(layerShellNamespaceHidesForFullscreen("com.example.panel"));
+
+  CHECK_FALSE(layerShellFrameCallbacksHiddenForFullscreen("lambda.dock", 0.998f));
+  CHECK(layerShellFrameCallbacksHiddenForFullscreen("lambda.dock", 0.999f));
+  CHECK(layerShellFrameCallbacksHiddenForFullscreen("lambda.dock", 1.0f));
+  CHECK_FALSE(layerShellFrameCallbacksHiddenForFullscreen("lambda.command-launcher", 1.0f));
+}
+
 TEST_CASE("layer shell pending state applies only on commit") {
   using namespace lambda::compositor;
 
