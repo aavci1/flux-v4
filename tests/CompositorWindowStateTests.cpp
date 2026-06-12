@@ -1074,6 +1074,42 @@ TEST_CASE("keyboard focus restoration helpers follow popup focus state") {
   CHECK_FALSE(lambda::compositor::keyboardFocusShouldRestoreToplevelAfterGrabDismiss(nullptr));
 }
 
+TEST_CASE("keyboard popup dismissal clears active popup grab stacks") {
+  using lambda::compositor::KeyboardPopupDismissRefs;
+  using lambda::compositor::WaylandServer;
+
+  WaylandServer::Impl::XdgPopupGrab grab{};
+  WaylandServer::Impl::XdgPopup parent{};
+  WaylandServer::Impl::XdgPopup child{};
+  WaylandServer::Impl::XdgPopup* cachedTop = nullptr;
+
+  REQUIRE(lambda::compositor::xdgPopupGrabPush(grab, &parent, nullptr, nullptr));
+  REQUIRE(lambda::compositor::xdgPopupGrabPush(grab, &child, nullptr, nullptr));
+
+  CHECK(lambda::compositor::keyboardDismissShouldClearPopupGrab(KeyboardPopupDismissRefs{
+      .popupGrabsEnabled = true,
+      .popupGrab = &grab,
+      .cachedGrabPopup = &cachedTop,
+  }));
+  CHECK(cachedTop == &child);
+
+  cachedTop = &parent;
+  CHECK_FALSE(lambda::compositor::keyboardDismissShouldClearPopupGrab(KeyboardPopupDismissRefs{
+      .popupGrabsEnabled = false,
+      .popupGrab = &grab,
+      .cachedGrabPopup = &cachedTop,
+  }));
+  CHECK(cachedTop == &parent);
+
+  lambda::compositor::xdgPopupGrabClear(grab);
+  CHECK_FALSE(lambda::compositor::keyboardDismissShouldClearPopupGrab(KeyboardPopupDismissRefs{
+      .popupGrabsEnabled = true,
+      .popupGrab = &grab,
+      .cachedGrabPopup = &cachedTop,
+  }));
+  CHECK(cachedTop == nullptr);
+}
+
 TEST_CASE("xdg popup grab requests are rejected after commit or existing grab") {
   lambda::compositor::WaylandServer::Impl::XdgPopup popup{};
 

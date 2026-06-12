@@ -43,6 +43,12 @@ struct KeyboardFocusRequestRefs {
   WaylandServer::Impl::XdgPopup** cachedGrabPopup = nullptr;
 };
 
+struct KeyboardPopupDismissRefs {
+  bool popupGrabsEnabled = false;
+  WaylandServer::Impl::XdgPopupGrab* popupGrab = nullptr;
+  WaylandServer::Impl::XdgPopup** cachedGrabPopup = nullptr;
+};
+
 [[nodiscard]] inline WaylandServer::Impl::Surface* popupGrabKeyboardFocusSurface(
     WaylandServer::Impl::XdgPopup const* popup) {
   if (!popup || popup->dismissed || !popup->xdgSurface) return nullptr;
@@ -57,6 +63,11 @@ struct KeyboardFocusRequestRefs {
   if (auto* popupSurface = popupGrabKeyboardFocusSurface(popup)) return popupSurface;
   if (refs.popupGrab->popups.empty()) xdgPopupGrabSyncTop(*refs.popupGrab, *refs.cachedGrabPopup);
   return requested;
+}
+
+[[nodiscard]] inline bool keyboardDismissShouldClearPopupGrab(KeyboardPopupDismissRefs refs) {
+  if (!refs.popupGrabsEnabled || !refs.popupGrab || !refs.cachedGrabPopup) return false;
+  return xdgPopupGrabSyncTop(*refs.popupGrab, *refs.cachedGrabPopup) != nullptr;
 }
 
 [[nodiscard]] inline bool keyboardFocusShouldRestoreToplevelAfterPopupDismiss(

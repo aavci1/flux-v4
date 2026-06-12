@@ -602,6 +602,13 @@ bool dismissPopupGrab(WaylandServer::Impl* server) {
 namespace lambda::compositor::wm {
 
 bool dismissTopPopup(WaylandServer::Impl* server) {
+  if (keyboardDismissShouldClearPopupGrab({
+          .popupGrabsEnabled = server && server->popupGrabsEnabled_,
+          .popupGrab = server ? &server->popupGrab_ : nullptr,
+          .cachedGrabPopup = server ? &server->grabPopup_ : nullptr,
+      })) {
+    return dismissPopupGrab(server);
+  }
   return dismissPopup(topmostPopup(server));
 }
 
