@@ -12,7 +12,7 @@ BUILD=1
 INCLUDE_SHELL=0
 PROBE_ONLY=0
 START_COMPOSITOR=0
-SELECTED_CASE=""
+SELECTED_CASES=()
 COMPOSITOR_ARGS=()
 
 usage() {
@@ -34,7 +34,8 @@ Options:
                  Seconds before the started compositor is terminated. Default: $COMPOSITOR_TIMEOUT_SECONDS.
   --compositor-arg ARG
                  Extra argument passed to lambda-window-manager. Repeatable.
-  --case NAME      Run one case: lambda-settings, lambda-files, lambda-editor,
+  --case NAME      Run one or more cases. May be repeated or comma-separated:
+                   lambda-settings, lambda-files, lambda-editor,
                    lambda-terminal, shell, terminal, browser, gtk, qt, mpv.
   --seconds N      Seconds to leave each app open. Default: $SECONDS_PER_APP.
   --probe-only     Print detected apps and do not launch anything.
@@ -131,11 +132,19 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --case)
-      SELECTED_CASE="${2:-}"
-      if [[ -z "$SELECTED_CASE" ]]; then
+      selected="${2:-}"
+      if [[ -z "$selected" ]]; then
         echo "--case requires a name" >&2
         exit 2
       fi
+      IFS=',' read -r -a selected_parts <<<"$selected"
+      for selected_part in "${selected_parts[@]}"; do
+        if [[ -z "$selected_part" ]]; then
+          echo "--case contains an empty case name" >&2
+          exit 2
+        fi
+        SELECTED_CASES+=("$selected_part")
+      done
       shift 2
       ;;
     --seconds)
@@ -181,7 +190,22 @@ if [[ "$PROBE_ONLY" -ne 1 && "$START_COMPOSITOR" -ne 1 && -z "${WAYLAND_DISPLAY:
 fi
 
 case_selected() {
-  [[ -z "$SELECTED_CASE" || "$SELECTED_CASE" == "$1" ]]
+  if [[ "${#SELECTED_CASES[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  local selected
+  for selected in "${SELECTED_CASES[@]}"; do
+    [[ "$selected" == "$1" ]] && return 0
+  done
+  return 1
+}
+
+case_explicitly_selected() {
+  local selected
+  for selected in "${SELECTED_CASES[@]}"; do
+    [[ "$selected" == "$1" ]] && return 0
+  done
+  return 1
 }
 
 quote_path() {
@@ -284,7 +308,7 @@ if case_selected "lambda-terminal"; then
 fi
 
 if case_selected "shell"; then
-  if [[ "$INCLUDE_SHELL" -eq 1 || "$SELECTED_CASE" == "shell" ]]; then
+  if [[ "$INCLUDE_SHELL" -eq 1 ]] || case_explicitly_selected "shell"; then
     if [[ -x "$(lambda_exe lambda-shell)" || "$BUILD" -eq 1 ]]; then
       add_case "shell" "required" "lambda-shell" "$(lambda_cmd lambda-shell)" \
         "Shell should show dock/status docklets, launch/focus/restore apps, and remain stable while other apps are tested."

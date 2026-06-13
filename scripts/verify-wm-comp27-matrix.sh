@@ -79,6 +79,8 @@ done
 
 for runner_capability in \
   "--start-compositor" \
+  "comma-separated" \
+  "SELECTED_CASES" \
   "LAMBDA_WINDOW_MANAGER_CPU_TRACE=1" \
   "LAMBDA_WINDOW_MANAGER_PACING_TRACE=1" \
   "LAMBDA_KMS_PRESENT_TRACE=1" \
