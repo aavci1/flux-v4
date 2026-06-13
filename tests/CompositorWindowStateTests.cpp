@@ -791,7 +791,7 @@ TEST_CASE("xdg toplevel client state resets on unmap") {
   CHECK_FALSE(lambda::compositor::resetXdgToplevelClientStateForUnmap(&toplevel));
 }
 
-TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
+TEST_CASE("unmapped surface cleanup drops stale seat focus and serial state") {
   using lambda::compositor::SurfaceSeatStateRefs;
   using lambda::compositor::WaylandServer;
 

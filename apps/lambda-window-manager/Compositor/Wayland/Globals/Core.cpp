@@ -744,10 +744,15 @@ void markXdgPopupMapped(WaylandServer::Impl::Surface* surface) {
 void resetXdgPopupForUnmap(WaylandServer::Impl::Surface* surface) {
   auto* popup = surface && surface->server ? wm::popupForSurface(surface->server, surface) : nullptr;
   if (!popup) return;
+  bool changed = popup->mapped;
   popup->mapped = false;
   if (xdgPopupGrabContains(surface->server->popupGrab_, popup)) {
     releasePopupGrab(surface->server, popup, 0);
   }
+  SurfaceSeatCleanupResult const seatCleanup = clearUnmappedSurfaceSeatState(surface->server, surface);
+  if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(surface->server);
+  changed = seatCleanup.changed || changed;
+  if (changed) surface->server->notifyShellStateChanged();
 }
 
 void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
