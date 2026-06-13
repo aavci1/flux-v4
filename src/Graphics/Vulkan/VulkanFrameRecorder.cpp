@@ -8,25 +8,72 @@ namespace lambda {
 
 namespace {
 
-void destroyRecorderBuffer(VmaAllocator allocator, VkBuffer &buffer, VmaAllocation &allocation,
-                           VkDeviceSize &capacity) noexcept {
-  if (allocator && buffer) {
-    vmaDestroyBuffer(allocator, buffer, allocation);
-  }
-  buffer = VK_NULL_HANDLE;
-  allocation = VK_NULL_HANDLE;
-  capacity = 0;
+bool hasRecorderResources(VulkanFrameRecorderResources const& resources) noexcept {
+  return resources.preparedQuadBuffer || resources.preparedRectBuffer ||
+         resources.preparedPathVertexBuffer || resources.preparedQuadDescriptor ||
+         resources.preparedRectDescriptor;
 }
 
-void freeRecorderDescriptor(VkDevice device, VkDescriptorPool descriptorPool,
-                            VkDescriptorSet &descriptor) noexcept {
-  if (device && descriptorPool && descriptor) {
-    vkFreeDescriptorSets(device, descriptorPool, 1, &descriptor);
-  }
-  descriptor = VK_NULL_HANDLE;
-}
+#if defined(LAMBDA_TESTING)
+VulkanFrameRecorderRetireHook gRetireHookForTesting;
+#endif
 
 } // namespace
+
+void destroyVulkanFrameRecorderResourcesNow(VulkanFrameRecorderResources& resources) noexcept {
+  if (resources.device && resources.descriptorPool && resources.preparedQuadDescriptor) {
+    vkFreeDescriptorSets(resources.device, resources.descriptorPool, 1,
+                         &resources.preparedQuadDescriptor);
+  }
+  resources.preparedQuadDescriptor = VK_NULL_HANDLE;
+  if (resources.device && resources.descriptorPool && resources.preparedRectDescriptor) {
+    vkFreeDescriptorSets(resources.device, resources.descriptorPool, 1,
+                         &resources.preparedRectDescriptor);
+  }
+  resources.preparedRectDescriptor = VK_NULL_HANDLE;
+
+  if (resources.allocator && resources.preparedQuadBuffer) {
+    vmaDestroyBuffer(resources.allocator, resources.preparedQuadBuffer,
+                     resources.preparedQuadAllocation);
+  }
+  resources.preparedQuadBuffer = VK_NULL_HANDLE;
+  resources.preparedQuadAllocation = VK_NULL_HANDLE;
+
+  if (resources.allocator && resources.preparedRectBuffer) {
+    vmaDestroyBuffer(resources.allocator, resources.preparedRectBuffer,
+                     resources.preparedRectAllocation);
+  }
+  resources.preparedRectBuffer = VK_NULL_HANDLE;
+  resources.preparedRectAllocation = VK_NULL_HANDLE;
+
+  if (resources.allocator && resources.preparedPathVertexBuffer) {
+    vmaDestroyBuffer(resources.allocator, resources.preparedPathVertexBuffer,
+                     resources.preparedPathVertexAllocation);
+  }
+  resources.preparedPathVertexBuffer = VK_NULL_HANDLE;
+  resources.preparedPathVertexAllocation = VK_NULL_HANDLE;
+}
+
+void retireVulkanFrameRecorderResources(VulkanFrameRecorderResources resources) noexcept {
+  if (!hasRecorderResources(resources)) {
+    return;
+  }
+#if defined(LAMBDA_TESTING)
+  if (gRetireHookForTesting && gRetireHookForTesting(resources)) {
+    return;
+  }
+#endif
+  if (deferVulkanFrameRecorderResourcesDestroy(resources)) {
+    return;
+  }
+  destroyVulkanFrameRecorderResourcesNow(resources);
+}
+
+#if defined(LAMBDA_TESTING)
+void setVulkanFrameRecorderRetireHookForTesting(VulkanFrameRecorderRetireHook hook) {
+  gRetireHookForTesting = std::move(hook);
+}
+#endif
 
 VulkanFrameRecorder::~VulkanFrameRecorder() {
   clear();
@@ -93,34 +140,30 @@ VulkanFrameRecorder &VulkanFrameRecorder::operator=(VulkanFrameRecorder &&other)
 }
 
 void VulkanFrameRecorder::clear() {
-  if (device && descriptorPool) {
-    freeRecorderDescriptor(device, descriptorPool, preparedQuadDescriptor);
-    freeRecorderDescriptor(device, descriptorPool, preparedRectDescriptor);
-  } else {
-    preparedQuadDescriptor = VK_NULL_HANDLE;
-    preparedRectDescriptor = VK_NULL_HANDLE;
-  }
-  if (allocator) {
-    destroyRecorderBuffer(allocator, preparedQuadBuffer, preparedQuadAllocation, preparedQuadCapacity);
-    destroyRecorderBuffer(allocator, preparedRectBuffer, preparedRectAllocation, preparedRectCapacity);
-    destroyRecorderBuffer(allocator, preparedPathVertexBuffer, preparedPathVertexAllocation,
-                          preparedPathVertexCapacity);
-  } else {
-    preparedQuadBuffer = VK_NULL_HANDLE;
-    preparedQuadAllocation = VK_NULL_HANDLE;
-    preparedQuadCapacity = 0;
-    preparedQuadDescriptor = VK_NULL_HANDLE;
-    preparedQuadUploadSignature = 0;
-    preparedRectBuffer = VK_NULL_HANDLE;
-    preparedRectAllocation = VK_NULL_HANDLE;
-    preparedRectCapacity = 0;
-    preparedRectDescriptor = VK_NULL_HANDLE;
-    preparedRectUploadSignature = 0;
-    preparedPathVertexBuffer = VK_NULL_HANDLE;
-    preparedPathVertexAllocation = VK_NULL_HANDLE;
-    preparedPathVertexCapacity = 0;
-    preparedPathVertexUploadSignature = 0;
-  }
+  retireVulkanFrameRecorderResources(VulkanFrameRecorderResources{
+      .allocator = allocator,
+      .device = device,
+      .descriptorPool = descriptorPool,
+      .preparedQuadBuffer = preparedQuadBuffer,
+      .preparedQuadAllocation = preparedQuadAllocation,
+      .preparedQuadDescriptor = preparedQuadDescriptor,
+      .preparedRectBuffer = preparedRectBuffer,
+      .preparedRectAllocation = preparedRectAllocation,
+      .preparedRectDescriptor = preparedRectDescriptor,
+      .preparedPathVertexBuffer = preparedPathVertexBuffer,
+      .preparedPathVertexAllocation = preparedPathVertexAllocation,
+  });
+  preparedQuadBuffer = VK_NULL_HANDLE;
+  preparedQuadAllocation = VK_NULL_HANDLE;
+  preparedQuadCapacity = 0;
+  preparedQuadDescriptor = VK_NULL_HANDLE;
+  preparedRectBuffer = VK_NULL_HANDLE;
+  preparedRectAllocation = VK_NULL_HANDLE;
+  preparedRectCapacity = 0;
+  preparedRectDescriptor = VK_NULL_HANDLE;
+  preparedPathVertexBuffer = VK_NULL_HANDLE;
+  preparedPathVertexAllocation = VK_NULL_HANDLE;
+  preparedPathVertexCapacity = 0;
   preparedQuadUploadSignature = 0;
   preparedRectUploadSignature = 0;
   preparedPathVertexUploadSignature = 0;

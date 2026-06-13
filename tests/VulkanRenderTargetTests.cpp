@@ -496,6 +496,61 @@ TEST_CASE("VulkanFrameRecorder supports empty lifecycle and move semantics") {
   CHECK(moved.rects.empty());
 }
 
+TEST_CASE("VulkanFrameRecorder defers prepared GPU resources when clearing") {
+  VulkanFrameRecorder recorded;
+  recorded.allocator = reinterpret_cast<VmaAllocator>(0x1);
+  recorded.device = reinterpret_cast<VkDevice>(0x2);
+  recorded.descriptorPool = reinterpret_cast<VkDescriptorPool>(0x3);
+  recorded.preparedQuadBuffer = reinterpret_cast<VkBuffer>(0x4);
+  recorded.preparedQuadAllocation = reinterpret_cast<VmaAllocation>(0x5);
+  recorded.preparedQuadCapacity = 64;
+  recorded.preparedQuadDescriptor = reinterpret_cast<VkDescriptorSet>(0x6);
+  recorded.preparedRectBuffer = reinterpret_cast<VkBuffer>(0x7);
+  recorded.preparedRectAllocation = reinterpret_cast<VmaAllocation>(0x8);
+  recorded.preparedRectCapacity = 128;
+  recorded.preparedRectDescriptor = reinterpret_cast<VkDescriptorSet>(0x9);
+  recorded.preparedPathVertexBuffer = reinterpret_cast<VkBuffer>(0xa);
+  recorded.preparedPathVertexAllocation = reinterpret_cast<VmaAllocation>(0xb);
+  recorded.preparedPathVertexCapacity = 256;
+
+  VulkanFrameRecorderResources retired{};
+  int retireCalls = 0;
+  setVulkanFrameRecorderRetireHookForTesting(
+      [&retired, &retireCalls](VulkanFrameRecorderResources const& resources) {
+        retired = resources;
+        ++retireCalls;
+        return true;
+      });
+
+  recorded.clear();
+  setVulkanFrameRecorderRetireHookForTesting({});
+
+  CHECK(retireCalls == 1);
+  CHECK(retired.allocator == reinterpret_cast<VmaAllocator>(0x1));
+  CHECK(retired.device == reinterpret_cast<VkDevice>(0x2));
+  CHECK(retired.descriptorPool == reinterpret_cast<VkDescriptorPool>(0x3));
+  CHECK(retired.preparedQuadBuffer == reinterpret_cast<VkBuffer>(0x4));
+  CHECK(retired.preparedQuadAllocation == reinterpret_cast<VmaAllocation>(0x5));
+  CHECK(retired.preparedQuadDescriptor == reinterpret_cast<VkDescriptorSet>(0x6));
+  CHECK(retired.preparedRectBuffer == reinterpret_cast<VkBuffer>(0x7));
+  CHECK(retired.preparedRectAllocation == reinterpret_cast<VmaAllocation>(0x8));
+  CHECK(retired.preparedRectDescriptor == reinterpret_cast<VkDescriptorSet>(0x9));
+  CHECK(retired.preparedPathVertexBuffer == reinterpret_cast<VkBuffer>(0xa));
+  CHECK(retired.preparedPathVertexAllocation == reinterpret_cast<VmaAllocation>(0xb));
+
+  CHECK(recorded.preparedQuadBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedQuadAllocation == VK_NULL_HANDLE);
+  CHECK(recorded.preparedQuadCapacity == 0);
+  CHECK(recorded.preparedQuadDescriptor == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectAllocation == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectCapacity == 0);
+  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
+  CHECK(recorded.preparedPathVertexBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedPathVertexAllocation == VK_NULL_HANDLE);
+  CHECK(recorded.preparedPathVertexCapacity == 0);
+}
+
 TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarget") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();

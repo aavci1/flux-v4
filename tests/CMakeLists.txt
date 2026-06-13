@@ -198,6 +198,7 @@ target_include_directories(lambda_reactive_tests PRIVATE
   ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(lambda_reactive_tests PRIVATE lambda doctest::doctest)
 set_target_properties(lambda_reactive_tests PROPERTIES CXX_STANDARD 23)
+target_compile_definitions(lambda_reactive_tests PRIVATE LAMBDA_TESTING=1)
 if(LAMBDA_ENABLE_ASAN)
   target_compile_options(lambda_reactive_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
   target_link_options(lambda_reactive_tests PRIVATE -fsanitize=address)

@@ -128,11 +128,15 @@ void SceneNode::setBounds(Rect bounds) {
     if (bounds_ == bounds) {
         return;
     }
+    bool const positionChanged = bounds.x != bounds_.x ||
+                                 bounds.y != bounds_.y;
     bool const sizeChanged = bounds.width != bounds_.width ||
                              bounds.height != bounds_.height;
     bounds_ = bounds;
     if (sizeChanged) {
         markDirty();
+    } else if (positionChanged) {
+        markSubtreeDirty();
     }
 }
 
@@ -344,8 +348,10 @@ void SceneNode::markDirty() noexcept {
 
 void SceneNode::markSubtreeDirty() noexcept {
     for (SceneNode *node = this; node; node = node->parent_) {
+        bool const hadCachedSubtreeBounds = node->cachedSubtreeVisualBounds_.has_value();
+        node->cachedSubtreeVisualBounds_.reset();
         if (node->subtreeDirty_) {
-            if (node != this) {
+            if (node != this && !hadCachedSubtreeBounds) {
                 break;
             }
         } else {

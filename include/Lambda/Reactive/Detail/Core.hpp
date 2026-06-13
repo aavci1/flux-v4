@@ -850,7 +850,22 @@ inline void flushEffects() {
   }
   sFlushingEffects = true;
   [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
+  [[maybe_unused]] std::size_t flushIterations = 0;
   while (!sEffectQueue.empty()) {
+#if !defined(NDEBUG) || defined(LAMBDA_TESTING)
+    constexpr std::size_t kMaxEffectFlushIterations = 10000;
+    if (++flushIterations > kMaxEffectFlushIterations) {
+      std::fprintf(stderr,
+                   "Lambda Reactive: effect flush exceeded %zu iterations; "
+                   "dropping the remaining scheduled effects.\n",
+                   kMaxEffectFlushIterations);
+      for (auto* effect : sEffectQueue) {
+        effect->scheduled = false;
+      }
+      sEffectQueue.clear();
+      break;
+    }
+#endif
     sEffectFlushQueue.clear();
     sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
     sEffectQueue.clear();

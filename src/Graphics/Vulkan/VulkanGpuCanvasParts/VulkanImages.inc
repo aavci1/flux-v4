@@ -72,6 +72,23 @@
     }
   }
 
+  void destroyDeferredRecorderResources(bool force) {
+    for (auto it = pendingRecorderResourceDestroys_.begin();
+         it != pendingRecorderResourceDestroys_.end();) {
+      if (!force && it->framesRemaining > 0) {
+        --it->framesRemaining;
+        ++it->successfulSubmits;
+      }
+      if (force || it->framesRemaining == 0) {
+        assert(force || it->successfulSubmits >= kMaxFramesInFlight);
+        destroyVulkanFrameRecorderResourcesNow(it->resources);
+        it = pendingRecorderResourceDestroys_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   void destroyDeferredOwnedImages(bool force) {
     for (auto it = pendingOwnedImageDestroys_.begin(); it != pendingOwnedImageDestroys_.end();) {
       if (!force && it->framesRemaining > 0) {
@@ -268,6 +285,7 @@
   void retireDeferredResourcesAfterSubmit() {
     destroyDeferredTextures(false);
     destroyDeferredBuffers(false);
+    destroyDeferredRecorderResources(false);
     destroyDeferredOwnedImages(false);
     retireSwapchains(false);
   }

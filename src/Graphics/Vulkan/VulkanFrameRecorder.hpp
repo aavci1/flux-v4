@@ -5,12 +5,40 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 struct VmaAllocator_T;
 using VmaAllocator = VmaAllocator_T *;
 
 namespace lambda {
+
+struct VulkanFrameRecorderResources {
+  VmaAllocator allocator = VK_NULL_HANDLE;
+  VkDevice device = VK_NULL_HANDLE;
+  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+
+  VkBuffer preparedQuadBuffer = VK_NULL_HANDLE;
+  VmaAllocation preparedQuadAllocation = VK_NULL_HANDLE;
+  VkDescriptorSet preparedQuadDescriptor = VK_NULL_HANDLE;
+
+  VkBuffer preparedRectBuffer = VK_NULL_HANDLE;
+  VmaAllocation preparedRectAllocation = VK_NULL_HANDLE;
+  VkDescriptorSet preparedRectDescriptor = VK_NULL_HANDLE;
+
+  VkBuffer preparedPathVertexBuffer = VK_NULL_HANDLE;
+  VmaAllocation preparedPathVertexAllocation = VK_NULL_HANDLE;
+};
+
+void retireVulkanFrameRecorderResources(VulkanFrameRecorderResources resources) noexcept;
+void destroyVulkanFrameRecorderResourcesNow(VulkanFrameRecorderResources& resources) noexcept;
+bool deferVulkanFrameRecorderResourcesDestroy(VulkanFrameRecorderResources resources) noexcept;
+
+#if defined(LAMBDA_TESTING)
+using VulkanFrameRecorderRetireHook =
+    std::function<bool(VulkanFrameRecorderResources const& resources)>;
+void setVulkanFrameRecorderRetireHookForTesting(VulkanFrameRecorderRetireHook hook);
+#endif
 
 /// Per-frame CPU-side Vulkan display list, detachable from a canvas and replayable
 /// into later frames.

@@ -91,6 +91,9 @@ option(LAMBDA_ENABLE_DEFAULT_EVENT_LOGGING
 option(LAMBDA_ENABLE_ASAN
   "Build Lambda targets with AddressSanitizer instrumentation."
   OFF)
+option(LAMBDA_ENABLE_WARNINGS
+  "Build Lambda core with common non-fatal compiler warnings."
+  ON)
 option(LAMBDA_PROFILE_REACTIVE
   "Compile deterministic reactive profiling counters and 5-second display-link reports."
   OFF)
@@ -116,6 +119,10 @@ option(LAMBDA_BUILD_WINDOW_MANAGER
   ${LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT})
 
 add_subdirectory(src)
+
+if(LAMBDA_ENABLE_WARNINGS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options(lambda PRIVATE -Wall -Wextra)
+endif()
 
 if(LAMBDA_BUILD_APPS)
   add_subdirectory(apps)

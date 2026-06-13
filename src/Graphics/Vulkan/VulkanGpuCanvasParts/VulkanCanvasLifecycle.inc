@@ -1,6 +1,9 @@
 namespace {
 
 class VulkanCanvas final : public Canvas {
+  friend bool ::lambda::deferVulkanFrameRecorderResourcesDestroy(
+      VulkanFrameRecorderResources resources) noexcept;
+
 public:
   VulkanCanvas(VkSurfaceKHR surface,
                unsigned int handle,
@@ -196,6 +199,7 @@ public:
     }
     destroyDeferredTextures(true);
     destroyDeferredBuffers(true);
+    destroyDeferredRecorderResources(true);
     destroyDeferredOwnedImages(true);
     for (Buffer& buffer : uploadStagingPool_) {
       destroyBuffer(buffer);

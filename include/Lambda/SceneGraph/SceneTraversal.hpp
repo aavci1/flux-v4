@@ -5,6 +5,7 @@
 /// Generic traversal and hit-testing helpers for the pure scenegraph.
 
 #include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneBounds.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
 #include <algorithm>
@@ -78,6 +79,12 @@ inline bool roundedRectContains(Rect const& rect, CornerRadius cornerRadius, Poi
 } // namespace detail
 
 inline Point pointInChildSpace(SceneNode const& child, Point point) {
+  Mat3 const& transform = child.transform();
+  if (transform.isTranslationOnly()) {
+    Point const position = child.position();
+    return Point{point.x - position.x - transform.m[6],
+                 point.y - position.y - transform.m[7]};
+  }
   Mat3 const childToParent = Mat3::translate(child.position()) * child.transform();
   return childToParent.inverse().apply(point);
 }
@@ -108,6 +115,11 @@ std::optional<std::pair<SceneNode const*, Point>> hitTestNode(SceneNode const& n
 
   for (auto it = node.children().rbegin(); it != node.children().rend(); ++it) {
     Point const childPoint = pointInChildSpace(**it, point);
+    Rect const childVisualBounds = detail::subtreeLocalVisualBounds(**it);
+    if (childVisualBounds.width > 0.f && childVisualBounds.height > 0.f &&
+        !childVisualBounds.contains(childPoint)) {
+      continue;
+    }
     if (auto hit = hitTestNode(**it, childPoint, std::forward<AcceptTarget>(acceptTarget))) {
       return hit;
     }

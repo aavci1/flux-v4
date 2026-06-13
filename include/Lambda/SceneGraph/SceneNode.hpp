@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -26,10 +27,12 @@ namespace scenegraph {
 class Renderer;
 class PreparedRenderOps;
 class Interaction;
+class SceneNode;
 
 namespace detail {
 struct SceneNodeAccess;
 bool isTransientRelayout() noexcept;
+Rect subtreeLocalVisualBounds(SceneNode const& node) noexcept;
 }
 
 using RelayoutFn = Reactive::SmallFn<void(LayoutConstraints const&), 64>;
@@ -134,11 +137,13 @@ class SceneNode {
     RelayoutFn relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
+    mutable std::optional<Rect> cachedSubtreeVisualBounds_{};
     mutable std::uint8_t preparedGroupCacheCooldown_ = 0;
     mutable std::uint64_t preparedRenderOpsKey_ = 0;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 
     friend struct detail::SceneNodeAccess;
+    friend Rect detail::subtreeLocalVisualBounds(SceneNode const& node) noexcept;
 };
 
 } // namespace scenegraph

@@ -188,6 +188,24 @@ TEST_CASE("Reactive Effect flush survives signal writes from a running effect") 
   }
 }
 
+TEST_CASE("Reactive Effect flush caps runaway self scheduling in test builds") {
+  Signal<int> source(0);
+  int runs = 0;
+
+  Effect effect([&] {
+    int const value = source.get();
+    ++runs;
+    if (value > 0) {
+      source.set(value + 1);
+    }
+  });
+
+  source.set(1);
+
+  CHECK(runs <= 10002);
+  CHECK(source.peek() <= 10001);
+}
+
 TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   Signal<int> trigger(0);
   lambda::Animated<float> readAnimation{0.f};

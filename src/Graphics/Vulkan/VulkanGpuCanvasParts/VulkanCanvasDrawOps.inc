@@ -568,6 +568,12 @@ private:
     bool recycleUploadStaging = false;
   };
 
+  struct PendingRecorderResourceDestroy {
+    VulkanFrameRecorderResources resources;
+    std::uint32_t framesRemaining = 0;
+    std::uint32_t successfulSubmits = 0;
+  };
+
   struct FrameGeometryResources {
     VkDescriptorSet rectDescriptorSet = VK_NULL_HANDLE;
     VkDescriptorSet calloutDescriptorSet = VK_NULL_HANDLE;
@@ -886,9 +892,28 @@ private:
     return true;
   }
 
+  bool deferFrameRecorderResourcesDestroy(VulkanFrameRecorderResources retired) {
+    if (!retired.device || retired.device != device_) {
+      return false;
+    }
+    if (retired.allocator && retired.allocator != allocator_) {
+      return false;
+    }
+    if (retired.descriptorPool && retired.descriptorPool != resources().descriptorPool) {
+      return false;
+    }
+    pendingRecorderResourceDestroys_.push_back(PendingRecorderResourceDestroy{
+        .resources = retired,
+        .framesRemaining = kMaxFramesInFlight + 1u,
+        .successfulSubmits = 0u,
+    });
+    return true;
+  }
+
   bool ensureRecorderBuffer(VulkanFrameRecorder const &recorded, VkBuffer &buffer,
                             VmaAllocation &allocation, VkDeviceSize &capacity,
-                            std::uint64_t &uploadSignature, void const *data,
+                            std::uint64_t &uploadSignature, VkDescriptorSet* descriptor,
+                            void const *data,
                             VkDeviceSize size, VkBufferUsageFlags usage) {
     if (!data || size == 0) {
       return true;
@@ -905,7 +930,19 @@ private:
       return true;
     }
     if (buffer) {
-      vmaDestroyBuffer(recorded.allocator, buffer, allocation);
+      VkDescriptorSet retiredDescriptor = VK_NULL_HANDLE;
+      if (descriptor) {
+        retiredDescriptor = *descriptor;
+        *descriptor = VK_NULL_HANDLE;
+      }
+      retireVulkanFrameRecorderResources(VulkanFrameRecorderResources{
+          .allocator = recorded.allocator,
+          .device = recorded.device,
+          .descriptorPool = recorded.descriptorPool,
+          .preparedQuadBuffer = buffer,
+          .preparedQuadAllocation = allocation,
+          .preparedQuadDescriptor = retiredDescriptor,
+      });
       buffer = VK_NULL_HANDLE;
       allocation = VK_NULL_HANDLE;
       capacity = 0;
@@ -971,14 +1008,16 @@ private:
       return false;
     if (!ensureRecorderBuffer(recorded, recorded.preparedRectBuffer, recorded.preparedRectAllocation,
                               recorded.preparedRectCapacity,
-                              recorded.preparedRectUploadSignature, recorded.rects.data(),
+                              recorded.preparedRectUploadSignature,
+                              &recorded.preparedRectDescriptor, recorded.rects.data(),
                               static_cast<VkDeviceSize>(recorded.rects.size() * sizeof(RectInstance)),
                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
       return false;
     }
     if (!ensureRecorderBuffer(recorded, recorded.preparedQuadBuffer, recorded.preparedQuadAllocation,
                               recorded.preparedQuadCapacity,
-                              recorded.preparedQuadUploadSignature, recorded.quads.data(),
+                              recorded.preparedQuadUploadSignature,
+                              &recorded.preparedQuadDescriptor, recorded.quads.data(),
                               static_cast<VkDeviceSize>(recorded.quads.size() * sizeof(QuadInstance)),
                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
       return false;
@@ -986,7 +1025,7 @@ private:
     if (!ensureRecorderBuffer(recorded, recorded.preparedPathVertexBuffer,
                               recorded.preparedPathVertexAllocation,
                               recorded.preparedPathVertexCapacity,
-                              recorded.preparedPathVertexUploadSignature, recorded.pathVerts.data(),
+                              recorded.preparedPathVertexUploadSignature, nullptr, recorded.pathVerts.data(),
                               static_cast<VkDeviceSize>(recorded.pathVerts.size() * sizeof(VulkanPathVertex)),
                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) {
       return false;

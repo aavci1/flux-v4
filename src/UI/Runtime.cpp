@@ -944,6 +944,7 @@ void Runtime::handleInput(InputEvent const& event) {
     break;
   case InputEvent::Kind::PointerMove: {
     PointerHitSnapshot const hit = pointerHitSnapshot(d->window, point);
+    bool hitMayBeStale = false;
     if (d->input.pressTarget) {
       float const dx = point.x - d->input.pressPoint.x;
       float const dy = point.y - d->input.pressPoint.y;
@@ -952,17 +953,26 @@ void Runtime::handleInput(InputEvent const& event) {
         d->input.pressCancelled = true;
       }
       if (d->input.pressTarget->onPointerMove) {
-        Point const local = localPointForTarget(*d->input.pressTarget, d->window, point)
-                                .value_or(point);
-        d->input.pressTarget->onPointerMove(local);
+        RuntimeTargetSnapshot target = *d->input.pressTarget;
+        Point const local = localPointForTarget(target, d->window, point).value_or(point);
+        target.onPointerMove(local);
+        hitMayBeStale = true;
       }
     } else if (hit.hit) {
       if (hit.hit->interaction && hit.hit->interaction->onPointerMove) {
-        hit.hit->interaction->onPointerMove(hit.hit->localPoint);
+        auto onPointerMove = hit.hit->interaction->onPointerMove;
+        Point const localPoint = hit.hit->localPoint;
+        onPointerMove(localPoint);
+        hitMayBeStale = true;
       }
     }
-    updateHoverForHit(d->input, point, hit);
-    updateCursorForHit(d->input, d->window, hit);
+    if (hitMayBeStale) {
+      updateHoverForPoint(d->input, d->window, point);
+      updateCursorForPoint(d->input, d->window, point);
+    } else {
+      updateHoverForHit(d->input, point, hit);
+      updateCursorForHit(d->input, d->window, hit);
+    }
     break;
   }
   case InputEvent::Kind::PointerUp:

@@ -90,6 +90,7 @@
   std::vector<PendingTextureTransition> pendingTextureTransitions_;
   std::vector<PendingTextureUpload> pendingTextureUploads_;
   std::vector<PendingBufferDestroy> pendingBufferDestroys_;
+  std::vector<PendingRecorderResourceDestroy> pendingRecorderResourceDestroys_;
   std::vector<Buffer> uploadStagingPool_;
   std::vector<PendingOwnedVulkanImageDestroy> pendingOwnedImageDestroys_;
   std::uint64_t renderTargetFrameSignature_ = 0;
@@ -124,6 +125,26 @@ bool deferOwnedVulkanImageDestroy(PendingOwnedVulkanImageDestroy destroy) {
   }
   return false;
 }
+
+} // namespace
+
+bool deferVulkanFrameRecorderResourcesDestroy(VulkanFrameRecorderResources resources) noexcept {
+  if (!resources.device ||
+      (!resources.preparedQuadBuffer && !resources.preparedRectBuffer &&
+       !resources.preparedPathVertexBuffer && !resources.preparedQuadDescriptor &&
+       !resources.preparedRectDescriptor)) {
+    return false;
+  }
+  std::lock_guard lock(gCanvasRegistryMutex);
+  for (VulkanCanvas* canvas : gCanvases) {
+    if (canvas && canvas->deferFrameRecorderResourcesDestroy(resources)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+namespace {
 
 void updateImageTexturesFor(VulkanImage const* image) {
   if (!image)

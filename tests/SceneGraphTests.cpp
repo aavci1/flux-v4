@@ -17,6 +17,9 @@
 #include <Lambda/SceneGraph/SceneRenderer.hpp>
 #include <Lambda/SceneGraph/TextNode.hpp>
 
+#include "SceneGraph/SceneBounds.hpp"
+#include "SceneGraph/SceneNodeInternal.hpp"
+
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -53,6 +56,25 @@ class CountingInteraction final : public Interaction {
 
   private:
     ComponentKey key_;
+    int* probes_ = nullptr;
+};
+
+class CountingBoundsNode final : public SceneNode {
+  public:
+    CountingBoundsNode(Rect bounds, Rect localBounds, int* probes)
+        : SceneNode(bounds)
+        , localBounds_(localBounds)
+        , probes_(probes) {}
+
+    Rect localBounds() const noexcept override {
+        if (probes_) {
+            ++*probes_;
+        }
+        return localBounds_;
+    }
+
+  private:
+    Rect localBounds_{};
     int* probes_ = nullptr;
 };
 
@@ -538,6 +560,83 @@ TEST_CASE("SceneRenderer quick reject uses overflowing group visual bounds") {
     CHECK(std::any_of(renderer.quickRejects.begin(), renderer.quickRejects.end(), [](Rect rect) {
         return rect == Rect::sharp(0.f, 0.f, 100.f, 20.f);
     }));
+}
+
+TEST_CASE("subtree visual bounds are cached and invalidated by subtree mutations") {
+    int rootBoundsCalls = 0;
+    int childBoundsCalls = 0;
+    auto root = std::make_unique<CountingBoundsNode>(
+        Rect {0.f, 0.f, 10.f, 10.f},
+        Rect::sharp(0.f, 0.f, 10.f, 10.f),
+        &rootBoundsCalls);
+    auto child = std::make_unique<CountingBoundsNode>(
+        Rect {20.f, 0.f, 5.f, 5.f},
+        Rect::sharp(0.f, 0.f, 5.f, 5.f),
+        &childBoundsCalls);
+    CountingBoundsNode* childNode = child.get();
+    root->appendChild(std::move(child));
+
+    CHECK(lambda::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
+          Rect::sharp(0.f, 0.f, 25.f, 10.f));
+    CHECK(rootBoundsCalls == 1);
+    CHECK(childBoundsCalls == 1);
+
+    CHECK(lambda::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
+          Rect::sharp(0.f, 0.f, 25.f, 10.f));
+    CHECK(rootBoundsCalls == 1);
+    CHECK(childBoundsCalls == 1);
+
+    childNode->setPosition(Point {30.f, 0.f});
+    CHECK(lambda::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
+          Rect::sharp(0.f, 0.f, 35.f, 10.f));
+    CHECK(rootBoundsCalls == 2);
+    CHECK(childBoundsCalls == 2);
+}
+
+TEST_CASE("SceneNode setBounds position changes dirty the owning subtree") {
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 100.f, 100.f});
+    auto child = std::make_unique<SceneNode>(Rect {5.f, 6.f, 20.f, 20.f});
+    SceneNode* childNode = child.get();
+    root->appendChild(std::move(child));
+    lambda::scenegraph::detail::SceneNodeAccess::clearSubtreeDirty(*childNode);
+    lambda::scenegraph::detail::SceneNodeAccess::clearSubtreeDirty(*root);
+
+    childNode->setBounds(Rect {12.f, 18.f, 20.f, 20.f});
+
+    CHECK(childNode->isSubtreeDirty());
+    CHECK(root->isSubtreeDirty());
+}
+
+TEST_CASE("Scenegraph hit testing rejects cached visual bounds before walking descendants") {
+    int rootBoundsCalls = 0;
+    int groupBoundsCalls = 0;
+    int leafBoundsCalls = 0;
+    auto root = std::make_unique<CountingBoundsNode>(
+        Rect {0.f, 0.f, 240.f, 160.f},
+        Rect::sharp(0.f, 0.f, 240.f, 160.f),
+        &rootBoundsCalls);
+    auto group = std::make_unique<CountingBoundsNode>(
+        Rect {120.f, 80.f, 40.f, 40.f},
+        Rect::sharp(0.f, 0.f, 40.f, 40.f),
+        &groupBoundsCalls);
+    for (int i = 0; i < 12; ++i) {
+        group->appendChild(std::make_unique<CountingBoundsNode>(
+            Rect {static_cast<float>(i), static_cast<float>(i), 4.f, 4.f},
+            Rect::sharp(0.f, 0.f, 4.f, 4.f),
+            &leafBoundsCalls));
+    }
+    root->appendChild(std::move(group));
+    SceneGraph graph {std::move(root)};
+
+    (void)lambda::scenegraph::detail::subtreeLocalVisualBounds(graph.root());
+    rootBoundsCalls = 0;
+    groupBoundsCalls = 0;
+    leafBoundsCalls = 0;
+
+    CHECK_FALSE(hitTestInteraction(graph, Point {12.f, 12.f}).has_value());
+    CHECK(rootBoundsCalls == 1);
+    CHECK(groupBoundsCalls == 0);
+    CHECK(leafBoundsCalls == 0);
 }
 
 TEST_CASE("Scenegraph interaction lookup collects focusable keys") {

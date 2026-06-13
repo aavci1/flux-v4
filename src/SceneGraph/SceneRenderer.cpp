@@ -239,38 +239,55 @@ class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
 class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
   public:
     bool replay(Renderer &) const override {
-        return false;
+      return false;
     }
 };
 
+template<typename Recorder, typename RenderBody, typename Finish>
+std::unique_ptr<PreparedRenderOps> captureCanvasPreparedOps(Canvas* canvas,
+                                                            RenderBody&& renderBody,
+                                                            Finish&& finish) {
+    Recorder recorded;
+    if (!beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+        return nullptr;
+    }
+    renderBody();
+    endRecordedOpsCaptureForCanvas(canvas);
+    return finish(recorded);
+}
+
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
 #if LAMBDA_METAL
-    MetalFrameRecorder recorded;
-    if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
-        node.render(*this);
-        endRecordedOpsCaptureForCanvas(&canvas_);
-        if (recordedOpsContainClipState(recorded)) {
-            // Local replay retags cached ops with the caller's current clip. Until it can merge
-            // recorded and caller clips, keep internally clipped leaves on the live render path.
-            return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-        }
-        return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
+    if (auto prepared = captureCanvasPreparedOps<MetalFrameRecorder>(
+            &canvas_,
+            [&] { node.render(*this); },
+            [](MetalFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
+                if (recordedOpsContainClipState(recorded)) {
+                    // Local replay retags cached ops with the caller's current clip. Until it can merge
+                    // recorded and caller clips, keep internally clipped leaves on the live render path.
+                    return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+                }
+                return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
+            })) {
+        return prepared;
     }
 #endif
 #if LAMBDA_VULKAN
-        VulkanFrameRecorder recorded;
-        if (beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
-            node.render(*this);
-            endRecordedOpsCaptureForCanvas(&canvas_);
-            if (!prepareRecordedOpsForCanvas(&canvas_, &recorded)) {
-                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-            }
-            if (recordedOpsContainClipState(recorded)) {
-                // Local replay retags cached ops with the caller's current clip. Until it can merge
-                // recorded and caller clips, keep internally clipped leaves on the live render path.
-            return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-        }
-        return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
+    if (auto prepared = captureCanvasPreparedOps<VulkanFrameRecorder>(
+            &canvas_,
+            [&] { node.render(*this); },
+            [this](VulkanFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
+                if (!prepareRecordedOpsForCanvas(&canvas_, &recorded)) {
+                    return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+                }
+                if (recordedOpsContainClipState(recorded)) {
+                    // Local replay retags cached ops with the caller's current clip. Until it can merge
+                    // recorded and caller clips, keep internally clipped leaves on the live render path.
+                    return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+                }
+                return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
+            })) {
+        return prepared;
     }
 #endif
     (void)node;
@@ -496,27 +513,27 @@ struct SceneRenderer::Impl {
             return nullptr;
         }
 #if LAMBDA_METAL
-        MetalFrameRecorder recorded;
-        if (beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+        if (auto prepared = captureCanvasPreparedOps<MetalFrameRecorder>(canvas, [&] {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
-            endRecordedOpsCaptureForCanvas(canvas);
+        }, [](MetalFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
             if (recordedOpsContainClipState(recorded)) {
                 // Group captures include clips from descendants. Replaying them as one local
                 // display list would drop those nested clips, so let the normal traversal render it.
                 return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
             }
             return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
+        })) {
+            return prepared;
         }
 #endif
 #if LAMBDA_VULKAN
-        VulkanFrameRecorder recorded;
-        if (beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+        if (auto prepared = captureCanvasPreparedOps<VulkanFrameRecorder>(canvas, [&] {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
-            endRecordedOpsCaptureForCanvas(canvas);
+        }, [canvas](VulkanFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
             if (!prepareRecordedOpsForCanvas(canvas, &recorded)) {
                 return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
             }
@@ -526,6 +543,8 @@ struct SceneRenderer::Impl {
                 return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
             }
             return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
+        })) {
+            return prepared;
         }
 #endif
         (void)node;

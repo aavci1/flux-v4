@@ -218,6 +218,24 @@ struct SingleProbeRoot {
   }
 };
 
+struct CapturedMoveUnmountRoot {
+  lambda::Reactive::Signal<bool>* visible = nullptr;
+  int* moveCount = nullptr;
+
+  lambda::Element body() const {
+    return lambda::Show(
+        *visible,
+        [visible = visible, moveCount = moveCount] {
+          return lambda::Element{lambda::Rectangle{}}
+              .size(40.f, 40.f)
+              .onPointerMove([visible, moveCount](lambda::Point) {
+                ++*moveCount;
+                visible->set(false);
+              });
+        });
+  }
+};
+
 struct TextInputFocusRoot {
   lambda::Reactive::Signal<std::string>* first = nullptr;
   lambda::Reactive::Signal<std::string>* second = nullptr;
@@ -684,6 +702,19 @@ TEST_CASE("pointer down then drag out keeps press until release") {
 
   harness.pointerUp({100.f, 100.f});
   CHECK_FALSE(press.get());
+}
+
+TEST_CASE("captured pointer move survives handler unmounting its target") {
+  RuntimeHarness harness;
+  lambda::Reactive::Signal<bool> visible{true};
+  int moveCount = 0;
+  harness.setRoot(CapturedMoveUnmountRoot{&visible, &moveCount});
+
+  harness.pointerDown({5.f, 5.f});
+  harness.pointerMove({16.f, 5.f});
+
+  CHECK(moveCount == 1);
+  CHECK_FALSE(visible.get());
 }
 
 TEST_CASE("focus moves between elements") {
