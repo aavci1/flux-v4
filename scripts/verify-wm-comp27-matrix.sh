@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLAN="$ROOT/docs/compositor-wlroots-improvement-plan.md"
 SMOKE="$ROOT/scripts/run-real-app-smoke.sh"
+AUDIT="$ROOT/scripts/audit-wm-comp27-validation-gates.sh"
 SERVER_LIFECYCLE="$ROOT/apps/lambda-window-manager/Compositor/Wayland/ServerLifecycle.cpp"
 
 fail() {
@@ -16,6 +17,8 @@ require_in_file() {
   local file="$2"
   grep -F -- "$needle" "$file" >/dev/null || fail "missing '$needle' in ${file#$ROOT/}"
 }
+
+[[ -x "$AUDIT" ]] || fail "missing executable scripts/audit-wm-comp27-validation-gates.sh"
 
 required_globals="$(
   awk '
@@ -90,6 +93,21 @@ for runner_capability in \
   "fatal/protocol/runtime log matches"; do
   require_in_file "$runner_capability" "$SMOKE"
 done
+
+for audit_capability in \
+  "real-app-probe" \
+  "live-wayland-session" \
+  "live-registry-probe" \
+  "lambda-window-manager-display" \
+  "target-tty" \
+  "uinput-driving" \
+  "manual-visual-checks" \
+  "wm-comp27-validation-gates" \
+  "run-real-app-smoke.sh"; do
+  require_in_file "$audit_capability" "$AUDIT"
+done
+
+require_in_file "audit-wm-comp27-validation-gates.sh" "$PLAN"
 
 while IFS= read -r global; do
   [[ -z "$global" ]] && continue
