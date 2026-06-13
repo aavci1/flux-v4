@@ -263,8 +263,8 @@ struct ControlledTextInputRoot {
 };
 
 struct StatefulOverlayProbe {
-  int* bodyCalls = nullptr;
-  int* cleanups = nullptr;
+  std::shared_ptr<int> bodyCalls;
+  std::shared_ptr<int> cleanups;
   lambda::Reactive::Signal<int>* state = nullptr;
 
   lambda::Element body() const {
@@ -1430,24 +1430,24 @@ TEST_CASE("select mouse hover drives stable active option highlight") {
 
 TEST_CASE("overlay rebuild relayouts mounted content without remounting state") {
   RuntimeHarness harness;
-  int bodyCalls = 0;
-  int cleanups = 0;
+  auto bodyCalls = std::make_shared<int>(0);
+  auto cleanups = std::make_shared<int>(0);
   lambda::Reactive::Signal<int> state;
 
   lambda::OverlayId const id = harness.window.overlayManager().push(
-      StatefulOverlayProbe{.bodyCalls = &bodyCalls, .cleanups = &cleanups, .state = &state},
+      StatefulOverlayProbe{.bodyCalls = bodyCalls, .cleanups = cleanups, .state = &state},
       lambda::OverlayConfig{}, &harness.runtime);
 
   REQUIRE(id.isValid());
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
-  CHECK(bodyCalls == 1);
-  CHECK(cleanups == 0);
+  CHECK(*bodyCalls == 1);
+  CHECK(*cleanups == 0);
 
   state.set(9);
   harness.window.overlayManager().rebuild({320.f, 180.f}, harness.runtime);
 
-  CHECK(bodyCalls == 1);
-  CHECK(cleanups == 0);
+  CHECK(*bodyCalls == 1);
+  CHECK(*cleanups == 0);
   CHECK(state.get() == 9);
 }
 
